@@ -36,7 +36,7 @@
       "suburbId": "avondale",
       "suburbName": "Avondale",
       "rating": 5,
-      "completedBookings": 8,
+      "completedBookings": 9,
       "avatarInitials": "TM",
       "finditId": "FH-USR-391044",
       "isBanned": false,
@@ -759,8 +759,8 @@
       "serviceRadiusKm": 18,
       "startingPriceUsd": 15,
       "rating": 5,
-      "reviewCount": 413,
-      "completedBookings": 1241,
+      "reviewCount": 414,
+      "completedBookings": 1242,
       "bio": "Executive mobile barber in Harare. Cordless Wahl/Babyliss clippers, hot towel shave, beard sculpting at your home.",
       "badges": {
         "phoneVerified": true,
@@ -819,6 +819,13 @@
         }
       ],
       "reviews": [
+        {
+          "customerName": "Tendai Moyo",
+          "rating": 5,
+          "tags": [],
+          "date": "Just now",
+          "comment": "Completed home service on Findit Harare"
+        },
         {
           "customerName": "Tendai Moyo",
           "rating": 4,
@@ -1113,7 +1120,7 @@
       "startPinCode": "4028",
       "pinVerifiedByProvider": false,
       "directProviderId": null,
-      "status": "CONFIRMED",
+      "status": "COMPLETED",
       "acceptedOfferId": "off_870420",
       "routeCoordinates": [
         [
@@ -1211,10 +1218,24 @@
           "type": "CHAT",
           "text": "Hi Tendai! I've packed my mobile kit and I'm on my way to Borowdale Road, Vainona, Harare (~2 mins away). Message me here if there are any gate instructions.",
           "timestamp": "2026-10-21T15:58:09.479Z"
+        },
+        {
+          "id": "msg_1792620332628",
+          "senderRole": "SYSTEM",
+          "senderName": "Findit Harare",
+          "providerId": "prov_4",
+          "type": "BOOKING_COMPLETED",
+          "text": "Service Completed & Rated (5.0 / 5.0 by Client).",
+          "timestamp": "2026-10-21T22:05:32.628Z"
         }
       ],
       "acceptedProviderId": "prov_4",
-      "agreedTotalUsd": 15
+      "agreedTotalUsd": 15,
+      "providerRatedByClient": {
+        "rating": 5,
+        "tags": [],
+        "comment": "Completed home service on Findit Harare"
+      }
     },
     {
       "id": "req_69505",

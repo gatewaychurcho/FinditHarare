@@ -1291,8 +1291,7 @@ const server = http.createServer(async (req, res) => {
         phone: rawPhone,
         deliveryMode: waResult.mode,
         liveWhatsAppSent: waResult.liveWhatsAppSent,
-        adminDmSent: true,
-        otpCode: otpCode
+        adminDmSent: true
       });
     } catch (e) {
       return sendJson(res, 400, { error: e.message });

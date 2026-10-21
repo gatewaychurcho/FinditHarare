@@ -8,7 +8,7 @@ const state = {
   db: null,
   role: 'CUSTOMER', // 'CUSTOMER' | 'PROVIDER'
   currentUser: null,
-  isAuthenticated: true,
+  isAuthenticated: false,
 
   // Screen flow: 'HOME' -> 'CONFIGURE' -> 'SEARCHING' -> 'BOOKED'
   screenStep: 'HOME',
@@ -64,7 +64,6 @@ const state = {
   authRole: 'CUSTOMER', // 'CUSTOMER' | 'PROVIDER'
   authPhone: '+263 77 ',
   authOtpDigits: ['', '', '', ''],
-  authReceivedCode: '',
   authName: '',
   authSuburbId: 'avondale',
   authCategoryId: 'braiding',
@@ -305,16 +304,24 @@ function loadSavedSession() {
     const raw = localStorage.getItem(SESSION_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (parsed.loggedOut) {
+      if (parsed.loggedOut || !parsed.accountId) {
         state.isAuthenticated = false;
         state.currentUser = null;
+        state.savedAccountId = null;
       } else if (parsed.role && parsed.accountId) {
         state.role = parsed.role;
         state.savedAccountId = parsed.accountId;
         state.isAuthenticated = true;
       }
+    } else {
+      state.isAuthenticated = false;
+      state.currentUser = null;
+      state.savedAccountId = null;
     }
-  } catch (e) {}
+  } catch (e) {
+    state.isAuthenticated = false;
+    state.currentUser = null;
+  }
 }
 
 function saveSession(role, accountId, loggedOut = false) {
@@ -343,23 +350,31 @@ async function fetchState() {
     const res = await fetch('/api/state');
     state.db = await res.json();
 
-    if (state.isAuthenticated) {
-      if (state.savedAccountId) {
-        if (state.role === 'PROVIDER') {
-          state.currentUser = state.db.providers.find((p) => p.id === state.savedAccountId) || state.db.providers[0];
+    if (state.isAuthenticated && state.savedAccountId) {
+      if (state.role === 'PROVIDER') {
+        const found = (state.db.providers || []).find((p) => p.id === state.savedAccountId);
+        if (found) {
+          state.currentUser = found;
+          state.isAuthenticated = true;
         } else {
-          state.currentUser = state.db.customers.find((c) => c.id === state.savedAccountId) || state.db.customers[0];
+          state.currentUser = null;
+          state.isAuthenticated = false;
+          state.savedAccountId = null;
         }
-      } else if (!state.currentUser) {
-        state.currentUser = state.db.customers[0];
-        state.role = 'CUSTOMER';
-      } else if (state.role === 'CUSTOMER') {
-        const updated = state.db.customers.find((c) => c.id === state.currentUser.id);
-        if (updated) state.currentUser = updated;
-      } else if (state.role === 'PROVIDER') {
-        const updated = state.db.providers.find((p) => p.id === state.currentUser.id);
-        if (updated) state.currentUser = updated;
+      } else {
+        const found = (state.db.customers || []).find((c) => c.id === state.savedAccountId);
+        if (found) {
+          state.currentUser = found;
+          state.isAuthenticated = true;
+        } else {
+          state.currentUser = null;
+          state.isAuthenticated = false;
+          state.savedAccountId = null;
+        }
       }
+    } else {
+      state.currentUser = null;
+      state.isAuthenticated = false;
     }
 
     syncRecommendedFare();
@@ -875,7 +890,7 @@ function getCustomerActiveRequest() {
   if (!state.db || !state.currentUser || !state.isAuthenticated) return null;
   if (state.activeRequestId) {
     const found = state.db.requests.find(
-      (r) => r.id === state.activeRequestId && (r.status === 'OPEN' || isBookedStatus(r.status))
+      (r) => r.id === state.activeRequestId && r.customerId === state.currentUser.id && (r.status === 'OPEN' || isBookedStatus(r.status))
     );
     if (found) return found;
   }
@@ -886,25 +901,19 @@ function getCustomerActiveRequest() {
     state.activeRequestId = myOpen.id;
     return myOpen;
   }
-  const anyBooked = state.db.requests.find((r) => isBookedStatus(r.status));
-  if (anyBooked) {
-    state.activeRequestId = anyBooked.id;
-    return anyBooked;
-  }
+  state.activeRequestId = null;
   return null;
 }
 
 function getProviderActiveBooking(providerId) {
-  if (!state.db || !state.db.requests) return null;
+  if (!state.db || !state.db.requests || !providerId) return null;
   const directMatch = state.db.requests.find((r) => {
     if (!isBookedStatus(r.status)) return false;
     if (r.acceptedProviderId && r.acceptedProviderId === providerId) return true;
     const accOffer = (r.offers || []).find((o) => o.id === r.acceptedOfferId);
     return accOffer && accOffer.providerId === providerId;
   });
-  if (directMatch) return directMatch;
-
-  return state.db.requests.find((r) => isBookedStatus(r.status)) || null;
+  return directMatch || null;
 }
 
 // ============================================================================
@@ -1228,20 +1237,13 @@ function renderHomeDiscoveryOverlay() {
   const topServices = getPersonalizedAndTopServices();
 
   return `
-    <!-- Top Row: Left Hamburger Drawer + Right Mode Switch (No Sign-Up Button when already Signed In!) -->
+    <!-- Top Row: Left Hamburger Drawer -->
     <div class="indrive-top-left-row">
       <button class="indrive-circle-btn" onclick="openSideDrawerModal()" title="Menu">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
           <path d="M4 7h16M4 12h16M4 17h16"/>
         </svg>
       </button>
-
-      <div style="display:flex; align-items:center; gap:8px;">
-        <button class="top-mode-switch-pill" onclick="toggleClientAndProviderMode()">
-          ${uiIcon('briefcase', 15)}
-          <span>Provider Mode</span>
-        </button>
-      </div>
     </div>
 
     <div>
@@ -1538,11 +1540,6 @@ function renderSearchingRadarOverlay(req) {
         ${uiIcon('close', 14)}
         <span>Cancel request</span>
       </button>
-
-      <button class="top-mode-switch-pill" onclick="toggleClientAndProviderMode()">
-        ${uiIcon('briefcase', 15)}
-        <span>View as Provider</span>
-      </button>
     </div>
 
     <div class="sheet-floating-controls" style="justify-content:flex-end;">
@@ -1721,10 +1718,6 @@ function renderBookedTrackingOverlay(req) {
       </button>
 
       <div style="display:flex; align-items:center; gap:8px;">
-        <button class="top-signup-pill-btn" onclick="toggleClientAndProviderMode()" title="See how this accepted booking looks on the Service Provider's screen">
-          ${uiIcon('briefcase', 14)}
-          <span>Provider Screen</span>
-        </button>
         <button class="cancel-request-red-pill pointer-auto" onclick="openCancelTaskModal('${req.id}')">
           ${uiIcon('close', 14)}
           <span>Cancel</span>
@@ -1950,7 +1943,7 @@ function renderSignUpWizardInnerHtml(isFullScreen = false) {
         <div style="background:#ECFDF5; border:1px solid #10B981; border-radius:12px; padding:10px 13px; margin-bottom:18px; display:flex; align-items:center; gap:9px;">
           <span style="width:8px; height:8px; border-radius:50%; background:#10B981; flex-shrink:0;"></span>
           <div style="font-size:12px; color:#065F46; line-height:1.4;">
-            Findit Harare Admin (+263 713 475 131) will send your 4-digit code to your WhatsApp.
+            Findit Harare Admin (@FinditHarare) will send your 4-digit code to your WhatsApp.
           </div>
         </div>
 
@@ -1978,16 +1971,8 @@ function renderSignUpWizardInnerHtml(isFullScreen = false) {
             class="btn-dark-sec"
             style="display:inline-flex; align-items:center; justify-content:center; gap:8px; width:100%; height:46px; text-decoration:none; font-size:13px; font-weight:700; color:#059669; border-color:#A7F3D0; background:#ECFDF5;"
           >
-            <span>💬 Message Admin on WhatsApp (+263 71 347 5131)</span>
+            <span>💬 Message @FinditHarare on WhatsApp</span>
           </a>
-
-          ${state.authReceivedCode ? `
-            <div style="text-align:center;">
-              <button class="btn-dark-sec" style="font-size:12px; padding:6px 14px; border-radius:99px; border-color:#93C5FD; color:#0066FF;" onclick="fillAuthOtpFromBanner('${state.authReceivedCode}')">
-                Tap to auto-fill code (${state.authReceivedCode})
-              </button>
-            </div>
-          ` : ''}
         </div>
       </div>
     `;
@@ -2087,45 +2072,17 @@ async function submitPhoneForOtp() {
     return;
   }
   try {
-    const res = await apiPost('/api/auth/send-whatsapp-otp', {
+    await apiPost('/api/auth/send-whatsapp-otp', {
       phone: cleaned,
       role: state.authRole
     });
-    state.authReceivedCode = res.otpCode;
     state.authOtpDigits = ['', '', '', ''];
     state.authStep = 'OTP';
     renderAll();
     showToast('Code requested! Admin alerted on WhatsApp.');
-    if (res.otpCode) {
-      showWhatsAppOtpNotification(cleaned, res.otpCode);
-    }
   } catch (err) {
     showToast(err.message, 'error');
   }
-}
-
-function showWhatsAppOtpNotification(phone, code) {
-  const root = document.getElementById('whatsappBannerRoot');
-  if (!root) return;
-  root.innerHTML = `
-    <div class="whatsapp-push-banner" onclick="fillAuthOtpFromBanner('${code}')" style="cursor:pointer;">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-        <span style="font-size:12px; font-weight:800; color:#25D366;">WhatsApp • Findit Harare Official</span>
-        <span style="font-size:11px; background:#25D366; color:#0F172A; font-weight:800; padding:2px 8px; border-radius:99px;">Tap to Auto-Fill ${code}</span>
-      </div>
-      <div style="font-size:13.5px; color:#FFFFFF;">
-        Your Findit Harare verification code is <strong>${code}</strong>.
-      </div>
-    </div>
-  `;
-}
-
-function fillAuthOtpFromBanner(code) {
-  state.authOtpDigits = String(code).split('').slice(0, 4);
-  const root = document.getElementById('whatsappBannerRoot');
-  if (root) root.innerHTML = '';
-  renderAll();
-  verifyAuthOtpCode();
 }
 
 function onAuthOtpInput(idx, val) {
@@ -2410,36 +2367,52 @@ function renderModalLayer() {
     return;
   }
 
-  // SLIDE-OUT LEFT NAVIGATION DRAWER (NO SIGN-UP BUTTON WHEN ALREADY SIGNED IN)
+  // SLIDE-OUT LEFT NAVIGATION DRAWER
   if (state.activeModal === 'DRAWER') {
-    const user = state.currentUser || { name: 'Tendai Moyo', rating: 5.0, phone: '+263 77 200 1001', avatarInitials: 'TM' };
+    const isAuth = state.isAuthenticated && state.currentUser;
+    const user = isAuth ? state.currentUser : null;
     const isProvider = state.role === 'PROVIDER';
-    const ratingNum = user.rating ? Number(user.rating).toFixed(2) : '5.00';
-    const jobCount = user.completedBookings || 3;
+    const ratingNum = user && user.rating ? Number(user.rating).toFixed(2) : null;
+    const jobCount = user ? (user.completedBookings || 0) : 0;
 
     root.innerHTML = `
       <div class="indrive-left-drawer-backdrop" onclick="closeModal()">
         <div class="indrive-left-drawer" onclick="event.stopPropagation()">
           <div>
-            <div class="drawer-profile-header" onclick="state.activeModal='SETTINGS'; renderModalLayer();">
-              <div class="drawer-avatar-circle">
-                ${user.avatarUrl
-                  ? `<img src="${user.avatarUrl}" alt="${user.name}" />`
-                  : `<span>${user.avatarInitials || 'TM'}</span>`
-                }
-              </div>
-              <div style="flex:1; min-width:0;">
-                <div style="font-size:15px; font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${user.name}</div>
-                <div style="font-size:12px; color:var(--text-secondary); font-weight:600; margin-top:2px; display:flex; align-items:center; gap:4px;">
-                  <span style="color:#F59E0B; display:inline-flex;">${uiIcon('star', 12)}</span>
-                  <span>${ratingNum} (${jobCount})</span>
+            ${isAuth ? `
+              <div class="drawer-profile-header" onclick="state.activeModal='SETTINGS'; renderModalLayer();">
+                <div class="drawer-avatar-circle">
+                  ${user.avatarUrl
+                    ? `<img src="${user.avatarUrl}" alt="${user.name}" />`
+                    : `<span>${user.avatarInitials || (user.name ? user.name.slice(0, 2).toUpperCase() : 'FH')}</span>`
+                  }
                 </div>
-                <div style="font-size:11px; font-family:monospace; font-weight:800; color:var(--blue-primary); margin-top:2px;">
-                  ID: ${user.finditId || (isProvider ? 'FH-PRO-849201' : 'FH-USR-392810')}
+                <div style="flex:1; min-width:0;">
+                  <div style="font-size:15px; font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${user.name}</div>
+                  <div style="font-size:12px; color:var(--text-secondary); font-weight:600; margin-top:2px; display:flex; align-items:center; gap:4px;">
+                    <span style="color:#F59E0B; display:inline-flex;">${uiIcon('star', 12)}</span>
+                    <span>${ratingNum || '5.00'} (${jobCount})</span>
+                  </div>
+                  <div style="font-size:11px; font-family:monospace; font-weight:800; color:var(--blue-primary); margin-top:2px;">
+                    ID: ${user.finditId || (isProvider ? 'FH-PRO-VERIFIED' : 'FH-USR-VERIFIED')}
+                  </div>
                 </div>
+                <span style="color:var(--text-secondary); display:inline-flex;">${uiIcon('chevronRight', 14)}</span>
               </div>
-              <span style="color:var(--text-secondary); display:inline-flex;">${uiIcon('chevronRight', 14)}</span>
-            </div>
+            ` : `
+              <div class="drawer-profile-header" onclick="state.authRole='CUSTOMER'; state.authStep='PHONE'; state.activeModal='SIGNUP_FLOW'; renderModalLayer();">
+                <div class="drawer-avatar-circle" style="background:var(--blue-soft); color:var(--blue-primary);">
+                  ${uiIcon('user', 20)}
+                </div>
+                <div style="flex:1; min-width:0;">
+                  <div style="font-size:15px; font-weight:800; color:var(--text-main);">Sign in with WhatsApp</div>
+                  <div style="font-size:12px; color:var(--blue-primary); font-weight:700; margin-top:2px;">
+                    Tap to verify &amp; access bookings
+                  </div>
+                </div>
+                <span style="color:var(--text-secondary); display:inline-flex;">${uiIcon('chevronRight', 14)}</span>
+              </div>
+            `}
 
             <div class="drawer-menu-list">
               <div class="drawer-menu-item active" onclick="closeModal()">
@@ -2623,7 +2596,10 @@ function renderModalLayer() {
 
   // REQUEST HISTORY MODAL
   if (state.activeModal === 'HISTORY') {
-    const myRequests = (state.db.requests || []).slice(0, 8);
+    const userId = state.currentUser ? state.currentUser.id : null;
+    const myRequests = userId
+      ? (state.db.requests || []).filter((r) => r.customerId === userId)
+      : [];
     root.innerHTML = `
       <div class="modal-backdrop" onclick="closeModal()">
         <div class="indrive-modal-sheet" onclick="event.stopPropagation()">
@@ -2631,11 +2607,17 @@ function renderModalLayer() {
             <div class="cancel-sheet-title">Request History</div>
             <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
           </div>
-          ${myRequests.map((r) => `
+          ${myRequests.length === 0 ? `
+            <div style="padding:40px 20px; text-align:center; color:var(--text-secondary);">
+              <div style="font-size:32px; margin-bottom:8px; color:var(--text-muted);">${uiIcon('clock', 36)}</div>
+              <div style="font-weight:700; font-size:15px; color:var(--text-primary); margin-bottom:4px;">No requests yet</div>
+              <div style="font-size:13px;">Your completed and active service requests will appear here.</div>
+            </div>
+          ` : myRequests.map((r) => `
             <div class="indrive-cancel-row" style="cursor:default;">
               <div>
                 <div style="font-weight:800; font-size:14.5px;">${r.title}</div>
-                <div style="font-size:12px; color:var(--text-secondary); margin-top:2px;">${r.exactAddress} • ${r.status}</div>
+                <div style="font-size:12px; color:var(--text-secondary); margin-top:2px;">${r.exactAddress || r.suburbName || 'Harare'} • ${r.status}</div>
               </div>
               <div style="font-weight:800; font-size:15.5px; color:var(--blue-primary);">${formatUsdPrice(r.budgetUsd)}</div>
             </div>
@@ -2840,18 +2822,18 @@ function renderModalLayer() {
               <span style="color:#059669; display:inline-flex;">${uiIcon('check', 18)}</span>
               <div>
                 <div style="font-size:13.5px; font-weight:800; color:var(--text-main);">Chat on WhatsApp Support</div>
-                <div style="font-size:11.5px; color:var(--text-secondary);">+263 71 347 5131 (0713475131) • Typically replies in 2 mins</div>
+                <div style="font-size:11.5px; color:var(--text-secondary);">@FinditHarare • Typically replies in 2 mins</div>
               </div>
             </div>
             ${uiIcon('chevronRight', 16)}
           </a>
 
-          <a href="tel:+263713475131" class="indrive-cancel-row" style="text-decoration:none;">
+          <a href="https://wa.me/263713475131?text=Hi%20Findit%20Harare%20Support,%20I%20would%20like%20to%20request%20a%20helpline%20call" target="_blank" rel="noopener" class="indrive-cancel-row" style="text-decoration:none;">
             <div class="cancel-row-left">
               <span style="color:var(--blue-primary); display:inline-flex;">${uiIcon('phone', 18)}</span>
               <div>
                 <div style="font-size:13.5px; font-weight:800; color:var(--text-main);">Direct Helpline Call</div>
-                <div style="font-size:11.5px; color:var(--text-secondary);">+263 71 347 5131 • Harare Local Team</div>
+                <div style="font-size:11.5px; color:var(--text-secondary);">@FinditHarare • Harare Support Desk</div>
               </div>
             </div>
             ${uiIcon('chevronRight', 16)}
@@ -3315,13 +3297,21 @@ function saveDraftNotes() {
 }
 
 async function submitServiceRequest() {
+  if (!state.isAuthenticated || !state.currentUser) {
+    state.authRole = 'CUSTOMER';
+    state.authStep = 'PHONE';
+    state.activeModal = 'SIGNUP_FLOW';
+    renderAll();
+    showToast('Please verify your WhatsApp to request a specialist');
+    return;
+  }
   try {
     const cat = state.db.categories.find((c) => c.id === state.selectedCategoryId) || state.db.categories[0];
     const sub = (cat.subServices || [])[state.selectedSubServiceIdx] || { name: `${cat.name} Home Service` };
 
     const res = await apiPost('/api/requests', {
-      customerId: state.currentUser?.id || 'cust_1',
-      customerName: state.currentUser?.name || 'Tendai Moyo',
+      customerId: state.currentUser.id,
+      customerName: state.currentUser.name,
       categoryId: cat.id,
       title: sub.name,
       description: state.draftNotes || `Home visit at ${state.customAddress} (${state.entranceNote}).`,
@@ -3508,25 +3498,48 @@ async function toggleClientAndProviderMode() {
   closeModal();
   state.isSheetMinimized = false;
   if (state.role === 'CUSTOMER') {
-    const activeReq = getCustomerActiveRequest();
-    let targetProv = state.db.providers[0];
-    if (activeReq && isBookedStatus(activeReq.status)) {
-      const accOffer = (activeReq.offers || []).find((o) => o.id === activeReq.acceptedOfferId);
-      const pid = activeReq.acceptedProviderId || accOffer?.providerId;
-      const matched = state.db.providers.find((p) => p.id === pid);
-      if (matched) targetProv = matched;
-      state.providerTab = 'ACTIVE_JOB';
+    const userPhone = state.currentUser ? (state.currentUser.phone || '').replace(/\D/g, '') : '';
+    const matchedProv = userPhone
+      ? (state.db.providers || []).find((p) => p.phone.replace(/\D/g, '') === userPhone && !p.isBanned)
+      : null;
+
+    if (matchedProv) {
+      state.role = 'PROVIDER';
+      state.currentUser = matchedProv;
+      state.providerTab = 'FEED';
+      saveSession('PROVIDER', matchedProv.id, false);
+      showToast(`Switched to Provider: ${matchedProv.name}`);
+      renderAll();
+    } else {
+      // Start authentic provider sign-in / registration wizard (like inDrive)
+      state.authRole = 'PROVIDER';
+      state.authStep = 'PHONE';
+      state.authPhone = state.currentUser?.phone || '+263 77 ';
+      state.activeModal = 'SIGNUP_FLOW';
+      renderAll();
+      showToast('Please sign in or register as a Service Provider');
     }
-    state.role = 'PROVIDER';
-    state.currentUser = targetProv;
-    saveSession('PROVIDER', targetProv.id, false);
   } else {
-    const cust = state.db.customers[0];
-    state.role = 'CUSTOMER';
-    state.currentUser = cust;
-    saveSession('CUSTOMER', cust.id, false);
+    // Switching back to Client Mode
+    const userPhone = state.currentUser ? (state.currentUser.phone || '').replace(/\D/g, '') : '';
+    const matchedCust = userPhone
+      ? (state.db.customers || []).find((c) => c.phone.replace(/\D/g, '') === userPhone && !c.isBanned)
+      : null;
+
+    if (matchedCust) {
+      state.role = 'CUSTOMER';
+      state.currentUser = matchedCust;
+      saveSession('CUSTOMER', matchedCust.id, false);
+      showToast('Switched to Client Mode');
+      renderAll();
+    } else {
+      state.role = 'CUSTOMER';
+      state.currentUser = null;
+      state.isAuthenticated = false;
+      saveSession('CUSTOMER', null, true);
+      renderAll();
+    }
   }
-  await fetchState();
 }
 
 function logoutCurrentAccount() {
@@ -3955,7 +3968,7 @@ function renderProviderWalletTab(prov) {
   const canBid = balance >= minBalance;
   const txs = (prov.walletTransactions || []).slice(0, 8);
 
-  const grossUsd = (prov.completedBookings || 48) * (prov.startingPriceUsd || 25);
+  const grossUsd = (prov.completedBookings || 0) * (prov.startingPriceUsd || 25);
   const commissionSavedOrPaid = Math.round(grossUsd * (commRate / 100) * 100) / 100;
   const netTakeHomeUsd = Math.round((grossUsd - commissionSavedOrPaid) * 100) / 100;
 
@@ -4671,10 +4684,16 @@ function renderChatMessagesHtml(messages) {
 }
 
 function updateChatFeedDomOnly(req) {
+  if (!req) return;
   const feed = document.getElementById('fullScreenChatFeed');
-  if (feed && req) {
+  if (feed) {
     feed.innerHTML = renderChatMessagesHtml(req.messages || []);
     feed.scrollTop = feed.scrollHeight;
+  }
+  const embeddedFeed = document.getElementById('embeddedChatScroll');
+  if (embeddedFeed) {
+    embeddedFeed.innerHTML = renderChatMessagesHtml(req.messages || []);
+    embeddedFeed.scrollTop = embeddedFeed.scrollHeight;
   }
 }
 
@@ -4683,39 +4702,40 @@ function sendChatMessage(text, requestId = null) {
   const cleanText = text.trim();
 
   const fallbackReq = state.role === 'PROVIDER'
-    ? getProviderActiveBooking((state.currentUser || state.db.providers[0])?.id)
+    ? getProviderActiveBooking(state.currentUser?.id)
     : getCustomerActiveRequest();
-  const targetReq = (state.db.requests || []).find((r) => r.id === (requestId || fallbackReq?.id)) || fallbackReq;
+  const targetReq = (state.db?.requests || []).find((r) => r.id === (requestId || fallbackReq?.id)) || fallbackReq;
   if (!targetReq) return;
 
-  const senderName = state.currentUser?.name || (state.role === 'PROVIDER' ? 'Service Provider' : 'Tendai Moyo');
+  const senderName = state.currentUser?.name || (state.role === 'PROVIDER' ? 'Service Provider' : 'Client');
   const tempMsg = {
     id: 'msg_' + Date.now(),
     senderRole: state.role,
     senderName: senderName,
     text: cleanText,
-    timestamp: new Date().toISOString()
+    createdAt: new Date().toISOString()
   };
 
-  // OPTIMISTIC 0ms UPDATE: Append locally immediately
+  // Immediate 0ms local append
   if (!targetReq.messages) targetReq.messages = [];
   targetReq.messages.push(tempMsg);
 
-  // Update feed immediately with zero delay
-  updateChatFeedDomOnly(targetReq);
-
-  // Clear input box if open
+  // Clear inputs immediately
   const input = document.getElementById('chatTextInput');
   if (input) input.value = '';
+  const inlineInput = document.getElementById(`inlineChatInput_${targetReq.id}`);
+  if (inlineInput) inlineInput.value = '';
 
-  // Background API call without freezing UI or re-fetching whole state
+  // Update DOM immediately with no lag
+  updateChatFeedDomOnly(targetReq);
+
+  // Send to backend asynchronously
   apiPost('/api/messages', {
     requestId: targetReq.id,
     senderRole: state.role,
     senderName: senderName,
     text: cleanText
   }).catch((err) => {
-    // If backend rejects (e.g. phone number detected), revert and notify
     targetReq.messages = targetReq.messages.filter((m) => m.id !== tempMsg.id);
     updateChatFeedDomOnly(targetReq);
     showToast(err.message || 'Could not send message', 'error');
