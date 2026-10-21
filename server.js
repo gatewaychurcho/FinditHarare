@@ -9,15 +9,26 @@ const DATA_DIR = path.join(__dirname, 'data');
 const DB_FILE = path.join(DATA_DIR, 'db.json');
 const PUBLIC_DIR = path.join(__dirname, 'public');
 
-// Optional Production Environment Variables for Real WhatsApp Cloud API & Admin Auth
-const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN || '';
-const WHATSAPP_PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || '';
+// Production Environment Variables for Real WhatsApp Cloud API
+const WHATSAPP_ACCESS_TOKEN =
+  process.env.WHATSAPP_ACCESS_TOKEN ||
+  process.env.META_WA_ACCESS_TOKEN ||
+  'EAAP2XjSuoEEBS8XNmMR8BFjcHIZBEMkvqHAI1hifSW5YsyjVHrVfCEZC32mQ8VJYik0ATpqmrXbLIiUEKL7sGg28bZAkkY67tCCYOtn1snBbZB5ZBh7z5wnPZCQ4QojpZB5ouVOEKrps824qsigstJbicNf1sjjoV6HsroAyzsBkHI80fB4ob3IcZB574053paXLroGvEZBwsuCF5y0xwvr4o2peJWvGmsZAH9RZCGENiIpZAAUX0eLRmjMZBbSrzEW5jhenpAZBnZALHQUmZCzMPG0FKDtDIQZDZD';
+
+const WHATSAPP_PHONE_NUMBER_ID =
+  process.env.WHATSAPP_PHONE_NUMBER_ID ||
+  process.env.META_WA_PHONE_NUMBER_ID ||
+  '1383762161485191';
+
+const WHATSAPP_BUSINESS_ACCOUNT_ID =
+  process.env.WHATSAPP_BUSINESS_ACCOUNT_ID ||
+  '1422874912704593';
 
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
-// Helper: Send Real WhatsApp OTP via Meta WhatsApp Cloud API when credentials are provided
+// Helper: Send Real WhatsApp OTP via Meta WhatsApp Cloud API
 function sendRealWhatsAppCloudOtp(toPhone, otpCode) {
   return new Promise((resolve) => {
     if (!WHATSAPP_ACCESS_TOKEN || !WHATSAPP_PHONE_NUMBER_ID) {
@@ -27,7 +38,7 @@ function sendRealWhatsAppCloudOtp(toPhone, otpCode) {
     if (cleanPhone.startsWith('0')) cleanPhone = '263' + cleanPhone.slice(1);
     else if (!cleanPhone.startsWith('263')) cleanPhone = '263' + cleanPhone;
 
-    // Use direct WhatsApp text message (works out of the box on Meta Cloud API without waiting for template approvals)
+    // Use direct WhatsApp text message (works out of the box on Meta Cloud API)
     const payload = JSON.stringify({
       messaging_product: 'whatsapp',
       recipient_type: 'individual',
@@ -44,6 +55,7 @@ function sendRealWhatsAppCloudOtp(toPhone, otpCode) {
         hostname: 'graph.facebook.com',
         path: `/v20.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
         method: 'POST',
+        rejectUnauthorized: false,
         headers: {
           Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
           'Content-Type': 'application/json',
