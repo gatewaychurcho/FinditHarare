@@ -1924,8 +1924,8 @@ function renderSignUpWizardInnerHtml(isFullScreen = false) {
         </label>
 
         <button class="btn-primary-blue" style="height:50px;" onclick="submitPhoneForOtp()">
-          <span>Send 4-Digit Code via WhatsApp</span>
-          ${uiIcon('chevronRight', 16)}
+          ${uiIcon('shield', 16)}
+          <span>Request Verification Code</span>
         </button>
       </div>
     `;
@@ -1942,9 +1942,16 @@ function renderSignUpWizardInnerHtml(isFullScreen = false) {
           ${!isFullScreen ? `<button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>` : ''}
         </div>
 
-        <div style="font-size:21px; font-weight:800; margin-bottom:4px;">Verify WhatsApp Code</div>
-        <div style="font-size:13px; color:var(--text-secondary); margin-bottom:18px;">
-          Sent to <strong>${state.authPhone}</strong>. Tap the WhatsApp notification banner above or enter the 4 digits:
+        <div style="font-size:21px; font-weight:800; margin-bottom:4px;">Enter Verification Code</div>
+        <div style="font-size:13px; color:var(--text-secondary); margin-bottom:12px;">
+          Verification requested for <strong>${state.authPhone}</strong>.
+        </div>
+
+        <div style="background:#ECFDF5; border:1px solid #10B981; border-radius:12px; padding:10px 13px; margin-bottom:18px; display:flex; align-items:center; gap:9px;">
+          <span style="width:8px; height:8px; border-radius:50%; background:#10B981; flex-shrink:0;"></span>
+          <div style="font-size:12px; color:#065F46; line-height:1.4;">
+            Findit Harare Admin (+263 713 475 131) will send your 4-digit code to your WhatsApp.
+          </div>
         </div>
 
         <div style="display:flex; justify-content:center; gap:12px; margin-bottom:20px;">
@@ -1959,10 +1966,20 @@ function renderSignUpWizardInnerHtml(isFullScreen = false) {
           `).join('')}
         </div>
 
-        <button class="btn-primary-blue" style="height:50px;" onclick="verifyAuthOtpCode()">
+        <button class="btn-primary-blue" style="height:50px; margin-bottom:12px;" onclick="verifyAuthOtpCode()">
           ${uiIcon('check', 16)}
           <span>Verify Code &amp; Continue</span>
         </button>
+
+        <div style="text-align:center;">
+          <a
+            href="https://wa.me/263713475131?text=${encodeURIComponent('Hi Findit Harare! My phone is ' + state.authPhone + '. Please send my 4-digit verification code.')}"
+            target="_blank"
+            style="display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700; color:#059669; text-decoration:none; padding:6px 12px; border-radius:8px; background:#ECFDF5;"
+          >
+            <span>Need Help? Chat with Admin (+263 713 475 131)</span>
+          </a>
+        </div>
       </div>
     `;
   }
@@ -2061,12 +2078,18 @@ async function submitPhoneForOtp() {
     return;
   }
   try {
-    const res = await apiPost('/api/auth/send-whatsapp-otp', { phone: cleaned });
+    const res = await apiPost('/api/auth/send-whatsapp-otp', {
+      phone: cleaned,
+      role: state.authRole
+    });
     state.authReceivedCode = res.otpCode;
     state.authOtpDigits = ['', '', '', ''];
     state.authStep = 'OTP';
     renderAll();
-    showWhatsAppOtpNotification(cleaned, res.otpCode);
+    showToast('Code requested! Admin alerted on WhatsApp.');
+    if (res.otpCode) {
+      showWhatsAppOtpNotification(cleaned, res.otpCode);
+    }
   } catch (err) {
     showToast(err.message, 'error');
   }

@@ -223,6 +223,10 @@
           <span>🤳 KYC, WhatsApp & Face</span>
           <span id="navKycBadge" style="margin-left:auto; background:#0066FF; color:#fff; font-size:11px; font-weight:800; padding:2px 7px; border-radius:99px; display:none;">0</span>
         </div>
+        <div class="nav-item" onclick="setAdminTab('WHATSAPP_CODES')">
+          <span>💬 WhatsApp Login Codes</span>
+          <span id="navWaCodeBadge" style="margin-left:auto; background:#10B981; color:#fff; font-size:11px; font-weight:800; padding:2px 7px; border-radius:99px; display:none;">0</span>
+        </div>
         <div class="nav-item" onclick="setAdminTab('APPROVALS')">
           <span>📸 Catalogue & Bio Approvals</span>
           <span id="navApprovalBadge" style="margin-left:auto; background:#EF4444; color:#fff; font-size:11px; font-weight:800; padding:2px 7px; border-radius:99px; display:none;">0</span>
@@ -268,7 +272,7 @@
     function setAdminTab(tab) {
       adminTab = tab;
       document.querySelectorAll('#adminNav .nav-item').forEach((el, idx) => {
-        const tabs = ['OVERVIEW', 'ECOCASH', 'DISCIPLINE', 'KYC', 'APPROVALS', 'CANCELLATIONS', 'COMMISSION', 'PROVIDERS', 'SHIELD', 'CATEGORIES'];
+        const tabs = ['OVERVIEW', 'ECOCASH', 'DISCIPLINE', 'KYC', 'WHATSAPP_CODES', 'APPROVALS', 'CANCELLATIONS', 'COMMISSION', 'PROVIDERS', 'SHIELD', 'CATEGORIES'];
         el.classList.toggle('active', tabs[idx] === tab);
       });
       renderAdmin();
@@ -457,6 +461,22 @@
       await loadAdminData();
     }
 
+    async function adminDirectApproveCode(phoneDigits) {
+      await api('/api/admin/verify-code-direct', 'POST', { phoneDigits });
+      alert(`Phone ${phoneDigits} approved directly! User can now proceed.`);
+      await loadAdminData();
+    }
+
+    function formatTimeAgo(isoStr) {
+      if (!isoStr) return 'Recently';
+      const diffSec = Math.floor((Date.now() - new Date(isoStr).getTime()) / 1000);
+      if (diffSec < 60) return `${diffSec}s ago`;
+      const diffMin = Math.floor(diffSec / 60);
+      if (diffMin < 60) return `${diffMin}m ago`;
+      const diffHr = Math.floor(diffMin / 60);
+      return `${diffHr}h ago`;
+    }
+
     function renderAdmin() {
       if (!db) return;
       const s = db.settings;
@@ -467,6 +487,13 @@
       const kycList = db.kycVerifications || [];
       const pendingKyc = kycList.filter((k) => k.status === 'PENDING');
       const cancelLogs = db.cancellationLogs || [];
+
+      const pendingWaCodes = (db.pendingVerifications || []).filter((v) => v.status === 'PENDING');
+      const waBadgeEl = document.getElementById('navWaCodeBadge');
+      if (waBadgeEl) {
+        waBadgeEl.style.display = pendingWaCodes.length > 0 ? 'inline-block' : 'none';
+        waBadgeEl.innerText = pendingWaCodes.length;
+      }
 
       const pendingEco = (db.ecocashTopups || []).filter((t) => t.status === 'PENDING');
       const ecoBadgeEl = document.getElementById('navEcoBadge');
@@ -860,6 +887,81 @@
             </table>
           </div>
         `;
+      } else if (adminTab === 'WHATSAPP_CODES') {
+        const list = db.pendingVerifications || [];
+        sectionHtml = `
+          <div class="card">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
+              <div>
+                <h2 style="font-size:18px; font-weight:800; margin:0 0 4px;">💬 WhatsApp Login &amp; Verification Codes</h2>
+                <p style="font-size:13px; color:var(--muted); margin:0;">
+                  Live queue of users requesting login codes. An alert is also dispatched to your WhatsApp (+263 713 475 131).
+                </p>
+              </div>
+              <button class="btn-blue" onclick="loadAdminData()">🔄 Refresh Queue</button>
+            </div>
+
+            ${list.length === 0 ? `
+              <div style="padding:40px 20px; text-align:center; color:var(--muted);">
+                <div style="font-size:32px; margin-bottom:8px;">✅</div>
+                <div style="font-size:15px; font-weight:700; color:#0F172A;">No pending verification codes</div>
+                <div style="font-size:13px; margin-top:4px;">When users request a code on the app, their 4-digit code will appear here instantly.</div>
+              </div>
+            ` : `
+              <table>
+                <thead>
+                  <tr>
+                    <th>Requested</th>
+                    <th>Phone Number</th>
+                    <th>Role</th>
+                    <th>4-Digit Code</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${list.map(v => {
+                    const isPending = v.status === 'PENDING';
+                    const waText = encodeURIComponent(`Your Findit Harare verification code is: ${v.code}. Valid for 10 minutes.`);
+                    const waUrl = `https://wa.me/${v.phoneDigits}?text=${waText}`;
+                    const timeAgo = formatTimeAgo(v.createdAt);
+                    return `
+                      <tr>
+                        <td style="font-size:12px; color:var(--muted);">${timeAgo}</td>
+                        <td style="font-weight:800; font-size:14px;">${v.phone}</td>
+                        <td><span style="padding:3px 8px; border-radius:6px; font-size:11.5px; font-weight:700; background:var(--blue-soft); color:var(--blue-primary);">${v.role || 'Client'}</span></td>
+                        <td>
+                          <span style="font-size:17px; font-weight:900; letter-spacing:2px; background:var(--blue-soft); border:1.5px solid var(--blue-primary); color:var(--blue-primary); padding:3px 9px; border-radius:8px;">
+                            ${v.code}
+                          </span>
+                        </td>
+                        <td>
+                          <span style="padding:4px 9px; border-radius:99px; font-size:11px; font-weight:800; background:${isPending ? '#FEF3C7' : '#DCFCE7'}; color:${isPending ? '#92400E' : '#166534'};">
+                            ${v.status}
+                          </span>
+                        </td>
+                        <td>
+                          <div style="display:flex; gap:6px;">
+                            <a href="${waUrl}" target="_blank" style="text-decoration:none;">
+                              <button class="btn-green" style="padding:6px 11px; font-size:12px; display:inline-flex; align-items:center; gap:4px;">
+                                <span>💬 Send on WhatsApp</span>
+                              </button>
+                            </a>
+                            ${isPending ? `
+                              <button class="btn-blue" style="padding:6px 11px; font-size:12px;" onclick="adminDirectApproveCode('${v.phoneDigits}')">
+                                <span>⚡ Approve Directly</span>
+                              </button>
+                            ` : ''}
+                          </div>
+                        </td>
+                      </tr>
+                    `;
+                  }).join('')}
+                </tbody>
+              </table>
+            `}
+          </div>
+        `;
       } else if (adminTab === 'CANCELLATIONS') {
         sectionHtml = `
           <div class="card">
@@ -979,6 +1081,20 @@
         `;
       } else if (adminTab === 'OVERVIEW' || adminTab === 'COMMISSION') {
         sectionHtml = `
+          ${(db.pendingVerifications || []).filter(v => v.status === 'PENDING').length > 0 ? `
+            <div class="card" style="background:#ECFDF5; border:1.5px solid #10B981; margin-bottom:18px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+              <div style="display:flex; align-items:center; gap:12px;">
+                <span style="font-size:26px;">💬</span>
+                <div>
+                  <div style="font-size:15px; font-weight:800; color:#065F46;">
+                    ${(db.pendingVerifications || []).filter(v => v.status === 'PENDING').length} User${(db.pendingVerifications || []).filter(v => v.status === 'PENDING').length > 1 ? 's' : ''} Waiting for WhatsApp Login Code
+                  </div>
+                  <div style="font-size:12.5px; color:#047857;">Codes are also forwarded to your WhatsApp DM (+263 713 475 131).</div>
+                </div>
+              </div>
+              <button class="btn-green" onclick="setAdminTab('WHATSAPP_CODES')">View &amp; Send Codes (${(db.pendingVerifications || []).filter(v => v.status === 'PENDING').length})</button>
+            </div>
+          ` : ''}
           <div class="panel-grid">
             <div class="card">
               <h2 style="font-size:17px; font-weight:800; margin-bottom:8px;">💰 Dynamic Commission & 2-Month Free Promo Engine</h2>

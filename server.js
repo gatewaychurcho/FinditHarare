@@ -24,21 +24,22 @@ const WHATSAPP_BUSINESS_ACCOUNT_ID =
   process.env.WHATSAPP_BUSINESS_ACCOUNT_ID ||
   '1422874912704593';
 
+const ADMIN_WHATSAPP_PHONE = process.env.ADMIN_WHATSAPP_PHONE || '263713475131';
+
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
-// Helper: Send Real WhatsApp OTP via Meta WhatsApp Cloud API
-function sendRealWhatsAppCloudOtp(toPhone, otpCode) {
+// Helper: Send arbitrary text to any WhatsApp number via Meta WhatsApp Cloud API
+function sendWhatsAppDirectText(toPhone, messageBody) {
   return new Promise((resolve) => {
     if (!WHATSAPP_ACCESS_TOKEN || !WHATSAPP_PHONE_NUMBER_ID) {
-      return resolve({ liveWhatsAppSent: false, mode: 'LOCAL_DEV_OTP' });
+      return resolve({ liveWhatsAppSent: false, mode: 'NO_CREDENTIALS' });
     }
     let cleanPhone = toPhone.replace(/\D/g, '');
     if (cleanPhone.startsWith('0')) cleanPhone = '263' + cleanPhone.slice(1);
     else if (!cleanPhone.startsWith('263')) cleanPhone = '263' + cleanPhone;
 
-    // Use direct WhatsApp text message (works out of the box on Meta Cloud API)
     const payload = JSON.stringify({
       messaging_product: 'whatsapp',
       recipient_type: 'individual',
@@ -46,7 +47,7 @@ function sendRealWhatsAppCloudOtp(toPhone, otpCode) {
       type: 'text',
       text: {
         preview_url: false,
-        body: `Your Findit Harare verification code is: ${otpCode}. Valid for 10 minutes.`
+        body: messageBody
       }
     });
 
@@ -74,6 +75,11 @@ function sendRealWhatsAppCloudOtp(toPhone, otpCode) {
     req.write(payload);
     req.end();
   });
+}
+
+// Helper: Send Real WhatsApp OTP via Meta WhatsApp Cloud API
+function sendRealWhatsAppCloudOtp(toPhone, otpCode) {
+  return sendWhatsAppDirectText(toPhone, `Your Findit Harare verification code is: ${otpCode}. Valid for 10 minutes.`);
 }
 
 // Helper: Generate Unique Cryptographic Findit Harare ID (e.g., FH-PRO-849201 or FH-USR-391044)
@@ -1236,6 +1242,39 @@ const server = http.createServer(async (req, res) => {
         attempts: 0
       });
 
+      // Save into db.pendingVerifications so Admin Dashboard has a live real-time queue
+      if (!db.pendingVerifications) db.pendingVerifications = [];
+      db.pendingVerifications = db.pendingVerifications.filter(
+        (v) => v.phoneDigits !== cleanDigits && Date.now() - new Date(v.createdAt).getTime() < 60 * 60 * 1000
+      );
+      const roleStr = body.role === 'PROVIDER' ? 'Service Provider' : 'Client';
+      db.pendingVerifications.unshift({
+        id: 'ver_' + Date.now(),
+        phone: rawPhone,
+        phoneDigits: cleanDigits,
+        code: otpCode,
+        role: roleStr,
+        status: 'PENDING',
+        createdAt: new Date().toISOString()
+      });
+      saveDb(db);
+
+      // AUTOMATIC NOTIFICATION TO ADMIN WHATSAPP DM (0713475131)
+      const userWaLink = `https://wa.me/${cleanDigits}?text=${encodeURIComponent(
+        `Your Findit Harare verification code is: ${otpCode}. Valid for 10 minutes.`
+      )}`;
+      const adminAlertText =
+        `🔔 *Findit Harare Verification Request*\n\n` +
+        `👤 Role: ${roleStr}\n` +
+        `📱 User Phone: ${rawPhone}\n` +
+        `🔑 Code: *${otpCode}*\n\n` +
+        `Tap below to send this code to user on WhatsApp:\n${userWaLink}`;
+
+      sendWhatsAppDirectText(ADMIN_WHATSAPP_PHONE, adminAlertText).catch((e) =>
+        console.log('[Admin DM Alert Error]:', e.message)
+      );
+
+      // Also dispatch directly to the user's WhatsApp number
       const waResult = await sendRealWhatsAppCloudOtp(rawPhone, otpCode);
       console.log(`[Findit WhatsApp OTP] Phone: ${rawPhone} | Code: ${otpCode} | Mode: ${waResult.mode}`);
 
@@ -1244,7 +1283,7 @@ const server = http.createServer(async (req, res) => {
         phone: rawPhone,
         deliveryMode: waResult.mode,
         liveWhatsAppSent: waResult.liveWhatsAppSent,
-        // Only return otpCode in response when WHATSAPP_ACCESS_TOKEN is not yet configured so local testing works seamlessly
+        adminDmSent: true,
         otpCode: waResult.liveWhatsAppSent ? undefined : otpCode
       });
     } catch (e) {
@@ -1261,14 +1300,17 @@ const server = http.createServer(async (req, res) => {
       const enteredCode = String(body.code || '').trim();
       const record = pendingOtpStore.get(cleanDigits);
 
-      if (!record) {
+      const dbPending = (db.pendingVerifications || []).find((v) => v.phoneDigits === cleanDigits);
+      const isApprovedByAdmin = dbPending && dbPending.status === 'APPROVED_BY_ADMIN';
+
+      if (!record && !isApprovedByAdmin) {
         return sendJson(res, 400, { error: 'Verification code expired or not requested. Please request a new WhatsApp code.' });
       }
-      if (Date.now() - record.createdAt > 10 * 60 * 1000) {
+      if (record && Date.now() - record.createdAt > 10 * 60 * 1000 && !isApprovedByAdmin) {
         pendingOtpStore.delete(cleanDigits);
         return sendJson(res, 400, { error: 'Verification code expired (10 min limit). Please request a new code.' });
       }
-      if (record.code !== enteredCode) {
+      if (!isApprovedByAdmin && record && record.code !== enteredCode) {
         record.attempts += 1;
         if (record.attempts >= 5) {
           pendingOtpStore.delete(cleanDigits);
@@ -1278,6 +1320,10 @@ const server = http.createServer(async (req, res) => {
       }
 
       pendingOtpStore.delete(cleanDigits);
+      if (dbPending) {
+        dbPending.status = 'VERIFIED';
+        saveDb(db);
+      }
       const existingCustomer = db.customers.find((c) => c.phone.replace(/\D/g, '') === cleanDigits) || null;
       const existingProvider = db.providers.find((p) => p.phone.replace(/\D/g, '') === cleanDigits) || null;
       return sendJson(res, 200, {
@@ -1286,6 +1332,26 @@ const server = http.createServer(async (req, res) => {
         existingCustomer,
         existingProvider
       });
+    } catch (e) {
+      return sendJson(res, 400, { error: e.message });
+    }
+  }
+
+  // Admin Direct Approval of Verification Code (bypass typing)
+  if (pathname === '/api/admin/verify-code-direct' && req.method === 'POST') {
+    try {
+      const body = await parseBody(req);
+      const cleanDigits = (body.phoneDigits || '').replace(/\D/g, '');
+      const record = pendingOtpStore.get(cleanDigits);
+      if (record) {
+        record.adminBypassed = true;
+      }
+      if (db.pendingVerifications) {
+        const item = db.pendingVerifications.find((v) => v.phoneDigits === cleanDigits);
+        if (item) item.status = 'APPROVED_BY_ADMIN';
+        saveDb(db);
+      }
+      return sendJson(res, 200, { success: true, message: `Phone ${cleanDigits} approved directly by Admin.` });
     } catch (e) {
       return sendJson(res, 400, { error: e.message });
     }

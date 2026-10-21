@@ -770,6 +770,15 @@
       "walletBalanceUsd": 15,
       "walletTransactions": [
         {
+          "id": "tx_1792598289479",
+          "date": "2026-10-21T15:58:09.479Z",
+          "type": "PROMO_WAIVER",
+          "method": "0% Launch Promo",
+          "amountUsd": 0,
+          "savedUsd": 1.5,
+          "note": "10% fee ($1.50) waived on $15.00 booking!"
+        },
+        {
           "id": "tx_1792537070462",
           "date": "2026-10-20T22:57:50.462Z",
           "type": "PROMO_WAIVER",
@@ -1081,6 +1090,132 @@
   ],
   "requests": [
     {
+      "id": "req_84230",
+      "customerId": "cust_1",
+      "customerFinditId": "FH-USR-391044",
+      "customerName": "Tendai Moyo",
+      "customerRating": 5,
+      "customerCompletedVisits": 8,
+      "categoryId": "barber",
+      "categoryName": "Mobile Barber & Grooming",
+      "title": "VIP Home Skin Fade + Beard Trim",
+      "description": "Home visit at Borowdale Road (Main Gate).",
+      "suburbId": "borrowdale",
+      "suburbName": "Vainona",
+      "exactAddress": "Borowdale Road, Vainona, Harare",
+      "lat": -17.75602,
+      "lng": 31.09078,
+      "serviceMode": "HOME_VISIT",
+      "preferredTime": "Today, Now (ASAP)",
+      "paymentMethod": "Cash USD",
+      "budgetUsd": 15,
+      "startPinCode": "4028",
+      "pinVerifiedByProvider": false,
+      "directProviderId": null,
+      "status": "CONFIRMED",
+      "acceptedOfferId": "off_870420",
+      "routeCoordinates": [
+        [
+          -17.802,
+          31.058
+        ],
+        [
+          -17.79572,
+          31.06043
+        ],
+        [
+          -17.78952,
+          31.06512
+        ],
+        [
+          -17.78346,
+          31.06711
+        ],
+        [
+          -17.77761,
+          31.07249
+        ],
+        [
+          -17.77197,
+          31.0753
+        ],
+        [
+          -17.76653,
+          31.08151
+        ],
+        [
+          -17.76123,
+          31.08501
+        ],
+        [
+          -17.75602,
+          31.09078
+        ]
+      ],
+      "createdAt": "2026-10-21T15:58:04.230Z",
+      "offers": [
+        {
+          "id": "off_870420",
+          "providerId": "prov_4",
+          "providerFinditId": "FH-PRO-854589",
+          "providerName": "Tinashe Gumbo",
+          "providerShortName": "Tinashe",
+          "providerBrand": "Cordless Pro Clipper Kit",
+          "providerAvatar": "TG",
+          "providerAvatarUrl": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=240&q=80",
+          "providerSkillTier": "Platinum pro",
+          "isPlatinum": true,
+          "providerExpYears": 7,
+          "providerRating": 5,
+          "providerReviewCount": 413,
+          "providerCompletedJobs": 1241,
+          "providerBadges": {
+            "phoneVerified": true,
+            "idVerified": true,
+            "businessVerified": true,
+            "faceVerified": true
+          },
+          "distanceKm": 6.2,
+          "etaMinutes": 2,
+          "priceUsd": 15,
+          "travelFeeUsd": 0,
+          "bidType": "ACCEPTED_PRICE",
+          "proposedTime": "2 min",
+          "conditions": [
+            "Your fare",
+            "Cordless Pro Clipper Kit"
+          ],
+          "status": "ACCEPTED",
+          "lastCounterBy": "PROVIDER",
+          "createdAt": "2026-10-21T15:58:07.042Z",
+          "expiresAt": 1792598407042,
+          "ttlSeconds": 120
+        }
+      ],
+      "messages": [
+        {
+          "id": "msg_1792598289479",
+          "senderRole": "SYSTEM",
+          "senderName": "Findit Harare",
+          "providerId": "prov_4",
+          "type": "BOOKING_CONFIRMED",
+          "text": "Tinashe Gumbo is now en route to Borowdale Road, Vainona, Harare (6.2 km away, ~2 mins). Share Start PIN #4028 when they arrive at your gate.",
+          "timestamp": "2026-10-21T15:58:09.479Z"
+        },
+        {
+          "id": "msg_1792598289480",
+          "senderRole": "PROVIDER",
+          "senderName": "Tinashe Gumbo",
+          "providerId": "prov_4",
+          "type": "CHAT",
+          "text": "Hi Tendai! I've packed my mobile kit and I'm on my way to Borowdale Road, Vainona, Harare (~2 mins away). Message me here if there are any gate instructions.",
+          "timestamp": "2026-10-21T15:58:09.479Z"
+        }
+      ],
+      "acceptedProviderId": "prov_4",
+      "agreedTotalUsd": 15
+    },
+    {
       "id": "req_69505",
       "customerId": "cust_1",
       "customerFinditId": "FH-USR-391044",
@@ -1103,7 +1238,7 @@
       "startPinCode": "4578",
       "pinVerifiedByProvider": false,
       "directProviderId": null,
-      "status": "CONFIRMED",
+      "status": "CANCELLED",
       "acceptedOfferId": "off_723300",
       "routeCoordinates": [
         [
@@ -1201,10 +1336,31 @@
           "type": "CHAT",
           "text": "Hi Tendai! I've packed my mobile kit and I'm on my way to Borowdale Road, Vainona, Harare (~2 mins away). Message me here if there are any gate instructions.",
           "timestamp": "2026-10-21T15:37:54.590Z"
+        },
+        {
+          "id": "msg_1792598235870",
+          "senderRole": "CUSTOMER",
+          "senderName": "Tendai Moyo",
+          "providerId": null,
+          "type": "QUICK_MESSAGE",
+          "text": "Coming out to open the gate",
+          "timestamp": "2026-10-21T15:57:15.870Z"
+        },
+        {
+          "id": "msg_1792598264581",
+          "senderRole": "SYSTEM",
+          "senderName": "Findit Harare",
+          "type": "TASK_CANCELLED",
+          "text": "Task Cancelled by Tendai Moyo (Client). Reason: \"High fares\"",
+          "timestamp": "2026-10-21T15:57:44.581Z"
         }
       ],
       "acceptedProviderId": "prov_2",
-      "agreedTotalUsd": 20
+      "agreedTotalUsd": 20,
+      "cancelledByRole": "CUSTOMER",
+      "cancelledByName": "Tendai Moyo",
+      "cancelReason": "High fares",
+      "cancelledAt": "2026-10-21T15:57:44.581Z"
     },
     {
       "id": "req_76835",
@@ -4177,6 +4333,20 @@
   ],
   "cancellationLogs": [
     {
+      "id": "canc_64581",
+      "timestamp": "2026-10-21T15:57:44.581Z",
+      "requestId": "req_69505",
+      "categoryName": "French Tip Acrylic Full Set",
+      "serviceTitle": "French Tip Acrylic Full Set",
+      "actorRole": "CUSTOMER",
+      "cancelledByRole": "CUSTOMER",
+      "actorName": "Tendai Moyo",
+      "cancelledByName": "Tendai Moyo",
+      "reason": "High fares",
+      "stage": "CONFIRMED",
+      "stageWhenCancelled": "CONFIRMED"
+    },
+    {
       "id": "canc_62860",
       "timestamp": "2026-10-20T22:59:22.860Z",
       "requestId": "req_08804",
@@ -4317,6 +4487,28 @@
   ],
   "leakageLogs": [
     {
+      "id": "leak_b504016b",
+      "timestamp": "2026-10-21T15:58:43.510Z",
+      "actorRole": "CUSTOMER",
+      "actorName": "Tendai Moyo",
+      "context": "In-App Chat (VIP Home Skin Fade + Beard Trim)",
+      "attemptedText": "@hnde.com",
+      "reasons": [
+        "Social media @handles and email addresses are blocked"
+      ]
+    },
+    {
+      "id": "leak_1bab4203",
+      "timestamp": "2026-10-21T15:58:32.325Z",
+      "actorRole": "CUSTOMER",
+      "actorName": "Tendai Moyo",
+      "context": "In-App Chat (VIP Home Skin Fade + Beard Trim)",
+      "attemptedText": "07890697889",
+      "reasons": [
+        "Phone numbers are blocked to keep bookings protected in-app"
+      ]
+    },
+    {
       "id": "leak_1",
       "timestamp": "2026-10-20T18:12:10.408Z",
       "actorRole": "PROVIDER",
@@ -4330,6 +4522,20 @@
     }
   ],
   "revenueLedger": [
+    {
+      "id": "rev_1792598289479",
+      "timestamp": "2026-10-21T15:58:09.479Z",
+      "requestId": "req_84230",
+      "providerName": "Tinashe Gumbo",
+      "customerName": "Tendai Moyo",
+      "categoryName": "Mobile Barber & Grooming",
+      "bookingAmountUsd": 15,
+      "configuredCommissionPercent": 10,
+      "standardFeeUsd": 1.5,
+      "promoApplied": true,
+      "actualFeeCollectedUsd": 0,
+      "paymentMethod": "Cash USD"
+    },
     {
       "id": "rev_1792597074590",
       "timestamp": "2026-10-21T15:37:54.590Z",
