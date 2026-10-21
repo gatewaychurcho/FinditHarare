@@ -348,7 +348,24 @@ function initSplashScreen() {
 async function fetchState() {
   try {
     const res = await fetch('/api/state');
-    state.db = await res.json();
+    const newDb = await res.json();
+
+    // Preserve optimistic local chat messages across state fetches so messages never disappear
+    if (state.db && state.db.requests && newDb.requests) {
+      newDb.requests.forEach((newReq) => {
+        const oldReq = state.db.requests.find((r) => r.id === newReq.id);
+        if (oldReq && oldReq.messages && oldReq.messages.length > 0) {
+          if (!newReq.messages) newReq.messages = [];
+          oldReq.messages.forEach((oldM) => {
+            if (!newReq.messages.some((m) => m.id === oldM.id || (m.text === oldM.text && m.senderRole === oldM.senderRole))) {
+              newReq.messages.push(oldM);
+            }
+          });
+        }
+      });
+    }
+
+    state.db = newDb;
 
     if (state.isAuthenticated && state.savedAccountId) {
       if (state.role === 'PROVIDER') {
@@ -410,6 +427,19 @@ function connectRealtimeStream() {
       const data = JSON.parse(event.data);
       if (data.eventType === 'CONNECTED') return;
 
+      if (data.eventType === 'MESSAGE_SENT' && data.payload) {
+        const { requestId, message } = data.payload;
+        const targetReq = (state.db?.requests || []).find((r) => r.id === requestId);
+        if (targetReq && message) {
+          if (!targetReq.messages) targetReq.messages = [];
+          if (!targetReq.messages.some((m) => m.id === message.id)) {
+            targetReq.messages.push(message);
+          }
+          updateChatFeedDomOnly(targetReq);
+        }
+        return;
+      }
+
       await fetchState();
 
       if (data.eventType === 'TASK_CANCELLED' && state.role === 'CUSTOMER') {
@@ -425,8 +455,66 @@ function connectRealtimeStream() {
 }
 
 // ============================================================================
-// 1-SECOND COUNTDOWN LOOP FOR SEARCH BAR & OFFER ACCEPT BUTTON FILLS
+// 1-SECOND COUNTDOWN LOOP FOR SEARCH BAR, GEOFENCE 50M ALERTS & 20M AUTO-PAIR
 // ============================================================================
+function calculateDistanceMeters(lat1, lng1, lat2, lng2) {
+  if (!lat1 || !lng1 || !lat2 || !lng2) return 999999;
+  const R = 6371000;
+  const toRad = (d) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.round(R * c);
+}
+
+function checkProximityAutoPairTick() {
+  if (!state.db || !state.isAuthenticated) return;
+  if (!state.bookingProximitySeconds) state.bookingProximitySeconds = {};
+
+  const bookedJob = state.role === 'PROVIDER'
+    ? getProviderActiveBooking(state.currentUser?.id)
+    : getCustomerActiveRequest();
+
+  if (!bookedJob || (bookedJob.status !== 'CONFIRMED' && bookedJob.status !== 'ARRIVED')) {
+    return;
+  }
+
+  const provId = bookedJob.acceptedProviderId || bookedJob.offers?.[0]?.providerId;
+  const prov = (state.db.providers || []).find((p) => p.id === provId) || state.db.providers?.[0];
+  if (!prov) return;
+
+  const distMeters = calculateDistanceMeters(prov.lat, prov.lng, bookedJob.lat, bookedJob.lng);
+  const isWithin20m = distMeters <= 20 || bookedJob.status === 'ARRIVED';
+
+  if (isWithin20m) {
+    state.bookingProximitySeconds[bookedJob.id] = (state.bookingProximitySeconds[bookedJob.id] || 0) + 1;
+    const currentSec = state.bookingProximitySeconds[bookedJob.id];
+
+    // Update countdown text on live DOM without wiping inputs or map
+    const countdownEls = document.querySelectorAll('.proximity-autopair-timer');
+    countdownEls.forEach((el) => {
+      el.textContent = `${Math.max(0, 60 - currentSec)}s`;
+    });
+
+    if (currentSec >= 60) {
+      delete state.bookingProximitySeconds[bookedJob.id];
+      showToast('20m Proximity reached for 1 min: Task automatically started!');
+      apiPost('/api/bookings/status', {
+        requestId: bookedJob.id,
+        status: 'IN_PROGRESS',
+        autoStarted: true
+      }).then(() => {
+        fetchState();
+      }).catch((e) => console.warn('Auto-pair trigger error:', e));
+    }
+  } else {
+    state.bookingProximitySeconds[bookedJob.id] = 0;
+  }
+}
+
 function startOfferCountdownLoop() {
   if (offerCountdownInterval) clearInterval(offerCountdownInterval);
   offerCountdownInterval = setInterval(() => {
@@ -435,6 +523,8 @@ function startOfferCountdownLoop() {
 }
 
 async function tickCountdowns() {
+  checkProximityAutoPairTick();
+
   if (!state.db || !state.isAuthenticated || state.role !== 'CUSTOMER') return;
   const activeReq = getCustomerActiveRequest();
   if (!activeReq || activeReq.status !== 'OPEN') return;
@@ -1776,6 +1866,38 @@ function renderBookedTrackingOverlay(req) {
           </div>
         </div>
 
+        <!-- Geofence 50m Alert & 20m Auto-Pair Status -->
+        ${(() => {
+          const distMeters = calculateDistanceMeters(prov?.lat, prov?.lng, req.lat, req.lng);
+          const isWithin50m = distMeters <= 50 || req.status === 'ARRIVED';
+          const isWithin20m = distMeters <= 20 || req.status === 'ARRIVED';
+          const proximitySec = (state.bookingProximitySeconds && state.bookingProximitySeconds[req.id]) || 0;
+          const autoPairRemaining = Math.max(0, 60 - proximitySec);
+
+          if (!isWithin50m || req.status === 'IN_PROGRESS') return '';
+          return `
+            <div style="background:#EFF6FF; border:1.5px solid #93C5FD; border-radius:13px; padding:10px 12px; margin-bottom:12px; display:flex; align-items:flex-start; gap:9px;">
+              <div style="width:30px; height:30px; border-radius:50%; background:#0066FF; color:#fff; display:flex; align-items:center; justify-content:center; flex-shrink:0; margin-top:1px;">
+                ${uiIcon('pin', 15)}
+              </div>
+              <div style="flex:1; min-width:0;">
+                <div style="font-size:12.5px; font-weight:800; color:#1E40AF;">
+                  ${req.status === 'ARRIVED' ? 'Provider is outside your gate!' : `Provider is within 50m (${distMeters}m away)!`}
+                </div>
+                <div style="font-size:12px; color:#1E3A8A; margin-top:2px;">
+                  Please share your 4-digit Start PIN: <strong style="font-size:13.5px; color:#0066FF; letter-spacing:1px;">#${req.startPinCode || '4829'}</strong> with ${prov?.shortName || 'your provider'}.
+                </div>
+                ${isWithin20m ? `
+                  <div style="font-size:11px; font-weight:700; color:#059669; margin-top:5px; display:flex; align-items:center; gap:5px;">
+                    <span style="width:6px; height:6px; border-radius:50%; background:#10B981; display:inline-block;"></span>
+                    <span>Within 20m • Auto-pairing in <span class="proximity-autopair-timer">${autoPairRemaining}s</span> if PIN not entered</span>
+                  </div>
+                ` : ''}
+              </div>
+            </div>
+          `;
+        })()}
+
         <!-- Accepted Service Provider Card -->
         <div class="indrive-selected-tier-box" style="margin-bottom:12px; padding:11px 13px;">
           <div class="offer-pro-row" style="margin-bottom:0;">
@@ -1800,7 +1922,7 @@ function renderBookedTrackingOverlay(req) {
 
         <!-- Latest Message Snippet Pill (if messages exist) -->
         ${(req.messages && req.messages.length > 0) ? `
-          <div class="chat-preview-pill" onclick="openChatDrawer('${prov?.id}')">
+          <div class="chat-preview-pill" onclick="openChatDrawer('${req.id}', '${prov?.id}')">
             <div class="chat-preview-dot"></div>
             <div class="chat-preview-text">
               <span class="chat-preview-sender">${req.messages[req.messages.length - 1].senderName}:</span>
@@ -1816,7 +1938,7 @@ function renderBookedTrackingOverlay(req) {
             ${uiIcon('phone', 14)}
             <span>Call</span>
           </button>
-          <button class="btn-dark-sec" onclick="openChatDrawer('${prov?.id}')">
+          <button class="btn-dark-sec" onclick="openChatDrawer('${req.id}', '${prov?.id}')">
             ${uiIcon('chat', 14)}
             <span>Chat ${(req.messages && req.messages.length > 0) ? `(${req.messages.length})` : ''}</span>
           </button>
@@ -2002,15 +2124,10 @@ function renderSignUpWizardInnerHtml(isFullScreen = false) {
             <span>Retake Photo</span>
           </button>
         ` : `
-          <button class="btn-primary-blue" style="height:42px; padding:0 16px;" onclick="captureRealWebcamSelfie()">
-            ${uiIcon('camera', 15)}
+          <button class="btn-primary-blue" style="height:44px; padding:0 24px; font-weight:700;" onclick="captureRealWebcamSelfie()">
+            ${uiIcon('camera', 16)}
             <span>Take Photo</span>
           </button>
-          <label class="btn-dark-sec" style="height:42px; padding:0 14px; cursor:pointer; display:inline-flex; align-items:center; gap:6px;">
-            <input type="file" accept="image/*" capture="user" style="display:none;" onchange="handleSelfieUpload(this)" />
-            ${uiIcon('image', 15)}
-            <span>Upload Photo</span>
-          </label>
         `}
       </div>
 
@@ -2123,7 +2240,12 @@ async function verifyAuthOtpCode() {
     if (root) root.innerHTML = '';
 
     // If an existing customer or provider profile matches this phone, log in immediately!
-    const existingAcc = state.authRole === 'PROVIDER' ? res.existingProvider : res.existingCustomer;
+    const cleanPhoneDigits = (state.authPhone || '').replace(/\D/g, '').slice(-9);
+    let existingAcc = state.authRole === 'PROVIDER' ? res.existingProvider : res.existingCustomer;
+    if (!existingAcc && state.db) {
+      const list = state.authRole === 'PROVIDER' ? (state.db.providers || []) : (state.db.customers || []);
+      existingAcc = list.find((item) => (item.phone || '').replace(/\D/g, '').slice(-9) === cleanPhoneDigits) || null;
+    }
     if (existingAcc) {
       state.currentUser = existingAcc;
       state.isAuthenticated = true;
@@ -2152,7 +2274,10 @@ async function startAuthWebcamPreview() {
         video: { facingMode: 'user', width: { ideal: 480 }, height: { ideal: 480 } }
       });
       const videoEl = document.getElementById('authSelfieVideo');
-      if (videoEl) videoEl.srcObject = mediaStreamRef;
+      if (videoEl) {
+        videoEl.srcObject = mediaStreamRef;
+        videoEl.play().catch(() => {});
+      }
     }
   } catch (e) {
     console.log('[Webcam Stream Error]:', e.message);
@@ -2174,7 +2299,7 @@ function captureRealWebcamSelfie() {
     renderAll();
   } else {
     startAuthWebcamPreview();
-    showToast('Starting camera... Please allow camera access, or tap "Upload Photo".');
+    showToast('Starting camera... Please allow camera access.');
   }
 }
 
@@ -2184,20 +2309,6 @@ function retakeAuthSelfie() {
   state.authFaceScanVerified = false;
   renderAll();
   setTimeout(startAuthWebcamPreview, 120);
-}
-
-function handleSelfieUpload(inputEl) {
-  const file = inputEl.files && inputEl.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    state.authCapturedSelfieUrl = e.target.result;
-    state.authFaceScanVerified = true;
-    stopFaceCameraStream();
-    showToast('Selfie photo uploaded!');
-    renderAll();
-  };
-  reader.readAsDataURL(file);
 }
 
 async function finishNativeRegistration() {
@@ -3851,26 +3962,43 @@ function renderProviderActiveVisitTab(prov, activeJob) {
           </button>
         ` : ''}
 
-        ${isArrived && !isInProgress ? `
-          <div style="background:#FFFBEB; border:1.5px solid #FDE68A; border-radius:13px; padding:10px 12px; margin-bottom:8px;">
-            <div style="font-size:12px; font-weight:800; color:#B45309; margin-bottom:6px;">
-              Ask ${activeJob.customerName.split(' ')[0]} for their 4-digit Start PIN (shown on their screen: #${activeJob.startPinCode}):
+        ${(() => {
+          const provUser = state.currentUser || state.db.providers[0];
+          const distMeters = calculateDistanceMeters(provUser?.lat, provUser?.lng, activeJob.lat, activeJob.lng);
+          const isWithin50m = distMeters <= 50 || isArrived;
+          const isWithin20m = distMeters <= 20 || isArrived;
+          const proximitySec = (state.bookingProximitySeconds && state.bookingProximitySeconds[activeJob.id]) || 0;
+          const autoPairRemaining = Math.max(0, 60 - proximitySec);
+
+          if ((!isArrived && !isWithin50m) || isInProgress) return '';
+          return `
+            <div style="background:#FFFBEB; border:1.5px solid #FDE68A; border-radius:13px; padding:11px 13px; margin-bottom:10px;">
+              <div style="font-size:12px; font-weight:800; color:#B45309; margin-bottom:7px; display:flex; align-items:center; gap:6px;">
+                <span style="color:#D97706; display:inline-flex;">${uiIcon('shield', 14)}</span>
+                <span>You are within 50m of ${activeJob.customerName.split(' ')[0]}! Ask client for their 4-digit Start PIN:</span>
+              </div>
+              <div style="display:flex; gap:8px;">
+                <input
+                  id="providerPinInput_${activeJob.id}"
+                  class="dark-input"
+                  style="font-size:16px; font-weight:800; letter-spacing:4px; text-align:center;"
+                  placeholder="• • • •"
+                  maxlength="4"
+                />
+                <button class="btn-primary-blue" style="height:42px; font-size:13px; padding:0 16px;" onclick="providerVerifyStartPin('${activeJob.id}')">
+                  ${uiIcon('key', 15)}
+                  <span>Verify &amp; Start</span>
+                </button>
+              </div>
+              ${isWithin20m ? `
+                <div style="font-size:11.5px; font-weight:700; color:#059669; margin-top:7px; display:flex; align-items:center; gap:5px;">
+                  <span style="width:6px; height:6px; border-radius:50%; background:#10B981; display:inline-block;"></span>
+                  <span>Within 20m of client • Auto-pairing in <span class="proximity-autopair-timer">${autoPairRemaining}s</span> if PIN not entered</span>
+                </div>
+              ` : ''}
             </div>
-            <div style="display:flex; gap:8px;">
-              <input
-                id="providerPinInput_${activeJob.id}"
-                class="dark-input"
-                style="font-size:16px; font-weight:800; letter-spacing:3px; text-align:center;"
-                value="${activeJob.startPinCode || '4829'}"
-                maxlength="4"
-              />
-              <button class="btn-primary-blue" style="height:42px; font-size:13px;" onclick="providerVerifyStartPin('${activeJob.id}')">
-                ${uiIcon('key', 15)}
-                <span>Verify PIN &amp; Start</span>
-              </button>
-            </div>
-          </div>
-        ` : ''}
+          `;
+        })()}
 
         ${isInProgress ? `
           <button class="btn-primary-blue" style="height:44px; font-size:14px; background:#10B981;" onclick="openRateBookingModal('${activeJob.id}')">
@@ -4521,9 +4649,25 @@ function escapeHtml(str) {
     .replace(/'/g, '&#39;');
 }
 
-function openChatDrawer(providerId) {
+function openChatDrawer(requestIdOrProviderId = null, optionalProviderId = null) {
   state.chatDrawerOpen = true;
-  state.activeChatProviderId = providerId;
+  let targetRequestId = null;
+  let targetProviderId = null;
+
+  if (typeof requestIdOrProviderId === 'string' && requestIdOrProviderId.startsWith('req_')) {
+    targetRequestId = requestIdOrProviderId;
+    targetProviderId = optionalProviderId;
+  } else if (typeof requestIdOrProviderId === 'string' && requestIdOrProviderId.startsWith('prov_')) {
+    targetProviderId = requestIdOrProviderId;
+    targetRequestId = optionalProviderId;
+  } else {
+    targetRequestId = requestIdOrProviderId;
+    targetProviderId = optionalProviderId;
+  }
+
+  if (targetRequestId) state.activeChatRequestId = targetRequestId;
+  if (targetProviderId) state.activeChatProviderId = targetProviderId;
+
   renderChatDrawer();
   setTimeout(() => {
     const input = document.getElementById('chatTextInput');
@@ -4546,9 +4690,16 @@ function renderChatDrawer() {
     return;
   }
 
-  const req = (state.role === 'PROVIDER'
-    ? getProviderActiveBooking((state.currentUser || state.db.providers[0])?.id)
-    : getCustomerActiveRequest()) || (state.db.requests || [])[0];
+  const targetReqId = state.activeChatRequestId;
+  const req = (targetReqId && (state.db?.requests || []).find((r) => r.id === targetReqId))
+    || (state.role === 'PROVIDER'
+      ? getProviderActiveBooking((state.currentUser || state.db?.providers?.[0])?.id)
+      : getCustomerActiveRequest())
+    || (state.db?.requests || [])[0];
+
+  if (req && !state.activeChatRequestId) {
+    state.activeChatRequestId = req.id;
+  }
 
   let peerName = 'Service Provider';
   let peerAvatar = 'https://images.unsplash.com/photo-1531123897727-8f129e1688ce?auto=format&fit=crop&w=240&q=80';
@@ -4704,15 +4855,17 @@ function sendChatMessage(text, requestId = null) {
   if (!text || !text.trim()) return;
   const cleanText = text.trim();
 
+  const targetReqId = requestId || state.activeChatRequestId;
   const fallbackReq = state.role === 'PROVIDER'
     ? getProviderActiveBooking(state.currentUser?.id)
     : getCustomerActiveRequest();
-  const targetReq = (state.db?.requests || []).find((r) => r.id === (requestId || fallbackReq?.id)) || fallbackReq;
+  const targetReq = (state.db?.requests || []).find((r) => r.id === (targetReqId || fallbackReq?.id)) || fallbackReq || (state.db?.requests || [])[0];
   if (!targetReq) return;
 
   const senderName = state.currentUser?.name || (state.role === 'PROVIDER' ? 'Service Provider' : 'Client');
+  const tempMsgId = 'msg_' + Date.now();
   const tempMsg = {
-    id: 'msg_' + Date.now(),
+    id: tempMsgId,
     senderRole: state.role,
     senderName: senderName,
     text: cleanText,
@@ -4738,9 +4891,16 @@ function sendChatMessage(text, requestId = null) {
     senderRole: state.role,
     senderName: senderName,
     text: cleanText
+  }).then((res) => {
+    if (res && res.message && res.message.id) {
+      tempMsg.id = res.message.id;
+    }
   }).catch((err) => {
-    targetReq.messages = targetReq.messages.filter((m) => m.id !== tempMsg.id);
-    updateChatFeedDomOnly(targetReq);
+    // Only drop if anti-leakage shield actively blocked it
+    if (err.message && err.message.includes('Shield')) {
+      targetReq.messages = targetReq.messages.filter((m) => m.id !== tempMsgId);
+      updateChatFeedDomOnly(targetReq);
+    }
     showToast(err.message || 'Could not send message', 'error');
   });
 }

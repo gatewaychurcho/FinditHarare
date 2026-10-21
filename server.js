@@ -984,8 +984,14 @@ function normalizeDatabase(parsed) {
   if (!parsed.settings.ecocashMerchantName) parsed.settings.ecocashMerchantName = 'FINDIT HARARE OFFICIAL';
   if (!parsed.settings.ecocashUssdShortcode) parsed.settings.ecocashUssdShortcode = '*151*2*2*84920#';
 
+  (parsed.requests || []).forEach((r) => {
+    if (!r.messages) r.messages = [];
+    if (!r.startPinCode) r.startPinCode = String(crypto.randomInt(1000, 9999));
+  });
+
   (parsed.customers || []).forEach((c, i) => {
     if (!c.finditId) c.finditId = `FH-USR-${391044 + i * 1123}`;
+    if (c.profileCompleted === undefined) c.profileCompleted = true;
     if (c.isBanned === undefined) c.isBanned = false;
     if (!c.activeWarnings) c.activeWarnings = [];
     if (c.warningsCount === undefined) c.warningsCount = 0;
@@ -994,6 +1000,7 @@ function normalizeDatabase(parsed) {
   });
   (parsed.providers || []).forEach((p, i) => {
     if (!p.finditId) p.finditId = `FH-PRO-${849201 + i * 1347}`;
+    if (p.profileCompleted === undefined) p.profileCompleted = true;
     if (p.isBanned === undefined) p.isBanned = false;
     if (!p.activeWarnings) p.activeWarnings = [];
     if (p.warningsCount === undefined) p.warningsCount = 0;
@@ -1003,24 +1010,25 @@ function normalizeDatabase(parsed) {
 }
 
 function loadDb() {
-  // Check /tmp first (Vercel writable directory across requests)
-  const tmpFile = path.join('/tmp', 'findit_db.json');
-  if (fs.existsSync(tmpFile)) {
-    try {
-      const parsed = JSON.parse(fs.readFileSync(tmpFile, 'utf8'));
-      if (parsed && parsed.approvalQueue) return normalizeDatabase(parsed);
-    } catch (e) {}
-  }
-
+  // Check primary DB_FILE first
   try {
     if (fs.existsSync(DB_FILE)) {
       const parsed = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
-      if (parsed && parsed.approvalQueue && parsed.kycVerifications && parsed.cancellationLogs) {
+      if (parsed && Array.isArray(parsed.requests) && Array.isArray(parsed.categories)) {
         return normalizeDatabase(parsed);
       }
     }
   } catch (err) {
     console.error('Error loading DB_FILE:', err.message);
+  }
+
+  // Check /tmp second (fallback across serverless invocations)
+  const tmpFile = path.join('/tmp', 'findit_db.json');
+  if (fs.existsSync(tmpFile)) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(tmpFile, 'utf8'));
+      if (parsed && Array.isArray(parsed.requests)) return normalizeDatabase(parsed);
+    } catch (e) {}
   }
 
   const initial = getInitialDatabase();
@@ -1032,13 +1040,13 @@ function saveDb(currentDb) {
   db = currentDb;
   const jsonStr = JSON.stringify(currentDb, null, 2);
   try {
-    fs.writeFileSync(path.join('/tmp', 'findit_db.json'), jsonStr, 'utf8');
-  } catch (tmpErr) {}
-  try {
     fs.writeFileSync(DB_FILE, jsonStr, 'utf8');
   } catch (err) {
     // EROFS on Vercel is expected
   }
+  try {
+    fs.writeFileSync(path.join('/tmp', 'findit_db.json'), jsonStr, 'utf8');
+  } catch (tmpErr) {}
 }
 
 let db = loadDb();
@@ -1207,7 +1215,9 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (pathname === '/api/state' && req.method === 'GET') {
-    db = loadDb();
+    if (!db || !Array.isArray(db.requests)) {
+      db = loadDb();
+    }
     return sendJson(res, 200, {
       ...db,
       suburbs: HARARE_SUBURBS,
@@ -1331,8 +1341,9 @@ const server = http.createServer(async (req, res) => {
         dbPending.status = 'VERIFIED';
         saveDb(db);
       }
-      const existingCustomer = db.customers.find((c) => c.phone.replace(/\D/g, '') === cleanDigits) || null;
-      const existingProvider = db.providers.find((p) => p.phone.replace(/\D/g, '') === cleanDigits) || null;
+      const last9 = cleanDigits.slice(-9);
+      const existingCustomer = db.customers.find((c) => (c.phone || '').replace(/\D/g, '').slice(-9) === last9) || null;
+      const existingProvider = db.providers.find((p) => (p.phone || '').replace(/\D/g, '').slice(-9) === last9) || null;
       return sendJson(res, 200, {
         verified: true,
         phone: rawPhone,
@@ -1385,7 +1396,8 @@ const server = http.createServer(async (req, res) => {
       const faceBiometricHash = crypto.createHash('sha256').update(avatarUrl.slice(0, 5000)).digest('hex').slice(0, 16).toUpperCase();
 
       if (role === 'CUSTOMER') {
-        let user = db.customers.find((c) => c.phone.replace(/\D/g, '') === phone.replace(/\D/g, ''));
+        const phoneLast9 = phone.replace(/\D/g, '').slice(-9);
+        let user = db.customers.find((c) => (c.phone || '').replace(/\D/g, '').slice(-9) === phoneLast9);
         if (!user) {
           user = {
             id: 'cust_' + Date.now().toString().slice(-4),
@@ -1401,6 +1413,7 @@ const server = http.createServer(async (req, res) => {
             avatarUrl: body.avatarUrl,
             whatsappVerified: true,
             faceVerified: true,
+            profileCompleted: true,
             faceBiometricHash,
             nationalIdNumber,
             isBanned: false,
@@ -1420,6 +1433,7 @@ const server = http.createServer(async (req, res) => {
           user.avatarUrl = body.avatarUrl;
           user.whatsappVerified = true;
           user.faceVerified = true;
+          user.profileCompleted = true;
           user.faceBiometricHash = faceBiometricHash;
           user.nationalIdNumber = nationalIdNumber;
           if (!user.finditId) user.finditId = generateFinditAppId('CUSTOMER');
@@ -1451,7 +1465,8 @@ const server = http.createServer(async (req, res) => {
         return sendJson(res, 200, { role: 'CUSTOMER', user });
       } else {
         const cat = db.categories.find((c) => c.id === body.categoryId) || db.categories[0];
-        let provider = db.providers.find((p) => p.phone.replace(/\D/g, '') === phone.replace(/\D/g, ''));
+        const provPhoneLast9 = phone.replace(/\D/g, '').slice(-9);
+        let provider = db.providers.find((p) => (p.phone || '').replace(/\D/g, '').slice(-9) === provPhoneLast9);
         if (!provider) {
           provider = {
             id: 'prov_' + Date.now().toString().slice(-4),
@@ -1465,6 +1480,7 @@ const server = http.createServer(async (req, res) => {
             isOnline: true,
             isBanned: false,
             banReason: '',
+            profileCompleted: true,
             warningsCount: 0,
             activeWarnings: [],
             acceptedConductRules: true,
@@ -1521,6 +1537,7 @@ const server = http.createServer(async (req, res) => {
           }
           provider.name = name;
           provider.avatarUrl = body.avatarUrl;
+          provider.profileCompleted = true;
           provider.faceBiometricHash = faceBiometricHash;
           provider.nationalIdNumber = nationalIdNumber;
           if (!provider.finditId) provider.finditId = generateFinditAppId('PROVIDER');
@@ -2386,15 +2403,35 @@ const server = http.createServer(async (req, res) => {
       reqItem.status = body.status;
       if (body.status === 'ARRIVED') {
         const offer = reqItem.offers.find((o) => o.id === reqItem.acceptedOfferId);
+        if (!reqItem.messages) reqItem.messages = [];
         reqItem.messages.push({
           id: 'msg_' + Date.now(),
           senderRole: 'PROVIDER',
           senderName: offer ? offer.providerName : 'Service Provider',
           providerId: offer ? offer.providerId : null,
           type: 'ARRIVED',
-          text: `I have arrived outside your gate at ${reqItem.exactAddress}. Please share your 4-digit Start PIN (#${reqItem.startPinCode}) so we can begin.`,
+          text: `I have arrived outside your gate at ${reqItem.exactAddress}. Please share your 4-digit Start PIN so we can begin.`,
           timestamp: new Date().toISOString()
         });
+      }
+
+      if (body.status === 'IN_PROGRESS') {
+        reqItem.pinVerifiedByProvider = true;
+        reqItem.autoStarted = Boolean(body.autoStarted);
+        if (!reqItem.messages) reqItem.messages = [];
+        reqItem.messages.push({
+          id: 'msg_' + Date.now(),
+          senderRole: 'SYSTEM',
+          senderName: 'Findit Harare Geofence',
+          type: 'PIN_VERIFIED',
+          text: body.autoStarted
+            ? `Proximity Auto-Pair active: Both parties detected within 20 meters for 1 minute. Task automatically recorded as STARTED.`
+            : `Arrival PIN verified. Service is now IN PROGRESS.`,
+          timestamp: new Date().toISOString()
+        });
+        saveDb(db);
+        broadcastUpdate('PIN_VERIFIED', { requestId: reqItem.id });
+        return sendJson(res, 200, { request: reqItem });
       }
 
       if (body.status === 'COMPLETED') {
@@ -2481,11 +2518,18 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
-  if (pathname === '/api/messages' && req.method === 'POST') {
+  if ((pathname === '/api/messages' || pathname === '/api/requests/messages') && req.method === 'POST') {
     try {
       const body = await parseBody(req);
-      const reqItem = db.requests.find((r) => r.id === body.requestId);
+      let reqItem = db.requests.find((r) => r.id === body.requestId);
+      if (!reqItem && body.providerId) {
+        reqItem = db.requests.find((r) => r.acceptedProviderId === body.providerId && ['BOOKED', 'CONFIRMED', 'ARRIVED', 'IN_PROGRESS'].includes(r.status));
+      }
+      if (!reqItem) {
+        reqItem = db.requests[0];
+      }
       if (!reqItem) return sendJson(res, 404, { error: 'Request not found' });
+      if (!reqItem.messages) reqItem.messages = [];
 
       const text = (body.text || '').trim();
       if (!text) return sendJson(res, 400, { error: 'Empty message' });

@@ -43,7 +43,8 @@
       "activeWarnings": [],
       "warningsCount": 0,
       "reviews": [],
-      "reviewCount": 8
+      "reviewCount": 8,
+      "profileCompleted": true
     },
     {
       "id": "cust_2",
@@ -59,7 +60,8 @@
       "activeWarnings": [],
       "warningsCount": 0,
       "reviews": [],
-      "reviewCount": 5
+      "reviewCount": 5,
+      "profileCompleted": true
     },
     {
       "id": "cust_8033",
@@ -79,7 +81,8 @@
       "activeWarnings": [],
       "warningsCount": 0,
       "reviews": [],
-      "reviewCount": 1
+      "reviewCount": 1,
+      "profileCompleted": true
     },
     {
       "id": "cust_8975",
@@ -99,7 +102,8 @@
       "activeWarnings": [],
       "warningsCount": 0,
       "reviews": [],
-      "reviewCount": 1
+      "reviewCount": 1,
+      "profileCompleted": true
     },
     {
       "id": "cust_1583",
@@ -129,7 +133,8 @@
           "comment": "Completed home service on Findit Harare",
           "date": "Just now"
         }
-      ]
+      ],
+      "profileCompleted": true
     },
     {
       "id": "cust_7725",
@@ -151,7 +156,8 @@
       "banReason": "",
       "warningsCount": 0,
       "activeWarnings": [],
-      "reviews": []
+      "reviews": [],
+      "profileCompleted": true
     }
   ],
   "categories": [
@@ -566,7 +572,8 @@
       "isBanned": false,
       "activeWarnings": [],
       "warningsCount": 0,
-      "banReason": ""
+      "banReason": "",
+      "profileCompleted": true
     },
     {
       "id": "prov_5",
@@ -631,7 +638,8 @@
       "finditId": "FH-PRO-850548",
       "isBanned": false,
       "activeWarnings": [],
-      "warningsCount": 0
+      "warningsCount": 0,
+      "profileCompleted": true
     },
     {
       "id": "prov_6",
@@ -687,7 +695,8 @@
       "finditId": "FH-PRO-851895",
       "isBanned": false,
       "activeWarnings": [],
-      "warningsCount": 0
+      "warningsCount": 0,
+      "profileCompleted": true
     },
     {
       "id": "prov_7",
@@ -736,7 +745,8 @@
       "finditId": "FH-PRO-853242",
       "isBanned": false,
       "activeWarnings": [],
-      "warningsCount": 0
+      "warningsCount": 0,
+      "profileCompleted": true
     },
     {
       "id": "prov_4",
@@ -842,7 +852,8 @@
       "finditId": "FH-PRO-854589",
       "isBanned": false,
       "activeWarnings": [],
-      "warningsCount": 0
+      "warningsCount": 0,
+      "profileCompleted": true
     },
     {
       "id": "prov_8",
@@ -901,7 +912,8 @@
       "finditId": "FH-PRO-855936",
       "isBanned": false,
       "activeWarnings": [],
-      "warningsCount": 0
+      "warningsCount": 0,
+      "profileCompleted": true
     },
     {
       "id": "prov_2",
@@ -969,7 +981,8 @@
       "finditId": "FH-PRO-857283",
       "isBanned": false,
       "activeWarnings": [],
-      "warningsCount": 0
+      "warningsCount": 0,
+      "profileCompleted": true
     },
     {
       "id": "prov_3",
@@ -1018,7 +1031,8 @@
       "finditId": "FH-PRO-858630",
       "isBanned": false,
       "activeWarnings": [],
-      "warningsCount": 0
+      "warningsCount": 0,
+      "profileCompleted": true
     },
     {
       "id": "prov_7388",
@@ -1093,7 +1107,8 @@
       "finditId": "FH-PRO-859977",
       "isBanned": false,
       "activeWarnings": [],
-      "warningsCount": 0
+      "warningsCount": 0,
+      "profileCompleted": true
     }
   ],
   "requests": [
