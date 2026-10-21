@@ -1,0 +1,12 @@
+{
+  "name": "findit-harare",
+  "version": "1.0.0",
+  "description": "Findit Harare — On-Demand Services Marketplace (inDrive-inspired Request, Offer, Guarded Chat & Dynamic Commission Platform)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

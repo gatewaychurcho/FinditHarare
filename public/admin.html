@@ -1,0 +1,1196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Findit Harare — Admin Control Center (/admin)</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --blue-primary: #0066FF;
+      --blue-dark: #004EEB;
+      --blue-soft: #EBF3FF;
+      --bg-page: #F4F7FB;
+      --bg-sidebar: #0F172A;
+      --bg-card: #FFFFFF;
+      --border: #E2E8F0;
+      --text: #0F172A;
+      --muted: #64748B;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg-page);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      -webkit-font-smoothing: antialiased;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .sidebar {
+      width: 265px;
+      background: var(--bg-sidebar);
+      color: #fff;
+      padding: 24px 16px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      margin-bottom: 26px;
+    }
+
+    .brand-icon {
+      width: 42px;
+      height: 42px;
+      border-radius: 12px;
+      background: var(--blue-primary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 22px;
+      color: #fff;
+      box-shadow: 0 6px 18px rgba(0, 102, 255, 0.4);
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 11px 14px;
+      border-radius: 12px;
+      color: #94A3B8;
+      font-size: 13.5px;
+      font-weight: 700;
+      cursor: pointer;
+      margin-bottom: 5px;
+      transition: all 0.16s;
+    }
+
+    .nav-item:hover { color: #fff; background: rgba(255,255,255,0.06); }
+    .nav-item.active {
+      background: var(--blue-primary);
+      color: #fff;
+      box-shadow: 0 4px 16px rgba(0, 102, 255, 0.35);
+    }
+
+    .main-area {
+      flex: 1;
+      padding: 28px 32px;
+      overflow-y: auto;
+      max-height: 100vh;
+    }
+
+    .top-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .kpi-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 18px;
+      box-shadow: 0 4px 14px rgba(15, 23, 42, 0.03);
+    }
+
+    .kpi-val {
+      font-size: 26px;
+      font-weight: 800;
+      margin-top: 6px;
+      letter-spacing: -0.02em;
+    }
+
+    .panel-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(410px, 1fr));
+      gap: 20px;
+    }
+
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 22px;
+      margin-bottom: 18px;
+      box-shadow: 0 4px 14px rgba(15, 23, 42, 0.03);
+    }
+
+    .btn-blue {
+      background: var(--blue-primary);
+      color: #fff;
+      border: none;
+      border-radius: 11px;
+      padding: 10px 16px;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    .btn-green {
+      background: #10B981;
+      color: #fff;
+      border: none;
+      border-radius: 11px;
+      padding: 10px 16px;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    .btn-outline {
+      background: #F8FAFC;
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 9px;
+      padding: 6px 11px;
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    th, td {
+      text-align: left;
+      padding: 12px 10px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    th {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+  </style>
+</head>
+<body>
+  <aside class="sidebar">
+    <div>
+      <div class="brand">
+        <div class="brand-icon" style="padding:0; overflow:hidden; background:transparent;">
+          <img src="/assets/logo-icon.svg" width="34" height="34" style="border-radius:10px; display:block;" alt="Findit Logo" />
+        </div>
+        <div>
+          <div style="font-weight:800; font-size:17px;">findit <span style="color:#60A5FA;">Admin</span></div>
+          <div style="font-size:11.5px; color:#94A3B8; font-weight:500;">Harare Control Center</div>
+        </div>
+      </div>
+
+      <div id="adminNav">
+        <div class="nav-item active" onclick="setAdminTab('OVERVIEW')">📊 Overview & Revenue</div>
+        <div class="nav-item" onclick="setAdminTab('ECOCASH')">
+          <span>💵 EcoCash SMS Top-Ups</span>
+          <span id="navEcoBadge" style="margin-left:auto; background:#10B981; color:#fff; font-size:11px; font-weight:800; padding:2px 7px; border-radius:99px; display:none;">0</span>
+        </div>
+        <div class="nav-item" onclick="setAdminTab('DISCIPLINE')">
+          <span>⚠️ Discipline &amp; Bans</span>
+          <span id="navWarnBadge" style="margin-left:auto; background:#EF4444; color:#fff; font-size:11px; font-weight:800; padding:2px 7px; border-radius:99px; display:none;">0</span>
+        </div>
+        <div class="nav-item" onclick="setAdminTab('KYC')">
+          <span>🤳 KYC, WhatsApp & Face</span>
+          <span id="navKycBadge" style="margin-left:auto; background:#0066FF; color:#fff; font-size:11px; font-weight:800; padding:2px 7px; border-radius:99px; display:none;">0</span>
+        </div>
+        <div class="nav-item" onclick="setAdminTab('APPROVALS')">
+          <span>📸 Catalogue & Bio Approvals</span>
+          <span id="navApprovalBadge" style="margin-left:auto; background:#EF4444; color:#fff; font-size:11px; font-weight:800; padding:2px 7px; border-radius:99px; display:none;">0</span>
+        </div>
+        <div class="nav-item" onclick="setAdminTab('CANCELLATIONS')">
+          <span>🚫 Task Cancellations</span>
+          <span id="navCancelBadge" style="margin-left:auto; background:#64748B; color:#fff; font-size:11px; font-weight:800; padding:2px 7px; border-radius:99px; display:none;">0</span>
+        </div>
+        <div class="nav-item" onclick="setAdminTab('COMMISSION')">💰 Commission & 2-Mo Promo</div>
+        <div class="nav-item" onclick="setAdminTab('PROVIDERS')">✅ Providers & Wallets</div>
+        <div class="nav-item" onclick="setAdminTab('SHIELD')">🛡️ Anti-Leakage Shield</div>
+        <div class="nav-item" onclick="setAdminTab('CATEGORIES')">🚀 Service Categories</div>
+      </div>
+    </div>
+
+    <div style="border-top:1px solid rgba(255,255,255,0.1); padding-top:14px;">
+      <a href="/" target="_blank" style="text-decoration:none;">
+        <button class="btn-blue" style="width:100%;">📱 Open Mobile App (/)</button>
+      </a>
+    </div>
+  </aside>
+
+  <main class="main-area" id="adminRoot">
+    Loading Admin Dashboard...
+  </main>
+
+  <script>
+    let adminTab = 'OVERVIEW';
+    let db = null;
+
+    async function api(path, method = 'GET', body = null) {
+      const opts = { method, headers: { 'Content-Type': 'application/json' } };
+      if (body) opts.body = JSON.stringify(body);
+      const res = await fetch(path, opts);
+      return res.json();
+    }
+
+    async function loadAdminData() {
+      db = await api('/api/state');
+      renderAdmin();
+    }
+
+    function setAdminTab(tab) {
+      adminTab = tab;
+      document.querySelectorAll('#adminNav .nav-item').forEach((el, idx) => {
+        const tabs = ['OVERVIEW', 'ECOCASH', 'DISCIPLINE', 'KYC', 'APPROVALS', 'CANCELLATIONS', 'COMMISSION', 'PROVIDERS', 'SHIELD', 'CATEGORIES'];
+        el.classList.toggle('active', tabs[idx] === tab);
+      });
+      renderAdmin();
+    }
+
+    async function verifyEcoCash(topupId, action, claimedAmount) {
+      let creditAmountUsd = claimedAmount;
+      let adminNote = '';
+      let warnProvider = false;
+      if (action === 'APPROVE') {
+        const val = prompt(`Confirm USD amount to credit to provider wallet:`, String(claimedAmount));
+        if (val === null) return;
+        creditAmountUsd = Number(val) || claimedAmount;
+      } else {
+        adminNote = prompt('Reason for rejecting EcoCash SMS (sent to provider):', 'Transaction not found on EcoCash merchant statement') || 'Unverified SMS reference';
+        warnProvider = confirm('Issue an official warning on this provider account for submitting an invalid/fake SMS?');
+      }
+      await api('/api/admin/ecocash-verify', 'POST', {
+        topupId,
+        action,
+        creditAmountUsd,
+        adminNote,
+        warnProvider
+      });
+      await loadAdminData();
+    }
+
+    function handleAdminSmsMatch(rawText) {
+      const container = document.getElementById('adminSmsMatchResult');
+      if (!container) return;
+      const text = (rawText || '').trim();
+      if (!text) {
+        container.innerHTML = '';
+        return;
+      }
+
+      // Extract Approval Code / Reference
+      const refMatch = text.match(/(?:Approval Code|Approval Ref|Ref|Code|Reference)[:\s]*([A-Za-z0-9\.]+)/i)
+        || text.match(/\b(PP\d{6}\.[0-9A-Za-z\.]+)\b/i)
+        || text.match(/\b([A-Za-z]{2}\d{6}\.\d{4}\.[A-Za-z0-9]+)\b/i);
+      const detectedRef = refMatch ? refMatch[1].trim() : '';
+
+      // Extract USD amount
+      const amtMatch = text.match(/(?:USD|\$)\s*([0-9]+(?:\.[0-9]{1,2})?)/i)
+        || text.match(/([0-9]+(?:\.[0-9]{1,2})?)\s*USD/i);
+      const detectedAmount = amtMatch ? parseFloat(amtMatch[1]) : null;
+
+      // Search pending submissions in db.ecocashTopups
+      const pendingList = (db.ecocashTopups || []).filter(t => t.status === 'PENDING');
+      
+      let matched = null;
+      if (detectedRef) {
+        matched = pendingList.find(t => {
+          const tRef = (t.referenceCode || '').toUpperCase();
+          const dRef = detectedRef.toUpperCase();
+          return tRef === dRef || tRef.includes(dRef) || dRef.includes(tRef);
+        });
+        if (!matched) {
+          matched = pendingList.find(t => (t.confirmationSms || '').toUpperCase().includes(detectedRef.toUpperCase()));
+        }
+      }
+
+      if (!matched && detectedAmount) {
+        const amtMatches = pendingList.filter(t => Number(t.claimedAmountUsd) === detectedAmount);
+        if (amtMatches.length === 1) {
+          matched = amtMatches[0];
+        }
+      }
+
+      if (matched) {
+        container.innerHTML = `
+          <div style="margin-top:14px; background:#ECFDF5; border:1.5px solid #10B981; border-radius:12px; padding:14px 16px;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span style="font-size:18px;">🎯</span>
+                <span style="font-size:14px; font-weight:800; color:#065F46;">Match Confirmed: Pending Top-Up Matches This SMS!</span>
+              </div>
+              <span style="padding:4px 10px; border-radius:99px; background:#D1FAE5; color:#047857; font-size:11px; font-weight:800;">
+                100% Verified Match
+              </span>
+            </div>
+
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px; font-size:12.5px;">
+              <div style="background:#FFFFFF; padding:10px; border-radius:8px; border:1px solid #A7F3D0;">
+                <div style="font-size:11px; color:#047857; font-weight:700;">PROVIDER DETAILS</div>
+                <div style="font-size:14px; font-weight:800; color:#064E3B; margin-top:2px;">${matched.providerName}</div>
+                <div style="color:#047857; font-size:11.5px; margin-top:2px;">ID: <strong>${matched.providerFinditId}</strong> • ${matched.providerPhone}</div>
+              </div>
+              <div style="background:#FFFFFF; padding:10px; border-radius:8px; border:1px solid #A7F3D0;">
+                <div style="font-size:11px; color:#047857; font-weight:700;">RECONCILED AMOUNT &amp; REF</div>
+                <div style="font-size:16px; font-weight:800; color:#059669; margin-top:2px;">$${detectedAmount || matched.claimedAmountUsd}.00 USD</div>
+                <div style="font-family:monospace; color:#047857; font-size:11px; margin-top:2px;">Ref: ${detectedRef || matched.referenceCode}</div>
+              </div>
+            </div>
+
+            <div style="display:flex; justify-content:flex-end; gap:8px;">
+              <button class="btn-outline" style="color:#DC2626; border-color:#FECACA; background:#FFFFFF;" onclick="verifyEcoCash('${matched.id}', 'REJECT', ${matched.claimedAmountUsd})">
+                ❌ Reject Submission
+              </button>
+              <button class="btn-blue" style="background:#059669; font-weight:800; padding:8px 18px;" onclick="verifyEcoCash('${matched.id}', 'APPROVE', ${detectedAmount || matched.claimedAmountUsd})">
+                ✅ Accept &amp; Credit $${detectedAmount || matched.claimedAmountUsd} to ${matched.providerName}
+              </button>
+            </div>
+          </div>
+        `;
+      } else {
+        container.innerHTML = `
+          <div style="margin-top:14px; background:#FFFBEB; border:1.5px solid #F59E0B; border-radius:12px; padding:12px 14px; font-size:12.5px; color:#92400E;">
+            <div style="font-weight:800; display:flex; align-items:center; gap:6px; margin-bottom:4px;">
+              <span>ℹ️</span>
+              <span>Detected: Ref <code>${detectedRef || 'None'}</code> • Amount: <code>${detectedAmount ? '$' + detectedAmount + ' USD' : 'None'}</code></span>
+            </div>
+            <div>
+              ${detectedRef || detectedAmount
+                ? 'No pending top-up currently matches this reference code or amount. The provider may not have submitted their SMS yet, or it has already been processed.'
+                : 'Could not extract an EcoCash reference code or USD amount from the pasted message. Please check the SMS format.'}
+            </div>
+          </div>
+        `;
+      }
+    }
+
+    async function disciplineAccount(role, accountId, action) {
+      let reason = '';
+      if (action === 'WARN') {
+        reason = prompt('Enter official warning reason to send to this user/provider:', 'Violation of Findit Harare fair booking rules');
+        if (!reason) return;
+      } else if (action === 'BAN') {
+        reason = prompt('Enter reason for permanently banning this account:', 'Safety policy violation & platform leakage');
+        if (!reason) return;
+        if (!confirm('Are you sure you want to BAN this account? They will be locked out of booking, bidding, and chat.')) return;
+      } else if (action === 'UNBAN') {
+        if (!confirm('Reinstate this account and allow them back onto the platform?')) return;
+        reason = 'Reinstated by Admin';
+      }
+      await api('/api/admin/discipline', 'POST', {
+        role,
+        accountId,
+        action,
+        reason
+      });
+      await loadAdminData();
+    }
+
+    async function moderateApprovalItem(approvalId, action) {
+      let reason = '';
+      if (action === 'REJECT') {
+        reason = prompt('Reason for rejection (sent to provider):', 'Contains promotional flyer, watermark, or phone number contact details.') || 'Violates clean work photo & bio policy';
+      }
+      await api('/api/admin/approvals', 'POST', { approvalId, action, reason });
+      await loadAdminData();
+    }
+
+    async function moderateKycItem(kycId, action) {
+      await api('/api/admin/kyc', 'POST', { kycId, action });
+      await loadAdminData();
+    }
+
+    async function togglePromo(active) {
+      await api('/api/admin/settings', 'POST', { launchPromoActive: active });
+      await loadAdminData();
+    }
+
+    async function updateGlobalCommission(val) {
+      await api('/api/admin/settings', 'POST', { commissionPercent: Number(val) });
+      await loadAdminData();
+    }
+
+    async function updateCatCommission(catId, val) {
+      await api('/api/admin/settings', 'POST', { categoryCommissions: { [catId]: Number(val) } });
+      await loadAdminData();
+    }
+
+    async function toggleProviderBadge(providerId, badgeKey) {
+      await api('/api/admin/verify-provider', 'POST', { providerId, badgeKey });
+      await loadAdminData();
+    }
+
+    async function adminTopUpProvider(providerId, amountUsd) {
+      await api('/api/wallet/topup', 'POST', { providerId, amountUsd, method: 'Admin Cash USD Voucher' });
+      await loadAdminData();
+    }
+
+    async function toggleCategoryStatus(categoryId) {
+      await api('/api/admin/category-status', 'POST', { categoryId });
+      await loadAdminData();
+    }
+
+    function renderAdmin() {
+      if (!db) return;
+      const s = db.settings;
+      const totalSaved = db.revenueLedger.filter((r) => r.promoApplied).reduce((a, r) => a + r.standardFeeUsd, 0);
+      const totalEarned = db.revenueLedger.reduce((a, r) => a + r.actualFeeCollectedUsd, 0);
+      const approvals = db.approvalQueue || [];
+      const pendingApprovals = approvals.filter((a) => a.status === 'PENDING');
+      const kycList = db.kycVerifications || [];
+      const pendingKyc = kycList.filter((k) => k.status === 'PENDING');
+      const cancelLogs = db.cancellationLogs || [];
+
+      const pendingEco = (db.ecocashTopups || []).filter((t) => t.status === 'PENDING');
+      const ecoBadgeEl = document.getElementById('navEcoBadge');
+      if (ecoBadgeEl) {
+        ecoBadgeEl.style.display = pendingEco.length > 0 ? 'inline-block' : 'none';
+        ecoBadgeEl.innerText = pendingEco.length;
+      }
+
+      const bannedAccountsCount = (db.customers || []).filter(c => c.isBanned).length + (db.providers || []).filter(p => p.isBanned).length;
+      const warnBadgeEl = document.getElementById('navWarnBadge');
+      if (warnBadgeEl) {
+        warnBadgeEl.style.display = bannedAccountsCount > 0 ? 'inline-block' : 'none';
+        warnBadgeEl.innerText = bannedAccountsCount;
+      }
+
+      const badgeEl = document.getElementById('navApprovalBadge');
+      if (badgeEl) {
+        badgeEl.style.display = pendingApprovals.length > 0 ? 'inline-block' : 'none';
+        badgeEl.innerText = pendingApprovals.length;
+      }
+
+      const kycBadgeEl = document.getElementById('navKycBadge');
+      if (kycBadgeEl) {
+        kycBadgeEl.style.display = pendingKyc.length > 0 ? 'inline-block' : 'none';
+        kycBadgeEl.innerText = pendingKyc.length;
+      }
+
+      const cancelBadgeEl = document.getElementById('navCancelBadge');
+      if (cancelBadgeEl) {
+        cancelBadgeEl.style.display = cancelLogs.length > 0 ? 'inline-block' : 'none';
+        cancelBadgeEl.innerText = cancelLogs.length;
+      }
+
+      const kpiHtml = `
+        <div class="top-header">
+          <div>
+            <h1 style="font-size:23px; font-weight:800; letter-spacing:-0.02em;">Findit Harare — Admin Control Center</h1>
+            <div style="font-size:13px; color:var(--muted); font-weight:500; margin-top:2px;">
+              Real-time control over EcoCash USD manual top-ups, account warnings/bans, WhatsApp &amp; Face KYC, catalogue photo approvals, and commissions
+            </div>
+          </div>
+          <span style="padding:8px 14px; border-radius:99px; background:var(--blue-soft); color:var(--blue-primary); font-size:12.5px; font-weight:800;">
+            ${s.launchPromoActive ? `🎁 0% Promo ON (${s.launchPromoDaysRemaining}d left)` : `💰 Collecting ${s.commissionPercent}% Commission`}
+          </span>
+        </div>
+
+        <div class="kpi-grid">
+          <div class="kpi-card" style="cursor:pointer;" onclick="setAdminTab('ECOCASH')">
+            <div style="font-size:11px; color:var(--muted); font-weight:800;">ECOCASH USD TOP-UPS</div>
+            <div class="kpi-val" style="color:${pendingEco.length > 0 ? '#10B981' : '#0066FF'};">${pendingEco.length} Pending</div>
+            <div style="font-size:12px; color:var(--muted); margin-top:4px; font-weight:600;">Manual SMS approval queue</div>
+          </div>
+
+          <div class="kpi-card" style="cursor:pointer;" onclick="setAdminTab('DISCIPLINE')">
+            <div style="font-size:11px; color:var(--muted); font-weight:800;">SAFETY &amp; BAN CENTER</div>
+            <div class="kpi-val" style="color:${bannedAccountsCount > 0 ? '#EF4444' : '#059669'};">${bannedAccountsCount} Banned</div>
+            <div style="font-size:12px; color:var(--muted); margin-top:4px; font-weight:600;">Discipline &amp; warnings</div>
+          </div>
+
+          <div class="kpi-card" style="cursor:pointer;" onclick="setAdminTab('APPROVALS')">
+            <div style="font-size:11px; color:var(--muted); font-weight:800;">CATALOGUE APPROVAL QUEUE</div>
+            <div class="kpi-val" style="color:${pendingApprovals.length > 0 ? '#D97706' : '#059669'};">${pendingApprovals.length} Pending</div>
+            <div style="font-size:12px; color:var(--muted); margin-top:4px; font-weight:600;">Anti-flyer &amp; watermark check</div>
+          </div>
+
+          <div class="kpi-card" style="cursor:pointer;" onclick="setAdminTab('CANCELLATIONS')">
+            <div style="font-size:11px; color:var(--muted); font-weight:800;">CANCELLATIONS &amp; SHIELD</div>
+            <div class="kpi-val" style="color:#EF4444;">${cancelLogs.length} Cancels • ${db.leakageLogs.length} Blocks</div>
+            <div style="font-size:12px; color:var(--muted); margin-top:4px; font-weight:600;">inDrive reason audit</div>
+          </div>
+        </div>
+      `;
+
+      let sectionHtml = '';
+
+      if (adminTab === 'ECOCASH') {
+        const pendingEcoList = (db.ecocashTopups || []).filter(t => t.status === 'PENDING');
+        const historyEcoList = (db.ecocashTopups || []).filter(t => t.status !== 'PENDING');
+
+        sectionHtml = `
+          <!-- SMART ECOCASH SMS MATCHER CARD -->
+          <div class="card" style="margin-bottom:20px; background:linear-gradient(135deg, #F8FAFC 0%, #EFF6FF 100%); border:1.5px solid #BFDBFE;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
+              <div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span style="font-size:20px;">⚡</span>
+                  <h2 style="font-size:18px; font-weight:800; color:#1E3A8A;">Smart EcoCash SMS Matcher &amp; Auto-Reconciler</h2>
+                </div>
+                <p style="font-size:13px; color:#475569; font-weight:500; margin-top:4px;">
+                  Paste transaction confirmation messages received on your EcoCash merchant phone (<strong>0772 910 440</strong>). The system automatically matches approval codes &amp; amounts with provider top-up submissions for instant 1-click credit or rejection.
+                </p>
+              </div>
+              <span style="padding:4px 12px; border-radius:99px; background:#DBEAFE; color:#1E40AF; font-size:11.5px; font-weight:800;">
+                Live Reconciliation
+              </span>
+            </div>
+
+            <div style="position:relative;">
+              <textarea
+                id="adminPastedSmsInput"
+                rows="3"
+                style="width:100%; border-radius:12px; border:1.5px solid #CBD5E1; padding:12px 14px; font-family:monospace; font-size:13px; color:#1E293B; background:#FFFFFF; outline:none; resize:vertical; box-sizing:border-box;"
+                placeholder="Paste received EcoCash transaction message here... (e.g. 'Transfer of USD 5.00 from TENDAI MOYO 0772001001 approved. Approval Code: PP261021.1432.A83921...')"
+                oninput="handleAdminSmsMatch(this.value)"
+              ></textarea>
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-top:6px;">
+                <span style="font-size:11.5px; color:#64748B;">Supported: EcoCash CashIn, Transfer, &amp; Merchant SMS formats</span>
+                <button
+                  type="button"
+                  style="border:none; background:none; color:#DC2626; font-size:12px; font-weight:700; cursor:pointer;"
+                  onclick="document.getElementById('adminPastedSmsInput').value=''; handleAdminSmsMatch('');"
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+
+            <div id="adminSmsMatchResult"></div>
+          </div>
+
+          <div class="card" style="margin-bottom:20px;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:14px;">
+              <div>
+                <h2 style="font-size:18px; font-weight:800;">💵 EcoCash USD Top-Up SMS Verification Queue</h2>
+                <p style="font-size:13px; color:var(--muted); font-weight:500; margin-top:3px;">
+                  Service providers send EcoCash USD to Findit Admin (<strong>0772 910 440</strong>) and paste their SMS confirmation. Verify the approval code on your EcoCash phone, then credit points to their wallet.
+                </p>
+              </div>
+              <span style="padding:6px 14px; border-radius:99px; background:#ECFDF5; color:#059669; font-size:12.5px; font-weight:800;">
+                ${pendingEcoList.length} Awaiting Verification
+              </span>
+            </div>
+
+            ${pendingEcoList.length === 0 ? `
+              <div style="text-align:center; padding:32px; color:var(--muted); font-size:14px; font-weight:600; background:#F8FAFC; border-radius:12px;">
+                ✅ All EcoCash top-up SMS submissions have been verified and processed!
+              </div>
+            ` : `
+              <div style="display:grid; grid-template-columns:1fr; gap:14px;">
+                ${pendingEcoList.map((item) => `
+                  <div style="background:#FFFFFF; border:1.5px solid var(--border); border-radius:14px; padding:16px; box-shadow:0 4px 12px rgba(0,0,0,0.03);">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px;">
+                      <div>
+                        <div style="font-size:16px; font-weight:800; color:var(--text);">${item.providerName}</div>
+                        <div style="font-size:12px; color:var(--muted); font-weight:600; margin-top:2px;">
+                          ID: <span style="font-family:monospace; font-weight:800; color:var(--blue-primary);">${item.providerFinditId}</span> • Phone: ${item.providerPhone}
+                        </div>
+                      </div>
+                      <div style="text-align:right;">
+                        <span style="font-size:20px; font-weight:800; color:#059669;">$${item.claimedAmountUsd}.00 USD</span>
+                        <div style="font-size:11px; color:var(--muted); font-weight:600;">Claimed Amount</div>
+                      </div>
+                    </div>
+
+                    <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:10px 12px; margin-bottom:12px;">
+                      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; font-size:11.5px; font-weight:800;">
+                        <span style="color:var(--text);">EcoCash SMS Content</span>
+                        <span style="color:var(--blue-primary); font-family:monospace;">Detected Ref: ${item.referenceCode}</span>
+                      </div>
+                      <div style="font-family:monospace; font-size:12px; color:#1E293B; word-break:break-word; line-height:1.45;">
+                        "${item.confirmationSms}"
+                      </div>
+                    </div>
+
+                    <div style="display:flex; justify-content:flex-end; gap:8px;">
+                      <button class="btn-outline" style="color:#DC2626; border-color:#FECACA;" onclick="verifyEcoCash('${item.id}', 'REJECT', ${item.claimedAmountUsd})">
+                        ❌ Reject &amp; Warn
+                      </button>
+                      <button class="btn-blue" style="background:#10B981;" onclick="verifyEcoCash('${item.id}', 'APPROVE', ${item.claimedAmountUsd})">
+                        ✅ Approve &amp; Credit $${item.claimedAmountUsd} to Wallet
+                      </button>
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            `}
+          </div>
+
+          <div class="card">
+            <h3 style="font-size:16px; font-weight:800; margin-bottom:12px;">Processed EcoCash Verification History</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>Provider &amp; Findit ID</th>
+                  <th>Reference Code</th>
+                  <th>Amount</th>
+                  <th>Status</th>
+                  <th>Submitted At</th>
+                  <th>Admin Note</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${historyEcoList.length === 0 ? `
+                  <tr><td colspan="6" style="text-align:center; color:var(--muted);">No processed transactions yet.</td></tr>
+                ` : historyEcoList.map((h) => `
+                  <tr>
+                    <td>
+                      <div style="font-weight:800;">${h.providerName}</div>
+                      <div style="font-size:11px; font-family:monospace; color:var(--muted);">${h.providerFinditId}</div>
+                    </td>
+                    <td style="font-family:monospace; font-weight:700;">${h.referenceCode}</td>
+                    <td style="font-weight:800; color:${h.status === 'APPROVED' ? '#059669' : '#DC2626'};">$${h.creditedAmountUsd || h.claimedAmountUsd} USD</td>
+                    <td>
+                      <span style="padding:4px 9px; border-radius:99px; font-size:11px; font-weight:800; ${h.status === 'APPROVED' ? 'background:#ECFDF5; color:#059669;' : 'background:#FEF2F2; color:#DC2626;'}">
+                        ${h.status}
+                      </span>
+                    </td>
+                    <td style="font-size:12px; color:var(--muted);">${new Date(h.submittedAt).toLocaleString()}</td>
+                    <td style="font-size:12px; color:var(--muted);">${h.adminNote || 'Verified via EcoCash Merchant'}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        `;
+      } else if (adminTab === 'DISCIPLINE') {
+        const allAccounts = [
+          ...(db.providers || []).map(p => ({ ...p, role: 'PROVIDER' })),
+          ...(db.customers || []).map(c => ({ ...c, role: 'CUSTOMER' }))
+        ];
+
+        sectionHtml = `
+          <div class="card" style="margin-bottom:20px;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:14px;">
+              <div>
+                <h2 style="font-size:18px; font-weight:800;">⚠️ Discipline, Official Warnings &amp; Account Bans</h2>
+                <p style="font-size:13px; color:var(--muted); font-weight:500; margin-top:3px;">
+                  Manage platform integrity across Harare. Send official policy warning banners to clients or providers, or permanently ban violators. Banned users are completely locked out of bookings, bidding, and chat.
+                </p>
+              </div>
+              <span style="padding:6px 14px; border-radius:99px; background:#FEF2F2; color:#DC2626; font-size:12.5px; font-weight:800;">
+                ${bannedAccountsCount} Banned Accounts
+              </span>
+            </div>
+
+            <table>
+              <thead>
+                <tr>
+                  <th>User / Provider</th>
+                  <th>Role &amp; Findit ID</th>
+                  <th>Phone Number</th>
+                  <th>Rating &amp; Reviews</th>
+                  <th>Warnings</th>
+                  <th>Account Status</th>
+                  <th>Moderation Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${allAccounts.map((acc) => `
+                  <tr style="${acc.isBanned ? 'background:#FFF1F2;' : ''}">
+                    <td>
+                      <div style="display:flex; align-items:center; gap:9px;">
+                        <div style="width:34px; height:34px; border-radius:50%; overflow:hidden; background:#E2E8F0; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:12px;">
+                          ${acc.avatarUrl ? `<img src="${acc.avatarUrl}" style="width:100%; height:100%; object-fit:cover;" />` : `<span>${(acc.name || 'U').slice(0, 2).toUpperCase()}</span>`}
+                        </div>
+                        <div>
+                          <div style="font-weight:800; font-size:13.5px; color:var(--text);">${acc.name}</div>
+                          <div style="font-size:11px; color:var(--muted); font-weight:600;">${acc.suburbId || acc.exactAddress || 'Harare'}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td>
+                      <span style="padding:3px 8px; border-radius:6px; font-size:11px; font-weight:800; ${acc.role === 'PROVIDER' ? 'background:var(--blue-soft); color:var(--blue-primary);' : 'background:#F1F5F9; color:#475569;'}">
+                        ${acc.role}
+                      </span>
+                      <div style="font-family:monospace; font-size:11px; font-weight:800; color:var(--text); margin-top:3px;">
+                        ${acc.finditId || (acc.role === 'PROVIDER' ? 'FH-PRO' : 'FH-USR')}
+                      </div>
+                    </td>
+                    <td style="font-weight:700; font-size:12.5px;">${acc.phone}</td>
+                    <td>
+                      <span style="font-weight:800; color:#D97706;">⭐ ${acc.rating || '5.0'}</span>
+                      <span style="font-size:11.5px; color:var(--muted); font-weight:600;">(${(acc.reviews || []).length} reviews)</span>
+                    </td>
+                    <td>
+                      <span style="font-weight:800; color:${(acc.warningsCount || 0) > 0 ? '#DC2626' : 'var(--muted)'};">
+                        ${acc.warningsCount || 0} warning(s)
+                      </span>
+                    </td>
+                    <td>
+                      <span style="padding:4px 9px; border-radius:99px; font-size:11px; font-weight:800; ${acc.isBanned ? 'background:#FEE2E2; color:#DC2626;' : 'background:#ECFDF5; color:#059669;'}">
+                        ${acc.isBanned ? 'BANNED' : 'ACTIVE'}
+                      </span>
+                    </td>
+                    <td>
+                      <div style="display:flex; gap:6px;">
+                        <button class="btn-outline" style="padding:5px 9px; font-size:11.5px; color:#D97706; border-color:#FDE68A;" onclick="disciplineAccount('${acc.role}', '${acc.id}', 'WARN')">
+                          ⚠️ Warn
+                        </button>
+                        ${acc.isBanned ? `
+                          <button class="btn-outline" style="padding:5px 9px; font-size:11.5px; color:#059669; border-color:#A7F3D0;" onclick="disciplineAccount('${acc.role}', '${acc.id}', 'UNBAN')">
+                            Reinstate
+                          </button>
+                        ` : `
+                          <button class="btn-outline" style="padding:5px 9px; font-size:11.5px; color:#DC2626; border-color:#FECACA;" onclick="disciplineAccount('${acc.role}', '${acc.id}', 'BAN')">
+                            🚫 Ban
+                          </button>
+                        `}
+                      </div>
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+
+          <div class="card">
+            <h3 style="font-size:16px; font-weight:800; margin-bottom:12px;">Discipline &amp; Ban Audit Trail</h3>
+            ${(db.disciplineLogs || []).length === 0 ? `
+              <div style="color:var(--muted); font-size:13px; text-align:center; padding:18px;">No disciplinary actions logged yet.</div>
+            ` : (db.disciplineLogs || []).map((log) => `
+              <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:11px 14px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                  <div style="font-weight:800; font-size:13px; color:var(--text);">
+                    <span style="color:${log.action === 'BAN' ? '#DC2626' : log.action === 'UNBAN' ? '#059669' : '#D97706'}; font-weight:800;">[${log.action}]</span>
+                    ${log.accountName} (${log.role}) • ID: ${log.accountId}
+                  </div>
+                  <div style="font-size:12px; color:var(--muted); margin-top:2px;">Reason: "${log.reason}"</div>
+                </div>
+                <div style="font-size:11.5px; color:var(--muted); font-weight:600;">${new Date(log.timestamp).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' })}</div>
+              </div>
+            `).join('')}
+          </div>
+        `;
+      } else if (adminTab === 'KYC') {
+        sectionHtml = `
+          <div class="card">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+              <div>
+                <h2 style="font-size:18px; font-weight:800;">🤳 Sign-Up KYC: WhatsApp OTP, Biometric Face Scan & National ID</h2>
+                <p style="font-size:13px; color:var(--muted); font-weight:500; margin-top:3px;">
+                  Every new Customer and Service Provider completes 3-step verification on sign-up: WhatsApp 4-Digit Code (+263), Biometric Face Liveness Scan, and Zimbabwe National ID.
+                </p>
+              </div>
+              <span style="padding:6px 12px; border-radius:99px; background:var(--blue-soft); color:var(--blue-primary); font-size:12px; font-weight:800;">
+                ${kycList.length} Total Profiles
+              </span>
+            </div>
+
+            <table>
+              <thead>
+                <tr>
+                  <th>User / Provider</th>
+                  <th>Role & Suburb</th>
+                  <th>WhatsApp OTP</th>
+                  <th>Biometric Face Liveness</th>
+                  <th>Zimbabwe National ID</th>
+                  <th>Status & Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${kycList.map((k) => {
+                  const isPending = k.status === 'PENDING';
+                  const isApproved = k.status === 'APPROVED';
+                  return `
+                    <tr>
+                      <td>
+                        <div style="font-weight:800;">${k.actorName}</div>
+                        <div style="font-size:11.5px; color:var(--muted); font-weight:600;">${k.phone} • ${k.submittedAt}</div>
+                      </td>
+                      <td>
+                        <span style="padding:3px 8px; border-radius:99px; font-size:10.5px; font-weight:800; background:${k.role === 'PROVIDER' ? '#EBF3FF' : '#F1F5F9'}; color:${k.role === 'PROVIDER' ? '#0066FF' : '#334155'};">
+                          ${k.role}
+                        </span>
+                        <div style="font-size:12px; font-weight:700; margin-top:4px;">📍 ${k.suburbName || 'Harare'}</div>
+                      </td>
+                      <td>
+                        <span style="color:#059669; font-weight:800;">✓ WhatsApp OTP Verified</span>
+                      </td>
+                      <td>
+                        <div style="font-weight:800; color:#0066FF;">🤳 ${k.faceScore || '99.2%'} Match</div>
+                        <div style="font-size:11px; color:var(--muted); font-weight:600;">3D Liveness Passed</div>
+                      </td>
+                      <td style="font-family:monospace; font-weight:800;">🪪 ${k.nationalId || 'Verified'}</td>
+                      <td>
+                        ${isPending ? `
+                          <div style="display:flex; gap:6px;">
+                            <button class="btn-green" style="padding:6px 10px; font-size:11.5px;" onclick="moderateKycItem('${k.id}', 'APPROVE')">Approve</button>
+                            <button class="btn-outline" style="color:#DC2626; border-color:#FECACA;" onclick="moderateKycItem('${k.id}', 'REJECT')">Reject</button>
+                          </div>
+                        ` : `
+                          <span style="padding:4px 10px; border-radius:99px; font-size:11px; font-weight:800; background:${isApproved ? '#ECFDF5' : '#FEF2F2'}; color:${isApproved ? '#059669' : '#DC2626'};">
+                            ${k.status}
+                          </span>
+                        `}
+                      </td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        `;
+      } else if (adminTab === 'CANCELLATIONS') {
+        sectionHtml = `
+          <div class="card">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+              <div>
+                <h2 style="font-size:18px; font-weight:800;">🚫 inDrive Mutual Task Cancellation Audit Logs</h2>
+                <p style="font-size:13px; color:var(--muted); font-weight:500; margin-top:3px;">
+                  Both Customers and Service Providers can cancel a task at any stage by selecting a mandatory reason. Repeated cancellations after booking confirmation are flagged here.
+                </p>
+              </div>
+              <span style="padding:6px 12px; border-radius:99px; background:#FEF2F2; color:#DC2626; font-size:12px; font-weight:800;">
+                ${cancelLogs.length} Logged Cancellations
+              </span>
+            </div>
+
+            <table>
+              <thead>
+                <tr>
+                  <th>Cancelled By</th>
+                  <th>Role</th>
+                  <th>Service & Stage</th>
+                  <th>Selected Cancellation Reason</th>
+                  <th>Time</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${cancelLogs.map((c) => `
+                  <tr>
+                    <td style="font-weight:800;">${c.actorName}</td>
+                    <td>
+                      <span style="padding:3px 9px; border-radius:99px; font-size:11px; font-weight:800; background:${c.actorRole === 'PROVIDER' ? '#FEF3C7' : '#EBF3FF'}; color:${c.actorRole === 'PROVIDER' ? '#B45309' : '#0066FF'};">
+                        ${c.actorRole}
+                      </span>
+                    </td>
+                    <td>
+                      <div style="font-weight:800;">${c.categoryName || 'Home Service'}</div>
+                      <div style="font-size:11px; color:var(--muted); font-weight:700;">Stage: ${c.stage}</div>
+                    </td>
+                    <td style="font-weight:700; color:#B91C1C;">"${c.reason}"</td>
+                    <td style="font-size:12px; color:var(--muted); font-weight:600;">${c.timestamp}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        `;
+      } else if (adminTab === 'APPROVALS') {
+        sectionHtml = `
+          <div class="card">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+              <div>
+                <h2 style="font-size:18px; font-weight:800;">📸 Provider Catalogue & Profile Moderation Queue</h2>
+                <p style="font-size:13px; color:var(--muted); font-weight:500; margin-top:3px;">
+                  Every catalogue photo or bio change submitted by a service provider is held here first. Reject any upload containing phone numbers, WhatsApp flyers, @handles, or business watermarks.
+                </p>
+              </div>
+              <span style="padding:6px 12px; border-radius:99px; background:#FEF3C7; color:#B45309; font-size:12px; font-weight:800;">
+                ${pendingApprovals.length} Waiting Review
+              </span>
+            </div>
+
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(360px, 1fr)); gap:16px;">
+              ${approvals.map((item) => {
+                const isPending = item.status === 'PENDING';
+                const isApproved = item.status === 'APPROVED';
+                return `
+                  <div style="border:1.5px solid ${isPending ? '#FDE68A' : (isApproved ? '#A7F3D0' : '#FECACA')}; background:${isPending ? '#FFFDF7' : '#FFFFFF'}; border-radius:16px; padding:16px; display:flex; flex-direction:column; justify-content:space-between;">
+                    <div>
+                      <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px;">
+                        <div>
+                          <div style="font-size:15px; font-weight:800;">${item.providerName}</div>
+                          <div style="font-size:12px; color:var(--muted); font-weight:600;">📍 ${item.providerSuburb} • ${item.type === 'CATALOGUE_PHOTO' ? '📸 Work Catalogue Photo' : '📝 Profile Bio Edit'}</div>
+                        </div>
+                        <span style="padding:4px 10px; border-radius:99px; font-size:11px; font-weight:800; background:${isPending ? '#FEF3C7' : (isApproved ? '#ECFDF5' : '#FEF2F2')}; color:${isPending ? '#B45309' : (isApproved ? '#059669' : '#DC2626')};">
+                          ${item.status}
+                        </span>
+                      </div>
+
+                      ${item.imageUrl ? `
+                        <div style="border-radius:12px; overflow:hidden; border:1px solid var(--border); margin-bottom:10px; background:#0F172A; height:190px; display:flex; align-items:center; justify-content:center;">
+                          <img src="${item.imageUrl}" alt="${item.title}" style="width:100%; height:100%; object-fit:cover;" />
+                        </div>
+                      ` : ''}
+
+                      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                        <div style="font-size:14px; font-weight:800;">${item.title || 'Profile Bio Update'}</div>
+                        ${item.priceTag ? `<span style="font-size:12px; font-weight:800; color:var(--blue-primary); background:var(--blue-soft); padding:3px 9px; border-radius:99px;">Ref: ${item.priceTag}</span>` : ''}
+                      </div>
+
+                      ${item.caption ? `<div style="font-size:12.5px; color:var(--text); font-weight:500; margin-bottom:8px;">"${item.caption}"</div>` : ''}
+                      ${item.proposedBio ? `<div style="font-size:12.5px; color:var(--text); background:#F8FAFC; padding:10px; border-radius:10px; border:1px solid var(--border); margin-bottom:8px;">"${item.proposedBio}"</div>` : ''}
+
+                      <div style="font-size:11.5px; font-weight:700; padding:8px 10px; border-radius:10px; background:${item.flaggedReason && item.flaggedReason.includes('Flagged') ? '#FEF2F2' : '#F1F5F9'}; color:${item.flaggedReason && item.flaggedReason.includes('Flagged') ? '#B91C1C' : '#475569'}; margin-bottom:12px;">
+                        🤖 Auto-Scan: ${item.flaggedReason || 'Passed text filter — inspect image visually for flyers/watermarks'}
+                      </div>
+                    </div>
+
+                    ${isPending ? `
+                      <div style="display:flex; gap:10px;">
+                        <button class="btn-green" style="flex:1;" onclick="moderateApprovalItem('${item.id}', 'APPROVE')">
+                          ✅ Approve & Publish
+                        </button>
+                        <button class="btn-outline" style="flex:1; border-color:#FECACA; background:#FEF2F2; color:#DC2626; font-weight:800;" onclick="moderateApprovalItem('${item.id}', 'REJECT')">
+                          🚫 Reject (Flyer / Phone #)
+                        </button>
+                      </div>
+                    ` : `
+                      <div style="font-size:11.5px; color:var(--muted); font-weight:700; text-align:right;">
+                        Moderated ${item.moderatedAt || ''} ${item.rejectionReason ? `• Reason: ${item.rejectionReason}` : ''}
+                      </div>
+                    `}
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        `;
+      } else if (adminTab === 'OVERVIEW' || adminTab === 'COMMISSION') {
+        sectionHtml = `
+          <div class="panel-grid">
+            <div class="card">
+              <h2 style="font-size:17px; font-weight:800; margin-bottom:8px;">💰 Dynamic Commission & 2-Month Free Promo Engine</h2>
+              <p style="font-size:13px; color:var(--muted); margin-bottom:16px; font-weight:500;">
+                Run the first 2 months at 0% fee so Harare providers see the value, then flip the switch below to start collecting your percentage cut from their Findit USD Wallets.
+              </p>
+
+              <div style="background:var(--blue-soft); padding:15px; border-radius:14px; display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                <div>
+                  <div style="font-weight:800; font-size:14px;">First 2 Months 0% Fee Launch Promo</div>
+                  <div style="font-size:12px; color:var(--muted); font-weight:600;">Toggle OFF anytime to immediately deduct ${s.commissionPercent}% per confirmed booking.</div>
+                </div>
+                <button class="${s.launchPromoActive ? 'btn-green' : 'btn-blue'}" onclick="togglePromo(${!s.launchPromoActive})">
+                  ${s.launchPromoActive ? 'Promo is ON (0% Fee)' : 'Promo is OFF (Collecting ' + s.commissionPercent + '%)'}
+                </button>
+              </div>
+
+              <div style="margin-bottom:16px;">
+                <label style="font-size:12px; font-weight:800; color:var(--muted); display:block; margin-bottom:6px;">
+                  GLOBAL COMMISSION PERCENTAGE: <strong style="color:var(--blue-primary); font-size:15px;" id="sliderLabel">${s.commissionPercent}%</strong>
+                </label>
+                <input
+                  type="range"
+                  min="3"
+                  max="25"
+                  value="${s.commissionPercent}"
+                  style="width:100%; accent-color:#0066FF;"
+                  oninput="document.getElementById('sliderLabel').innerText = this.value + '%'"
+                  onchange="updateGlobalCommission(this.value)"
+                />
+              </div>
+
+              <div style="font-size:12px; font-weight:800; color:var(--muted); margin-bottom:8px;">PER-CATEGORY COMMISSION OVERRIDES (%):</div>
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                ${db.categories.filter((c) => c.status === 'ACTIVE').map((c) => {
+                  const rate = s.categoryCommissions[c.id] ?? s.commissionPercent;
+                  return `
+                    <div style="background:#F8FAFC; border:1px solid var(--border); padding:9px 12px; border-radius:10px; display:flex; justify-content:space-between; align-items:center;">
+                      <span style="font-size:13px; font-weight:700;">${c.icon} ${c.name}</span>
+                      <input
+                        type="number"
+                        min="0"
+                        max="35"
+                        value="${rate}"
+                        style="width:64px; background:#fff; color:var(--text); border:1px solid var(--border); border-radius:8px; padding:5px; font-weight:800; text-align:center;"
+                        onchange="updateCatCommission('${c.id}', this.value)"
+                      />
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+
+            <div class="card">
+              <h2 style="font-size:17px; font-weight:800; margin-bottom:12px;">🧾 Live USD Bookings & Commission Ledger</h2>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Provider & Customer</th>
+                    <th>Job Value</th>
+                    <th>Fee / Promo</th>
+                    <th>Payment</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${db.revenueLedger.map((r) => `
+                    <tr>
+                      <td>
+                        <div style="font-weight:800;">${r.providerName}</div>
+                        <div style="font-size:11.5px; color:var(--muted); font-weight:600;">Client: ${r.customerName} (${r.categoryName})</div>
+                      </td>
+                      <td style="font-weight:800;">$${r.bookingAmountUsd.toFixed(2)} USD</td>
+                      <td>
+                        ${r.promoApplied
+                          ? `<span style="color:#059669; font-weight:800;">$0.00 (Waived $${r.standardFeeUsd.toFixed(2)})</span>`
+                          : `<span style="color:var(--blue-primary); font-weight:800;">+$${r.actualFeeCollectedUsd.toFixed(2)} USD (${r.configuredCommissionPercent}%)</span>`
+                        }
+                      </td>
+                      <td style="font-size:12px; font-weight:600;">${r.paymentMethod}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+      } else if (adminTab === 'PROVIDERS') {
+        sectionHtml = `
+          <div class="card">
+            <h2 style="font-size:17px; font-weight:800; margin-bottom:12px;">✅ Harare Providers, Trust Badges & USD Wallets</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>Provider</th>
+                  <th>Suburb & Rating</th>
+                  <th>USD Wallet</th>
+                  <th>Trust Verification Badges</th>
+                  <th>Admin Wallet Top-Up</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${db.providers.map((p) => `
+                  <tr>
+                    <td>
+                      <div style="font-weight:800;">${p.name}</div>
+                      <div style="font-size:11.5px; color:var(--muted); font-weight:600;">${p.phone}</div>
+                    </td>
+                    <td>
+                      <div style="font-weight:700;">📍 ${p.suburbName}</div>
+                      <div style="font-size:11.5px; color:var(--muted); font-weight:600;">⭐ ${p.rating} (${p.completedBookings} jobs)</div>
+                    </td>
+                    <td style="font-weight:800; color:var(--blue-primary); font-size:15px;">$${p.walletBalanceUsd.toFixed(2)} USD</td>
+                    <td>
+                      <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                        <button class="btn-outline" style="border-color:${p.badges.phoneVerified ? '#0066FF' : ''}; color:${p.badges.phoneVerified ? '#0066FF' : ''};" onclick="toggleProviderBadge('${p.id}', 'phoneVerified')">
+                          ${p.badges.phoneVerified ? '✓' : '+'} 💬 WhatsApp
+                        </button>
+                        <button class="btn-outline" style="border-color:${p.badges.faceVerified ? '#0066FF' : ''}; color:${p.badges.faceVerified ? '#0066FF' : ''};" onclick="toggleProviderBadge('${p.id}', 'faceVerified')">
+                          ${p.badges.faceVerified ? '✓' : '+'} 🤳 Face Scan
+                        </button>
+                        <button class="btn-outline" style="border-color:${p.badges.idVerified ? '#059669' : ''}; color:${p.badges.idVerified ? '#059669' : ''};" onclick="toggleProviderBadge('${p.id}', 'idVerified')">
+                          ${p.badges.idVerified ? '✓' : '+'} 🪪 National ID
+                        </button>
+                        <button class="btn-outline" style="border-color:${p.badges.businessVerified ? '#D97706' : ''}; color:${p.badges.businessVerified ? '#D97706' : ''};" onclick="toggleProviderBadge('${p.id}', 'businessVerified')">
+                          ${p.badges.businessVerified ? '✓' : '+'} 🏢 Business
+                        </button>
+                      </div>
+                    </td>
+                    <td>
+                      <button class="btn-blue" style="padding:7px 12px; font-size:12px;" onclick="adminTopUpProvider('${p.id}', 10)">
+                        +$10 USD Credit
+                      </button>
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        `;
+      } else if (adminTab === 'SHIELD') {
+        sectionHtml = `
+          <div class="card">
+            <h2 style="font-size:17px; font-weight:800; margin-bottom:8px;">🛡️ Anti-Leakage Shield Security Logs</h2>
+            <p style="font-size:13px; color:var(--muted); margin-bottom:14px; font-weight:500;">
+              Every time a customer or provider attempts to type a phone number (077/078/+263), @handle, or "WhatsApp / Call me on", the platform blocks it and records it below.
+            </p>
+            ${db.leakageLogs.map((l) => `
+              <div style="background:#FEF2F2; border:1px solid #FECACA; border-radius:12px; padding:13px; margin-bottom:10px;">
+                <div style="display:flex; justify-content:space-between; font-weight:800; color:#B91C1C;">
+                  <span>🚫 ${l.actorName} (${l.actorRole})</span>
+                  <span style="font-size:11.5px;">${l.context}</span>
+                </div>
+                <div style="font-family:monospace; background:#FFFFFF; border:1px solid #FECACA; padding:8px 10px; border-radius:8px; margin:6px 0; color:#0F172A; font-weight:700;">
+                  "${l.attemptedText}"
+                </div>
+                <div style="font-size:12px; color:#991B1B; font-weight:600;">Blocked Reason: ${l.reasons.join(' • ')}</div>
+              </div>
+            `).join('')}
+          </div>
+        `;
+      } else if (adminTab === 'CATEGORIES') {
+        sectionHtml = `
+          <div class="card">
+            <h2 style="font-size:17px; font-weight:800; margin-bottom:8px;">🚀 Harare Service Categories (Active vs Coming Soon)</h2>
+            <p style="font-size:13px; color:var(--muted); margin-bottom:14px; font-weight:500;">
+              Beauty & Grooming categories are active now; Home Cleaning & Handyman are marked Coming Soon. Click any button to activate or pause a category.
+            </p>
+            <table>
+              <thead>
+                <tr>
+                  <th>Category</th>
+                  <th>Description</th>
+                  <th>Status</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${db.categories.map((c) => `
+                  <tr>
+                    <td style="font-weight:800; font-size:14px;">${c.icon} ${c.fullName || c.name}</td>
+                    <td style="color:var(--muted); font-weight:600;">${c.tagline}</td>
+                    <td>
+                      <span style="padding:4px 10px; border-radius:99px; font-size:11px; font-weight:800; background:${c.status === 'ACTIVE' ? '#ECFDF5' : '#FFFBEB'}; color:${c.status === 'ACTIVE' ? '#059669' : '#D97706'};">
+                        ${c.status}
+                      </span>
+                    </td>
+                    <td>
+                      <button class="btn-outline" onclick="toggleCategoryStatus('${c.id}')">
+                        Switch to ${c.status === 'ACTIVE' ? 'COMING SOON' : 'ACTIVE'}
+                      </button>
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        `;
+      }
+
+      document.getElementById('adminRoot').innerHTML = kpiHtml + sectionHtml;
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      loadAdminData();
+      const es = new EventSource('/api/stream');
+      es.onmessage = (evt) => {
+        try {
+          const msg = JSON.parse(evt.data);
+          if (msg.eventType && msg.eventType !== 'CONNECTED') loadAdminData();
+        } catch (e) {}
+      };
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#0066FF" />
+  <title>Findit Harare — Your Price. Your Pro. At Your Door.</title>
+  <link rel="manifest" href="manifest.json" />
+  <!-- Inter & Plus Jakarta Sans Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <!-- Leaflet Map CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="appViewport" class="app-viewport">
+    <!-- Electric Blue Animated Splash Screen -->
+    <div id="splashScreen" class="splash-screen">
+      <div class="splash-content">
+        <div class="splash-logo-wrap">
+          <svg class="splash-logo-svg" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect width="120" height="120" rx="30" fill="#FFFFFF" />
+            <path d="M26 84C26 52 48 30 82 30" stroke="#38BDF8" stroke-width="11" stroke-linecap="round" />
+            <path d="M48 90V56C48 45.5 55.5 39 66 39H74" stroke="#0066FF" stroke-width="11" stroke-linecap="round" />
+            <path d="M38 64H66" stroke="#0066FF" stroke-width="10" stroke-linecap="round" />
+            <path d="M84 62V90" stroke="#0066FF" stroke-width="11" stroke-linecap="round" />
+            <circle cx="84" cy="44" r="7.5" fill="#0066FF" />
+          </svg>
+        </div>
+
+        <div class="splash-brand-title">
+          find<span class="splash-brand-accent">it</span>
+        </div>
+
+        <div class="splash-catchphrase">
+          Your Price. Your Pro. At Your Door.
+        </div>
+
+        <div class="splash-loader-track">
+          <div class="splash-loader-fill" id="splashLoaderFill"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- WhatsApp Push Notification Banner for 4-Digit OTP Code -->
+    <div id="whatsappBannerRoot"></div>
+
+    <!-- Full-Screen Harare Street Map (OpenStreetMap Free Tiles — No API Key Required) -->
+    <div id="harareMapContainer" class="map-layer">
+      <div id="leafletMap" class="leaflet-map"></div>
+      <div id="fallbackRadarMap" class="fallback-radar-map"></div>
+
+      <!-- Center Home Location Pin + Blue Radar Circles -->
+      <div id="centerMapPin" class="center-map-pin" style="display:none;">
+        <!-- Concentric Blue Radar Circles when Searching -->
+        <div id="mapRadarPulses" class="map-radar-pulses" style="display:none;">
+          <div class="radar-circle-outer"></div>
+          <div class="radar-circle-inner"></div>
+        </div>
+
+        <!-- Home Visit Location Callout Bubble -->
+        <div class="indrive-where-from-bubble" id="whereFromBubble" onclick="openSuburbPickerModal()">
+          <div class="where-from-sub">Your home location</div>
+          <div class="where-from-row">
+            <span id="centerPinLabel">Avondale, Harare</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+          </div>
+        </div>
+
+        <!-- Electric Blue & White Home Visit Pin on Stem -->
+        <div class="indrive-waving-pin-box">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+            <circle cx="13.5" cy="5.5" r="2.4" fill="#FFFFFF"/>
+            <path d="M7 4.5C7 8.5 9.5 11 13 11.5L15.5 19.5M10 11.2L8 19.5M13 11.5L18 14" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="indrive-pin-stem"></div>
+        <div class="indrive-pin-anchor-dot"></div>
+      </div>
+    </div>
+
+    <!-- "Choose a pro" Incoming Offer Cards Overlay (with 120s Shrinking Accept Button) -->
+    <div id="floatingOffersRoot" class="floating-offers-root"></div>
+
+    <!-- Main UI Overlay (Top Bar with Sign Up Button & Bottom Sheet) -->
+    <div id="uiOverlay" class="ui-overlay"></div>
+  </div>
+
+  <!-- Bottom Sheet Modals & Slide-Out Left Drawer -->
+  <div id="pickerModalRoot"></div>
+
+  <!-- Guarded Quick-Message Chat Drawer -->
+  <div id="chatDrawerRoot"></div>
+
+  <!-- Masked In-App Voice Call Modal -->
+  <div id="callModalRoot"></div>
+
+  <!-- Toast Notifications -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
