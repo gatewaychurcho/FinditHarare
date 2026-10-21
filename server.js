@@ -23,33 +23,26 @@ function sendRealWhatsAppCloudOtp(toPhone, otpCode) {
     if (!WHATSAPP_ACCESS_TOKEN || !WHATSAPP_PHONE_NUMBER_ID) {
       return resolve({ liveWhatsAppSent: false, mode: 'LOCAL_DEV_OTP' });
     }
-    const cleanPhone = toPhone.replace(/\D/g, '');
+    let cleanPhone = toPhone.replace(/\D/g, '');
+    if (cleanPhone.startsWith('0')) cleanPhone = '263' + cleanPhone.slice(1);
+    else if (!cleanPhone.startsWith('263')) cleanPhone = '263' + cleanPhone;
+
+    // Use direct WhatsApp text message (works out of the box on Meta Cloud API without waiting for template approvals)
     const payload = JSON.stringify({
       messaging_product: 'whatsapp',
+      recipient_type: 'individual',
       to: cleanPhone,
-      type: 'template',
-      template: {
-        name: process.env.WHATSAPP_OTP_TEMPLATE || 'findit_otp_verification',
-        language: { code: 'en' },
-        components: [
-          {
-            type: 'body',
-            parameters: [{ type: 'text', text: String(otpCode) }]
-          },
-          {
-            type: 'button',
-            sub_type: 'url',
-            index: '0',
-            parameters: [{ type: 'text', text: String(otpCode) }]
-          }
-        ]
+      type: 'text',
+      text: {
+        preview_url: false,
+        body: `Your Findit Harare verification code is: ${otpCode}. Valid for 10 minutes.`
       }
     });
 
     const req = https.request(
       {
         hostname: 'graph.facebook.com',
-        path: `/v19.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
+        path: `/v20.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
         method: 'POST',
         headers: {
           Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
@@ -1199,7 +1192,10 @@ const server = http.createServer(async (req, res) => {
     return sendJson(res, 200, {
       ...db,
       suburbs: HARARE_SUBURBS,
-      quickMessages: QUICK_MESSAGES
+      quickMessages: QUICK_MESSAGES,
+      config: {
+        agoraAppId: process.env.AGORA_APP_ID || 'aab8b8f8d67246b9bf73a87995eb871a'
+      }
     });
   }
 
