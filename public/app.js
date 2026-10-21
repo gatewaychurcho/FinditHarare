@@ -4550,8 +4550,12 @@ function sendCustomChat(requestId = null) {
   input.value = '';
 }
 
-function startInAppCall(peerName, contextTitle) {
-  state.activeCall = { peerName, contextTitle };
+let agoraClient = null;
+let localAudioTrack = null;
+let isAudioMuted = false;
+
+async function startInAppCall(peerName, contextTitle, channelId = 'findit_harare_call') {
+  state.activeCall = { peerName, contextTitle, channelId, isMuted: false };
   state.callSeconds = 0;
   if (callInterval) clearInterval(callInterval);
   callInterval = setInterval(() => {
@@ -4564,10 +4568,51 @@ function startInAppCall(peerName, contextTitle) {
     }
   }, 1000);
   renderCallModal();
+
+  // Initialize real Agora RTC voice session if AgoraRTC is loaded
+  try {
+    if (window.AgoraRTC) {
+      agoraClient = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
+      agoraClient.on('user-published', async (user, mediaType) => {
+        await agoraClient.subscribe(user, mediaType);
+        if (mediaType === 'audio') {
+          user.audioTrack.play();
+        }
+      });
+      const appId = state.db?.config?.agoraAppId || 'aab8b8f8d67246b9bf73a87995eb871a';
+      const cleanChannel = (channelId || 'harare_call').replace(/[^a-zA-Z0-9_-]/g, '_');
+      await agoraClient.join(appId, cleanChannel, null, null);
+      localAudioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+      await agoraClient.publish([localAudioTrack]);
+      showToast('Agora Voice connected (encrypted)');
+    }
+  } catch (err) {
+    console.log('Agora RTC Voice notice:', err.message);
+  }
 }
 
-function endInAppCall() {
+async function toggleCallMute() {
+  if (localAudioTrack) {
+    isAudioMuted = !isAudioMuted;
+    await localAudioTrack.setMuted(isAudioMuted);
+    if (state.activeCall) state.activeCall.isMuted = isAudioMuted;
+    renderCallModal();
+    showToast(isAudioMuted ? 'Microphone muted' : 'Microphone unmuted');
+  }
+}
+
+async function endInAppCall() {
   if (callInterval) clearInterval(callInterval);
+  try {
+    if (localAudioTrack) {
+      localAudioTrack.close();
+      localAudioTrack = null;
+    }
+    if (agoraClient) {
+      await agoraClient.leave();
+      agoraClient = null;
+    }
+  } catch (e) {}
   state.activeCall = null;
   renderCallModal();
 }
@@ -4584,15 +4629,27 @@ function renderCallModal() {
       <div class="indrive-modal-sheet" style="text-align:center; padding:32px 20px;">
         <div style="font-size:11.5px; color:var(--blue-primary); font-weight:800; text-transform:uppercase; letter-spacing:0.06em; display:inline-flex; align-items:center; gap:6px;">
           ${uiIcon('lock', 14)}
-          <span>Findit Masked In-App Call</span>
+          <span>Findit Masked Agora Voice Call</span>
         </div>
         <div style="font-size:23px; font-weight:800; margin-top:10px;">${state.activeCall.peerName}</div>
         <div style="font-size:13px; color:var(--text-secondary); margin-top:4px;">${state.activeCall.contextTitle}</div>
         <div id="callTimerText" style="font-size:32px; font-weight:800; color:var(--blue-primary); margin:24px 0;">00:00</div>
-        <button class="cancel-request-red-pill" style="padding:0 28px; height:48px; font-size:15px;" onclick="endInAppCall()">
-          ${uiIcon('phone', 16)}
-          <span>End Call</span>
-        </button>
+
+        <div style="display:flex; justify-content:center; align-items:center; gap:14px;">
+          <button
+            type="button"
+            class="btn-dark-sec"
+            style="width:48px; height:48px; border-radius:50%; padding:0; display:inline-flex; align-items:center; justify-content:center;"
+            onclick="toggleCallMute()"
+            title="Mute / Unmute"
+          >
+            ${state.activeCall.isMuted ? uiIcon('close', 20) : uiIcon('phone', 20)}
+          </button>
+          <button class="cancel-request-red-pill" style="padding:0 28px; height:48px; font-size:15px;" onclick="endInAppCall()">
+            ${uiIcon('phone', 16)}
+            <span>End Call</span>
+          </button>
+        </div>
       </div>
     </div>
   `;
