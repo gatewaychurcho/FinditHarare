@@ -103,7 +103,9 @@ function uiIcon(name, size = 16) {
     close: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`,
     chevronUp: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><polyline points="18 15 12 9 6 15"/></svg>`,
     chevronDown: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><polyline points="6 9 12 15 18 9"/></svg>`,
+    chevronLeft: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><polyline points="15 18 9 12 15 6"/></svg>`,
     chevronRight: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><polyline points="9 18 15 12 9 6"/></svg>`,
+    send: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>`,
     arrowLeft: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>`,
     briefcase: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>`,
     user: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`,
@@ -1803,10 +1805,19 @@ function renderBookedTrackingOverlay(req) {
           </div>
         </div>
 
-        <!-- Embedded Live In-App Chat -->
-        ${renderEmbeddedChatComponent(req, prov?.shortName || prov?.name || 'Pro')}
+        <!-- Latest Message Snippet Pill (if messages exist) -->
+        ${(req.messages && req.messages.length > 0) ? `
+          <div class="chat-preview-pill" onclick="openChatDrawer('${prov?.id}')">
+            <div class="chat-preview-dot"></div>
+            <div class="chat-preview-text">
+              <span class="chat-preview-sender">${req.messages[req.messages.length - 1].senderName}:</span>
+              ${req.messages[req.messages.length - 1].text}
+            </div>
+            <span class="chat-preview-action">Reply ${uiIcon('chevronRight', 12)}</span>
+          </div>
+        ` : ''}
 
-        <!-- Action Buttons: Masked Call, Full Chat, Complete Service -->
+        <!-- Action Buttons: Masked Call, Full Screen Chat, Complete Service -->
         <div style="display:grid; grid-template-columns:1fr 1fr 1.25fr; gap:8px;">
           <button class="btn-dark-sec" onclick="startInAppCall('${prov?.name || 'Pro'}', '${req.title}')">
             ${uiIcon('phone', 14)}
@@ -1814,7 +1825,7 @@ function renderBookedTrackingOverlay(req) {
           </button>
           <button class="btn-dark-sec" onclick="openChatDrawer('${prov?.id}')">
             ${uiIcon('chat', 14)}
-            <span>Chat (${(req.messages || []).length})</span>
+            <span>Chat ${(req.messages && req.messages.length > 0) ? `(${req.messages.length})` : ''}</span>
           </button>
           <button class="btn-primary-blue" style="height:42px; font-size:13px;" onclick="openRateBookingModal('${req.id}')">
             ${uiIcon('check', 15)}
@@ -3780,15 +3791,30 @@ function renderProviderActiveVisitTab(prov, activeJob) {
         ` : ''}
       </div>
 
-      <!-- Real-Time Synced Chat with Client -->
-      ${renderEmbeddedChatComponent(activeJob, activeJob.customerName.split(' ')[0])}
+      <!-- Latest Message Snippet Pill (if messages exist) -->
+      ${(activeJob.messages && activeJob.messages.length > 0) ? `
+        <div class="chat-preview-pill" onclick="openChatDrawer('${activeJob.id}')">
+          <div class="chat-preview-dot"></div>
+          <div class="chat-preview-text">
+            <span class="chat-preview-sender">${activeJob.messages[activeJob.messages.length - 1].senderName}:</span>
+            ${activeJob.messages[activeJob.messages.length - 1].text}
+          </div>
+          <span class="chat-preview-action">Reply ${uiIcon('chevronRight', 12)}</span>
+        </div>
+      ` : ''}
 
       <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
         <button class="btn-dark-sec" onclick="startInAppCall('${activeJob.customerName}', '${activeJob.title}')">
           ${uiIcon('phone', 15)}
           <span>Call Client</span>
         </button>
-        <button class="cancel-request-red-pill" style="justify-content:center;" onclick="openCancelTaskModal('${activeJob.id}')">
+        <button class="btn-dark-sec" onclick="openChatDrawer('${activeJob.id}')">
+          ${uiIcon('chat', 15)}
+          <span>Chat ${(activeJob.messages && activeJob.messages.length > 0) ? `(${activeJob.messages.length})` : ''}</span>
+        </button>
+      </div>
+      <div style="margin-top:8px;">
+        <button class="cancel-request-red-pill" style="justify-content:center; width:100%;" onclick="openCancelTaskModal('${activeJob.id}')">
           ${uiIcon('close', 14)}
           <span>Cancel Job</span>
         </button>
@@ -4437,10 +4463,26 @@ async function submitProviderCatalogueUpload() {
 // ============================================================================
 // IN-APP PROTECTED CHAT & MASKED VOICE CALL
 // ============================================================================
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function openChatDrawer(providerId) {
   state.chatDrawerOpen = true;
   state.activeChatProviderId = providerId;
   renderChatDrawer();
+  setTimeout(() => {
+    const input = document.getElementById('chatTextInput');
+    if (input) input.focus();
+    const feed = document.getElementById('fullScreenChatFeed');
+    if (feed) feed.scrollTop = feed.scrollHeight;
+  }, 80);
 }
 
 function closeChatDrawer() {
@@ -4459,7 +4501,25 @@ function renderChatDrawer() {
   const req = (state.role === 'PROVIDER'
     ? getProviderActiveBooking((state.currentUser || state.db.providers[0])?.id)
     : getCustomerActiveRequest()) || (state.db.requests || [])[0];
-  const messages = req?.messages || [];
+
+  let peerName = 'Service Provider';
+  let peerAvatar = 'https://images.unsplash.com/photo-1531123897727-8f129e1688ce?auto=format&fit=crop&w=240&q=80';
+  let peerSubtitle = 'Online • Verified Pro';
+
+  if (state.role === 'PROVIDER') {
+    peerName = req?.customerName || 'Client';
+    peerAvatar = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=240&q=80';
+    peerSubtitle = 'Client • Home Visit';
+  } else {
+    const provId = req?.acceptedProviderId || req?.offers?.[0]?.providerId || state.activeChatProviderId;
+    const prov = state.db.providers.find((p) => p.id === provId) || state.db.providers[0];
+    if (prov) {
+      peerName = prov.name;
+      peerAvatar = prov.avatarUrl;
+      peerSubtitle = `${prov.skillTier || 'Platinum Pro'} • ${prov.rating || '4.9'} ★`;
+    }
+  }
+
   const quickList = state.role === 'PROVIDER'
     ? [
         'On my way with my mobile kit!',
@@ -4474,65 +4534,160 @@ function renderChatDrawer() {
         'Please call me in-app when outside'
       ];
 
-  root.innerHTML = `
-    <div class="modal-backdrop" onclick="closeChatDrawer()">
-      <div class="indrive-modal-sheet" onclick="event.stopPropagation()">
-        <div class="cancel-sheet-header">
-          <div class="cancel-sheet-title">In-App Protected Chat</div>
-          <button class="cancel-close-x" onclick="closeChatDrawer()">${uiIcon('close', 16)}</button>
-        </div>
+  const messages = req?.messages || [];
 
-        <div style="max-height:240px; overflow-y:auto; background:var(--bg-card); border:1px solid var(--border-light); border-radius:14px; padding:12px; margin-bottom:10px;">
-          ${messages.length === 0 ? `
-            <div style="color:var(--text-secondary); font-size:13px; text-align:center; padding:16px;">
-              Phone numbers &amp; WhatsApp links are blocked. Use preset messages or type below.
-            </div>
-          ` : messages.map((m) => `
-            <div style="margin-bottom:8px;">
-              <div style="font-size:11px; color:var(--text-secondary); font-weight:700;">${m.senderName}</div>
-              <div style="background:${m.senderRole === state.role ? 'var(--blue-primary)' : 'var(--blue-soft)'}; color:${m.senderRole === state.role ? '#FFFFFF' : 'var(--text-main)'}; display:inline-block; padding:8px 12px; border-radius:12px; font-size:13px; font-weight:600; margin-top:2px;">
-                ${m.text}
+  root.innerHTML = `
+    <div class="fullscreen-chat-backdrop" onclick="closeChatDrawer()">
+      <div class="fullscreen-chat-modal" onclick="event.stopPropagation()">
+        <!-- Header -->
+        <div class="fullscreen-chat-header">
+          <button class="fullscreen-chat-close-btn" onclick="closeChatDrawer()" title="Back to Map">
+            ${uiIcon('chevronLeft', 20)}
+          </button>
+
+          <div class="fullscreen-chat-peer">
+            <img src="${peerAvatar}" alt="${escapeHtml(peerName)}" class="fullscreen-chat-avatar" />
+            <div class="fullscreen-chat-peer-info">
+              <div class="fullscreen-chat-peer-name">${escapeHtml(peerName)}</div>
+              <div class="fullscreen-chat-peer-status">
+                <span style="width:7px; height:7px; border-radius:50%; background:#10B981; display:inline-block;"></span>
+                <span>${escapeHtml(peerSubtitle)}</span>
               </div>
             </div>
-          `).join('')}
-        </div>
+          </div>
 
-        <div style="display:flex; gap:6px; overflow-x:auto; padding-bottom:10px;">
-          ${quickList.map((q) => `
-            <button class="btn-dark-sec" style="white-space:nowrap; font-size:12px; padding:7px 11px;" onclick="sendChatMessage('${q.replace(/'/g, "\\'")}', '${req?.id || ''}')">
-              ${q}
+          <div class="fullscreen-chat-header-actions">
+            <button class="fullscreen-chat-call-btn" onclick="startInAppCall('${peerName.replace(/'/g, "\\'")}', '${(req?.title || 'Home Visit').replace(/'/g, "\\'")}')" title="Call ${escapeHtml(peerName)}">
+              ${uiIcon('phone', 17)}
             </button>
-          `).join('')}
+            <button class="fullscreen-chat-close-btn" onclick="closeChatDrawer()" title="Close Chat">
+              ${uiIcon('close', 18)}
+            </button>
+          </div>
         </div>
 
-        <div style="display:flex; gap:8px;">
-          <input id="chatTextInput" class="dark-input" placeholder="Message (phone numbers blocked)..." onkeydown="if(event.key==='Enter') sendCustomChat('${req?.id || ''}')" />
-          <button class="btn-primary-blue" style="width:90px; height:44px;" onclick="sendCustomChat('${req?.id || ''}')">Send</button>
+        <!-- Security Notice -->
+        <div class="fullscreen-chat-security-bar">
+          <span style="color:var(--blue-primary); display:inline-flex;">${uiIcon('lock', 12)}</span>
+          <span>In-app protected chat. Phone numbers &amp; WhatsApp links are blocked for safety.</span>
+        </div>
+
+        <!-- Scrollable Messages Feed -->
+        <div class="fullscreen-chat-feed" id="fullScreenChatFeed">
+          ${renderChatMessagesHtml(messages)}
+        </div>
+
+        <!-- Footer: Preset quick replies & Input -->
+        <div class="fullscreen-chat-footer">
+          <div class="chat-quick-strip">
+            ${quickList.map((q) => `
+              <button class="chat-preset-chip" onclick="sendChatMessage('${q.replace(/'/g, "\\'")}', '${req?.id || ''}')">
+                ${q}
+              </button>
+            `).join('')}
+          </div>
+
+          <div class="chat-inline-input-row">
+            <input
+              id="chatTextInput"
+              class="dark-input"
+              style="font-size:13.5px; padding:11px 14px;"
+              placeholder="Type message (phone numbers blocked)..."
+              onkeydown="if(event.key==='Enter') sendCustomChat('${req?.id || ''}')"
+            />
+            <button
+              class="btn-primary-blue"
+              style="width:50px; height:44px; padding:0; flex-shrink:0; border-radius:14px; display:inline-flex; align-items:center; justify-content:center;"
+              onclick="sendCustomChat('${req?.id || ''}')"
+              title="Send"
+            >
+              ${uiIcon('send', 17)}
+            </button>
+          </div>
         </div>
       </div>
     </div>
   `;
 }
 
-async function sendChatMessage(text, requestId = null) {
+function renderChatMessagesHtml(messages) {
+  if (!messages || messages.length === 0) {
+    return `
+      <div style="text-align:center; padding:36px 20px; color:var(--text-secondary); margin:auto 0;">
+        <div style="width:48px; height:48px; border-radius:50%; background:var(--blue-soft); color:var(--blue-primary); display:inline-flex; align-items:center; justify-content:center; margin-bottom:12px;">
+          ${uiIcon('chat', 24)}
+        </div>
+        <div style="font-size:14px; font-weight:800; color:var(--text-main); margin-bottom:4px;">In-App Encrypted Chat</div>
+        <div style="font-size:12.5px; max-width:280px; margin:0 auto; line-height:1.4;">
+          Chat with each other to coordinate your home visit. Direct contacts are masked.
+        </div>
+      </div>
+    `;
+  }
+
+  return messages.map((m) => {
+    const isSystem = m.senderRole === 'SYSTEM';
+    const isMine = !isSystem && m.senderRole === state.role;
+    const rowClass = isSystem ? 'system' : isMine ? 'mine' : 'theirs';
+    return `
+      <div class="chat-msg-row ${rowClass}">
+        ${!isSystem ? `<div class="chat-msg-sender">${isMine ? 'You' : escapeHtml(m.senderName)}</div>` : ''}
+        <div class="chat-msg-bubble">${escapeHtml(m.text)}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+function updateChatFeedDomOnly(req) {
+  const feed = document.getElementById('fullScreenChatFeed');
+  if (feed && req) {
+    feed.innerHTML = renderChatMessagesHtml(req.messages || []);
+    feed.scrollTop = feed.scrollHeight;
+  }
+}
+
+function sendChatMessage(text, requestId = null) {
+  if (!text || !text.trim()) return;
+  const cleanText = text.trim();
+
   const fallbackReq = state.role === 'PROVIDER'
     ? getProviderActiveBooking((state.currentUser || state.db.providers[0])?.id)
     : getCustomerActiveRequest();
-  const targetId = requestId || fallbackReq?.id || (state.db.requests || [])[0]?.id;
-  if (!targetId) return;
-  try {
-    await apiPost('/api/messages', {
-      requestId: targetId,
-      senderRole: state.role,
-      senderName: state.currentUser?.name || (state.role === 'PROVIDER' ? 'Service Provider' : 'Tendai Moyo'),
-      text
-    });
-    await fetchState();
-    const feedEl = document.getElementById('embeddedChatScroll');
-    if (feedEl) feedEl.scrollTop = feedEl.scrollHeight;
-  } catch (err) {
-    showToast(err.message, 'error');
-  }
+  const targetReq = (state.db.requests || []).find((r) => r.id === (requestId || fallbackReq?.id)) || fallbackReq;
+  if (!targetReq) return;
+
+  const senderName = state.currentUser?.name || (state.role === 'PROVIDER' ? 'Service Provider' : 'Tendai Moyo');
+  const tempMsg = {
+    id: 'msg_' + Date.now(),
+    senderRole: state.role,
+    senderName: senderName,
+    text: cleanText,
+    timestamp: new Date().toISOString()
+  };
+
+  // OPTIMISTIC 0ms UPDATE: Append locally immediately
+  if (!targetReq.messages) targetReq.messages = [];
+  targetReq.messages.push(tempMsg);
+
+  // Update feed immediately with zero delay
+  updateChatFeedDomOnly(targetReq);
+
+  // Clear input box if open
+  const input = document.getElementById('chatTextInput');
+  if (input) input.value = '';
+
+  // Background API call without freezing UI or re-fetching whole state
+  apiPost('/api/messages', {
+    requestId: targetReq.id,
+    senderRole: state.role,
+    senderName: senderName,
+    text: cleanText
+  }).catch((err) => {
+    // If backend rejects (e.g. phone number detected), revert and notify
+    targetReq.messages = targetReq.messages.filter((m) => m.id !== tempMsg.id);
+    updateChatFeedDomOnly(targetReq);
+    showToast(err.message || 'Could not send message', 'error');
+  });
 }
 
 function sendInlineChatMessage(requestId) {
@@ -4546,8 +4701,8 @@ function sendInlineChatMessage(requestId) {
 function sendCustomChat(requestId = null) {
   const input = document.getElementById('chatTextInput');
   if (!input || !input.value.trim()) return;
-  sendChatMessage(input.value.trim(), requestId);
-  input.value = '';
+  const text = input.value.trim();
+  sendChatMessage(text, requestId);
 }
 
 let agoraClient = null;

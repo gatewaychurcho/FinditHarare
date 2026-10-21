@@ -917,7 +917,17 @@
         "faceVerified": true
       },
       "walletBalanceUsd": 12,
-      "walletTransactions": [],
+      "walletTransactions": [
+        {
+          "id": "tx_1792597074590",
+          "date": "2026-10-21T15:37:54.590Z",
+          "type": "PROMO_WAIVER",
+          "method": "0% Launch Promo",
+          "amountUsd": 0,
+          "savedUsd": 2,
+          "note": "10% fee ($2.00) waived on $20.00 booking!"
+        }
+      ],
       "portfolio": [
         {
           "id": "cat_5229",
@@ -1070,6 +1080,132 @@
     }
   ],
   "requests": [
+    {
+      "id": "req_69505",
+      "customerId": "cust_1",
+      "customerFinditId": "FH-USR-391044",
+      "customerName": "Tendai Moyo",
+      "customerRating": 5,
+      "customerCompletedVisits": 8,
+      "categoryId": "nails",
+      "categoryName": "Mobile Nail Tech & Pedicure",
+      "title": "French Tip Acrylic Full Set",
+      "description": "Home visit at Borowdale Road (Main Gate).",
+      "suburbId": "borrowdale",
+      "suburbName": "Vainona",
+      "exactAddress": "Borowdale Road, Vainona, Harare",
+      "lat": -17.75592,
+      "lng": 31.09066,
+      "serviceMode": "HOME_VISIT",
+      "preferredTime": "Today, Now (ASAP)",
+      "paymentMethod": "Cash USD",
+      "budgetUsd": 20,
+      "startPinCode": "4578",
+      "pinVerifiedByProvider": false,
+      "directProviderId": null,
+      "status": "CONFIRMED",
+      "acceptedOfferId": "off_723300",
+      "routeCoordinates": [
+        [
+          -17.756,
+          31.084
+        ],
+        [
+          -17.75545,
+          31.08316
+        ],
+        [
+          -17.75499,
+          31.08459
+        ],
+        [
+          -17.75468,
+          31.08331
+        ],
+        [
+          -17.75456,
+          31.08543
+        ],
+        [
+          -17.75466,
+          31.08498
+        ],
+        [
+          -17.75495,
+          31.08792
+        ],
+        [
+          -17.75539,
+          31.08816
+        ],
+        [
+          -17.75592,
+          31.09066
+        ]
+      ],
+      "createdAt": "2026-10-21T15:37:49.518Z",
+      "offers": [
+        {
+          "id": "off_723300",
+          "providerId": "prov_2",
+          "providerFinditId": "FH-PRO-857283",
+          "providerName": "Nyasha Chikwanda",
+          "providerShortName": "Nyasha",
+          "providerBrand": "Acrylic & Gel Mobile Nail Kit",
+          "providerAvatar": "NC",
+          "providerAvatarUrl": "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=240&q=80",
+          "providerSkillTier": "Platinum pro",
+          "isPlatinum": true,
+          "providerExpYears": 4,
+          "providerRating": 4.94,
+          "providerReviewCount": 195,
+          "providerCompletedJobs": 540,
+          "providerBadges": {
+            "phoneVerified": true,
+            "idVerified": true,
+            "businessVerified": false,
+            "faceVerified": true
+          },
+          "distanceKm": 0.7,
+          "etaMinutes": 2,
+          "priceUsd": 20,
+          "travelFeeUsd": 0,
+          "bidType": "ACCEPTED_PRICE",
+          "proposedTime": "2 min",
+          "conditions": [
+            "Your fare",
+            "Acrylic & Gel Mobile Nail Kit"
+          ],
+          "status": "ACCEPTED",
+          "lastCounterBy": "PROVIDER",
+          "createdAt": "2026-10-21T15:37:52.330Z",
+          "expiresAt": 1792597192330,
+          "ttlSeconds": 120
+        }
+      ],
+      "messages": [
+        {
+          "id": "msg_1792597074590",
+          "senderRole": "SYSTEM",
+          "senderName": "Findit Harare",
+          "providerId": "prov_2",
+          "type": "BOOKING_CONFIRMED",
+          "text": "Nyasha Chikwanda is now en route to Borowdale Road, Vainona, Harare (0.7 km away, ~2 mins). Share Start PIN #4578 when they arrive at your gate.",
+          "timestamp": "2026-10-21T15:37:54.590Z"
+        },
+        {
+          "id": "msg_1792597074591",
+          "senderRole": "PROVIDER",
+          "senderName": "Nyasha Chikwanda",
+          "providerId": "prov_2",
+          "type": "CHAT",
+          "text": "Hi Tendai! I've packed my mobile kit and I'm on my way to Borowdale Road, Vainona, Harare (~2 mins away). Message me here if there are any gate instructions.",
+          "timestamp": "2026-10-21T15:37:54.590Z"
+        }
+      ],
+      "acceptedProviderId": "prov_2",
+      "agreedTotalUsd": 20
+    },
     {
       "id": "req_76835",
       "customerId": "cust_1583",
@@ -4194,6 +4330,20 @@
     }
   ],
   "revenueLedger": [
+    {
+      "id": "rev_1792597074590",
+      "timestamp": "2026-10-21T15:37:54.590Z",
+      "requestId": "req_69505",
+      "providerName": "Nyasha Chikwanda",
+      "customerName": "Tendai Moyo",
+      "categoryName": "Mobile Nail Tech & Pedicure",
+      "bookingAmountUsd": 20,
+      "configuredCommissionPercent": 10,
+      "standardFeeUsd": 2,
+      "promoApplied": true,
+      "actualFeeCollectedUsd": 0,
+      "paymentMethod": "Cash USD"
+    },
     {
       "id": "rev_1792587981252",
       "timestamp": "2026-10-21T13:06:21.252Z",
