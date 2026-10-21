@@ -1971,14 +1971,23 @@ function renderSignUpWizardInnerHtml(isFullScreen = false) {
           <span>Verify Code &amp; Continue</span>
         </button>
 
-        <div style="text-align:center;">
+        <div style="margin-top:12px; display:flex; flex-direction:column; gap:8px;">
           <a
             href="https://wa.me/263713475131?text=${encodeURIComponent('Hi Findit Harare! My phone is ' + state.authPhone + '. Please send my 4-digit verification code.')}"
             target="_blank"
-            style="display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700; color:#059669; text-decoration:none; padding:6px 12px; border-radius:8px; background:#ECFDF5;"
+            class="btn-dark-sec"
+            style="display:inline-flex; align-items:center; justify-content:center; gap:8px; width:100%; height:46px; text-decoration:none; font-size:13px; font-weight:700; color:#059669; border-color:#A7F3D0; background:#ECFDF5;"
           >
-            <span>Need Help? Chat with Admin (+263 713 475 131)</span>
+            <span>💬 Message Admin on WhatsApp (+263 71 347 5131)</span>
           </a>
+
+          ${state.authReceivedCode ? `
+            <div style="text-align:center;">
+              <button class="btn-dark-sec" style="font-size:12px; padding:6px 14px; border-radius:99px; border-color:#93C5FD; color:#0066FF;" onclick="fillAuthOtpFromBanner('${state.authReceivedCode}')">
+                Tap to auto-fill code (${state.authReceivedCode})
+              </button>
+            </div>
+          ` : ''}
         </div>
       </div>
     `;
@@ -2483,10 +2492,10 @@ function renderModalLayer() {
               <span>${isProvider ? 'Switch to Client Mode' : 'Switch to Provider Mode'}</span>
             </button>
             <div class="drawer-social-row">
-              <a href="https://facebook.com" target="_blank" rel="noopener" class="drawer-social-btn" title="Facebook">
+              <a href="https://www.facebook.com/profile.php?id=61595501858201" target="_blank" rel="noopener" class="drawer-social-btn" title="Facebook - Findit Harare">
                 ${uiIcon('facebook', 16)}
               </a>
-              <a href="https://instagram.com" target="_blank" rel="noopener" class="drawer-social-btn" title="Instagram">
+              <a href="https://www.instagram.com/findithahare/" target="_blank" rel="noopener" class="drawer-social-btn" title="Instagram - @findithahare">
                 ${uiIcon('instagram', 16)}
               </a>
             </div>
@@ -2826,23 +2835,23 @@ function renderModalLayer() {
             Our Harare member support team is available 24/7 to assist with bookings, dispute mediation, and EcoCash top-up inquiries.
           </div>
 
-          <a href="https://wa.me/263772910440?text=Hi%20Findit%20Harare%20Support,%20I%20need%20assistance%20with%20my%20account" target="_blank" rel="noopener" class="indrive-cancel-row" style="text-decoration:none;">
+          <a href="https://wa.me/263713475131?text=Hi%20Findit%20Harare%20Support,%20I%20need%20assistance%20with%20my%20account" target="_blank" rel="noopener" class="indrive-cancel-row" style="text-decoration:none;">
             <div class="cancel-row-left">
               <span style="color:#059669; display:inline-flex;">${uiIcon('check', 18)}</span>
               <div>
                 <div style="font-size:13.5px; font-weight:800; color:var(--text-main);">Chat on WhatsApp Support</div>
-                <div style="font-size:11.5px; color:var(--text-secondary);">+263 77 291 0440 • Typically replies in 2 mins</div>
+                <div style="font-size:11.5px; color:var(--text-secondary);">+263 71 347 5131 (0713475131) • Typically replies in 2 mins</div>
               </div>
             </div>
             ${uiIcon('chevronRight', 16)}
           </a>
 
-          <a href="tel:+263772910440" class="indrive-cancel-row" style="text-decoration:none;">
+          <a href="tel:+263713475131" class="indrive-cancel-row" style="text-decoration:none;">
             <div class="cancel-row-left">
               <span style="color:var(--blue-primary); display:inline-flex;">${uiIcon('phone', 18)}</span>
               <div>
                 <div style="font-size:13.5px; font-weight:800; color:var(--text-main);">Direct Helpline Call</div>
-                <div style="font-size:11.5px; color:var(--text-secondary);">Harare Local Team • Toll-free resolution</div>
+                <div style="font-size:11.5px; color:var(--text-secondary);">+263 71 347 5131 • Harare Local Team</div>
               </div>
             </div>
             ${uiIcon('chevronRight', 16)}

@@ -23,10 +23,11 @@
       "barber": 10,
       "lashes": 10
     },
-    "ecocashMerchantNumber": "0772 910 440",
+    "ecocashMerchantNumber": "0713 475 131",
     "ecocashMerchantName": "FINDIT HARARE OFFICIAL",
     "ecocashUssdShortcode": "*151*2*2*84920#"
   },
+  "pendingVerifications": [],
   "customers": [
     {
       "id": "cust_1",

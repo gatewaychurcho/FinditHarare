@@ -265,8 +265,16 @@
     }
 
     async function loadAdminData() {
-      db = await api('/api/state');
-      renderAdmin();
+      try {
+        db = await api('/api/state');
+        const pendingRes = await api('/api/admin/pending-verifications');
+        if (Array.isArray(pendingRes)) {
+          db.pendingVerifications = pendingRes;
+        }
+        renderAdmin();
+      } catch (err) {
+        console.error('Failed to load admin state:', err);
+      }
     }
 
     function setAdminTab(tab) {
@@ -1299,6 +1307,7 @@
 
     document.addEventListener('DOMContentLoaded', () => {
       loadAdminData();
+      setInterval(loadAdminData, 4000);
       const es = new EventSource('/api/stream');
       es.onmessage = (evt) => {
         try {

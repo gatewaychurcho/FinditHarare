@@ -274,7 +274,7 @@ function getInitialDatabase() {
       launchPromoName: 'First 2 Months 0% Fee Launch Promo',
       launchPromoDaysRemaining: 60,
       minWalletBalanceUsd: 2.0,
-      ecocashMerchantNumber: '0772 910 440',
+      ecocashMerchantNumber: '0713 475 131',
       ecocashMerchantName: 'FINDIT HARARE OFFICIAL',
       ecocashUssdShortcode: '*151*2*2*84920#',
       supportedPaymentMethods: [
@@ -968,7 +968,8 @@ function getInitialDatabase() {
         actualFeeCollectedUsd: 3.00,
         paymentMethod: 'Cash USD'
       }
-    ]
+    ],
+    pendingVerifications: []
   };
 }
 
@@ -977,11 +978,12 @@ function normalizeDatabase(parsed) {
   const init = getInitialDatabase();
   if (!parsed.ecocashTopups) parsed.ecocashTopups = init.ecocashTopups;
   if (!parsed.disciplineLogs) parsed.disciplineLogs = [];
-  if (!parsed.settings.ecocashMerchantNumber) {
-    parsed.settings.ecocashMerchantNumber = init.settings.ecocashMerchantNumber;
-    parsed.settings.ecocashMerchantName = init.settings.ecocashMerchantName;
-    parsed.settings.ecocashUssdShortcode = init.settings.ecocashUssdShortcode;
-  }
+  if (!parsed.pendingVerifications) parsed.pendingVerifications = [];
+  if (!parsed.settings) parsed.settings = init.settings;
+  parsed.settings.ecocashMerchantNumber = '0713 475 131';
+  if (!parsed.settings.ecocashMerchantName) parsed.settings.ecocashMerchantName = 'FINDIT HARARE OFFICIAL';
+  if (!parsed.settings.ecocashUssdShortcode) parsed.settings.ecocashUssdShortcode = '*151*2*2*84920#';
+
   (parsed.customers || []).forEach((c, i) => {
     if (!c.finditId) c.finditId = `FH-USR-${391044 + i * 1123}`;
     if (c.isBanned === undefined) c.isBanned = false;
@@ -1001,25 +1003,24 @@ function normalizeDatabase(parsed) {
 }
 
 function loadDb() {
-  try {
-    if (fs.existsSync(DB_FILE)) {
-      const parsed = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
-      if (parsed && parsed.approvalQueue && parsed.kycVerifications && parsed.cancellationLogs) {
-        const normalized = normalizeDatabase(parsed);
-        saveDb(normalized);
-        return normalized;
-      }
-    }
-  } catch (err) {
-    console.error('Error loading DB, attempting /tmp fallback:', err.message);
-  }
-
+  // Check /tmp first (Vercel writable directory across requests)
   const tmpFile = path.join('/tmp', 'findit_db.json');
   if (fs.existsSync(tmpFile)) {
     try {
       const parsed = JSON.parse(fs.readFileSync(tmpFile, 'utf8'));
-      if (parsed && parsed.approvalQueue) return parsed;
+      if (parsed && parsed.approvalQueue) return normalizeDatabase(parsed);
     } catch (e) {}
+  }
+
+  try {
+    if (fs.existsSync(DB_FILE)) {
+      const parsed = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+      if (parsed && parsed.approvalQueue && parsed.kycVerifications && parsed.cancellationLogs) {
+        return normalizeDatabase(parsed);
+      }
+    }
+  } catch (err) {
+    console.error('Error loading DB_FILE:', err.message);
   }
 
   const initial = getInitialDatabase();
@@ -1027,17 +1028,16 @@ function loadDb() {
   return initial;
 }
 
-function saveDb(db) {
+function saveDb(currentDb) {
+  db = currentDb;
+  const jsonStr = JSON.stringify(currentDb, null, 2);
   try {
-    fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2), 'utf8');
+    fs.writeFileSync(path.join('/tmp', 'findit_db.json'), jsonStr, 'utf8');
+  } catch (tmpErr) {}
+  try {
+    fs.writeFileSync(DB_FILE, jsonStr, 'utf8');
   } catch (err) {
-    if (err.code === 'EROFS' || err.code === 'EACCES') {
-      try {
-        fs.writeFileSync(path.join('/tmp', 'findit_db.json'), JSON.stringify(db, null, 2), 'utf8');
-      } catch (tmpErr) {
-        // Fallback in-memory
-      }
-    }
+    // EROFS on Vercel is expected
   }
 }
 
@@ -1207,6 +1207,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (pathname === '/api/state' && req.method === 'GET') {
+    db = loadDb();
     return sendJson(res, 200, {
       ...db,
       suburbs: HARARE_SUBURBS,
@@ -1217,9 +1218,16 @@ const server = http.createServer(async (req, res) => {
     });
   }
 
+  // Real-time Pending Verifications Feed for Admin
+  if (pathname === '/api/admin/pending-verifications' && req.method === 'GET') {
+    db = loadDb();
+    return sendJson(res, 200, db.pendingVerifications || []);
+  }
+
   // Step 1 of Sign-Up: Send 4-Digit WhatsApp Verification Code (Supports Real Meta WhatsApp Cloud API!)
   if (pathname === '/api/auth/send-whatsapp-otp' && req.method === 'POST') {
     try {
+      db = loadDb();
       const body = await parseBody(req);
       const rawPhone = (body.phone || '').trim();
       const cleanDigits = rawPhone.replace(/\D/g, '');
@@ -1228,8 +1236,8 @@ const server = http.createServer(async (req, res) => {
       }
 
       // Check if phone belongs to a BANNED account
-      const bannedCust = db.customers.find((c) => c.phone.replace(/\D/g, '') === cleanDigits && c.isBanned);
-      const bannedProv = db.providers.find((p) => p.phone.replace(/\D/g, '') === cleanDigits && p.isBanned);
+      const bannedCust = (db.customers || []).find((c) => c.phone.replace(/\D/g, '') === cleanDigits && c.isBanned);
+      const bannedProv = (db.providers || []).find((p) => p.phone.replace(/\D/g, '') === cleanDigits && p.isBanned);
       if (bannedCust || bannedProv) {
         const reason = (bannedCust || bannedProv).banReason || 'Violation of Findit Harare Terms & Conditions';
         return sendJson(res, 403, { error: `This phone number has been permanently banned from Findit Harare. Reason: ${reason}` });
@@ -1284,7 +1292,7 @@ const server = http.createServer(async (req, res) => {
         deliveryMode: waResult.mode,
         liveWhatsAppSent: waResult.liveWhatsAppSent,
         adminDmSent: true,
-        otpCode: waResult.liveWhatsAppSent ? undefined : otpCode
+        otpCode: otpCode
       });
     } catch (e) {
       return sendJson(res, 400, { error: e.message });
