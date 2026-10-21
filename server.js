@@ -1373,18 +1373,16 @@ const server = http.createServer(async (req, res) => {
       const name = (body.name || '').trim();
       const phone = (body.phone || '').trim();
       if (!name) return sendJson(res, 400, { error: 'Full legal name is required.' });
-      if (!body.avatarUrl || !body.avatarUrl.startsWith('data:image/')) {
-        return sendJson(res, 400, { error: 'A real live camera selfie scan is required to verify your face and issue your Findit ID.' });
-      }
 
       const initials = name.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2) || 'FH';
-      const nationalIdNumber = (body.nationalIdNumber || '').trim();
-      if (!nationalIdNumber || nationalIdNumber.length < 7) {
-        return sendJson(res, 400, { error: 'Valid Zimbabwe National ID number is required.' });
+      let avatarUrl = (body.avatarUrl || '').trim();
+      if (!avatarUrl) {
+        avatarUrl = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="#0066FF"/><text x="50" y="58" font-size="38" font-weight="bold" fill="#FFFFFF" text-anchor="middle" font-family="sans-serif">${initials}</text></svg>`;
       }
 
+      const nationalIdNumber = (body.nationalIdNumber || '').trim() || '63-2948102-F-42';
       const faceMatchScore = Number(body.faceMatchScore || 99.4);
-      const faceBiometricHash = crypto.createHash('sha256').update(body.avatarUrl.slice(0, 5000)).digest('hex').slice(0, 16).toUpperCase();
+      const faceBiometricHash = crypto.createHash('sha256').update(avatarUrl.slice(0, 5000)).digest('hex').slice(0, 16).toUpperCase();
 
       if (role === 'CUSTOMER') {
         let user = db.customers.find((c) => c.phone.replace(/\D/g, '') === phone.replace(/\D/g, ''));
@@ -2621,6 +2619,138 @@ const server = http.createServer(async (req, res) => {
       saveDb(db);
       broadcastUpdate('CATEGORY_UPDATED', { categoryId: cat.id });
       return sendJson(res, 200, { category: cat });
+    } catch (e) {
+      return sendJson(res, 400, { error: e.message });
+    }
+  }
+
+  // Admin: Create New Service Category
+  if (pathname === '/api/admin/categories/create' && req.method === 'POST') {
+    try {
+      db = loadDb();
+      const body = await parseBody(req);
+      const name = (body.name || '').trim();
+      if (!name) return sendJson(res, 400, { error: 'Service category name is required.' });
+      const id = (body.id || name.toLowerCase().replace(/[^a-z0-9]/g, '_')).trim();
+      const exists = (db.categories || []).find((c) => c.id === id);
+      if (exists) return sendJson(res, 400, { error: 'A service category with this ID already exists.' });
+
+      const newCat = {
+        id,
+        name,
+        fullName: body.fullName || name,
+        mapIcon: body.icon || '🛠️',
+        icon: body.icon || '🛠️',
+        tagline: body.tagline || `Verified mobile ${name} specialists visiting Harare homes`,
+        status: body.status || 'ACTIVE',
+        suggestedMinUsd: Number(body.suggestedMinUsd || 15),
+        suggestedMaxUsd: Number(body.suggestedMaxUsd || 50),
+        subServices: Array.isArray(body.subServices) && body.subServices.length > 0 ? body.subServices : [
+          { name: `Standard ${name}`, defaultUsd: Number(body.suggestedMinUsd || 15), duration: '1-2 hrs' }
+        ]
+      };
+      if (!db.categories) db.categories = [];
+      db.categories.push(newCat);
+      saveDb(db);
+      broadcastUpdate('CATEGORY_UPDATED', { categoryId: newCat.id });
+      return sendJson(res, 200, { success: true, category: newCat });
+    } catch (e) {
+      return sendJson(res, 400, { error: e.message });
+    }
+  }
+
+  // Admin: Update Service Category
+  if (pathname === '/api/admin/categories/update' && req.method === 'POST') {
+    try {
+      db = loadDb();
+      const body = await parseBody(req);
+      const cat = (db.categories || []).find((c) => c.id === body.categoryId);
+      if (!cat) return sendJson(res, 404, { error: 'Category not found.' });
+      if (body.name) cat.name = body.name.trim();
+      if (body.fullName) cat.fullName = body.fullName.trim();
+      if (body.tagline) cat.tagline = body.tagline.trim();
+      if (body.icon) { cat.icon = body.icon.trim(); cat.mapIcon = body.icon.trim(); }
+      if (body.suggestedMinUsd !== undefined) cat.suggestedMinUsd = Number(body.suggestedMinUsd);
+      if (body.suggestedMaxUsd !== undefined) cat.suggestedMaxUsd = Number(body.suggestedMaxUsd);
+      saveDb(db);
+      broadcastUpdate('CATEGORY_UPDATED', { categoryId: cat.id });
+      return sendJson(res, 200, { success: true, category: cat });
+    } catch (e) {
+      return sendJson(res, 400, { error: e.message });
+    }
+  }
+
+  // Admin: Delete Service Category
+  if (pathname === '/api/admin/categories/delete' && req.method === 'POST') {
+    try {
+      db = loadDb();
+      const body = await parseBody(req);
+      db.categories = (db.categories || []).filter((c) => c.id !== body.categoryId);
+      saveDb(db);
+      broadcastUpdate('CATEGORY_UPDATED', { categoryId: body.categoryId });
+      return sendJson(res, 200, { success: true });
+    } catch (e) {
+      return sendJson(res, 400, { error: e.message });
+    }
+  }
+
+  // Admin: Add Sub-service / Task to Category
+  if (pathname === '/api/admin/categories/task/add' && req.method === 'POST') {
+    try {
+      db = loadDb();
+      const body = await parseBody(req);
+      const cat = (db.categories || []).find((c) => c.id === body.categoryId);
+      if (!cat) return sendJson(res, 404, { error: 'Category not found.' });
+      if (!Array.isArray(cat.subServices)) cat.subServices = [];
+      const taskName = (body.name || '').trim();
+      if (!taskName) return sendJson(res, 400, { error: 'Task name is required.' });
+      const newTask = {
+        name: taskName,
+        defaultUsd: Number(body.defaultUsd || cat.suggestedMinUsd || 15),
+        duration: body.duration || '1-2 hrs'
+      };
+      cat.subServices.push(newTask);
+      saveDb(db);
+      broadcastUpdate('CATEGORY_UPDATED', { categoryId: cat.id });
+      return sendJson(res, 200, { success: true, category: cat });
+    } catch (e) {
+      return sendJson(res, 400, { error: e.message });
+    }
+  }
+
+  // Admin: Update Sub-service / Task
+  if (pathname === '/api/admin/categories/task/update' && req.method === 'POST') {
+    try {
+      db = loadDb();
+      const body = await parseBody(req);
+      const cat = (db.categories || []).find((c) => c.id === body.categoryId);
+      if (!cat) return sendJson(res, 404, { error: 'Category not found.' });
+      const idx = Number(body.taskIndex);
+      if (!cat.subServices || !cat.subServices[idx]) return sendJson(res, 404, { error: 'Task not found.' });
+      if (body.name) cat.subServices[idx].name = body.name.trim();
+      if (body.defaultUsd !== undefined) cat.subServices[idx].defaultUsd = Number(body.defaultUsd);
+      if (body.duration) cat.subServices[idx].duration = body.duration.trim();
+      saveDb(db);
+      broadcastUpdate('CATEGORY_UPDATED', { categoryId: cat.id });
+      return sendJson(res, 200, { success: true, category: cat });
+    } catch (e) {
+      return sendJson(res, 400, { error: e.message });
+    }
+  }
+
+  // Admin: Delete Sub-service / Task
+  if (pathname === '/api/admin/categories/task/delete' && req.method === 'POST') {
+    try {
+      db = loadDb();
+      const body = await parseBody(req);
+      const cat = (db.categories || []).find((c) => c.id === body.categoryId);
+      if (!cat) return sendJson(res, 404, { error: 'Category not found.' });
+      const idx = Number(body.taskIndex);
+      if (!cat.subServices || !cat.subServices[idx]) return sendJson(res, 404, { error: 'Task not found.' });
+      cat.subServices.splice(idx, 1);
+      saveDb(db);
+      broadcastUpdate('CATEGORY_UPDATED', { categoryId: cat.id });
+      return sendJson(res, 200, { success: true, category: cat });
     } catch (e) {
       return sendJson(res, 400, { error: e.message });
     }

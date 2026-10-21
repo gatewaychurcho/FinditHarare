@@ -469,6 +469,86 @@
       await loadAdminData();
     }
 
+    async function promptAddCategory() {
+      const name = prompt('Enter new service category name (e.g. Electrical, Plumbing, Cleaning, Handyman):');
+      if (!name || !name.trim()) return;
+      const icon = prompt('Enter emoji/icon for this category:', '🛠️') || '🛠️';
+      const tagline = prompt('Enter short tagline:', `Verified mobile ${name.trim()} specialists visiting Harare homes`) || `Verified mobile ${name.trim()} specialists`;
+      const minUsd = prompt('Suggested starting price in USD:', '20') || '20';
+      const res = await api('/api/admin/categories/create', 'POST', {
+        name: name.trim(),
+        fullName: `${name.trim()} Services`,
+        icon: icon.trim(),
+        tagline: tagline.trim(),
+        suggestedMinUsd: Number(minUsd) || 20,
+        suggestedMaxUsd: (Number(minUsd) || 20) * 2.5
+      });
+      if (res.error) alert(res.error);
+      await loadAdminData();
+    }
+
+    async function promptEditCategory(categoryId, currentName, currentTagline, currentMinUsd, currentIcon) {
+      const name = prompt('Edit category name:', currentName);
+      if (!name || !name.trim()) return;
+      const tagline = prompt('Edit tagline:', currentTagline) || currentTagline;
+      const minUsd = prompt('Edit starting rate in USD:', currentMinUsd) || currentMinUsd;
+      const icon = prompt('Edit icon / emoji:', currentIcon) || currentIcon;
+      await api('/api/admin/categories/update', 'POST', {
+        categoryId,
+        name: name.trim(),
+        fullName: `${name.trim()} Services`,
+        tagline: tagline.trim(),
+        suggestedMinUsd: Number(minUsd) || 15,
+        icon: icon.trim()
+      });
+      await loadAdminData();
+    }
+
+    async function promptDeleteCategory(categoryId, name) {
+      if (!confirm(`Are you sure you want to delete "${name}" and all its tasks?`)) return;
+      await api('/api/admin/categories/delete', 'POST', { categoryId });
+      await loadAdminData();
+    }
+
+    async function promptAddTask(categoryId, categoryName) {
+      const taskName = prompt(`Add a new task/service under "${categoryName}" (e.g. Knotless Braids, Fade Cut, Pipe Unclog):`);
+      if (!taskName || !taskName.trim()) return;
+      const defaultUsd = prompt('Standard base rate in USD:', '20') || '20';
+      const duration = prompt('Typical duration (e.g. 1-2 hrs):', '1.5 hrs') || '1.5 hrs';
+      const res = await api('/api/admin/categories/task/add', 'POST', {
+        categoryId,
+        name: taskName.trim(),
+        defaultUsd: Number(defaultUsd) || 20,
+        duration: duration.trim()
+      });
+      if (res.error) alert(res.error);
+      await loadAdminData();
+    }
+
+    async function promptEditTask(categoryId, taskIndex, currentName, currentUsd, currentDuration) {
+      const name = prompt('Edit task name:', currentName);
+      if (!name || !name.trim()) return;
+      const defaultUsd = prompt('Base rate in USD:', currentUsd) || currentUsd;
+      const duration = prompt('Duration:', currentDuration) || currentDuration;
+      await api('/api/admin/categories/task/update', 'POST', {
+        categoryId,
+        taskIndex,
+        name: name.trim(),
+        defaultUsd: Number(defaultUsd) || 20,
+        duration: duration.trim()
+      });
+      await loadAdminData();
+    }
+
+    async function promptDeleteTask(categoryId, taskIndex, taskName) {
+      if (!confirm(`Delete task "${taskName}"?`)) return;
+      await api('/api/admin/categories/task/delete', 'POST', {
+        categoryId,
+        taskIndex
+      });
+      await loadAdminData();
+    }
+
     async function adminDirectApproveCode(phoneDigits) {
       await api('/api/admin/verify-code-direct', 'POST', { phoneDigits });
       alert(`Phone ${phoneDigits} approved directly! User can now proceed.`);
@@ -1266,38 +1346,97 @@
       } else if (adminTab === 'CATEGORIES') {
         sectionHtml = `
           <div class="card">
-            <h2 style="font-size:17px; font-weight:800; margin-bottom:8px;">🚀 Harare Service Categories (Active vs Coming Soon)</h2>
-            <p style="font-size:13px; color:var(--muted); margin-bottom:14px; font-weight:500;">
-              Beauty & Grooming categories are active now; Home Cleaning & Handyman are marked Coming Soon. Click any button to activate or pause a category.
-            </p>
-            <table>
-              <thead>
-                <tr>
-                  <th>Category</th>
-                  <th>Description</th>
-                  <th>Status</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${db.categories.map((c) => `
-                  <tr>
-                    <td style="font-weight:800; font-size:14px;">${c.icon} ${c.fullName || c.name}</td>
-                    <td style="color:var(--muted); font-weight:600;">${c.tagline}</td>
-                    <td>
-                      <span style="padding:4px 10px; border-radius:99px; font-size:11px; font-weight:800; background:${c.status === 'ACTIVE' ? '#ECFDF5' : '#FFFBEB'}; color:${c.status === 'ACTIVE' ? '#059669' : '#D97706'};">
-                        ${c.status}
-                      </span>
-                    </td>
-                    <td>
-                      <button class="btn-outline" onclick="toggleCategoryStatus('${c.id}')">
-                        Switch to ${c.status === 'ACTIVE' ? 'COMING SOON' : 'ACTIVE'}
-                      </button>
-                    </td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
+              <div>
+                <h2 style="font-size:18px; font-weight:800; margin:0 0 4px;">🚀 Harare Service Categories &amp; Catalogue Tasks</h2>
+                <p style="font-size:13px; color:var(--muted); margin:0;">
+                  Add, edit, or delete services and specific booking tasks. Changes reflect immediately on client &amp; provider apps.
+                </p>
+              </div>
+              <button class="btn-blue" onclick="promptAddCategory()">➕ Add New Service Category</button>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:16px;">
+              ${(db.categories || []).map((c) => {
+                const subList = c.subServices || [];
+                const isActive = c.status === 'ACTIVE';
+                return `
+                  <div style="background:#FFFFFF; border:1.5px solid var(--border); border-radius:14px; padding:16px;">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px; flex-wrap:wrap; gap:10px;">
+                      <div>
+                        <div style="font-size:16px; font-weight:800; display:flex; align-items:center; gap:8px;">
+                          <span>${c.icon || '🛠️'}</span>
+                          <span>${c.fullName || c.name}</span>
+                          <span style="padding:2px 8px; border-radius:99px; font-size:11px; font-weight:800; background:${isActive ? '#ECFDF5' : '#FFFBEB'}; color:${isActive ? '#059669' : '#D97706'};">
+                            ${c.status}
+                          </span>
+                        </div>
+                        <div style="font-size:12.5px; color:var(--muted); margin-top:2px;">
+                          ${c.tagline} • Base Starting Rate: <strong>$${c.suggestedMinUsd || 15} USD</strong>
+                        </div>
+                      </div>
+
+                      <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                        <button class="btn-blue" style="padding:5px 12px; font-size:12px;" onclick="promptAddTask('${c.id}', '${(c.name || '').replace(/'/g, "\\'")}')">
+                          ➕ Add Task
+                        </button>
+                        <button class="btn-outline" style="padding:5px 11px; font-size:12px;" onclick="promptEditCategory('${c.id}', '${(c.name || '').replace(/'/g, "\\'")}', '${(c.tagline || '').replace(/'/g, "\\'")}', ${c.suggestedMinUsd || 15}, '${c.icon || '🛠️'}')">
+                          ✏️ Edit
+                        </button>
+                        <button class="btn-outline" style="padding:5px 11px; font-size:12px;" onclick="toggleCategoryStatus('${c.id}')">
+                          ${isActive ? '⏸️ Set Coming Soon' : '▶️ Activate'}
+                        </button>
+                        <button class="btn-outline" style="padding:5px 11px; font-size:12px; color:#DC2626; border-color:#FECACA;" onclick="promptDeleteCategory('${c.id}', '${(c.name || '').replace(/'/g, "\\'")}')">
+                          🗑️ Delete
+                        </button>
+                      </div>
+                    </div>
+
+                    <!-- Tasks / Sub-Services Table -->
+                    <div style="background:var(--bg-card); border-radius:10px; border:1px solid var(--border); overflow:hidden;">
+                      <div style="padding:8px 12px; background:var(--blue-soft); font-size:11.5px; font-weight:800; color:var(--blue-primary); display:flex; justify-content:space-between; align-items:center;">
+                        <span>SUB-SERVICES / TASKS (${subList.length})</span>
+                      </div>
+                      ${subList.length === 0 ? `
+                        <div style="padding:14px; text-align:center; font-size:12px; color:var(--muted);">
+                          No specific tasks added yet. Tap <strong>+ Add Task</strong> above to add tasks.
+                        </div>
+                      ` : `
+                        <table style="margin:0; width:100%;">
+                          <thead>
+                            <tr style="background:none;">
+                              <th style="padding:7px 12px; font-size:11px;">Task Name</th>
+                              <th style="padding:7px 12px; font-size:11px;">Standard Rate (USD)</th>
+                              <th style="padding:7px 12px; font-size:11px;">Duration</th>
+                              <th style="padding:7px 12px; font-size:11px; text-align:right;">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            ${subList.map((task, idx) => `
+                              <tr>
+                                <td style="padding:8px 12px; font-size:13px; font-weight:700;">${task.name}</td>
+                                <td style="padding:8px 12px; font-size:13px; font-weight:800; color:var(--blue-primary);">$${task.defaultUsd || 15} USD</td>
+                                <td style="padding:8px 12px; font-size:12px; color:var(--muted);">${task.duration || '1-2 hrs'}</td>
+                                <td style="padding:8px 12px; text-align:right;">
+                                  <div style="display:inline-flex; gap:6px;">
+                                    <button class="btn-outline" style="padding:3px 9px; font-size:11px;" onclick="promptEditTask('${c.id}', ${idx}, '${(task.name || '').replace(/'/g, "\\'")}', ${task.defaultUsd || 15}, '${task.duration || ''}')">
+                                      ✏️ Edit
+                                    </button>
+                                    <button class="btn-outline" style="padding:3px 9px; font-size:11px; color:#DC2626; border-color:#FECACA;" onclick="promptDeleteTask('${c.id}', ${idx}, '${(task.name || '').replace(/'/g, "\\'")}')">
+                                      🗑️ Delete
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            `).join('')}
+                          </tbody>
+                        </table>
+                      `}
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
           </div>
         `;
       }

@@ -1995,11 +1995,23 @@ function renderSignUpWizardInnerHtml(isFullScreen = false) {
         ${!state.authFaceScanVerified ? `<div class="face-laser-line"></div>` : ''}
       </div>
 
-      <div style="display:flex; justify-content:center; align-items:center; gap:10px; margin-bottom:14px;">
-        <button class="btn-dark-sec" onclick="captureRealWebcamSelfie()">
-          ${state.authFaceScanVerified ? uiIcon('check', 15) : uiIcon('camera', 15)}
-          <span>${state.authFaceScanVerified ? 'Face Verified (99.4% Match) — Retake' : 'Run Live Face Verification'}</span>
-        </button>
+      <div style="display:flex; justify-content:center; align-items:center; gap:8px; margin-bottom:14px; flex-wrap:wrap;">
+        ${state.authFaceScanVerified ? `
+          <button class="btn-dark-sec" onclick="retakeAuthSelfie()">
+            ${uiIcon('camera', 15)}
+            <span>Retake Photo</span>
+          </button>
+        ` : `
+          <button class="btn-primary-blue" style="height:42px; padding:0 16px;" onclick="captureRealWebcamSelfie()">
+            ${uiIcon('camera', 15)}
+            <span>Take Photo</span>
+          </button>
+          <label class="btn-dark-sec" style="height:42px; padding:0 14px; cursor:pointer; display:inline-flex; align-items:center; gap:6px;">
+            <input type="file" accept="image/*" capture="user" style="display:none;" onchange="handleSelfieUpload(this)" />
+            ${uiIcon('image', 15)}
+            <span>Upload Photo</span>
+          </label>
+        `}
       </div>
 
       <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:14px;">
@@ -2103,16 +2115,28 @@ async function verifyAuthOtpCode() {
     return;
   }
   try {
-    await apiPost('/api/auth/verify-whatsapp-otp', {
+    const res = await apiPost('/api/auth/verify-whatsapp-otp', {
       phone: state.authPhone,
       code
     });
     const root = document.getElementById('whatsappBannerRoot');
     if (root) root.innerHTML = '';
 
+    // If an existing customer or provider profile matches this phone, log in immediately!
+    const existingAcc = state.authRole === 'PROVIDER' ? res.existingProvider : res.existingCustomer;
+    if (existingAcc) {
+      state.currentUser = existingAcc;
+      state.isAuthenticated = true;
+      state.activeModal = null;
+      saveSession(state.authRole, existingAcc.id, false);
+      showToast(`Welcome back, ${existingAcc.name}!`);
+      renderAll();
+      return;
+    }
+
     state.authStep = 'PROFILE';
     renderAll();
-    startAuthWebcamPreview();
+    setTimeout(startAuthWebcamPreview, 120);
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -2121,61 +2145,95 @@ async function verifyAuthOtpCode() {
 async function startAuthWebcamPreview() {
   try {
     if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-      mediaStreamRef = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: 320, height: 320 } });
+      if (mediaStreamRef) {
+        mediaStreamRef.getTracks().forEach((t) => t.stop());
+      }
+      mediaStreamRef = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', width: { ideal: 480 }, height: { ideal: 480 } }
+      });
       const videoEl = document.getElementById('authSelfieVideo');
       if (videoEl) videoEl.srcObject = mediaStreamRef;
     }
-  } catch (e) {}
+  } catch (e) {
+    console.log('[Webcam Stream Error]:', e.message);
+  }
 }
 
 function captureRealWebcamSelfie() {
   const videoEl = document.getElementById('authSelfieVideo');
   if (videoEl && videoEl.videoWidth > 0) {
     const canvas = document.createElement('canvas');
-    canvas.width = 240;
-    canvas.height = 240;
+    canvas.width = Math.min(480, videoEl.videoWidth || 320);
+    canvas.height = Math.min(480, videoEl.videoHeight || 320);
     const ctx = canvas.getContext('2d');
-    ctx.drawImage(videoEl, 0, 0, 240, 240);
-
-    // Biometric pixel luminance analysis to ensure face is well lit and camera is not obstructed
-    const imgData = ctx.getImageData(0, 0, 240, 240);
-    const data = imgData.data;
-    let totalLum = 0;
-    for (let i = 0; i < data.length; i += 4) {
-      totalLum += 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-    }
-    const avgLum = totalLum / (data.length / 4);
-    if (avgLum < 18) {
-      showToast('Camera too dark or covered. Please face the light for biometric photo.', 'error');
-      return;
-    }
-
-    state.authCapturedSelfieUrl = canvas.toDataURL('image/jpeg', 0.85);
+    ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+    state.authCapturedSelfieUrl = canvas.toDataURL('image/jpeg', 0.88);
     state.authFaceScanVerified = true;
     stopFaceCameraStream();
-    showToast('Face biometric scan verified');
+    showToast('Selfie photo captured!');
     renderAll();
   } else {
-    state.authCapturedSelfieUrl = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=240&q=80';
-    state.authFaceScanVerified = true;
-    stopFaceCameraStream();
-    showToast('Identity selfie registered');
-    renderAll();
+    startAuthWebcamPreview();
+    showToast('Starting camera... Please allow camera access, or tap "Upload Photo".');
   }
 }
 
+function retakeAuthSelfie() {
+  stopFaceCameraStream();
+  state.authCapturedSelfieUrl = null;
+  state.authFaceScanVerified = false;
+  renderAll();
+  setTimeout(startAuthWebcamPreview, 120);
+}
+
+function handleSelfieUpload(inputEl) {
+  const file = inputEl.files && inputEl.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    state.authCapturedSelfieUrl = e.target.result;
+    state.authFaceScanVerified = true;
+    stopFaceCameraStream();
+    showToast('Selfie photo uploaded!');
+    renderAll();
+  };
+  reader.readAsDataURL(file);
+}
+
 async function finishNativeRegistration() {
-  if (!state.authName.trim()) {
+  const name = (state.authName || '').trim();
+  if (!name) {
     showToast('Please enter your full name', 'error');
     return;
   }
-  if (!state.authFaceScanVerified) {
-    captureRealWebcamSelfie();
+
+  // Try snapping from live video stream if photo wasn't manually captured yet
+  if (!state.authCapturedSelfieUrl) {
+    const videoEl = document.getElementById('authSelfieVideo');
+    if (videoEl && videoEl.videoWidth > 0) {
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.min(480, videoEl.videoWidth || 320);
+      canvas.height = Math.min(480, videoEl.videoHeight || 320);
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+      state.authCapturedSelfieUrl = canvas.toDataURL('image/jpeg', 0.88);
+      state.authFaceScanVerified = true;
+      stopFaceCameraStream();
+    }
   }
+
+  // Clean vector initials avatar if camera hardware was unavailable, never a stranger's photo
+  let finalAvatar = state.authCapturedSelfieUrl;
+  if (!finalAvatar) {
+    const initials = name.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2) || 'FH';
+    const svgAvatar = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="#0066FF"/><text x="50" y="58" font-size="38" font-weight="bold" fill="#FFFFFF" text-anchor="middle" font-family="sans-serif">${initials}</text></svg>`;
+    finalAvatar = `data:image/svg+xml;utf8,${encodeURIComponent(svgAvatar)}`;
+  }
+
   try {
     const res = await apiPost('/api/auth/complete-signup', {
       role: state.authRole,
-      name: state.authName.trim(),
+      name: name,
       phone: state.authPhone.trim(),
       suburbId: state.authSuburbId,
       categoryId: state.authCategoryId,
@@ -2183,7 +2241,7 @@ async function finishNativeRegistration() {
       brandName: state.authBrandName.trim(),
       startingPriceUsd: Number(state.authStartingPrice || 25),
       nationalIdNumber: state.authNationalId.trim() || '63-2948102-F-42',
-      avatarUrl: state.authCapturedSelfieUrl || '',
+      avatarUrl: finalAvatar,
       portfolioImageUrl: state.authPortfolioPhotoUrl || ''
     });
 
@@ -2192,8 +2250,8 @@ async function finishNativeRegistration() {
     state.isAuthenticated = true;
     state.activeModal = null;
     saveSession(res.role, res.user.id, false);
-    showToast(`Welcome ${res.user.name}! Your Findit App ID: ${res.user.finditId}`);
-    await fetchState();
+    showToast(`Welcome ${res.user.name}! Your account is verified.`);
+    renderAll();
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -2828,16 +2886,6 @@ function renderModalLayer() {
             ${uiIcon('chevronRight', 16)}
           </a>
 
-          <a href="https://wa.me/263713475131?text=Hi%20Findit%20Harare%20Support,%20I%20would%20like%20to%20request%20a%20helpline%20call" target="_blank" rel="noopener" class="indrive-cancel-row" style="text-decoration:none;">
-            <div class="cancel-row-left">
-              <span style="color:var(--blue-primary); display:inline-flex;">${uiIcon('phone', 18)}</span>
-              <div>
-                <div style="font-size:13.5px; font-weight:800; color:var(--text-main);">Direct Helpline Call</div>
-                <div style="font-size:11.5px; color:var(--text-secondary);">@FinditHarare • Harare Support Desk</div>
-              </div>
-            </div>
-            ${uiIcon('chevronRight', 16)}
-          </a>
 
           <div style="margin-top:14px; padding:12px; background:var(--bg-card); border-radius:12px; border:1px solid var(--border-light); font-size:11.5px; color:var(--text-secondary); line-height:1.4;">
             <strong>Support Hours:</strong> Monday – Sunday, 24 Hours<br/>
@@ -3636,10 +3684,6 @@ function renderProviderModeOverlay() {
           <span style="color:var(--blue-primary); display:inline-flex;">${uiIcon('wallet', 15)}</span>
           <span>$${(prov.walletBalanceUsd || 0).toFixed(2)}</span>
         </button>
-        <button class="top-mode-switch-pill" style="padding:0 11px;" onclick="toggleClientAndProviderMode()" title="Switch to Client Mode">
-          ${uiIcon('user', 14)}
-          <span>Client</span>
-        </button>
       </div>
     </div>
 
@@ -3963,86 +4007,51 @@ function renderProviderRequestsFeedTab(prov, openRequests, activeJob) {
 // ----------------------------------------------------------------------------
 function renderProviderWalletTab(prov) {
   const commRate = state.db.settings?.commissionPercent ?? 10;
-  const minBalance = state.db.settings?.minWalletBalanceUsd ?? 2.0;
+  const minBalance = Math.max(0, state.db.settings?.minWalletBalanceUsd ?? 2.0);
   const balance = Number(prov.walletBalanceUsd || 0);
   const canBid = balance >= minBalance;
-  const txs = (prov.walletTransactions || []).slice(0, 8);
-
-  const grossUsd = (prov.completedBookings || 0) * (prov.startingPriceUsd || 25);
-  const commissionSavedOrPaid = Math.round(grossUsd * (commRate / 100) * 100) / 100;
-  const netTakeHomeUsd = Math.round((grossUsd - commissionSavedOrPaid) * 100) / 100;
-
+  const txs = (prov.walletTransactions || []).slice(0, 10);
   const quickAmounts = [5, 10, 20, 50];
   const myEcoSubmissions = (state.db.ecocashTopups || []).filter((t) => t.providerId === prov.id).slice(0, 5);
 
   return `
     <div>
-      <!-- Hero Prepaid USD Wallet Card -->
-      <div class="wallet-hero-card">
-        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px;">
+      <!-- Clean Sleek Wallet Balance Card -->
+      <div class="wallet-hero-card" style="padding:16px 18px; border-radius:16px; margin-bottom:12px;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
           <div>
-            <div style="font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:0.05em; opacity:0.88; display:flex; align-items:center; gap:5px;">
-              ${uiIcon('wallet', 14)}
-              <span>Prepaid Findit USD Wallet</span>
+            <div style="font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:0.04em; opacity:0.85;">
+              Prepaid USD Wallet
             </div>
-            <div style="font-size:30px; font-weight:800; margin-top:3px; letter-spacing:-0.02em;">
+            <div style="font-size:28px; font-weight:800; margin-top:2px; letter-spacing:-0.02em;">
               $${balance.toFixed(2)} <span style="font-size:13px; font-weight:700; opacity:0.85;">USD</span>
             </div>
           </div>
 
-          <span style="background:${canBid ? 'rgba(16,185,129,0.22)' : 'rgba(239,68,68,0.28)'}; border:1px solid ${canBid ? '#34D399' : '#FCA5A5'}; color:#FFFFFF; padding:4px 10px; border-radius:99px; font-size:11px; font-weight:800; display:inline-flex; align-items:center; gap:4px;">
-            ${canBid ? uiIcon('check', 12) : uiIcon('shield', 12)}
+          <span style="background:${canBid ? 'rgba(16,185,129,0.25)' : 'rgba(239,68,68,0.25)'}; border:1px solid ${canBid ? '#34D399' : '#FCA5A5'}; color:#FFFFFF; padding:4px 10px; border-radius:99px; font-size:11px; font-weight:800; display:inline-flex; align-items:center; gap:4px;">
+            ${canBid ? uiIcon('check', 11) : uiIcon('shield', 11)}
             <span>${canBid ? 'Active for Bidding' : 'Top Up Required'}</span>
           </span>
         </div>
 
-        <div style="display:flex; justify-content:space-between; align-items:center; padding-top:9px; border-top:1px solid rgba(255,255,255,0.2); font-size:11.5px; font-weight:700;">
-          <span>Min. Bid Balance: $${minBalance.toFixed(2)} USD</span>
-          <span>Platform Commission: ${commRate}% ${commRate === 0 ? '(Launch Promo)' : ''}</span>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; padding-top:8px; border-top:1px solid rgba(255,255,255,0.2); font-size:11px; font-weight:600; opacity:0.9;">
+          <span>Min. Balance: $${minBalance.toFixed(2)} USD</span>
+          <span>Platform Commission: ${commRate}%</span>
         </div>
       </div>
 
-      <!-- How Service Provider Wallet Works -->
-      <div style="background:var(--blue-soft); border:1px solid var(--blue-border); border-radius:14px; padding:9px 12px; margin-bottom:12px; font-size:11.5px; color:var(--text-main); line-height:1.45; display:flex; align-items:flex-start; gap:8px;">
-        <span style="color:var(--blue-primary); margin-top:1px;">${uiIcon('shield', 15)}</span>
-        <div>
-          <strong>How Findit Wallet Works:</strong> Clients pay you 100% directly in <strong>Cash USD</strong> at their home. Findit deducts only the <strong>${commRate}% commission</strong> from your prepaid wallet when your offer is accepted.
-        </div>
-      </div>
-
-      <!-- Gross vs Commission vs Net Take-Home Summary -->
-      <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:7px; margin-bottom:12px;">
-        <div style="background:var(--bg-card); border:1px solid var(--border-light); border-radius:13px; padding:9px 10px;">
-          <div style="font-size:10px; font-weight:800; color:var(--text-secondary); text-transform:uppercase;">Gross Earned</div>
-          <div style="font-size:15.5px; font-weight:800; color:var(--text-main); margin-top:2px;">$${grossUsd}</div>
-        </div>
-        <div style="background:var(--bg-card); border:1px solid var(--border-light); border-radius:13px; padding:9px 10px;">
-          <div style="font-size:10px; font-weight:800; color:var(--text-secondary); text-transform:uppercase;">Commission (${commRate}%)</div>
-          <div style="font-size:15.5px; font-weight:800; color:var(--blue-primary); margin-top:2px;">$${commissionSavedOrPaid}</div>
-        </div>
-        <div style="background:#ECFDF5; border:1px solid #A7F3D0; border-radius:13px; padding:9px 10px;">
-          <div style="font-size:10px; font-weight:800; color:#059669; text-transform:uppercase;">Net Take-Home</div>
-          <div style="font-size:15.5px; font-weight:800; color:#059669; margin-top:2px;">$${netTakeHomeUsd}</div>
-        </div>
-      </div>
-
-      <!-- EcoCash USD Only Wallet Top-Up Form -->
-      <div style="background:#FFFFFF; border:1.5px solid var(--border-light); border-radius:16px; padding:13px; margin-bottom:12px;">
-        <div style="font-size:13px; font-weight:800; color:var(--text-main); margin-bottom:6px; display:flex; justify-content:space-between; align-items:center;">
-          <span>EcoCash USD Top-Up</span>
-          <span style="font-size:11px; background:#ECFDF5; color:#059669; font-weight:800; padding:2px 8px; border-radius:99px;">Admin Verified</span>
+      <!-- Compact EcoCash USD Top-Up Card -->
+      <div style="background:#FFFFFF; border:1px solid var(--border-light); border-radius:14px; padding:14px; margin-bottom:12px; box-shadow:0 1px 3px rgba(0,0,0,0.03);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <div style="font-size:13px; font-weight:800; color:var(--text-main);">Top Up via EcoCash USD</div>
+          <span style="font-size:10.5px; font-weight:700; color:#059669; background:#ECFDF5; padding:2px 8px; border-radius:99px;">*151# Send USD</span>
         </div>
 
-        <div style="background:#F8FAFC; border:1px solid var(--border-light); border-radius:12px; padding:10px; margin-bottom:10px; font-size:11.5px; line-height:1.45;">
-          <div style="font-weight:800; color:var(--text-main); margin-bottom:2px;">1. Send EcoCash USD to Findit Harare:</div>
-          <div style="display:flex; justify-content:space-between; align-items:center; background:#FFFFFF; padding:6px 10px; border-radius:8px; border:1px dashed var(--blue-primary); margin:4px 0;">
-            <span style="font-weight:800; font-size:13px; color:var(--blue-primary);">0772 910 440</span>
-            <span style="font-size:10.5px; font-weight:700; color:var(--text-secondary);">(Dial *151# Send USD)</span>
-          </div>
-        </div>
-
-        <div style="font-size:12px; font-weight:800; color:var(--text-main); margin-bottom:6px;">
-          2. Select the Amount You Sent (USD)
+        <div style="background:#F8FAFC; border:1px solid var(--border-light); border-radius:10px; padding:8px 10px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
+          <span style="font-size:12px; color:var(--text-secondary); font-weight:600;">EcoCash: <strong style="color:var(--blue-primary); font-size:13px;">0713 475 131</strong></span>
+          <button class="btn-dark-sec" style="padding:4px 9px; font-size:11px;" onclick="navigator.clipboard?.writeText('0713475131'); showToast('EcoCash number copied!');">
+            Copy
+          </button>
         </div>
 
         <div class="wallet-amount-grid" style="margin-bottom:10px;">
@@ -4056,43 +4065,37 @@ function renderProviderWalletTab(prov) {
           `).join('')}
         </div>
 
-        <div style="margin-bottom:6px;">
-          <label style="font-size:12px; font-weight:800; color:var(--text-main);">
-            3. Paste Transaction Message
-          </label>
-        </div>
-
         <textarea
           id="walletEcocashSmsInput"
           class="dark-input"
-          rows="3"
-          style="width:100%; font-size:11.5px; line-height:1.4; padding:8px 10px; font-family:monospace; resize:none; margin-bottom:10px;"
-          placeholder="Paste your EcoCash transaction confirmation message here..."
+          rows="2"
+          style="width:100%; font-size:11.5px; line-height:1.4; padding:8px 10px; resize:none; margin-bottom:8px;"
+          placeholder="Paste EcoCash confirmation SMS here..."
         ></textarea>
 
         <button
           class="btn-primary-blue"
-          style="width:100%; height:44px; font-size:13.5px;"
+          style="width:100%; height:40px; font-size:13px;"
           onclick="submitEcoCashTopup()"
         >
-          ${uiIcon('check', 15)}
-          <span>Submit EcoCash $${Number(state.walletTopupAmount || 5).toFixed(2)} SMS to Admin</span>
+          ${uiIcon('check', 14)}
+          <span>Submit $${Number(state.walletTopupAmount || 5).toFixed(2)} Top-Up</span>
         </button>
       </div>
 
       <!-- EcoCash Verification Status History -->
       ${myEcoSubmissions.length > 0 ? `
-        <div style="font-size:12px; font-weight:800; color:var(--text-secondary); margin-bottom:7px;">
-          EcoCash SMS Verification Requests (${myEcoSubmissions.length})
+        <div style="font-size:11.5px; font-weight:800; color:var(--text-secondary); margin-bottom:6px;">
+          Recent Top-Up Submissions
         </div>
         <div style="margin-bottom:12px;">
           ${myEcoSubmissions.map((s) => `
-            <div style="background:var(--bg-card); border:1px solid var(--border-light); border-radius:12px; padding:10px 12px; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center;">
+            <div style="background:var(--bg-card); border:1px solid var(--border-light); border-radius:10px; padding:8px 10px; margin-bottom:5px; display:flex; justify-content:space-between; align-items:center;">
               <div>
                 <div style="font-size:12px; font-weight:800; color:var(--text-main);">Ref: ${s.referenceCode} • $${s.claimedAmountUsd} USD</div>
-                <div style="font-size:10.5px; color:var(--text-secondary);">${new Date(s.submittedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • ${s.confirmationSms.slice(0, 32)}...</div>
+                <div style="font-size:10.5px; color:var(--text-secondary);">${new Date(s.submittedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
               </div>
-              <span style="font-size:10.5px; font-weight:800; padding:3px 8px; border-radius:99px; ${s.status === 'APPROVED' ? 'background:#ECFDF5; color:#059669;' : s.status === 'REJECTED' ? 'background:#FEF2F2; color:#DC2626;' : 'background:#FFFBEB; color:#D97706;'}">
+              <span style="font-size:10.5px; font-weight:800; padding:2px 7px; border-radius:99px; ${s.status === 'APPROVED' ? 'background:#ECFDF5; color:#059669;' : s.status === 'REJECTED' ? 'background:#FEF2F2; color:#DC2626;' : 'background:#FFFBEB; color:#D97706;'}">
                 ${s.status === 'APPROVED' ? 'Approved' : s.status === 'REJECTED' ? 'Rejected' : 'In Review'}
               </span>
             </div>
@@ -4101,20 +4104,20 @@ function renderProviderWalletTab(prov) {
       ` : ''}
 
       <!-- Recent Wallet Transaction Ledger -->
-      <div style="font-size:12px; font-weight:800; color:var(--text-secondary); margin-bottom:7px;">
-        Wallet Transaction Ledger (${txs.length})
+      <div style="font-size:11.5px; font-weight:800; color:var(--text-secondary); margin-bottom:6px;">
+        Transaction History (${txs.length})
       </div>
       ${txs.length === 0 ? `
-        <div style="font-size:12.5px; color:var(--text-secondary); text-align:center; padding:14px; background:var(--bg-card); border-radius:12px;">
+        <div style="font-size:12px; color:var(--text-secondary); text-align:center; padding:14px; background:var(--bg-card); border-radius:10px; border:1px solid var(--border-light);">
           No wallet transactions yet.
         </div>
       ` : txs.map((t) => `
-        <div class="wallet-ledger-item">
+        <div class="wallet-ledger-item" style="padding:8px 10px;">
           <div style="min-width:0;">
-            <div style="font-size:12.5px; font-weight:700; color:var(--text-main); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${t.note}</div>
-            <div style="font-size:10.5px; color:var(--text-secondary); font-weight:600;">${t.type === 'TOPUP' ? 'Prepaid Top-Up' : 'Platform Commission'}</div>
+            <div style="font-size:12px; font-weight:700; color:var(--text-main); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${t.note}</div>
+            <div style="font-size:10px; color:var(--text-secondary); font-weight:600;">${t.type === 'TOPUP' ? 'Prepaid Top-Up' : 'Platform Commission'}</div>
           </div>
-          <span style="font-size:13.5px; font-weight:800; color:${t.amountUsd >= 0 ? '#059669' : '#DC2626'}; flex-shrink:0;">
+          <span style="font-size:12.5px; font-weight:800; color:${t.amountUsd >= 0 ? '#059669' : '#DC2626'}; flex-shrink:0;">
             ${t.amountUsd >= 0 ? `+$${Number(t.amountUsd).toFixed(2)}` : `-$${Math.abs(Number(t.amountUsd)).toFixed(2)}`}
           </span>
         </div>

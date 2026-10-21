@@ -7,7 +7,7 @@
     "launchPromoActive": true,
     "launchPromoName": "First 2 Months 0% Fee Launch Promo",
     "launchPromoDaysRemaining": 60,
-    "minWalletBalanceUsd": -3,
+    "minWalletBalanceUsd": 2,
     "supportedPaymentMethods": [
       "Cash USD",
       "EcoCash USD",
