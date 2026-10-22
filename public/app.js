@@ -1092,31 +1092,55 @@ async function tickCountdowns() {
   }
 }
 
-async function apiGet(url) {
+async function apiGet(url, retries = 2) {
   const target = url.startsWith('http') ? url : (API_BASE + url);
-  const res = await fetch(target);
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Request failed');
-  return data;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(target);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Request failed');
+      return data;
+    } catch (err) {
+      if (attempt < retries) {
+        await new Promise((r) => setTimeout(r, 350 * (attempt + 1)));
+        continue;
+      }
+      throw err;
+    }
+  }
 }
 
-async function apiPost(url, body) {
+async function apiPost(url, body, retries = 2) {
   const target = url.startsWith('http') ? url : (API_BASE + url);
-  const res = await fetch(target, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
-  });
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error(data.error || 'Request failed');
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(target, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Request failed');
+      }
+      return data;
+    } catch (err) {
+      if (attempt < retries) {
+        await new Promise((r) => setTimeout(r, 350 * (attempt + 1)));
+        continue;
+      }
+      throw err;
+    }
   }
-  return data;
 }
 
 function showToast(msg, type = 'info') {
-  // Silence toast notifications for normal operations as requested by user
   if (type !== 'error') return;
+  // Ignore raw transient fetch drops from displaying scary toasts
+  if (typeof msg === 'string' && (msg.toLowerCase().includes('failed to fetch') || msg.toLowerCase().includes('networkerror'))) {
+    console.warn('Network notice (auto-reconnecting):', msg);
+    return;
+  }
   const container = document.getElementById('toastContainer');
   if (!container) return;
   const el = document.createElement('div');
@@ -3233,6 +3257,11 @@ function renderModalLayer() {
                 ${uiIcon('support', 18)}
                 <span>Support</span>
               </div>
+
+              <a href="/FinditHarare.apk" download="FinditHarare.apk" class="drawer-menu-item" style="text-decoration:none; color:inherit; background:#EFF6FF; border:1px solid #BFDBFE; border-radius:12px; margin:6px 0; font-weight:700;">
+                <span style="font-size:18px;">📱</span>
+                <span style="color:#1D4ED8;">Download Android APK</span>
+              </a>
             </div>
           </div>
 

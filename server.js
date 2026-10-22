@@ -1094,7 +1094,8 @@ const MIME_TYPES = {
   '.json': 'application/json; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
-  '.ico': 'image/x-icon'
+  '.ico': 'image/x-icon',
+  '.apk': 'application/vnd.android.package-archive'
 };
 
 const server = http.createServer(async (req, res) => {
@@ -2944,6 +2945,13 @@ if (require.main === module) {
   server.listen(PORT, () => {
     console.log(`Findit Harare App running at http://localhost:${PORT}`);
     console.log(`Findit Harare Admin Dashboard running at http://localhost:${PORT}/admin`);
+
+    // Self-ping every 5 minutes to keep Render / cloud containers warm and active
+    setInterval(() => {
+      try {
+        http.get(`http://localhost:${PORT}/api/state`, (r) => r.resume()).on('error', () => {});
+      } catch (e) {}
+    }, 5 * 60 * 1000);
   });
 }
 

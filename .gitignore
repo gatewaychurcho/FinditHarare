@@ -20,3 +20,7 @@ Thumbs.db
 
 # Temporary logs & scratch
 *.log
+
+# Android Build Outputs
+build-android/
+*.idsig
