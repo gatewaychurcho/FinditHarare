@@ -10,6 +10,7 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "agora-token": "^2.0.7"
+    "agora-token": "^2.0.7",
+    "pg": "^8.23.1"
   }
 }
