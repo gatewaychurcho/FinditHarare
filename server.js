@@ -2333,6 +2333,7 @@ const server = http.createServer(async (req, res) => {
       reqItem.acceptedOfferId = offer.id;
       reqItem.acceptedProviderId = offer.providerId;
       reqItem.agreedTotalUsd = totalAgreedUsd;
+      reqItem.commissionDeducted = false;
 
       if (provider) {
         reqItem.routeCoordinates = generateHarareRoadWaypoints(
@@ -2341,28 +2342,6 @@ const server = http.createServer(async (req, res) => {
           reqItem.lat,
           reqItem.lng
         );
-
-        if (!isPromo) {
-          provider.walletBalanceUsd = Math.round((provider.walletBalanceUsd - chargedFeeUsd) * 100) / 100;
-          provider.walletTransactions.unshift({
-            id: 'tx_' + Date.now(),
-            date: new Date().toISOString(),
-            type: 'COMMISSION_DEDUCTION',
-            method: 'Findit Wallet Points',
-            amountUsd: -chargedFeeUsd,
-            note: `${categoryRate}% commission (-$${chargedFeeUsd.toFixed(2)} Pts) on $${totalAgreedUsd.toFixed(2)} booking (${reqItem.title})`
-          });
-        } else {
-          provider.walletTransactions.unshift({
-            id: 'tx_' + Date.now(),
-            date: new Date().toISOString(),
-            type: 'PROMO_WAIVER',
-            method: '0% Launch Promo',
-            amountUsd: 0,
-            savedUsd: standardFeeUsd,
-            note: `${categoryRate}% fee ($${standardFeeUsd.toFixed(2)}) waived on $${totalAgreedUsd.toFixed(2)} booking!`
-          });
-        }
       }
 
       db.revenueLedger.unshift({
@@ -2413,22 +2392,88 @@ const server = http.createServer(async (req, res) => {
       const body = await parseBody(req);
       const reqItem = db.requests.find((r) => r.id === body.requestId);
       if (!reqItem) return sendJson(res, 404, { error: 'Booking not found' });
-      if (String(body.pinCode).trim() !== String(reqItem.startPinCode)) {
+      
+      const isAuto = Boolean(body.autoVerified);
+      if (!isAuto && String(body.pinCode).trim() !== String(reqItem.startPinCode)) {
         return sendJson(res, 400, { error: 'Incorrect 4-digit Start PIN. Ask the client for the Start PIN shown on their booking screen.' });
       }
+      
       reqItem.pinVerifiedByProvider = true;
       reqItem.status = 'IN_PROGRESS';
+
+      // Secure Commission Deduction: Deduct from provider ONLY after PIN is verified (manual or auto)
+      if (!reqItem.commissionDeducted) {
+        reqItem.commissionDeducted = true;
+        const provider = db.providers.find((p) => p.id === reqItem.acceptedProviderId);
+        if (provider) {
+          const totalAgreedUsd = Number(reqItem.agreedTotalUsd || reqItem.budgetUsd);
+          const categoryRate = db.settings.categoryCommissions[reqItem.categoryId] ?? db.settings.commissionPercent;
+          const standardFeeUsd = Math.round(totalAgreedUsd * (categoryRate / 100) * 100) / 100;
+          const isPromo = Boolean(db.settings.launchPromoActive);
+          const chargedFeeUsd = isPromo ? 0 : standardFeeUsd;
+
+          if (!isPromo && chargedFeeUsd > 0) {
+            provider.walletBalanceUsd = Math.round((provider.walletBalanceUsd - chargedFeeUsd) * 100) / 100;
+            provider.walletTransactions.unshift({
+              id: 'tx_' + Date.now(),
+              date: new Date().toISOString(),
+              type: 'COMMISSION_DEDUCTION',
+              method: 'Findit Wallet Points',
+              amountUsd: -chargedFeeUsd,
+              note: `${categoryRate}% commission (-$${chargedFeeUsd.toFixed(2)} Pts) on $${totalAgreedUsd.toFixed(2)} booking (${reqItem.title})`
+            });
+          }
+        }
+      }
+
       reqItem.messages.push({
         id: 'msg_' + Date.now(),
         senderRole: 'SYSTEM',
         senderName: 'Findit Harare',
         type: 'PIN_VERIFIED',
-        text: `Arrival PIN #${reqItem.startPinCode} Verified. Provider has arrived and service is now IN PROGRESS.`,
+        text: isAuto
+          ? `20m Geofence Auto-Pair Verified. Service is now IN PROGRESS.`
+          : `Arrival PIN #${reqItem.startPinCode} Verified. Provider has arrived and service is now IN PROGRESS.`,
         timestamp: new Date().toISOString()
       });
       saveDb(db);
-      broadcastUpdate('PIN_VERIFIED', { requestId: reqItem.id });
+      broadcastUpdate('PIN_VERIFIED', { requestId: reqItem.id, request: reqItem });
       return sendJson(res, 200, { request: reqItem });
+    } catch (e) {
+      return sendJson(res, 400, { error: e.message });
+    }
+  }
+
+  // Real-Time In-App Calling Signaling (Caller -> Server -> Recipient)
+  if (pathname === '/api/calls/initiate' && req.method === 'POST') {
+    try {
+      const body = await parseBody(req);
+      const { requestId, callerId, callerName, recipientId, contextTitle, channelId } = body;
+      broadcastUpdate('CALL_INCOMING', {
+        requestId,
+        callerId,
+        callerName,
+        recipientId,
+        contextTitle,
+        channelId: channelId || ('call_' + requestId)
+      });
+      return sendJson(res, 200, { ok: true, channelId: channelId || ('call_' + requestId) });
+    } catch (e) {
+      return sendJson(res, 400, { error: e.message });
+    }
+  }
+
+  // Real-Time In-App Calling Response (Accept / Decline / Hang-Up)
+  if (pathname === '/api/calls/respond' && req.method === 'POST') {
+    try {
+      const body = await parseBody(req);
+      const { requestId, channelId, action } = body;
+      broadcastUpdate('CALL_RESPONSE', {
+        requestId,
+        channelId,
+        action
+      });
+      return sendJson(res, 200, { ok: true });
     } catch (e) {
       return sendJson(res, 400, { error: e.message });
     }

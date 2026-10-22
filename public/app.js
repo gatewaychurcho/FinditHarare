@@ -386,6 +386,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Mobile & Android Hardware Back Button Handler: Exit modals/steps smoothly rather than leaving app
   window.addEventListener('popstate', () => {
+    if (state.incomingCall) {
+      declineIncomingCall();
+      return;
+    }
     if (state.activeCall) {
       endInAppCall();
       return;
@@ -524,7 +528,7 @@ function computeStateFingerprint(db) {
 
 async function fetchState(force = false) {
   try {
-    const res = await fetch('/api/state');
+    const res = await fetch((typeof API_BASE !== 'undefined' ? API_BASE : '') + '/api/state');
     const newDb = await res.json();
 
     // Preserve optimistic local chat messages across state fetches so messages never disappear
@@ -638,7 +642,7 @@ function handleIncomingRealtimeEvent(data) {
     }
   }
 
-  // 2. NEW REQUEST CREATED (Instant delivery to providers via WebSocket)
+  // 2. NEW REQUEST CREATED (Instant delivery to providers via WebSocket - Card pops up directly!)
   if (data.eventType === 'REQUEST_CREATED' && data.payload?.request) {
     const req = data.payload.request;
     if (!state.db) state.db = {};
@@ -646,17 +650,14 @@ function handleIncomingRealtimeEvent(data) {
     const existingIdx = state.db.requests.findIndex((r) => r.id === req.id);
     if (existingIdx >= 0) state.db.requests[existingIdx] = req;
     else state.db.requests.unshift(req);
-    if (state.role === 'PROVIDER') {
-      showToast(`New Job: ${req.title} (${req.suburbName}) • $${req.budgetUsd}`);
-      if ('vibrate' in navigator) {
-        try { navigator.vibrate([120, 60, 120]); } catch (e) {}
-      }
+    if (state.role === 'PROVIDER' && 'vibrate' in navigator) {
+      try { navigator.vibrate([120, 60, 120]); } catch (e) {}
     }
     renderAll();
     return;
   }
 
-  // 3. PROVIDER SUBMITTED AN OFFER (Instant delivery to client via WebSocket)
+  // 3. PROVIDER SUBMITTED AN OFFER (Instant delivery to client - Offer card pops up directly!)
   if (data.eventType === 'OFFER_SUBMITTED' && data.payload?.offer) {
     const { requestId, offer, request } = data.payload;
     if (request && state.db?.requests) {
@@ -665,11 +666,8 @@ function handleIncomingRealtimeEvent(data) {
       else state.db.requests.unshift(request);
     }
     const currentActive = getCustomerActiveRequest();
-    if (state.role === 'CUSTOMER' && currentActive && currentActive.id === requestId) {
-      showToast(`Offer from ${offer.providerName}: $${offer.priceUsd}`);
-      if ('vibrate' in navigator) {
-        try { navigator.vibrate([150, 70, 150]); } catch (e) {}
-      }
+    if (state.role === 'CUSTOMER' && currentActive && currentActive.id === requestId && 'vibrate' in navigator) {
+      try { navigator.vibrate([150, 70, 150]); } catch (e) {}
     }
     renderAll();
     return;
@@ -744,6 +742,47 @@ function handleIncomingRealtimeEvent(data) {
     }
     showToast(data.payload?.reason ? `Booking cancelled: ${data.payload.reason}` : `Booking was cancelled.`);
     renderAll();
+    return;
+  }
+
+  // 8. REAL-TIME CALL INCOMING (Signaling to recipient)
+  if (data.eventType === 'CALL_INCOMING' && data.payload) {
+    const { callerId, callerName, recipientId, contextTitle, channelId, requestId } = data.payload;
+    if (state.currentUser?.id && recipientId === state.currentUser.id) {
+      state.incomingCall = {
+        callerId,
+        callerName,
+        contextTitle,
+        channelId,
+        requestId
+      };
+      playIncomingRingtone();
+      renderCallModal();
+    }
+    return;
+  }
+
+  // 9. REAL-TIME CALL RESPONSE (Signaling to caller)
+  if (data.eventType === 'CALL_RESPONSE' && data.payload) {
+    const { channelId, action } = data.payload;
+    if (action === 'ACCEPT' && state.activeCall && state.activeCall.channelId === channelId) {
+      stopCallRingtones();
+      state.activeCall.callState = 'CONNECTED';
+      state.callSeconds = 0;
+      if (callInterval) clearInterval(callInterval);
+      callInterval = setInterval(() => {
+        state.callSeconds++;
+        const el = document.getElementById('callTimerText');
+        if (el) {
+          const m = String(Math.floor(state.callSeconds / 60)).padStart(2, '0');
+          const s = String(state.callSeconds % 60).padStart(2, '0');
+          el.textContent = `${m}:${s}`;
+        }
+      }, 1000);
+      renderCallModal();
+    } else if ((action === 'DECLINE' || action === 'END') && (state.activeCall || state.incomingCall)) {
+      endInAppCall(false);
+    }
     return;
   }
 
@@ -885,21 +924,35 @@ function checkProximityAutoPairTick() {
     state.bookingProximitySeconds[bookedJob.id] = (state.bookingProximitySeconds[bookedJob.id] || 0) + 1;
     const currentSec = state.bookingProximitySeconds[bookedJob.id];
 
-    // Update countdown text on live DOM without wiping inputs or map
+    // Client's phone starts ringing asking to give provider the Start PIN!
+    // Rings for up to 5 minutes (300 seconds), cannot be cancelled unless PIN verified.
+    if (state.role === 'CUSTOMER' && !bookedJob.pinVerifiedByProvider) {
+      if (currentSec <= 300) {
+        startArrivalVibrationAlert(bookedJob);
+      } else {
+        stopArrivalVibrationAlert();
+      }
+    }
+
+    // Update countdown timer on DOM: 3 minutes = 180 seconds auto-pair threshold
     const countdownEls = document.querySelectorAll('.proximity-autopair-timer');
     countdownEls.forEach((el) => {
-      el.textContent = `${Math.max(0, 60 - currentSec)}s`;
+      const remaining = Math.max(0, 180 - currentSec);
+      const m = Math.floor(remaining / 60);
+      const s = String(remaining % 60).padStart(2, '0');
+      el.textContent = `${m}:${s}`;
     });
 
-    if (currentSec >= 60) {
+    // If provider is within 20m for 3 minutes (180s) and PIN not shared, auto-pair & deduct commission!
+    if (currentSec >= 180 && !bookedJob.pinVerifiedByProvider && !bookedJob.autoPairTriggered) {
+      bookedJob.autoPairTriggered = true;
       delete state.bookingProximitySeconds[bookedJob.id];
-      showToast('20m Proximity reached for 1 min: Task automatically started!');
-      apiPost('/api/bookings/status', {
+      stopArrivalVibrationAlert();
+      apiPost('/api/bookings/verify-pin', {
         requestId: bookedJob.id,
-        status: 'IN_PROGRESS',
-        autoStarted: true
+        autoVerified: true
       }).then(() => {
-        fetchState();
+        fetchState(true);
       }).catch((e) => console.warn('Auto-pair trigger error:', e));
     }
   } else {
@@ -982,8 +1035,21 @@ async function tickCountdowns() {
   }
 }
 
+const API_BASE = (typeof window !== 'undefined' && window.location.hostname.includes('vercel.app'))
+  ? 'https://finditharare.onrender.com'
+  : '';
+
+async function apiGet(url) {
+  const target = url.startsWith('http') ? url : (API_BASE + url);
+  const res = await fetch(target);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Request failed');
+  return data;
+}
+
 async function apiPost(url, body) {
-  const res = await fetch(url, {
+  const target = url.startsWith('http') ? url : (API_BASE + url);
+  const res = await fetch(target, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body)
@@ -996,6 +1062,8 @@ async function apiPost(url, body) {
 }
 
 function showToast(msg, type = 'info') {
+  // Silence toast notifications for normal operations as requested by user
+  if (type !== 'error') return;
   const container = document.getElementById('toastContainer');
   if (!container) return;
   const el = document.createElement('div');
@@ -5552,9 +5620,114 @@ function sendCustomChat(requestId = null) {
 let agoraClient = null;
 let localAudioTrack = null;
 let isAudioMuted = false;
+let callRingInterval = null;
 
-async function startInAppCall(peerName, contextTitle, channelId = 'findit_harare_call') {
-  state.activeCall = { peerName, contextTitle, channelId, isMuted: false };
+function playOutgoingRingtone() {
+  stopCallRingtones();
+  callRingInterval = setInterval(() => {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(440, ctx.currentTime);
+      gain.gain.setValueAtTime(0.18, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.2);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 1.2);
+    } catch (e) {}
+  }, 3000);
+}
+
+function playIncomingRingtone() {
+  stopCallRingtones();
+  callRingInterval = setInterval(() => {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const now = ctx.currentTime;
+      const osc1 = ctx.createOscillator();
+      const osc2 = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc1.type = 'sine';
+      osc2.type = 'sine';
+      osc1.frequency.setValueAtTime(853, now);
+      osc2.frequency.setValueAtTime(960, now);
+      gain.gain.setValueAtTime(0.28, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 1.4);
+      osc1.connect(gain);
+      osc2.connect(gain);
+      gain.connect(ctx.destination);
+      osc1.start(now);
+      osc2.start(now);
+      osc1.stop(now + 1.4);
+      osc2.stop(now + 1.4);
+    } catch (e) {}
+    if ('vibrate' in navigator) {
+      try { navigator.vibrate([400, 200, 400]); } catch (e) {}
+    }
+  }, 2500);
+}
+
+function stopCallRingtones() {
+  if (callRingInterval) {
+    clearInterval(callRingInterval);
+    callRingInterval = null;
+  }
+}
+
+async function startInAppCall(peerName, contextTitle, channelId = null, recipientId = null) {
+  const activeReq = state.role === 'PROVIDER'
+    ? getProviderActiveBooking(state.currentUser?.id)
+    : getCustomerActiveRequest();
+
+  const finalChannelId = channelId || (activeReq ? ('call_' + activeReq.id) : 'harare_call');
+  const finalRecipientId = recipientId || (state.role === 'PROVIDER' ? activeReq?.customerId : activeReq?.acceptedProviderId);
+
+  state.activeCall = {
+    callState: 'OUTGOING',
+    peerName,
+    contextTitle,
+    channelId: finalChannelId,
+    recipientId: finalRecipientId,
+    isMuted: false
+  };
+  state.incomingCall = null;
+  state.callSeconds = 0;
+  playOutgoingRingtone();
+  renderCallModal();
+
+  if (finalRecipientId) {
+    apiPost('/api/calls/initiate', {
+      requestId: activeReq?.id,
+      callerId: state.currentUser?.id,
+      callerName: state.currentUser?.name || 'User',
+      recipientId: finalRecipientId,
+      contextTitle,
+      channelId: finalChannelId
+    }).catch((e) => console.warn('Call initiate notice:', e));
+  }
+
+  joinAgoraVoiceChannel(finalChannelId);
+}
+
+async function answerIncomingCall() {
+  if (!state.incomingCall) return;
+  stopCallRingtones();
+  const inc = state.incomingCall;
+  state.activeCall = {
+    callState: 'CONNECTED',
+    peerName: inc.callerName,
+    contextTitle: inc.contextTitle,
+    channelId: inc.channelId,
+    isMuted: false
+  };
+  state.incomingCall = null;
   state.callSeconds = 0;
   if (callInterval) clearInterval(callInterval);
   callInterval = setInterval(() => {
@@ -5568,9 +5741,35 @@ async function startInAppCall(peerName, contextTitle, channelId = 'findit_harare
   }, 1000);
   renderCallModal();
 
-  // Initialize real Agora RTC voice session if AgoraRTC is loaded
+  apiPost('/api/calls/respond', {
+    requestId: inc.requestId,
+    channelId: inc.channelId,
+    action: 'ACCEPT'
+  }).catch((e) => console.warn('Call respond notice:', e));
+
+  joinAgoraVoiceChannel(inc.channelId);
+}
+
+async function declineIncomingCall() {
+  stopCallRingtones();
+  if (state.incomingCall) {
+    const inc = state.incomingCall;
+    apiPost('/api/calls/respond', {
+      requestId: inc.requestId,
+      channelId: inc.channelId,
+      action: 'DECLINE'
+    }).catch((e) => {});
+    state.incomingCall = null;
+  }
+  renderCallModal();
+}
+
+async function joinAgoraVoiceChannel(channelId) {
   try {
     if (window.AgoraRTC) {
+      if (agoraClient) {
+        try { await agoraClient.leave(); } catch (e) {}
+      }
       agoraClient = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
       agoraClient.on('user-published', async (user, mediaType) => {
         await agoraClient.subscribe(user, mediaType);
@@ -5592,10 +5791,9 @@ async function startInAppCall(peerName, contextTitle, channelId = 'findit_harare
       await agoraClient.join(appId, cleanChannel, rtcToken, 0);
       localAudioTrack = await AgoraRTC.createMicrophoneAudioTrack();
       await agoraClient.publish([localAudioTrack]);
-      showToast('Agora Voice connected (encrypted)');
     }
   } catch (err) {
-    console.log('Agora RTC Voice notice:', err.message);
+    console.warn('Agora RTC Voice notice:', err.message);
   }
 }
 
@@ -5605,12 +5803,14 @@ async function toggleCallMute() {
     await localAudioTrack.setMuted(isAudioMuted);
     if (state.activeCall) state.activeCall.isMuted = isAudioMuted;
     renderCallModal();
-    showToast(isAudioMuted ? 'Microphone muted' : 'Microphone unmuted');
   }
 }
 
-async function endInAppCall() {
+async function endInAppCall(notify = true) {
+  stopCallRingtones();
   if (callInterval) clearInterval(callInterval);
+  const chanId = state.activeCall?.channelId || state.incomingCall?.channelId;
+  const reqId = state.activeChatRequestId || state.activeRequestId;
   try {
     if (localAudioTrack) {
       localAudioTrack.close();
@@ -5622,21 +5822,84 @@ async function endInAppCall() {
     }
   } catch (e) {}
   state.activeCall = null;
+  state.incomingCall = null;
   renderCallModal();
+
+  if (notify && chanId) {
+    apiPost('/api/calls/respond', {
+      requestId: reqId,
+      channelId: chanId,
+      action: 'END'
+    }).catch((e) => {});
+  }
 }
 
 function renderCallModal() {
   const root = document.getElementById('callModalRoot');
   if (!root) return;
+
+  // 1. Render Incoming Call Ringing Screen
+  if (state.incomingCall) {
+    const inc = state.incomingCall;
+    const proMatch = state.db.providers?.find((p) => p.name === inc.callerName || p.shortName === inc.callerName);
+    const custMatch = state.db.customers?.find((c) => c.name === inc.callerName);
+    const avatarUrl = proMatch?.avatarUrl || custMatch?.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=240&q=80';
+
+    root.innerHTML = `
+      <div class="indrive-call-overlay">
+        <div class="indrive-call-top-bar">
+          <div></div>
+          <div class="indrive-call-header-info">
+            <div class="indrive-call-title">
+              <span style="color:#10B981;">🛡️</span>
+              <span>Incoming inDrive VoIP Call</span>
+            </div>
+            <div class="indrive-call-encrypted-tag">Masked • Free Internet Call</div>
+          </div>
+          <div></div>
+        </div>
+
+        <div class="indrive-call-center">
+          <div class="indrive-call-avatar-wrap">
+            <div class="indrive-call-ring ring-1"></div>
+            <div class="indrive-call-ring ring-2"></div>
+            <img src="${avatarUrl}" class="indrive-call-avatar" alt="${inc.callerName}" />
+          </div>
+          <div class="indrive-call-peer-name">${inc.callerName}</div>
+          <div class="indrive-call-peer-context">${inc.contextTitle || 'Home Service Booking'}</div>
+          <div style="font-size:16px; font-weight:800; color:#10B981; margin-top:14px; letter-spacing:0.04em;">
+            Incoming Call...
+          </div>
+        </div>
+
+        <div style="display:flex; justify-content:center; align-items:center; gap:36px; margin-bottom:24px;">
+          <button type="button" style="background:#EF4444; color:#fff; width:64px; height:64px; border-radius:50%; border:none; display:flex; flex-direction:column; align-items:center; justify-content:center; font-weight:800; box-shadow:0 8px 24px rgba(239,68,68,0.5); cursor:pointer;" onclick="declineIncomingCall()">
+            ${uiIcon('phone', 24)}
+            <span style="font-size:10px; margin-top:2px;">Decline</span>
+          </button>
+
+          <button type="button" style="background:#10B981; color:#fff; width:68px; height:68px; border-radius:50%; border:none; display:flex; flex-direction:column; align-items:center; justify-content:center; font-weight:800; box-shadow:0 8px 24px rgba(16,185,129,0.5); cursor:pointer;" onclick="answerIncomingCall()">
+            ${uiIcon('phone', 26)}
+            <span style="font-size:10px; margin-top:2px;">Accept</span>
+          </button>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // 2. Render Active Call Screen (Outgoing Ringing or Connected)
   if (!state.activeCall) {
     root.innerHTML = '';
     return;
   }
+
   const peerName = state.activeCall.peerName || 'Specialist';
   const contextTitle = state.activeCall.contextTitle || 'Harare Home Visit';
   const proMatch = state.db.providers?.find((p) => p.name === peerName || p.shortName === peerName);
   const custMatch = state.db.customers?.find((c) => c.name === peerName);
   const avatarUrl = proMatch?.avatarUrl || custMatch?.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=240&q=80';
+  const isOutgoing = state.activeCall.callState === 'OUTGOING';
 
   root.innerHTML = `
     <div class="indrive-call-overlay">
@@ -5667,7 +5930,9 @@ function renderCallModal() {
         </div>
         <div class="indrive-call-peer-name">${peerName}</div>
         <div class="indrive-call-peer-context">${contextTitle}</div>
-        <div id="callTimerText" class="indrive-call-timer">00:00</div>
+        <div id="callTimerText" class="indrive-call-timer">
+          ${isOutgoing ? 'Calling...' : '00:00'}
+        </div>
       </div>
 
       <div class="indrive-call-bottom-dock">
