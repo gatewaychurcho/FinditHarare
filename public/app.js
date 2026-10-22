@@ -6078,51 +6078,43 @@ function pushNavigationHistoryState(stateObj = {}) {
   } catch (e) {}
 }
 
+window.handleAndroidBack = function() {
+  if (state.activeModal) {
+    closeModal();
+    return true;
+  }
+  if (state.chatDrawerOpen) {
+    closeChatDrawer();
+    return true;
+  }
+  const sideDrawer = document.getElementById('sideDrawerModal');
+  if (sideDrawer && !sideDrawer.classList.contains('hidden')) {
+    closeSideDrawerModal();
+    return true;
+  }
+  if (state.incomingCall || state.activeCall) {
+    endInAppCall(true);
+    return true;
+  }
+  if (state.role === 'PROVIDER' && state.providerTab && state.providerTab !== 'FEED' && state.providerTab !== 'ACTIVE_JOB') {
+    state.providerTab = 'FEED';
+    renderUiOverlay();
+    return true;
+  }
+  if (state.role === 'CUSTOMER' && state.screenStep === 'CONFIGURE') {
+    state.screenStep = 'HOME';
+    renderAll();
+    return true;
+  }
+  if (state.role === 'CUSTOMER' && state.screenStep === 'SEARCHING') {
+    cancelActiveCustomerRequest();
+    return true;
+  }
+  return false;
+};
+
 if (typeof window !== 'undefined') {
   window.addEventListener('popstate', (e) => {
-    // 1. If an active modal is open, dismiss it
-    if (state.activeModal) {
-      closeModal();
-      return;
-    }
-
-    // 2. If chat drawer is open, close it
-    if (state.chatDrawerOpen) {
-      closeChatDrawer();
-      return;
-    }
-
-    // 3. If side drawer is open, close it
-    const sideDrawer = document.getElementById('sideDrawerModal');
-    if (sideDrawer && !sideDrawer.classList.contains('hidden')) {
-      closeSideDrawerModal();
-      return;
-    }
-
-    // 4. If call screen is open, decline or end
-    if (state.incomingCall || state.activeCall) {
-      endInAppCall(true);
-      return;
-    }
-
-    // 5. If provider is on a secondary tab (WALLET, CATALOGUE), go back to FEED
-    if (state.role === 'PROVIDER' && state.providerTab && state.providerTab !== 'FEED' && state.providerTab !== 'ACTIVE_JOB') {
-      state.providerTab = 'FEED';
-      renderUiOverlay();
-      return;
-    }
-
-    // 6. If client is in CONFIGURE, return to HOME
-    if (state.role === 'CUSTOMER' && state.screenStep === 'CONFIGURE') {
-      state.screenStep = 'HOME';
-      renderAll();
-      return;
-    }
-
-    // 7. If client is SEARCHING for offers, cancel search & return to HOME
-    if (state.role === 'CUSTOMER' && state.screenStep === 'SEARCHING') {
-      cancelActiveCustomerRequest();
-      return;
-    }
+    window.handleAndroidBack();
   });
 }

@@ -23,6 +23,10 @@ echo "2. Linking APK & Generating R.java..."
 "$ANDROID_TOOLS/aapt2" link \
   -I "$ANDROID_JAR" \
   --manifest android/app/src/main/AndroidManifest.xml \
+  --min-sdk-version 24 \
+  --target-sdk-version 34 \
+  --version-code 1 \
+  --version-name "1.0.0" \
   --java "$BUILD_DIR/gen" \
   -o "$BUILD_DIR/unaligned.apk" \
   "$BUILD_DIR/res.zip" \
@@ -30,7 +34,7 @@ echo "2. Linking APK & Generating R.java..."
 
 echo "3. Compiling Java Source Files..."
 "$JAVA_BIN/javac" \
-  --release 17 \
+  --release 8 \
   -cp "$ANDROID_JAR" \
   -d "$BUILD_DIR/classes" \
   "$BUILD_DIR/gen/zw/co/finditharare/R.java" \
@@ -39,6 +43,7 @@ echo "3. Compiling Java Source Files..."
 echo "4. Converting Bytecode to DEX with D8..."
 "$ANDROID_TOOLS/d8" \
   --release \
+  --min-api 24 \
   --lib "$ANDROID_JAR" \
   --output "$BUILD_DIR/dex" \
   $(find "$BUILD_DIR/classes" -name "*.class")
@@ -71,11 +76,16 @@ echo "8. Signing APK with apksigner..."
   --ks-pass pass:android \
   --ks-key-alias androiddebugkey \
   --key-pass pass:android \
+  --v1-signing-enabled true \
+  --v2-signing-enabled true \
+  --v3-signing-enabled true \
   --out "$OUTPUT_APK" \
   "$BUILD_DIR/aligned.apk"
 
 echo "9. Verifying APK Signature..."
-"$ANDROID_TOOLS/apksigner" verify "$OUTPUT_APK"
+"$ANDROID_TOOLS/apksigner" verify -v "$OUTPUT_APK"
+
+cp "$OUTPUT_APK" public/FinditHarare.apk
 
 echo "=== SUCCESS! FinditHarare.apk built successfully ==="
-ls -lh "$OUTPUT_APK"
+ls -lh "$OUTPUT_APK" public/FinditHarare.apk

@@ -131,8 +131,24 @@ public class MainActivity extends Activity {
     public void onBackPressed() {
         if (webView != null) {
             webView.evaluateJavascript(
-                "if (window.history && window.history.length > 1) { window.history.back(); } else { window._handleExit(); }",
-                null
+                "(function() { " +
+                "  if (typeof window.handleAndroidBack === 'function') { " +
+                "    return window.handleAndroidBack(); " +
+                "  } " +
+                "  return false; " +
+                "})();",
+                new ValueCallback<String>() {
+                    @Override
+                    public void onReceiveValue(String value) {
+                        if ("true".equals(value)) {
+                            // Successfully handled by in-app navigation (closed modal/tab/drawer)
+                        } else if (webView.canGoBack()) {
+                            webView.goBack();
+                        } else {
+                            MainActivity.super.onBackPressed();
+                        }
+                    }
+                }
             );
         } else {
             super.onBackPressed();
