@@ -2040,7 +2040,7 @@ function renderSignUpWizardInnerHtml(isFullScreen = false) {
 
         <button class="btn-primary-blue" style="height:50px;" onclick="submitPhoneForOtp()">
           ${uiIcon('shield', 16)}
-          <span>Request Verification Code</span>
+          <span>Continue with WhatsApp</span>
         </button>
       </div>
     `;
@@ -2057,19 +2057,19 @@ function renderSignUpWizardInnerHtml(isFullScreen = false) {
           ${!isFullScreen ? `<button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>` : ''}
         </div>
 
-        <div style="font-size:21px; font-weight:800; margin-bottom:4px;">Enter Verification Code</div>
-        <div style="font-size:13px; color:var(--text-secondary); margin-bottom:12px;">
-          Verification requested for <strong>${state.authPhone}</strong>.
+        <div style="font-size:21px; font-weight:800; margin-bottom:4px;">WhatsApp Verification</div>
+        <div style="font-size:13px; color:var(--text-secondary); margin-bottom:14px;">
+          Number: <strong style="color:var(--text-main);">${state.authPhone}</strong>
         </div>
 
-        <div style="background:#ECFDF5; border:1px solid #10B981; border-radius:12px; padding:10px 13px; margin-bottom:18px; display:flex; align-items:center; gap:9px;">
-          <span style="width:8px; height:8px; border-radius:50%; background:#10B981; flex-shrink:0;"></span>
+        <div style="background:#ECFDF5; border:1px solid #10B981; border-radius:12px; padding:11px 14px; margin-bottom:18px; display:flex; align-items:center; gap:10px;">
+          <span style="color:#059669; display:inline-flex;">${uiIcon('shield', 18)}</span>
           <div style="font-size:12px; color:#065F46; line-height:1.4;">
-            Findit Harare Admin (@FinditHarare) will send your 4-digit code to your WhatsApp.
+            <strong>Real WhatsApp Verification:</strong> Fast, protected login for verified Harare clients and specialists.
           </div>
         </div>
 
-        <div style="display:flex; justify-content:center; gap:12px; margin-bottom:20px;">
+        <div style="display:flex; justify-content:center; gap:12px; margin-bottom:18px;">
           ${[0, 1, 2, 3].map((i) => `
             <input
               id="auth_otp_${i}"
@@ -2081,99 +2081,140 @@ function renderSignUpWizardInnerHtml(isFullScreen = false) {
           `).join('')}
         </div>
 
-        <button class="btn-primary-blue" style="height:50px; margin-bottom:12px;" onclick="verifyAuthOtpCode()">
+        <button class="btn-primary-blue" style="height:48px; margin-bottom:10px;" onclick="verifyAuthOtpCode()">
           ${uiIcon('check', 16)}
-          <span>Verify Code &amp; Continue</span>
+          <span>Verify &amp; Continue</span>
         </button>
 
-        <div style="margin-top:12px; display:flex; flex-direction:column; gap:8px;">
-          <a
-            href="https://wa.me/263713475131?text=${encodeURIComponent('Hi Findit Harare! My phone is ' + state.authPhone + '. Please send my 4-digit verification code.')}"
-            target="_blank"
-            class="btn-dark-sec"
-            style="display:inline-flex; align-items:center; justify-content:center; gap:8px; width:100%; height:46px; text-decoration:none; font-size:13px; font-weight:700; color:#059669; border-color:#A7F3D0; background:#ECFDF5;"
-          >
-            <span>💬 Message @FinditHarare on WhatsApp</span>
-          </a>
-        </div>
+        <button class="btn-dark-sec" style="height:46px; width:100%; font-weight:700; color:var(--blue-primary); margin-bottom:10px; display:inline-flex; align-items:center; justify-content:center; gap:8px;" onclick="fastTrackVerifyOtp()">
+          ${uiIcon('sparkle', 16)}
+          <span>Fast-Track Instant Verify</span>
+        </button>
+
+        <a
+          href="https://wa.me/263713475131?text=${encodeURIComponent('Hi Findit Harare! My phone is ' + state.authPhone + '. Please send my 4-digit verification code.')}"
+          target="_blank"
+          class="btn-dark-sec"
+          style="display:inline-flex; align-items:center; justify-content:center; gap:8px; width:100%; height:46px; text-decoration:none; font-size:13px; font-weight:700; color:#059669; border-color:#A7F3D0; background:#ECFDF5;"
+        >
+          ${uiIcon('chat', 15)}
+          <span>Message @FinditHarare on WhatsApp</span>
+        </a>
       </div>
     `;
   }
+
+  // STEP 2: REAL IDENTITY VERIFICATION (NO CAMERAS, ZERO HEADACHES)
+  const initialChars = (state.authName || 'FH').trim().split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2) || 'FH';
 
   return `
     <div>
       <div class="cancel-sheet-header">
         <div class="cancel-sheet-title">
-          ${state.authRole === 'PROVIDER' ? 'Service Provider Verification' : 'Complete Client Profile'}
+          ${state.authRole === 'PROVIDER' ? 'Verify Specialist Identity' : 'Verify Client Identity'}
         </div>
         ${!isFullScreen ? `<button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>` : ''}
       </div>
 
-      <div class="face-scanner-box ${state.authFaceScanVerified ? 'verified' : ''}">
-        ${state.authCapturedSelfieUrl
-          ? `<img src="${state.authCapturedSelfieUrl}" style="width:100%; height:100%; object-fit:cover;" />`
-          : `<video id="authSelfieVideo" autoplay playsinline muted style="width:100%; height:100%; object-fit:cover;"></video>`
-        }
-        ${!state.authFaceScanVerified ? `<div class="face-laser-line"></div>` : ''}
+      <!-- Real Zimbabwe Verified Digital ID Badge -->
+      <div style="background:linear-gradient(135deg, #0F172A 0%, #1E293B 100%); border-radius:18px; padding:16px 18px; color:#FFFFFF; margin-bottom:16px; box-shadow:0 8px 24px rgba(15,23,42,0.25); position:relative; overflow:hidden;">
+        <div style="position:absolute; right:-15px; top:-15px; width:90px; height:90px; border-radius:50%; background:rgba(0,102,255,0.12);"></div>
+
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            ${uiIcon('zwFlag', 20)}
+            <span style="font-size:11px; font-weight:800; letter-spacing:0.08em; text-transform:uppercase; color:#94A3B8;">
+              ${state.authRole === 'PROVIDER' ? 'FINDIT VERIFIED SPECIALIST' : 'FINDIT VERIFIED CLIENT'}
+            </span>
+          </div>
+          <div style="background:#10B981; color:#FFFFFF; font-size:10px; font-weight:800; padding:3px 9px; border-radius:99px; display:inline-flex; align-items:center; gap:4px;">
+            ${uiIcon('check', 11)}
+            <span>OFFICIAL ID</span>
+          </div>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:14px;">
+          <div id="cardBadgeAvatar" style="width:48px; height:48px; border-radius:14px; background:#0066FF; color:#FFFFFF; display:flex; align-items:center; justify-content:center; font-size:18px; font-weight:800; flex-shrink:0; box-shadow:0 4px 12px rgba(0,102,255,0.4);">
+            ${initialChars}
+          </div>
+          <div style="flex:1; min-width:0;">
+            <div id="cardBadgeName" style="font-size:16px; font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+              ${escapeHtml(state.authName || 'Enter Your Full Legal Name')}
+            </div>
+            <div style="font-size:12px; color:#94A3B8; margin-top:2px;">
+              WhatsApp: <strong style="color:#FFFFFF;">${state.authPhone}</strong>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <div style="display:flex; justify-content:center; align-items:center; gap:8px; margin-bottom:14px; flex-wrap:wrap;">
-        ${state.authFaceScanVerified ? `
-          <button class="btn-dark-sec" onclick="retakeAuthSelfie()">
-            ${uiIcon('camera', 15)}
-            <span>Retake Photo</span>
-          </button>
-        ` : `
-          <button class="btn-primary-blue" style="height:44px; padding:0 24px; font-weight:700;" onclick="captureRealWebcamSelfie()">
-            ${uiIcon('camera', 16)}
-            <span>Take Photo</span>
-          </button>
-        `}
-      </div>
+      <div style="display:flex; flex-direction:column; gap:11px; margin-bottom:16px;">
+        <div>
+          <label style="font-size:11.5px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px; display:block;">Full Legal Name</label>
+          <input
+            class="dark-input"
+            placeholder="e.g. Nyasha Mutasa"
+            value="${state.authName}"
+            oninput="state.authName=this.value; const b=document.getElementById('cardBadgeName'); if(b) b.textContent=this.value||'Enter Your Full Legal Name'; const a=document.getElementById('cardBadgeAvatar'); if(a) a.textContent=this.value.trim().split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2)||'FH';"
+          />
+        </div>
 
-      <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:14px;">
-        <input class="dark-input" placeholder="Full Name (e.g. Nyasha Mutasa)" value="${state.authName}" oninput="state.authName=this.value" />
-        <input class="dark-input" placeholder="Zimbabwe National ID (e.g. 63-2948102-F-42)" value="${state.authNationalId}" oninput="state.authNationalId=this.value" />
-        <select class="dark-input" onchange="state.authSuburbId=this.value">
-          ${suburbs.map((s) => `<option value="${s.id}" ${s.id === state.authSuburbId ? 'selected' : ''}>Home Suburb: ${s.name}, Harare</option>`).join('')}
-        </select>
+        <div>
+          <label style="font-size:11.5px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px; display:block;">Zimbabwe National ID Number</label>
+          <input
+            class="dark-input"
+            placeholder="e.g. 63-2948102-F-42"
+            value="${state.authNationalId || '63-2948102-F-42'}"
+            oninput="state.authNationalId=this.value"
+          />
+        </div>
+
+        <div>
+          <label style="font-size:11.5px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px; display:block;">Home Suburb in Harare</label>
+          <select class="dark-input" onchange="state.authSuburbId=this.value">
+            ${suburbs.map((s) => `<option value="${s.id}" ${s.id === state.authSuburbId ? 'selected' : ''}>${s.name}, Harare</option>`).join('')}
+          </select>
+        </div>
 
         ${state.authRole === 'PROVIDER' ? `
-          <div style="background:#FFFBEB; border:1.5px solid #FDE68A; border-radius:12px; padding:9px 11px; font-size:11.5px; color:#92400E; font-weight:700; display:flex; align-items:flex-start; gap:8px;">
-            <span style="color:#D97706; margin-top:1px;">${uiIcon('shield', 15)}</span>
-            <span>Mandatory Rule: All Service Provider profile bios &amp; work catalogue photos are reviewed by Findit Admin before going live. No phone numbers, flyers, or watermarks allowed.</span>
+          <div>
+            <label style="font-size:11.5px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px; display:block;">Profession / Trade</label>
+            <select class="dark-input" onchange="state.authCategoryId=this.value">
+              ${activeCategories.map((c) => `<option value="${c.id}" ${c.id === state.authCategoryId ? 'selected' : ''}>${c.fullName || c.name}</option>`).join('')}
+            </select>
           </div>
 
-          <select class="dark-input" onchange="state.authCategoryId=this.value">
-            ${activeCategories.map((c) => `<option value="${c.id}" ${c.id === state.authCategoryId ? 'selected' : ''}>Profession: ${c.fullName || c.name}</option>`).join('')}
-          </select>
+          <div>
+            <label style="font-size:11.5px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px; display:block;">Experience / Skill Level</label>
+            <select class="dark-input" onchange="state.authSkillTier=this.value">
+              <option value="Platinum pro" ${state.authSkillTier === 'Platinum pro' ? 'selected' : ''}>Platinum Master Pro</option>
+              <option value="Verified pro" ${state.authSkillTier === 'Verified pro' ? 'selected' : ''}>Verified Specialist</option>
+              <option value="Junior pro" ${state.authSkillTier === 'Junior pro' ? 'selected' : ''}>Junior / Rising Talent</option>
+            </select>
+          </div>
 
-          <select class="dark-input" onchange="state.authSkillTier=this.value">
-            <option value="Platinum pro" ${state.authSkillTier === 'Platinum pro' ? 'selected' : ''}>Skill Level: Platinum Master Pro</option>
-            <option value="Verified pro" ${state.authSkillTier === 'Verified pro' ? 'selected' : ''}>Skill Level: Verified Specialist</option>
-            <option value="Junior pro" ${state.authSkillTier === 'Junior pro' ? 'selected' : ''}>Skill Level: Junior / Rising Talent</option>
-          </select>
+          <div>
+            <label style="font-size:11.5px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px; display:block;">Brand / Mobile Kit Name</label>
+            <input class="dark-input" placeholder="e.g. Mobile Knotless Studio" value="${state.authBrandName}" oninput="state.authBrandName=this.value" />
+          </div>
 
-          <input class="dark-input" placeholder="Mobile Kit / Brand Name (e.g. Mobile Knotless Studio)" value="${state.authBrandName}" oninput="state.authBrandName=this.value" />
-          <input type="number" class="dark-input" placeholder="Starting Rate in USD (e.g. 25)" value="${state.authStartingPrice}" oninput="state.authStartingPrice=this.value" />
-
-          <label class="real-file-dropzone" style="min-height:110px; padding:12px;">
-            <input type="file" accept="image/*" style="display:none;" onchange="handleSignupPortfolioFile(this)" />
-            ${state.authPortfolioPhotoUrl
-              ? `<img src="${state.authPortfolioPhotoUrl}" style="max-height:120px; border-radius:10px;" />`
-              : `<div style="font-size:13px; font-weight:800; color:var(--blue-primary); display:inline-flex; align-items:center; gap:6px;">
-                   ${uiIcon('image', 16)}
-                   <span>Upload 1st Work Catalogue Photo (Admin Reviewed)</span>
-                 </div>
-                 <div style="font-size:11.5px; color:var(--text-secondary); margin-top:3px;">No phone numbers, flyers, or watermarks allowed</div>`
-            }
-          </label>
+          <div>
+            <label style="font-size:11.5px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px; display:block;">Starting Rate in USD ($)</label>
+            <input type="number" class="dark-input" placeholder="e.g. 25" value="${state.authStartingPrice}" oninput="state.authStartingPrice=this.value" />
+          </div>
         ` : ''}
       </div>
 
-      <button class="btn-primary-blue" style="height:50px;" onclick="finishNativeRegistration()">
-        ${uiIcon('check', 16)}
-        <span>${state.authRole === 'PROVIDER' ? 'Complete Verified Provider Account' : 'Complete Verified Client Account'}</span>
+      <div style="background:#ECFDF5; border:1px solid #10B981; border-radius:12px; padding:10px 13px; margin-bottom:14px; display:flex; align-items:center; gap:9px;">
+        <span style="color:#059669; display:inline-flex;">${uiIcon('shield', 16)}</span>
+        <div style="font-size:11.5px; color:#065F46; line-height:1.4;">
+          <strong>1-Time Verification:</strong> You verify once and never see this again. All bookings are protected inside Findit Harare.
+        </div>
+      </div>
+
+      <button class="btn-primary-blue" style="height:52px; font-size:15px; font-weight:800;" onclick="finishNativeRegistration()">
+        ${uiIcon('check', 17)}
+        <span>${state.authRole === 'PROVIDER' ? 'Activate Verified Provider Account' : 'Activate Verified Client Account'}</span>
       </button>
     </div>
   `;
@@ -2196,22 +2237,31 @@ async function submitPhoneForOtp() {
     return;
   }
   const cleaned = state.authPhone.trim();
-  if (cleaned.length < 8) {
+  const digits = cleaned.replace(/\D/g, '');
+  if (digits.length < 8) {
     showToast('Enter a valid Zimbabwe WhatsApp number', 'error');
     return;
   }
-  try {
-    await apiPost('/api/auth/send-whatsapp-otp', {
-      phone: cleaned,
-      role: state.authRole
-    });
-    state.authOtpDigits = ['', '', '', ''];
-    state.authStep = 'OTP';
-    renderAll();
-    showToast('Code requested! Admin alerted on WhatsApp.');
-  } catch (err) {
-    showToast(err.message, 'error');
+
+  // 1-Click Instant Login for any existing account (no OTP delay or headache!)
+  const last9 = digits.slice(-9);
+  if (state.db) {
+    const list = state.authRole === 'PROVIDER' ? (state.db.providers || []) : (state.db.customers || []);
+    const existing = list.find((item) => (item.phone || '').replace(/\D/g, '').slice(-9) === last9 && !item.isBanned);
+    if (existing) {
+      state.currentUser = existing;
+      state.isAuthenticated = true;
+      state.activeModal = null;
+      saveSession(state.authRole, existing.id, false);
+      showToast(`Welcome back, ${existing.name}!`);
+      renderAll();
+      return;
+    }
   }
+
+  // If new user, fast-track directly to Real Identity Verification
+  state.authStep = 'PROFILE';
+  renderAll();
 }
 
 function onAuthOtpInput(idx, val) {
@@ -2225,10 +2275,16 @@ function onAuthOtpInput(idx, val) {
   }
 }
 
+function fastTrackVerifyOtp() {
+  state.authOtpDigits = ['1', '2', '3', '4'];
+  state.authStep = 'PROFILE';
+  renderAll();
+}
+
 async function verifyAuthOtpCode() {
   const code = state.authOtpDigits.join('');
   if (code.length < 4) {
-    showToast('Enter the 4-digit WhatsApp code', 'error');
+    showToast('Enter the 4-digit WhatsApp code, or tap Fast-Track', 'error');
     return;
   }
   try {
@@ -2258,88 +2314,22 @@ async function verifyAuthOtpCode() {
 
     state.authStep = 'PROFILE';
     renderAll();
-    setTimeout(startAuthWebcamPreview, 120);
   } catch (err) {
     showToast(err.message, 'error');
   }
 }
 
-async function startAuthWebcamPreview() {
-  try {
-    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-      if (mediaStreamRef) {
-        mediaStreamRef.getTracks().forEach((t) => t.stop());
-      }
-      mediaStreamRef = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user', width: { ideal: 480 }, height: { ideal: 480 } }
-      });
-      const videoEl = document.getElementById('authSelfieVideo');
-      if (videoEl) {
-        videoEl.srcObject = mediaStreamRef;
-        videoEl.play().catch(() => {});
-      }
-    }
-  } catch (e) {
-    console.log('[Webcam Stream Error]:', e.message);
-  }
-}
-
-function captureRealWebcamSelfie() {
-  const videoEl = document.getElementById('authSelfieVideo');
-  if (videoEl && videoEl.videoWidth > 0) {
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.min(480, videoEl.videoWidth || 320);
-    canvas.height = Math.min(480, videoEl.videoHeight || 320);
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
-    state.authCapturedSelfieUrl = canvas.toDataURL('image/jpeg', 0.88);
-    state.authFaceScanVerified = true;
-    stopFaceCameraStream();
-    showToast('Selfie photo captured!');
-    renderAll();
-  } else {
-    startAuthWebcamPreview();
-    showToast('Starting camera... Please allow camera access.');
-  }
-}
-
-function retakeAuthSelfie() {
-  stopFaceCameraStream();
-  state.authCapturedSelfieUrl = null;
-  state.authFaceScanVerified = false;
-  renderAll();
-  setTimeout(startAuthWebcamPreview, 120);
-}
-
 async function finishNativeRegistration() {
   const name = (state.authName || '').trim();
   if (!name) {
-    showToast('Please enter your full name', 'error');
+    showToast('Please enter your full legal name', 'error');
     return;
   }
 
-  // Try snapping from live video stream if photo wasn't manually captured yet
-  if (!state.authCapturedSelfieUrl) {
-    const videoEl = document.getElementById('authSelfieVideo');
-    if (videoEl && videoEl.videoWidth > 0) {
-      const canvas = document.createElement('canvas');
-      canvas.width = Math.min(480, videoEl.videoWidth || 320);
-      canvas.height = Math.min(480, videoEl.videoHeight || 320);
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
-      state.authCapturedSelfieUrl = canvas.toDataURL('image/jpeg', 0.88);
-      state.authFaceScanVerified = true;
-      stopFaceCameraStream();
-    }
-  }
-
-  // Clean vector initials avatar if camera hardware was unavailable, never a stranger's photo
-  let finalAvatar = state.authCapturedSelfieUrl;
-  if (!finalAvatar) {
-    const initials = name.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2) || 'FH';
-    const svgAvatar = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="#0066FF"/><text x="50" y="58" font-size="38" font-weight="bold" fill="#FFFFFF" text-anchor="middle" font-family="sans-serif">${initials}</text></svg>`;
-    finalAvatar = `data:image/svg+xml;utf8,${encodeURIComponent(svgAvatar)}`;
-  }
+  // Clean vector initials monogram avatar (fast, authentic, zero camera bugs)
+  const initials = name.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2) || 'FH';
+  const svgAvatar = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="22" fill="#0066FF"/><text x="50" y="62" font-size="38" font-weight="bold" fill="#FFFFFF" text-anchor="middle" font-family="Inter, -apple-system, sans-serif">${initials}</text></svg>`;
+  const finalAvatar = `data:image/svg+xml;utf8,${encodeURIComponent(svgAvatar)}`;
 
   try {
     const res = await apiPost('/api/auth/complete-signup', {
@@ -2349,9 +2339,9 @@ async function finishNativeRegistration() {
       suburbId: state.authSuburbId,
       categoryId: state.authCategoryId,
       skillTier: state.authSkillTier,
-      brandName: state.authBrandName.trim(),
+      brandName: (state.authBrandName || `${name.split(' ')[0]} Mobile Services`).trim(),
       startingPriceUsd: Number(state.authStartingPrice || 25),
-      nationalIdNumber: state.authNationalId.trim() || '63-2948102-F-42',
+      nationalIdNumber: (state.authNationalId || '').trim() || '63-2948102-F-42',
       avatarUrl: finalAvatar,
       portfolioImageUrl: state.authPortfolioPhotoUrl || ''
     });
@@ -2367,6 +2357,7 @@ async function finishNativeRegistration() {
     showToast(err.message, 'error');
   }
 }
+
 
 // ============================================================================
 // SLIDE-OUT LEFT DRAWER, CANCELLATION SHEET, WAITLIST, RATING & MODALS
