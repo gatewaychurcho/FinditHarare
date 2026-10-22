@@ -2849,7 +2849,13 @@ function renderModalLayer() {
             <span style="color:var(--blue-primary); font-weight:800;">USD ($)</span>
           </div>
           <div class="indrive-cancel-row" onclick="logoutCurrentAccount()">
-            <span style="color:#DC2626; font-weight:800;">Log Out</span>
+            <span style="color:var(--text-main); font-weight:700;">Log Out</span>
+          </div>
+          <div class="indrive-cancel-row" onclick="promptDeleteAccount()" style="border-top:1px solid #FEE2E2; margin-top:6px; cursor:pointer;">
+            <span style="color:#DC2626; font-weight:800; display:flex; align-items:center; gap:8px;">
+              ${uiIcon('trash', 16)}
+              <span>Delete Account Permanently</span>
+            </span>
           </div>
         </div>
       </div>
@@ -3452,12 +3458,18 @@ async function submitServiceRequest() {
     state.authStep = 'PHONE';
     state.activeModal = 'SIGNUP_FLOW';
     renderAll();
-    showToast('Please verify your WhatsApp to request a specialist');
+    showToast('Please verify your WhatsApp first to find offers');
     return;
   }
   try {
     const cat = state.db.categories.find((c) => c.id === state.selectedCategoryId) || state.db.categories[0];
     const sub = (cat.subServices || [])[state.selectedSubServiceIdx] || { name: `${cat.name} Home Service` };
+
+    const btn = document.querySelector('.indrive-find-offers-btn');
+    if (btn) {
+      btn.style.opacity = '0.75';
+      btn.innerHTML = `<span>Broadcasting...</span>`;
+    }
 
     const res = await apiPost('/api/requests', {
       customerId: state.currentUser.id,
@@ -3480,9 +3492,12 @@ async function submitServiceRequest() {
     state.isSheetMinimized = false;
     state.isOffersMinimized = false;
     state.screenStep = 'SEARCHING';
+    renderAll();
+    showToast(`Broadcast live! Waiting for verified specialists to respond.`);
     await fetchState();
   } catch (err) {
     showToast(err.message, 'error');
+    renderAll();
   }
 }
 
@@ -3699,6 +3714,45 @@ function logoutCurrentAccount() {
   state.authStep = 'PHONE';
   saveSession(null, null, true);
   renderAll();
+}
+
+async function promptDeleteAccount() {
+  if (!state.isAuthenticated || !state.currentUser) {
+    showToast('No active account to delete', 'error');
+    return;
+  }
+
+  const userName = state.currentUser.name || 'Your Account';
+  const confirmed = confirm(
+    `Permanently Delete Account (${userName})?\n\n` +
+    `• All personal details, phone number, and National ID will be completely erased from Findit Harare.\n` +
+    `• Records will be permanently deleted from the database.\n` +
+    `• Any open requests or bids will be cancelled immediately.\n\n` +
+    `Are you sure you want to proceed?`
+  );
+
+  if (!confirmed) return;
+
+  try {
+    showToast('Deleting your account from database...');
+    const res = await apiPost('/api/auth/delete-account', {
+      role: state.role,
+      userId: state.currentUser.id,
+      phone: state.currentUser.phone
+    });
+
+    closeModal();
+    state.isAuthenticated = false;
+    state.currentUser = null;
+    state.activeRequestId = null;
+    state.activeCall = null;
+    state.authStep = 'PHONE';
+    saveSession(null, null, true);
+    showToast(res.message || 'Account successfully deleted.');
+    renderAll();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
 }
 
 function openProviderCatalogueModal(providerId, requestId = null, offerId = null) {

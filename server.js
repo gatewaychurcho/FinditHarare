@@ -60,6 +60,50 @@ const AGORA_CHAT_TOKEN = process.env.AGORA_CHAT_TOKEN || '007eJxTYJDZ8JJ1Sl3zxbd
 const AGORA_WS_API = process.env.AGORA_WS_API || 'msync-api-61.chat.agora.io';
 const AGORA_REST_API = process.env.AGORA_REST_API || 'a61.chat.agora.io';
 
+// Admin Security: Encrypted (PBKDF2 Salted SHA-256) Password
+const ADMIN_SALT = process.env.ADMIN_SALT || 'findit_harare_admin_salt_#2026';
+// Precomputed hash for password "tawanda#3002" with salt "findit_harare_admin_salt_#2026"
+const ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH || '1e1adeb42af47e89ef0d871d0c8551332b6a653c6f5e0f4257b13f2595eec988';
+const activeAdminSessions = new Map(); // token -> { createdAt, expiresAt }
+
+function verifyAdminPassword(plaintext) {
+  if (!plaintext || typeof plaintext !== 'string') return false;
+  try {
+    const computed = crypto.pbkdf2Sync(plaintext, ADMIN_SALT, 100000, 32, 'sha256').toString('hex');
+    return crypto.timingSafeEqual(Buffer.from(computed), Buffer.from(ADMIN_PASSWORD_HASH));
+  } catch (e) {
+    return false;
+  }
+}
+
+function validateAdminToken(req) {
+  const authHeader = req.headers['authorization'] || '';
+  const token = authHeader.replace(/^Bearer\s+/i, '').trim() || req.headers['x-admin-token'] || '';
+  if (!token) return false;
+  const session = activeAdminSessions.get(token);
+  if (!session) return false;
+  if (Date.now() > session.expiresAt) {
+    activeAdminSessions.delete(token);
+    return false;
+  }
+  return true;
+}
+
+// PostgreSQL Client Pool for Supabase Deletions/Sync (if DATABASE_URL is set)
+let pgClient = null;
+const DATABASE_URL = process.env.DATABASE_URL;
+if (DATABASE_URL) {
+  try {
+    const { Pool } = require('pg');
+    pgClient = new Pool({
+      connectionString: DATABASE_URL,
+      ssl: { rejectUnauthorized: false }
+    });
+  } catch (e) {
+    pgClient = null;
+  }
+}
+
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
@@ -1101,91 +1145,12 @@ function broadcastUpdate(eventType, payload = {}) {
 }
 
 function scheduleStaggeredProviderBids(requestId) {
+  // Pure production mode: All simulated/demo bids are completely removed.
+  // Offers will ONLY appear when a real, verified service provider submits a real bid.
   if (staggeredBidTimers.has(requestId)) {
     staggeredBidTimers.get(requestId).forEach((t) => clearTimeout(t));
+    staggeredBidTimers.delete(requestId);
   }
-
-  const reqItem = db.requests.find((r) => r.id === requestId);
-  if (!reqItem || reqItem.status !== 'OPEN') return;
-
-  let matchingProviders = db.providers.filter((p) => p.categoryId === reqItem.categoryId && p.isOnline !== false && !p.isBanned);
-  if (matchingProviders.length < 4) {
-    const extras = db.providers.filter((p) => p.categoryId !== reqItem.categoryId && p.isOnline !== false && !p.isBanned);
-    matchingProviders = [...matchingProviders, ...extras].slice(0, 4);
-  }
-  if (reqItem.directProviderId) {
-    const directProv = db.providers.find((p) => p.id === reqItem.directProviderId && !p.isBanned);
-    if (directProv) {
-      matchingProviders = [directProv, ...matchingProviders.filter((p) => p.id !== directProv.id)];
-    }
-  }
-
-  const delaysMs = [2800, 5800, 9200, 12800];
-  const priceDeltas = [0, 2, 2, 3.5];
-  const timers = [];
-
-  matchingProviders.slice(0, 4).forEach((prov, idx) => {
-    const delay = delaysMs[idx] || (idx + 1) * 3500;
-    const timer = setTimeout(() => {
-      const currentReq = db.requests.find((r) => r.id === requestId);
-      if (!currentReq || currentReq.status !== 'OPEN') return;
-      if (currentReq.offers.some((o) => o.providerId === prov.id)) return;
-
-      const distKm = getDistanceKm(prov.lat, prov.lng, currentReq.lat, currentReq.lng);
-      const delta = priceDeltas[idx] !== undefined ? priceDeltas[idx] : 2;
-      const proposedUsd = Math.max(5, Number((Number(currentReq.budgetUsd) + delta).toFixed(2)));
-      const isExactAccept = proposedUsd <= Number(currentReq.budgetUsd);
-      const nowMs = Date.now();
-      const etaMins = idx === 0 ? 2 : Math.max(3, Math.min(8, Math.round(distKm * 1.4)));
-
-      const newOffer = {
-        id: 'off_' + nowMs.toString().slice(-5) + idx,
-        providerId: prov.id,
-        providerFinditId: prov.finditId,
-        providerName: prov.name,
-        providerShortName: prov.shortName || prov.name.split(' ')[0],
-        providerBrand: prov.brandName,
-        providerAvatar: prov.avatarInitials,
-        providerAvatarUrl: prov.avatarUrl || '',
-        providerSkillTier: prov.skillTier || 'Verified pro',
-        isPlatinum: Boolean(prov.isPlatinum),
-        providerExpYears: prov.experienceYears || 3,
-        providerRating: prov.rating,
-        providerReviewCount: prov.reviewCount,
-        providerCompletedJobs: prov.completedBookings,
-        providerBadges: prov.badges,
-        distanceKm: distKm,
-        etaMinutes: etaMins,
-        priceUsd: proposedUsd,
-        travelFeeUsd: 0,
-        bidType: isExactAccept ? 'ACCEPTED_PRICE' : 'COUNTER_BID',
-        proposedTime: `${etaMins} min`,
-        conditions: [
-          isExactAccept ? 'Your fare' : prov.skillTier,
-          prov.brandName
-        ],
-        status: 'PROPOSED',
-        lastCounterBy: 'PROVIDER',
-        createdAt: new Date(nowMs).toISOString(),
-        expiresAt: nowMs + 120 * 1000,
-        ttlSeconds: 120
-      };
-
-      currentReq.offers.push(newOffer);
-      saveDb(db);
-      broadcastUpdate('OFFER_SUBMITTED', {
-        requestId: currentReq.id,
-        offerId: newOffer.id,
-        providerName: prov.name,
-        priceUsd: proposedUsd,
-        bidType: newOffer.bidType
-      });
-    }, delay);
-
-    timers.push(timer);
-  });
-
-  staggeredBidTimers.set(requestId, timers);
 }
 
 function sendJson(res, statusCode, data) {
@@ -1193,7 +1158,7 @@ function sendJson(res, statusCode, data) {
     'Content-Type': 'application/json; charset=utf-8',
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type'
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-admin-token'
   });
   res.end(JSON.stringify(data));
 }
@@ -1307,6 +1272,47 @@ const server = http.createServer(async (req, res) => {
       wsApi: AGORA_WS_API,
       restApi: AGORA_REST_API
     });
+  }
+
+  // ============================================================================
+  // ADMIN AUTHENTICATION (ENCRYPTED / SALTED HASH PROTECTION)
+  // ============================================================================
+  if (pathname === '/api/admin/login' && req.method === 'POST') {
+    try {
+      const body = await parseBody(req);
+      const password = (body.password || '').trim();
+      if (!password) {
+        return sendJson(res, 400, { error: 'Admin password is required.' });
+      }
+      if (!verifyAdminPassword(password)) {
+        return sendJson(res, 401, { error: 'Incorrect Admin Password. Access Denied.' });
+      }
+      const token = crypto.randomBytes(32).toString('hex');
+      const expiresAt = Date.now() + 24 * 3600 * 1000; // 24 hours
+      activeAdminSessions.set(token, { createdAt: Date.now(), expiresAt });
+      return sendJson(res, 200, { success: true, token, expiresAt });
+    } catch (e) {
+      return sendJson(res, 500, { error: e.message });
+    }
+  }
+
+  if (pathname === '/api/admin/session' && req.method === 'GET') {
+    const isValid = validateAdminToken(req);
+    return sendJson(res, 200, { authenticated: isValid });
+  }
+
+  if (pathname === '/api/admin/logout' && req.method === 'POST') {
+    const authHeader = req.headers['authorization'] || '';
+    const token = authHeader.replace(/^Bearer\s+/i, '').trim() || req.headers['x-admin-token'] || '';
+    if (token) activeAdminSessions.delete(token);
+    return sendJson(res, 200, { success: true });
+  }
+
+  // Guard all Admin routes: Require valid session token
+  if (pathname.startsWith('/api/admin/') && pathname !== '/api/admin/login' && pathname !== '/api/admin/session') {
+    if (!validateAdminToken(req)) {
+      return sendJson(res, 401, { error: 'Unauthorized: Admin login required.' });
+    }
   }
 
   // Real-time Pending Verifications Feed for Admin
@@ -1651,6 +1657,67 @@ const server = http.createServer(async (req, res) => {
       }
     } catch (e) {
       return sendJson(res, 400, { error: e.message });
+    }
+  }
+
+  // Delete User Account (Permanently deletes from JSON database and Supabase PostgreSQL)
+  if (pathname === '/api/auth/delete-account' && req.method === 'POST') {
+    try {
+      db = loadDb();
+      const body = await parseBody(req);
+      const role = body.role || 'CUSTOMER';
+      const userId = body.userId;
+      const rawPhone = (body.phone || '').trim();
+      const phoneDigits = rawPhone.replace(/\D/g, '');
+
+      if (!userId && !phoneDigits) {
+        return sendJson(res, 400, { error: 'User identifier or phone is required to delete account.' });
+      }
+
+      // 1. Remove from JSON database
+      if (role === 'PROVIDER') {
+        db.providers = db.providers.filter((p) => p.id !== userId && p.phone.replace(/\D/g, '') !== phoneDigits);
+      } else {
+        db.customers = db.customers.filter((c) => c.id !== userId && c.phone.replace(/\D/g, '') !== phoneDigits);
+      }
+
+      // 2. Cancel and clean any open requests
+      db.requests.forEach((r) => {
+        if (r.customerId === userId || (r.customerPhone && r.customerPhone.replace(/\D/g, '') === phoneDigits)) {
+          if (r.status === 'OPEN') r.status = 'CANCELLED';
+        }
+      });
+
+      // 3. Remove pending verifications
+      if (db.pendingVerifications) {
+        db.pendingVerifications = db.pendingVerifications.filter((v) => v.phone?.replace(/\D/g, '') !== phoneDigits);
+      }
+
+      saveDb(db);
+      broadcastUpdate('ACCOUNT_DELETED', { userId, role, phone: rawPhone });
+
+      // 4. Delete from Supabase PostgreSQL database if connected
+      if (pgClient && phoneDigits.length >= 7) {
+        try {
+          const matchPattern = `%${phoneDigits.slice(-8)}%`;
+          if (role === 'PROVIDER') {
+            await pgClient.query('DELETE FROM public.providers WHERE phone LIKE $1', [matchPattern]);
+            await pgClient.query('DELETE FROM public.users WHERE phone LIKE $1', [matchPattern]);
+          } else {
+            await pgClient.query('DELETE FROM public.users WHERE phone LIKE $1', [matchPattern]);
+          }
+          console.log(`Supabase PostgreSQL: Account ${rawPhone} permanently deleted.`);
+        } catch (pgErr) {
+          console.warn('Supabase delete warning:', pgErr.message);
+        }
+      }
+
+      return sendJson(res, 200, {
+        success: true,
+        message: 'Your account and personal data have been permanently deleted from Findit Harare.'
+      });
+    } catch (e) {
+      return sendJson(res, 500, { error: e.message });
     }
   }
 
