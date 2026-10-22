@@ -1034,6 +1034,20 @@ function setupWebSocketServer(httpServer) {
     socket.on('error', () => wsClients.delete(client));
   });
   console.log('Real-Time WebSocket (native Node RFC 6455) initialized on /ws');
+
+  // Keep-alive heartbeat every 20 seconds so Render / Cloudflare / proxies never drop idle WebSockets
+  setInterval(() => {
+    const pingMsg = JSON.stringify({ eventType: 'PING', timestamp: new Date().toISOString() });
+    for (const client of wsClients) {
+      try {
+        if (typeof client.send === 'function') {
+          client.send(pingMsg);
+        }
+      } catch (e) {
+        wsClients.delete(client);
+      }
+    }
+  }, 20000);
 }
 
 function scheduleStaggeredProviderBids(requestId) {
@@ -2375,7 +2389,7 @@ const server = http.createServer(async (req, res) => {
         senderName: offer.providerName,
         providerId: offer.providerId,
         type: 'CHAT',
-        text: `Hi ${(reqItem.customerName || 'Client').split(' ')[0]}! I've packed my mobile kit and I'm on my way to ${reqItem.exactAddress} (~${offer.etaMinutes || 5} mins away). Message me here if there are any gate instructions.`,
+        text: `Hello! I have accepted your request and I'm heading your way with my equipment. Feel free to call or message me here.`,
         timestamp: new Date().toISOString()
       });
 

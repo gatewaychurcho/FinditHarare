@@ -4,6 +4,10 @@
 
 const SESSION_KEY = 'findit_harare_session_v3';
 
+const API_BASE = (typeof window !== 'undefined' && window.location.hostname.includes('vercel.app'))
+  ? 'https://finditharare.onrender.com'
+  : '';
+
 const state = {
   db: null,
   role: 'CUSTOMER', // 'CUSTOMER' | 'PROVIDER'
@@ -618,12 +622,12 @@ function initRealtimeSync() {
       if (!isUserTyping && state.activeModal !== 'SIGNUP_FLOW') {
         fetchState(false);
       }
-    }, 1500);
+    }, 1200);
   }
 }
 
 function handleIncomingRealtimeEvent(data) {
-  if (!data || data.eventType === 'CONNECTED') return;
+  if (!data || data.eventType === 'CONNECTED' || data.eventType === 'PING') return;
 
   // 1. CHAT MESSAGE SENT (Encrypted & private between customer and assigned provider only)
   if (data.eventType === 'MESSAGE_SENT' && data.payload) {
@@ -650,6 +654,7 @@ function handleIncomingRealtimeEvent(data) {
     const existingIdx = state.db.requests.findIndex((r) => r.id === req.id);
     if (existingIdx >= 0) state.db.requests[existingIdx] = req;
     else state.db.requests.unshift(req);
+    lastUiOverlaySignature = ''; // Invalidate signature cache so card appears without delay!
     if (state.role === 'PROVIDER' && 'vibrate' in navigator) {
       try { navigator.vibrate([120, 60, 120]); } catch (e) {}
     }
@@ -665,6 +670,7 @@ function handleIncomingRealtimeEvent(data) {
       if (reqIdx >= 0) state.db.requests[reqIdx] = request;
       else state.db.requests.unshift(request);
     }
+    lastUiOverlaySignature = ''; // Invalidate signature cache!
     const currentActive = getCustomerActiveRequest();
     if (state.role === 'CUSTOMER' && currentActive && currentActive.id === requestId && 'vibrate' in navigator) {
       try { navigator.vibrate([150, 70, 150]); } catch (e) {}
@@ -680,6 +686,7 @@ function handleIncomingRealtimeEvent(data) {
       const idx = state.db.requests.findIndex((r) => r.id === requestId);
       if (idx >= 0) state.db.requests[idx] = request;
     }
+    lastUiOverlaySignature = ''; // Invalidate signature cache so accepted request card vanishes for all other providers!
     if (state.role === 'PROVIDER') {
       if (state.currentUser?.id === acceptedProviderId) {
         state.providerTab = 'ACTIVE_JOB';
@@ -705,6 +712,7 @@ function handleIncomingRealtimeEvent(data) {
       const idx = state.db.requests.findIndex((r) => r.id === requestId);
       if (idx >= 0) state.db.requests[idx] = request;
     }
+    lastUiOverlaySignature = '';
     if (state.role === 'CUSTOMER') {
       startArrivalVibrationAlert(request);
       showToast(`Specialist is waiting outside! Please share your Start PIN #${request.startPinCode}.`, 'info');
@@ -720,6 +728,7 @@ function handleIncomingRealtimeEvent(data) {
       const idx = state.db.requests.findIndex((r) => r.id === data.payload.requestId);
       if (idx >= 0) state.db.requests[idx] = data.payload.request;
     }
+    lastUiOverlaySignature = '';
     showToast(`Start PIN verified! Service is now in progress.`);
     renderAll();
     return;
@@ -732,6 +741,7 @@ function handleIncomingRealtimeEvent(data) {
       const idx = state.db.requests.findIndex((r) => r.id === data.payload.requestId);
       if (idx >= 0) state.db.requests[idx] = data.payload.request;
     }
+    lastUiOverlaySignature = '';
     if (state.role === 'CUSTOMER') {
       state.screenStep = 'HOME';
       state.activeRequestId = null;
@@ -748,7 +758,11 @@ function handleIncomingRealtimeEvent(data) {
   // 8. REAL-TIME CALL INCOMING (Signaling to recipient)
   if (data.eventType === 'CALL_INCOMING' && data.payload) {
     const { callerId, callerName, recipientId, contextTitle, channelId, requestId } = data.payload;
-    if (state.currentUser?.id && recipientId === state.currentUser.id) {
+    const isTargetRecipient = (state.currentUser?.id && String(recipientId) === String(state.currentUser.id)) ||
+      (state.role === 'CUSTOMER' && state.activeRequestId === requestId) ||
+      (state.role === 'PROVIDER' && getProviderActiveBooking(state.currentUser?.id)?.id === requestId);
+
+    if (isTargetRecipient && (!state.currentUser?.id || String(callerId) !== String(state.currentUser.id))) {
       state.incomingCall = {
         callerId,
         callerName,
@@ -826,6 +840,7 @@ function connectWebSocket() {
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
+        if (data.eventType === 'PING') return;
         handleIncomingRealtimeEvent(data);
       } catch (e) {}
     };
@@ -844,7 +859,7 @@ function connectWebSocket() {
         realtimeReconnectTimer = setTimeout(() => {
           realtimeReconnectTimer = null;
           connectWebSocket();
-        }, 3000);
+        }, 1500);
       }
     };
   } catch (e) {
@@ -859,7 +874,8 @@ function connectRealtimeStream() {
   }
 
   try {
-    const es = new EventSource('/api/stream');
+    const sseBase = (typeof API_BASE !== 'undefined' && API_BASE) ? API_BASE : '';
+    const es = new EventSource(`${sseBase}/api/stream`);
     realtimeEventSource = es;
 
     es.onmessage = (event) => {
@@ -1034,10 +1050,6 @@ async function tickCountdowns() {
     await fetchState();
   }
 }
-
-const API_BASE = (typeof window !== 'undefined' && window.location.hostname.includes('vercel.app'))
-  ? 'https://finditharare.onrender.com'
-  : '';
 
 async function apiGet(url) {
   const target = url.startsWith('http') ? url : (API_BASE + url);
@@ -1694,6 +1706,12 @@ function renderUiOverlay(force = false) {
   }
 
   const activeReq = state.role === 'CUSTOMER' ? getCustomerActiveRequest() : null;
+  const provRequestsSig = state.role === 'PROVIDER'
+    ? (state.db?.requests || []).map((r) => `${r.id}:${r.status}:${r.acceptedProviderId || ''}:${(r.offers || []).length}`).join(';')
+    : '';
+  const provActiveJob = state.role === 'PROVIDER' ? getProviderActiveBooking(state.currentUser?.id) : null;
+  const provActiveJobSig = provActiveJob ? `${provActiveJob.id}:${provActiveJob.status}:${provActiveJob.pinVerifiedByProvider}:${(provActiveJob.messages || []).length}` : 'NO_JOB';
+
   const overlaySig = [
     state.role,
     state.screenStep,
@@ -1706,7 +1724,9 @@ function renderUiOverlay(force = false) {
     state.currentUser?.id,
     state.currentUser?.walletBalanceUsd,
     state.currentUser?.activeWarnings?.length || 0,
-    activeReq ? `${activeReq.id}:${activeReq.status}:${activeReq.budgetUsd}:${activeReq.startPinVerified}` : 'NO_REQ'
+    activeReq ? `${activeReq.id}:${activeReq.status}:${activeReq.budgetUsd}:${activeReq.startPinVerified}` : 'NO_REQ',
+    provRequestsSig,
+    provActiveJobSig
   ].join('|');
 
   if (!force && overlaySig === lastUiOverlaySignature) {
@@ -2407,21 +2427,55 @@ function renderBookedTrackingOverlay(req) {
           </button>
         </div>
 
-        ${req.status === 'ARRIVED' ? `
-          <div class="pulsating-arrival-banner">
-            <div style="display:flex; align-items:center; gap:10px;">
-              <span style="font-size:22px; line-height:1;">🚨</span>
-              <div style="flex:1; min-width:0;">
-                <div style="font-size:14px; font-weight:800; color:#DC2626;">${prov?.name || 'Your specialist'} is waiting outside!</div>
-                <div style="font-size:12px; color:#991B1B; margin-top:2px;">Phone will alert until you share Start PIN <strong>#${req.startPinCode || '4829'}</strong></div>
+        ${(() => {
+          const distMeters = calculateDistanceMeters(prov?.lat, prov?.lng, req.lat, req.lng);
+          const isWithin20m = distMeters <= 20 || req.status === 'ARRIVED';
+          const proximitySec = (state.bookingProximitySeconds && state.bookingProximitySeconds[req.id]) || 0;
+          const autoPairRemaining = Math.max(0, 60 - proximitySec);
+
+          if (req.status === 'ARRIVED') {
+            return `
+              <div class="pulsating-arrival-banner" style="background:#FEF2F2; border:1.5px solid #FCA5A5; border-radius:14px; padding:12px 14px; margin-bottom:12px; display:flex; align-items:center; justify-content:space-between; gap:12px;">
+                <div style="flex:1; min-width:0;">
+                  <div style="font-size:11.5px; font-weight:800; color:#DC2626; text-transform:uppercase; letter-spacing:0.04em; display:flex; align-items:center; gap:5px; margin-bottom:3px;">
+                    <span style="width:7px; height:7px; border-radius:50%; background:#EF4444; display:inline-block;"></span>
+                    <span>${prov?.shortName || prov?.name || 'Specialist'} is Waiting Outside</span>
+                  </div>
+                  <div style="font-size:12px; color:#991B1B;">
+                    Share this Start PIN with your specialist to begin:
+                  </div>
+                  ${isWithin20m ? `
+                    <div style="font-size:11px; font-weight:700; color:#059669; margin-top:4px; display:flex; align-items:center; gap:4px;">
+                      <span style="width:5px; height:5px; border-radius:50%; background:#10B981;"></span>
+                      <span>Within 20m • Auto-pairs in <span class="proximity-autopair-timer">${autoPairRemaining}s</span></span>
+                    </div>
+                  ` : ''}
+                </div>
+                <div style="background:#FFFFFF; border:2px solid #EF4444; border-radius:12px; padding:6px 14px; text-align:center; box-shadow:0 2px 8px rgba(239,68,68,0.15); flex-shrink:0;">
+                  <div style="font-size:9.5px; font-weight:800; color:#DC2626; letter-spacing:0.05em;">START PIN</div>
+                  <div style="font-size:18px; font-weight:900; color:#DC2626; letter-spacing:2px; line-height:1.2;">#${req.startPinCode || '4829'}</div>
+                </div>
               </div>
-            </div>
-          </div>
-        ` : ''}
+            `;
+          }
+
+          if (distMeters <= 50 && req.status !== 'IN_PROGRESS') {
+            return `
+              <div style="background:#EFF6FF; border:1px solid #BFDBFE; border-radius:12px; padding:9px 12px; margin-bottom:12px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
+                <div style="font-size:12px; font-weight:700; color:#1E40AF; display:flex; align-items:center; gap:6px;">
+                  <span style="color:#2563EB;">${uiIcon('pin', 14)}</span>
+                  <span>Specialist approaching (~${distMeters}m away)</span>
+                </div>
+                <div style="font-size:12px; font-weight:800; color:#2563EB;">PIN #${req.startPinCode || '4829'}</div>
+              </div>
+            `;
+          }
+          return '';
+        })()}
 
         <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:12px;">
           <div>
-            <div style="font-size:16.5px; font-weight:800; color:var(--text-main); display:flex; align-items:center; gap:7px;">
+            <div style="font-size:16px; font-weight:800; color:var(--text-main); display:flex; align-items:center; gap:7px;">
               <span style="color:var(--blue-primary); display:inline-flex;">${statusIcon}</span>
               <span>${statusHeadline}</span>
             </div>
@@ -2429,10 +2483,12 @@ function renderBookedTrackingOverlay(req) {
               ${req.title} • <strong style="color:var(--blue-primary);">${formatUsdPrice(agreedPrice)}</strong> (${req.paymentMethod})
             </div>
           </div>
-          <div style="background:var(--blue-soft); border:1.5px solid var(--blue-border); padding:6px 12px; border-radius:12px; text-align:center; flex-shrink:0;">
-            <div style="font-size:9.5px; color:var(--blue-primary); font-weight:800;">START PIN</div>
-            <div style="font-size:16.5px; font-weight:800; color:var(--blue-primary); letter-spacing:2px;">${req.startPinCode || '4829'}</div>
-          </div>
+          ${req.status !== 'ARRIVED' ? `
+            <div style="background:var(--blue-soft); border:1.5px solid var(--blue-border); padding:6px 12px; border-radius:12px; text-align:center; flex-shrink:0;">
+              <div style="font-size:9.5px; color:var(--blue-primary); font-weight:800;">START PIN</div>
+              <div style="font-size:16.5px; font-weight:800; color:var(--blue-primary); letter-spacing:2px;">${req.startPinCode || '4829'}</div>
+            </div>
+          ` : ''}
         </div>
 
         ${req.photoUrl ? `
@@ -2444,38 +2500,6 @@ function renderBookedTrackingOverlay(req) {
             </div>
           </div>
         ` : ''}
-
-        <!-- Geofence 50m Alert & 20m Auto-Pair Status -->
-        ${(() => {
-          const distMeters = calculateDistanceMeters(prov?.lat, prov?.lng, req.lat, req.lng);
-          const isWithin50m = distMeters <= 50 || req.status === 'ARRIVED';
-          const isWithin20m = distMeters <= 20 || req.status === 'ARRIVED';
-          const proximitySec = (state.bookingProximitySeconds && state.bookingProximitySeconds[req.id]) || 0;
-          const autoPairRemaining = Math.max(0, 60 - proximitySec);
-
-          if (!isWithin50m || req.status === 'IN_PROGRESS') return '';
-          return `
-            <div style="background:#EFF6FF; border:1.5px solid #93C5FD; border-radius:13px; padding:10px 12px; margin-bottom:12px; display:flex; align-items:flex-start; gap:9px;">
-              <div style="width:30px; height:30px; border-radius:50%; background:#0066FF; color:#fff; display:flex; align-items:center; justify-content:center; flex-shrink:0; margin-top:1px;">
-                ${uiIcon('pin', 15)}
-              </div>
-              <div style="flex:1; min-width:0;">
-                <div style="font-size:12.5px; font-weight:800; color:#1E40AF;">
-                  ${req.status === 'ARRIVED' ? 'Provider is outside your gate!' : `Provider is within 50m (${distMeters}m away)!`}
-                </div>
-                <div style="font-size:12px; color:#1E3A8A; margin-top:2px;">
-                  Please share your 4-digit Start PIN: <strong style="font-size:13.5px; color:#0066FF; letter-spacing:1px;">#${req.startPinCode || '4829'}</strong> with ${prov?.shortName || 'your provider'}.
-                </div>
-                ${isWithin20m ? `
-                  <div style="font-size:11px; font-weight:700; color:#059669; margin-top:5px; display:flex; align-items:center; gap:5px;">
-                    <span style="width:6px; height:6px; border-radius:50%; background:#10B981; display:inline-block;"></span>
-                    <span>Within 20m • Auto-pairing in <span class="proximity-autopair-timer">${autoPairRemaining}s</span> if PIN not entered</span>
-                  </div>
-                ` : ''}
-              </div>
-            </div>
-          `;
-        })()}
 
         <!-- Accepted Service Provider Card -->
         <div class="indrive-selected-tier-box" style="margin-bottom:12px; padding:11px 13px;">
@@ -4641,51 +4665,52 @@ function renderProviderActiveVisitTab(prov, activeJob) {
           </div>
         ` : ''}
 
-        <!-- Step-by-Step Provider Execution Controls -->
-        ${isEnRoute ? `
-          <button class="btn-primary-blue" style="height:44px; font-size:14px;" onclick="providerMarkArrived('${activeJob.id}')">
-            ${uiIcon('pin', 16)}
-            <span>I'm Waiting Outside</span>
-          </button>
-        ` : ''}
-
-        ${(() => {
+        <!-- Compact Provider Execution Bar (Outside Gate & PIN Entry) -->
+        ${!isInProgress ? (() => {
           const provUser = state.currentUser || state.db.providers[0];
           const distMeters = calculateDistanceMeters(provUser?.lat, provUser?.lng, activeJob.lat, activeJob.lng);
-          const isWithin50m = distMeters <= 50 || isArrived;
           const isWithin20m = distMeters <= 20 || isArrived;
           const proximitySec = (state.bookingProximitySeconds && state.bookingProximitySeconds[activeJob.id]) || 0;
           const autoPairRemaining = Math.max(0, 60 - proximitySec);
 
-          if ((!isArrived && !isWithin50m) || isInProgress) return '';
           return `
-            <div style="background:#FFFBEB; border:1.5px solid #FDE68A; border-radius:13px; padding:11px 13px; margin-bottom:10px;">
-              <div style="font-size:12px; font-weight:800; color:#B45309; margin-bottom:7px; display:flex; align-items:center; gap:6px;">
-                <span style="color:#D97706; display:inline-flex;">${uiIcon('shield', 14)}</span>
-                <span>You are within 50m of ${activeJob.customerName.split(' ')[0]}! Ask client for their 4-digit Start PIN:</span>
+            <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px; padding:7px 9px; margin-bottom:10px;">
+              <div style="display:flex; align-items:center; gap:8px;">
+                ${isEnRoute ? `
+                  <button class="btn-primary-blue" style="height:36px; font-size:12px; font-weight:700; padding:0 12px; white-space:nowrap; flex-shrink:0; border-radius:8px;" onclick="providerMarkArrived('${activeJob.id}')">
+                    ${uiIcon('pin', 13)}
+                    <span>I'm Outside</span>
+                  </button>
+                ` : `
+                  <div style="height:36px; padding:0 10px; background:#FEF3C7; border:1px solid #FCD34D; border-radius:8px; display:flex; align-items:center; gap:5px; font-size:11.5px; font-weight:800; color:#B45309; white-space:nowrap; flex-shrink:0;">
+                    <span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:#F59E0B;"></span>
+                    <span>Outside Gate</span>
+                  </div>
+                `}
+
+                <div style="flex:1; display:flex; gap:6px; min-width:0;">
+                  <input
+                    id="providerPinInput_${activeJob.id}"
+                    class="dark-input"
+                    style="height:36px; font-size:14px; font-weight:800; letter-spacing:2px; text-align:center; padding:0 6px; flex:1; min-width:60px;"
+                    placeholder="Enter PIN"
+                    maxlength="4"
+                  />
+                  <button class="btn-primary-blue" style="height:36px; font-size:12px; font-weight:800; padding:0 12px; white-space:nowrap; border-radius:8px;" onclick="providerVerifyStartPin('${activeJob.id}')">
+                    <span>Verify</span>
+                  </button>
+                </div>
               </div>
-              <div style="display:flex; gap:8px;">
-                <input
-                  id="providerPinInput_${activeJob.id}"
-                  class="dark-input"
-                  style="font-size:16px; font-weight:800; letter-spacing:4px; text-align:center;"
-                  placeholder="• • • •"
-                  maxlength="4"
-                />
-                <button class="btn-primary-blue" style="height:42px; font-size:13px; padding:0 16px;" onclick="providerVerifyStartPin('${activeJob.id}')">
-                  ${uiIcon('key', 15)}
-                  <span>Verify &amp; Start</span>
-                </button>
-              </div>
+
               ${isWithin20m ? `
-                <div style="font-size:11.5px; font-weight:700; color:#059669; margin-top:7px; display:flex; align-items:center; gap:5px;">
-                  <span style="width:6px; height:6px; border-radius:50%; background:#10B981; display:inline-block;"></span>
-                  <span>Within 20m of client • Auto-pairing in <span class="proximity-autopair-timer">${autoPairRemaining}s</span> if PIN not entered</span>
+                <div style="font-size:10.5px; font-weight:700; color:#059669; margin-top:5px; display:flex; align-items:center; gap:4px;">
+                  <span style="width:5px; height:5px; border-radius:50%; background:#10B981;"></span>
+                  <span>Within 20m • Auto-pairs in <span class="proximity-autopair-timer">${autoPairRemaining}s</span> if PIN not entered</span>
                 </div>
               ` : ''}
             </div>
           `;
-        })()}
+        })() : ''}
 
         ${isInProgress ? `
           <button class="btn-primary-blue" style="height:44px; font-size:14px; background:#10B981;" onclick="openRateBookingModal('${activeJob.id}')">
@@ -5789,7 +5814,12 @@ async function joinAgoraVoiceChannel(channelId) {
         console.warn('Agora token generation note:', tokenErr.message);
       }
       await agoraClient.join(appId, cleanChannel, rtcToken, 0);
-      localAudioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+      localAudioTrack = await AgoraRTC.createMicrophoneAudioTrack({
+        AEC: true,               // WebRTC Acoustic Echo Cancellation
+        ANS: true,               // WebRTC Automatic Noise Suppression
+        AGC: true,               // WebRTC Automatic Gain Control
+        encoderConfig: 'speech_standard' // 32kbps mono crystal-clear voice without distortion
+      });
       await agoraClient.publish([localAudioTrack]);
     }
   } catch (err) {
