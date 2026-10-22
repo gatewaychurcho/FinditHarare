@@ -2486,3 +2486,219 @@ html, body {
   border-radius: 12px;
   margin-bottom: 6px;
 }
+
+/* Instagram Direct Calling Styling */
+.instagram-call-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  background: radial-gradient(circle at 50% 30%, #1e293b 0%, #0f172a 100%);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 24px 20px 40px;
+  color: #FFFFFF;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.ig-call-top-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: env(safe-area-inset-top, 12px);
+}
+
+.ig-call-icon-btn {
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  color: #FFFFFF;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.ig-call-header-info {
+  text-align: center;
+}
+
+.ig-call-title {
+  font-size: 15px;
+  font-weight: 800;
+  color: #FFFFFF;
+}
+
+.ig-call-encrypted-tag {
+  font-size: 11px;
+  color: #94A3B8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.ig-call-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin: auto 0;
+}
+
+.ig-call-avatar-wrap {
+  position: relative;
+  width: 124px;
+  height: 124px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+.ig-call-avatar {
+  width: 108px;
+  height: 108px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3.5px solid #0066FF;
+  box-shadow: 0 10px 30px rgba(0, 102, 255, 0.4);
+  position: relative;
+  z-index: 2;
+}
+
+.ig-call-ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 2px solid rgba(0, 102, 255, 0.6);
+  pointer-events: none;
+}
+
+.ig-call-ring.ring-1 {
+  inset: -10px;
+  animation: igAcousticWave 2s infinite ease-out;
+}
+
+.ig-call-ring.ring-2 {
+  inset: -22px;
+  animation: igAcousticWave 2s infinite ease-out 0.6s;
+}
+
+@keyframes igAcousticWave {
+  0% { transform: scale(0.9); opacity: 0.9; }
+  100% { transform: scale(1.35); opacity: 0; }
+}
+
+.ig-call-peer-name {
+  font-size: 24px;
+  font-weight: 800;
+  color: #FFFFFF;
+  letter-spacing: -0.02em;
+}
+
+.ig-call-peer-context {
+  font-size: 13.5px;
+  color: #94A3B8;
+  margin-top: 4px;
+}
+
+.ig-call-timer {
+  font-size: 18px;
+  font-weight: 700;
+  color: #38BDF8;
+  margin-top: 14px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.05em;
+}
+
+.ig-call-bottom-dock {
+  background: rgba(15, 23, 42, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 36px;
+  padding: 12px 18px;
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  gap: 12px;
+  max-width: 380px;
+  margin: 0 auto;
+  width: 100%;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+}
+
+.ig-dock-btn {
+  background: none;
+  border: none;
+  color: #FFFFFF;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  transition: all 0.2s;
+  padding: 6px 10px;
+  border-radius: 14px;
+}
+
+.ig-dock-btn.muted {
+  color: #EF4444;
+}
+
+.ig-dock-btn.hangup {
+  background: #EF4444;
+  color: #FFFFFF;
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  padding: 0;
+  justify-content: center;
+  box-shadow: 0 6px 20px rgba(239, 68, 68, 0.5);
+  transform: rotate(135deg);
+}
+
+.ig-dock-btn.hangup span {
+  display: none;
+}
+
+/* Style reference photo attached card */
+.style-photo-preview-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--blue-soft);
+  border: 1.5px solid var(--blue-border);
+  border-radius: 14px;
+  padding: 8px 12px;
+  margin-top: 8px;
+}
+
+.style-photo-thumb {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  object-fit: cover;
+  border: 1px solid var(--blue-border);
+}
+
+/* Pulsating Waiting Outside Banner */
+.pulsating-arrival-banner {
+  background: #FEF2F2;
+  border: 2px solid #EF4444;
+  border-radius: 16px;
+  padding: 14px;
+  margin-bottom: 12px;
+  animation: pulseArrivalGlow 1.8s infinite ease-in-out;
+}
+
+@keyframes pulseArrivalGlow {
+  0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5); }
+  70% { box-shadow: 0 0 0 12px rgba(239, 68, 68, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}

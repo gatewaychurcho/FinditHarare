@@ -29,6 +29,7 @@ const state = {
   draftPaymentMethod: 'Cash USD',
   draftAutoAccept: false,
   draftNotes: '',
+  draftPhotoUrl: null,
   notesLeakageWarning: '',
 
   // Active searching fare stepper (-0.50 / +0.50)
@@ -159,6 +160,51 @@ function toggleOffersMinimize(forceVal) {
     state.isOffersMinimized = !state.isOffersMinimized;
   }
   renderFloatingOffersOverlay();
+}
+
+function formatProRatingAndJobs(rating, completedBookings) {
+  const jobs = Number(completedBookings || 0);
+  const stars = Number(rating || 0);
+  if (jobs === 0 || stars === 0) {
+    return `<span class="new-pro-badge" style="display:inline-flex; align-items:center; gap:4px; font-size:11.5px; font-weight:700; color:#D97706; background:#FEF3C7; border:1px solid #FCD34D; padding:2px 7px; border-radius:7px;">
+      <span style="display:inline-flex;">${uiIcon('star', 12)}</span>
+      <span>New (0 jobs)</span>
+    </span>`;
+  }
+  return `<span style="display:inline-flex; align-items:center; gap:3px; font-size:12px; font-weight:800; color:var(--text-main);">
+    ${uiIcon('star', 13)}
+    <span>${stars.toFixed(1)}</span>
+    <span class="offer-pro-jobs" style="color:var(--text-secondary); font-weight:600; margin-left:2px;">(${jobs} job${jobs > 1 ? 's' : ''})</span>
+  </span>`;
+}
+
+let arrivalVibrateInterval = null;
+
+function startArrivalVibrationAlert(req) {
+  if (arrivalVibrateInterval) return;
+  if ('vibrate' in navigator) {
+    try { navigator.vibrate([500, 200, 500, 200, 800]); } catch (e) {}
+  }
+  arrivalVibrateInterval = setInterval(() => {
+    const activeReq = getCustomerActiveRequest();
+    if (!activeReq || activeReq.status !== 'ARRIVED' || activeReq.pinVerifiedByProvider) {
+      stopArrivalVibrationAlert();
+      return;
+    }
+    if ('vibrate' in navigator) {
+      try { navigator.vibrate([500, 200, 500, 200, 800]); } catch (e) {}
+    }
+  }, 2400);
+}
+
+function stopArrivalVibrationAlert() {
+  if (arrivalVibrateInterval) {
+    clearInterval(arrivalVibrateInterval);
+    arrivalVibrateInterval = null;
+  }
+  if ('vibrate' in navigator) {
+    try { navigator.vibrate(0); } catch (e) {}
+  }
 }
 
 let leafletMap = null;
@@ -298,7 +344,38 @@ document.addEventListener('DOMContentLoaded', async () => {
   useBrowserGeolocation(true);
   initRealtimeSync();
   startOfferCountdownLoop();
+
+  // Mobile & Android Hardware Back Button Handler: Exit modals/steps smoothly rather than leaving app
+  window.addEventListener('popstate', () => {
+    if (state.activeCall) {
+      endInAppCall();
+      return;
+    }
+    if (state.chatDrawerOpen) {
+      closeChatDrawer();
+      return;
+    }
+    if (state.activeModal) {
+      closeModal();
+      return;
+    }
+    if (state.screenStep === 'CONFIGURE') {
+      state.screenStep = 'HOME';
+      renderAll();
+      return;
+    }
+    if (state.isOffersMinimized) {
+      toggleOffersMinimize(false);
+      return;
+    }
+  });
 });
+
+function pushNavState(label) {
+  try {
+    window.history.pushState({ step: label, ts: Date.now() }, '');
+  } catch (e) {}
+}
 
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
@@ -490,6 +567,7 @@ function initRealtimeSync() {
 function handleIncomingRealtimeEvent(data) {
   if (!data || data.eventType === 'CONNECTED') return;
 
+  // 1. CHAT MESSAGE SENT
   if (data.eventType === 'MESSAGE_SENT' && data.payload) {
     const { requestId, message } = data.payload;
     const targetReq = (state.db?.requests || []).find((r) => r.id === requestId);
@@ -502,7 +580,117 @@ function handleIncomingRealtimeEvent(data) {
     }
   }
 
-  // If user is currently typing in an input or on sign up flow, never interrupt their screen!
+  // 2. NEW REQUEST CREATED (Instant delivery to providers via WebSocket)
+  if (data.eventType === 'REQUEST_CREATED' && data.payload?.request) {
+    const req = data.payload.request;
+    if (!state.db) state.db = {};
+    if (!Array.isArray(state.db.requests)) state.db.requests = [];
+    const existingIdx = state.db.requests.findIndex((r) => r.id === req.id);
+    if (existingIdx >= 0) state.db.requests[existingIdx] = req;
+    else state.db.requests.unshift(req);
+    if (state.role === 'PROVIDER') {
+      showToast(`New Job: ${req.title} (${req.suburbName}) • $${req.budgetUsd}`);
+      if ('vibrate' in navigator) {
+        try { navigator.vibrate([120, 60, 120]); } catch (e) {}
+      }
+    }
+    renderAll();
+    return;
+  }
+
+  // 3. PROVIDER SUBMITTED AN OFFER (Instant delivery to client via WebSocket)
+  if (data.eventType === 'OFFER_SUBMITTED' && data.payload?.offer) {
+    const { requestId, offer, request } = data.payload;
+    if (request && state.db?.requests) {
+      const reqIdx = state.db.requests.findIndex((r) => r.id === requestId);
+      if (reqIdx >= 0) state.db.requests[reqIdx] = request;
+      else state.db.requests.unshift(request);
+    }
+    const currentActive = getCustomerActiveRequest();
+    if (state.role === 'CUSTOMER' && currentActive && currentActive.id === requestId) {
+      showToast(`Offer from ${offer.providerName}: $${offer.priceUsd}`);
+      if ('vibrate' in navigator) {
+        try { navigator.vibrate([150, 70, 150]); } catch (e) {}
+      }
+    }
+    renderAll();
+    return;
+  }
+
+  // 4. BOOKING CONFIRMED (Accepted offer: disappears for other providers, locks in for accepted provider & client)
+  if (data.eventType === 'BOOKING_CONFIRMED' && data.payload?.request) {
+    const { requestId, acceptedProviderId, request } = data.payload;
+    if (state.db?.requests) {
+      const idx = state.db.requests.findIndex((r) => r.id === requestId);
+      if (idx >= 0) state.db.requests[idx] = request;
+    }
+    if (state.role === 'PROVIDER') {
+      if (state.currentUser?.id === acceptedProviderId) {
+        state.providerTab = 'ACTIVE_JOB';
+        showToast(`Offer accepted by ${request.customerName}! Route active.`);
+        if ('vibrate' in navigator) {
+          try { navigator.vibrate([200, 100, 200]); } catch (e) {}
+        }
+      } else {
+        // Another provider took the job! It vanishes from this provider's feed immediately!
+        showToast(`Job "${request.title}" was accepted by another specialist.`);
+      }
+    }
+    if (state.role === 'CUSTOMER') {
+      state.screenStep = 'BOOKED';
+    }
+    renderAll();
+    return;
+  }
+
+  // 5. PROVIDER ARRIVED OUTSIDE GATE (Triggers persistent vibration on client phone!)
+  if (data.eventType === 'PROVIDER_ARRIVED' && data.payload?.request) {
+    const { requestId, request } = data.payload;
+    if (state.db?.requests) {
+      const idx = state.db.requests.findIndex((r) => r.id === requestId);
+      if (idx >= 0) state.db.requests[idx] = request;
+    }
+    if (state.role === 'CUSTOMER') {
+      startArrivalVibrationAlert(request);
+      showToast(`Specialist is waiting outside! Please share your Start PIN #${request.startPinCode}.`, 'info');
+    }
+    renderAll();
+    return;
+  }
+
+  // 6. START PIN VERIFIED (Task Started - Stop vibration!)
+  if (data.eventType === 'PIN_VERIFIED') {
+    stopArrivalVibrationAlert();
+    if (data.payload?.request && state.db?.requests) {
+      const idx = state.db.requests.findIndex((r) => r.id === data.payload.requestId);
+      if (idx >= 0) state.db.requests[idx] = data.payload.request;
+    }
+    showToast(`Start PIN verified! Service is now in progress.`);
+    renderAll();
+    return;
+  }
+
+  // 7. TASK CANCELLED (By user or provider)
+  if (data.eventType === 'TASK_CANCELLED') {
+    stopArrivalVibrationAlert();
+    if (data.payload?.request && state.db?.requests) {
+      const idx = state.db.requests.findIndex((r) => r.id === data.payload.requestId);
+      if (idx >= 0) state.db.requests[idx] = data.payload.request;
+    }
+    if (state.role === 'CUSTOMER') {
+      state.screenStep = 'HOME';
+      state.activeRequestId = null;
+      state.pendingSearchFareUsd = null;
+    }
+    if (state.role === 'PROVIDER') {
+      state.providerTab = 'FEED';
+    }
+    showToast(data.payload?.reason ? `Booking cancelled: ${data.payload.reason}` : `Booking was cancelled.`);
+    renderAll();
+    return;
+  }
+
+  // If user is currently typing in an input, don't interrupt them
   const activeEl = document.activeElement;
   const isUserTyping = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT');
   if (state.activeModal === 'SIGNUP_FLOW' || isUserTyping) {
@@ -510,13 +698,6 @@ function handleIncomingRealtimeEvent(data) {
   }
 
   fetchState();
-
-  if (data.eventType === 'TASK_CANCELLED' && state.role === 'CUSTOMER') {
-    state.screenStep = 'HOME';
-    state.activeRequestId = null;
-    state.pendingSearchFareUsd = null;
-    renderAll();
-  }
 }
 
 function connectWebSocket() {
@@ -1318,8 +1499,7 @@ function renderFloatingOffersOverlay(force = false) {
             <div class="offer-pro-details">
               <div class="offer-pro-name-line">
                 <span>${shortName}</span>
-                <span style="display:inline-flex; align-items:center; gap:3px;">${uiIcon('star', 13)} ${offer.providerRating || 4.9}</span>
-                <span class="offer-pro-jobs">${jobsCount} jobs</span>
+                ${formatProRatingAndJobs(offer.providerRating || prov?.rating, offer.providerCompletedJobs || prov?.completedBookings)}
               </div>
               <div class="offer-pro-kit-line">${offer.providerBrand || req.title}</div>
               ${isPlatinum ? `<div class="offer-pro-platinum-line">Platinum pro</div>` : ''}
@@ -1816,6 +1996,28 @@ function renderConfigureFareOverlay() {
             </div>
           </div>
 
+          <!-- Style Reference Photo Upload (1 photo of hairstyle, nails, fade) -->
+          <div style="margin-bottom:12px;">
+            <input type="file" id="stylePhotoInput" accept="image/*" style="display:none;" onchange="handleDraftStylePhotoUpload(this)" />
+            ${state.draftPhotoUrl ? `
+              <div class="style-photo-preview-wrap">
+                <img src="${state.draftPhotoUrl}" class="style-photo-thumb" onclick="openImagePreviewModal('${state.draftPhotoUrl}', 'Desired Style Photo')" alt="Style Photo" />
+                <div style="flex:1; min-width:0;">
+                  <div style="font-size:12px; font-weight:800; color:var(--blue-primary);">1 Style Reference Photo Attached</div>
+                  <div style="font-size:11px; color:var(--text-secondary); cursor:pointer;" onclick="openImagePreviewModal('${state.draftPhotoUrl}', 'Desired Style Photo')">Tap thumbnail to view full size</div>
+                </div>
+                <button type="button" class="small-pill-btn" style="color:var(--danger-red); border-color:rgba(239,68,68,0.3); background:#FFF5F5;" onclick="removeDraftStylePhoto()">
+                  Remove
+                </button>
+              </div>
+            ` : `
+              <button type="button" class="btn-dark-sec" style="width:100%; height:40px; font-size:12px; justify-content:center; gap:7px; border-style:dashed;" onclick="document.getElementById('stylePhotoInput').click()">
+                <span style="color:var(--blue-primary); display:inline-flex;">${uiIcon('camera', 16)}</span>
+                <span>Attach 1 Photo of Desired Style (Hairstyle, Nails, Fade)</span>
+              </button>
+            `}
+          </div>
+
           <div class="indrive-find-footer-row">
             <button class="footer-icon-btn" onclick="openPaymentModal()" title="Payment Method (${state.draftPaymentMethod})">
               ${uiIcon('wallet', 20)}
@@ -2016,7 +2218,7 @@ function renderBookedTrackingOverlay(req) {
   let statusHeadline = `${prov?.shortName || prov?.name || 'Pro'} is arriving in ~${acceptedOffer?.etaMinutes || 4} min`;
   if (req.status === 'ARRIVED') {
     statusIcon = uiIcon('pin', 18);
-    statusHeadline = `${prov?.shortName || prov?.name} has arrived at your gate!`;
+    statusHeadline = `${prov?.shortName || prov?.name} is waiting outside!`;
   } else if (req.status === 'IN_PROGRESS' || req.pinVerifiedByProvider) {
     statusIcon = uiIcon('sparkle', 18);
     statusHeadline = `Service in progress at your home`;
@@ -2071,6 +2273,18 @@ function renderBookedTrackingOverlay(req) {
           </button>
         </div>
 
+        ${req.status === 'ARRIVED' ? `
+          <div class="pulsating-arrival-banner">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <span style="font-size:22px; line-height:1;">🚨</span>
+              <div style="flex:1; min-width:0;">
+                <div style="font-size:14px; font-weight:800; color:#DC2626;">${prov?.name || 'Your specialist'} is waiting outside!</div>
+                <div style="font-size:12px; color:#991B1B; margin-top:2px;">Phone will alert until you share Start PIN <strong>#${req.startPinCode || '4829'}</strong></div>
+              </div>
+            </div>
+          </div>
+        ` : ''}
+
         <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:12px;">
           <div>
             <div style="font-size:16.5px; font-weight:800; color:var(--text-main); display:flex; align-items:center; gap:7px;">
@@ -2086,6 +2300,16 @@ function renderBookedTrackingOverlay(req) {
             <div style="font-size:16.5px; font-weight:800; color:var(--blue-primary); letter-spacing:2px;">${req.startPinCode || '4829'}</div>
           </div>
         </div>
+
+        ${req.photoUrl ? `
+          <div style="display:flex; align-items:center; gap:9px; background:var(--blue-soft); border:1px solid var(--blue-border); border-radius:12px; padding:7px 11px; margin-bottom:12px;">
+            <img src="${req.photoUrl}" style="width:40px; height:40px; border-radius:8px; object-fit:cover; cursor:pointer;" onclick="openImagePreviewModal('${req.photoUrl}', 'Desired Style Photo')" alt="Reference Style" />
+            <div style="flex:1; min-width:0;">
+              <div style="font-size:12px; font-weight:800; color:var(--blue-primary);">Your Desired Style Reference Photo</div>
+              <div style="font-size:11px; color:var(--text-secondary); cursor:pointer;" onclick="openImagePreviewModal('${req.photoUrl}', 'Desired Style Photo')">Tap to view full image</div>
+            </div>
+          </div>
+        ` : ''}
 
         <!-- Geofence 50m Alert & 20m Auto-Pair Status -->
         ${(() => {
@@ -2129,7 +2353,7 @@ function renderBookedTrackingOverlay(req) {
             <div class="offer-pro-details">
               <div class="offer-pro-name-line">
                 <span>${prov?.name || 'Tariro Moyo'}</span>
-                <span style="display:inline-flex; align-items:center; gap:3px;">${uiIcon('star', 13)} ${prov?.rating || 4.96}</span>
+                ${formatProRatingAndJobs(prov?.rating, prov?.completedBookings)}
               </div>
               <div class="offer-pro-kit-line">${prov?.brandName || 'Mobile Service'} • ${acceptedOffer?.distanceKm || 2.4} km away</div>
               <div class="offer-pro-platinum-line">${prov?.skillTier || 'Platinum pro'}</div>
@@ -2267,10 +2491,19 @@ function renderSignUpWizardInnerHtml(isFullScreen = false) {
           </div>
 
           <div>
-            <label style="font-size:11.5px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px; display:block;">Harare Suburb</label>
-            <select class="dark-input" onchange="state.authSuburbId = this.value">
-              ${suburbs.map((s) => `<option value="${s.id}" ${s.id === state.authSuburbId ? 'selected' : ''}>${s.name}, Harare</option>`).join('')}
-            </select>
+            <label style="font-size:11.5px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px; display:block;">Location (Live GPS Detection)</label>
+            <div style="background:var(--blue-soft); border:1.5px solid var(--blue-border); border-radius:13px; padding:10px 13px; display:flex; align-items:center; justify-content:space-between; gap:8px;">
+              <div style="display:flex; align-items:center; gap:8px; min-width:0;">
+                <span style="color:var(--blue-primary); display:inline-flex;">${uiIcon('crosshair', 16)}</span>
+                <span style="font-size:12.5px; font-weight:700; color:var(--text-main); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                  ${state.customSuburbLabel ? state.customSuburbLabel.split(',')[0] + ', Harare' : 'Harare Central (Live GPS)'}
+                </span>
+              </div>
+              <button type="button" class="small-pill-btn" onclick="useBrowserGeolocation(false); renderModalLayer();" style="flex-shrink:0;">
+                Detect Live
+              </button>
+            </div>
+            <div style="font-size:11px; color:var(--text-secondary); margin-top:4px;">No physical address typing required — live GPS detects your exact spot each time you use Findit.</div>
           </div>
 
           ${state.authRole === 'PROVIDER' ? `
@@ -2765,7 +2998,7 @@ function renderModalLayer() {
 
               <div class="drawer-menu-item" onclick="state.activeModal='HISTORY'; renderModalLayer();">
                 ${uiIcon('clock', 18)}
-                <span>Request history</span>
+                <span>${isProvider ? 'Service History' : 'Request history'}</span>
               </div>
 
               <div class="drawer-menu-item" onclick="state.activeModal='NOTIFICATIONS'; renderModalLayer();">
@@ -2930,34 +3163,68 @@ function renderModalLayer() {
     return;
   }
 
-  // REQUEST HISTORY MODAL
+  // REQUEST & SERVICE HISTORY MODAL (SEPARATED FOR CLIENT VS PROVIDER)
   if (state.activeModal === 'HISTORY') {
     const userId = state.currentUser ? state.currentUser.id : null;
-    const myRequests = userId
-      ? (state.db.requests || []).filter((r) => r.customerId === userId)
+    const isProvider = state.role === 'PROVIDER';
+    const items = userId
+      ? (state.db.requests || []).filter((r) =>
+          isProvider
+            ? (r.acceptedProviderId === userId || (r.offers || []).some((o) => o.providerId === userId && r.acceptedOfferId === o.id))
+            : r.customerId === userId
+        )
       : [];
+    const modalTitle = isProvider ? 'Service History' : 'Request History';
+    const emptySub = isProvider
+      ? 'Your accepted and completed client visits will appear here.'
+      : 'Your completed and active service requests will appear here.';
+
     root.innerHTML = `
       <div class="modal-backdrop" onclick="closeModal()">
         <div class="indrive-modal-sheet" onclick="event.stopPropagation()">
           <div class="cancel-sheet-header">
-            <div class="cancel-sheet-title">Request History</div>
+            <div class="cancel-sheet-title">${modalTitle}</div>
             <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
           </div>
-          ${myRequests.length === 0 ? `
+          ${items.length === 0 ? `
             <div style="padding:40px 20px; text-align:center; color:var(--text-secondary);">
               <div style="font-size:32px; margin-bottom:8px; color:var(--text-muted);">${uiIcon('clock', 36)}</div>
-              <div style="font-weight:700; font-size:15px; color:var(--text-primary); margin-bottom:4px;">No requests yet</div>
-              <div style="font-size:13px;">Your completed and active service requests will appear here.</div>
+              <div style="font-weight:700; font-size:15px; color:var(--text-primary); margin-bottom:4px;">No ${isProvider ? 'services' : 'requests'} yet</div>
+              <div style="font-size:13px;">${emptySub}</div>
             </div>
-          ` : myRequests.map((r) => `
+          ` : items.map((r) => `
             <div class="indrive-cancel-row" style="cursor:default;">
               <div>
                 <div style="font-weight:800; font-size:14.5px;">${r.title}</div>
-                <div style="font-size:12px; color:var(--text-secondary); margin-top:2px;">${r.exactAddress || r.suburbName || 'Harare'} • ${r.status}</div>
+                <div style="font-size:12px; color:var(--text-secondary); margin-top:2px;">
+                  ${isProvider ? `Client: ${r.customerName} • ` : ''}${r.exactAddress || r.suburbName || 'Harare'} • <span style="font-weight:700; color:var(--blue-primary);">${r.status}</span>
+                </div>
               </div>
-              <div style="font-weight:800; font-size:15.5px; color:var(--blue-primary);">${formatUsdPrice(r.budgetUsd)}</div>
+              <div style="font-weight:800; font-size:15.5px; color:var(--blue-primary);">${formatUsdPrice(r.agreedTotalUsd || r.budgetUsd)}</div>
             </div>
           `).join('')}
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // DESIRED STYLE REFERENCE PHOTO PREVIEW MODAL
+  if (state.activeModal === 'IMAGE_PREVIEW') {
+    const { photoUrl, title } = state.modalData || {};
+    root.innerHTML = `
+      <div class="modal-backdrop" onclick="closeModal()">
+        <div class="indrive-modal-sheet" onclick="event.stopPropagation()" style="text-align:center; padding:18px;">
+          <div class="cancel-sheet-header" style="margin-bottom:14px;">
+            <div class="cancel-sheet-title">${title || 'Style Reference Photo'}</div>
+            <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
+          </div>
+          <div style="max-height:68vh; overflow:auto; border-radius:14px; border:1.5px solid var(--border-light); background:#0F172A; display:flex; align-items:center; justify-content:center;">
+            <img src="${photoUrl}" style="max-width:100%; max-height:65vh; display:block; object-fit:contain; border-radius:14px;" alt="Desired Style Reference" />
+          </div>
+          <div style="font-size:12px; font-weight:700; color:var(--text-secondary); margin-top:12px;">
+            Exact client reference photo attached to this service booking
+          </div>
         </div>
       </div>
     `;
@@ -3660,8 +3927,11 @@ async function submitServiceRequest() {
       lng: state.pinnedLng,
       paymentMethod: state.draftPaymentMethod,
       budgetUsd: Number(state.draftFareUsd),
-      autoAccept: state.draftAutoAccept
+      autoAccept: state.draftAutoAccept,
+      photoUrl: state.draftPhotoUrl || null
     });
+
+    state.draftPhotoUrl = null;
 
     if (res.request) {
       if (!state.db) state.db = {};
@@ -3683,6 +3953,29 @@ async function submitServiceRequest() {
     showToast(err.message, 'error');
     renderAll();
   }
+}
+
+function handleDraftStylePhotoUpload(inputEl) {
+  const file = inputEl.files && inputEl.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    state.draftPhotoUrl = e.target.result;
+    renderAll();
+    showToast('Desired style reference photo attached!');
+  };
+  reader.readAsDataURL(file);
+}
+
+function removeDraftStylePhoto() {
+  state.draftPhotoUrl = null;
+  renderAll();
+}
+
+function openImagePreviewModal(photoUrl, title = 'Desired Style Photo') {
+  state.activeModal = 'IMAGE_PREVIEW';
+  state.modalData = { photoUrl, title };
+  renderModalLayer();
 }
 
 function stepActiveSearchFare(delta) {
@@ -4166,7 +4459,7 @@ function renderProviderActiveVisitTab(prov, activeJob) {
         </div>
         <div class="provider-step-pill ${isArrived ? 'active' : isInProgress ? 'done' : ''}">
           ${isInProgress ? uiIcon('check', 11) : ''}
-          <span>2. At Gate (PIN)</span>
+          <span>2. Waiting Outside (PIN)</span>
         </div>
         <div class="provider-step-pill ${isInProgress ? 'active' : ''}">
           <span>3. In Service</span>
@@ -4184,7 +4477,7 @@ function renderProviderActiveVisitTab(prov, activeJob) {
             <div style="font-size:16.5px; font-weight:800; color:var(--text-main); margin-top:2px; display:flex; align-items:center; gap:6px;">
               <span>${activeJob.customerName}</span>
               <span style="font-size:12.5px; color:var(--text-secondary); display:inline-flex; align-items:center; gap:3px;">
-                ${uiIcon('star', 12)} ${activeJob.customerRating || '5.0'}
+                ${(Number(activeJob.customerRating) || 0) > 0 ? `${uiIcon('star', 12)} ${activeJob.customerRating}` : '• New Client'}
               </span>
             </div>
             <div style="font-size:12.5px; color:var(--blue-primary); font-weight:700; margin-top:2px; display:flex; align-items:center; gap:4px;">
@@ -4204,11 +4497,21 @@ function renderProviderActiveVisitTab(prov, activeJob) {
           <span>${activeJob.title} • <span style="font-weight:600; color:var(--text-secondary);">${activeJob.description}</span></span>
         </div>
 
+        ${activeJob.photoUrl ? `
+          <div style="display:flex; align-items:center; gap:9px; background:var(--blue-soft); border:1px solid var(--blue-border); border-radius:11px; padding:7px 11px; margin-bottom:10px;">
+            <img src="${activeJob.photoUrl}" style="width:42px; height:42px; border-radius:8px; object-fit:cover; cursor:pointer;" onclick="openImagePreviewModal('${activeJob.photoUrl}', 'Client Reference Photo')" alt="Desired Style Reference" />
+            <div style="flex:1; min-width:0;">
+              <div style="font-size:12px; font-weight:800; color:var(--blue-primary);">Client Desired Style Photo</div>
+              <div style="font-size:11px; color:var(--text-secondary); cursor:pointer;" onclick="openImagePreviewModal('${activeJob.photoUrl}', 'Client Reference Photo')">Tap to view full reference photo</div>
+            </div>
+          </div>
+        ` : ''}
+
         <!-- Step-by-Step Provider Execution Controls -->
         ${isEnRoute ? `
           <button class="btn-primary-blue" style="height:44px; font-size:14px;" onclick="providerMarkArrived('${activeJob.id}')">
             ${uiIcon('pin', 16)}
-            <span>I Have Arrived at Client's Gate</span>
+            <span>I'm Waiting Outside</span>
           </button>
         ` : ''}
 
@@ -4335,12 +4638,30 @@ function renderProviderRequestsFeedTab(prov, openRequests, activeJob) {
             </div>
 
             <div style="font-size:15px; font-weight:800; color:var(--text-main); margin-bottom:2px;">${r.title}</div>
-            <div style="font-size:12px; color:var(--text-secondary); margin-bottom:8px; display:flex; align-items:center; gap:5px; flex-wrap:wrap;">
+            <div style="font-size:12px; color:var(--text-secondary); margin-bottom:6px; display:flex; align-items:center; gap:5px; flex-wrap:wrap;">
               ${uiIcon('user', 13)}
               <span>${r.customerName}</span>
-              <span style="display:inline-flex; align-items:center; gap:2px;">(${uiIcon('star', 11)} ${r.customerRating || '5.0'})</span>
+              <span style="display:inline-flex; align-items:center; gap:2px;">
+                ${(Number(r.customerRating) || 0) > 0 ? `(${uiIcon('star', 11)} ${r.customerRating})` : '(New Client)'}
+              </span>
               <span>• ${r.exactAddress}</span>
             </div>
+
+            ${r.description ? `
+              <div style="font-size:12px; color:var(--text-main); background:rgba(0,0,0,0.03); border-radius:8px; padding:6px 9px; margin-bottom:8px;">
+                <strong>Client note:</strong> ${r.description}
+              </div>
+            ` : ''}
+
+            ${r.photoUrl ? `
+              <div style="display:flex; align-items:center; gap:9px; background:var(--blue-soft); border:1px solid var(--blue-border); border-radius:10px; padding:6px 10px; margin-bottom:8px;">
+                <img src="${r.photoUrl}" style="width:44px; height:44px; border-radius:8px; object-fit:cover; cursor:pointer;" onclick="openImagePreviewModal('${r.photoUrl}', 'Desired Style Photo')" alt="Client Reference Photo" />
+                <div style="flex:1; min-width:0;">
+                  <div style="font-size:12px; font-weight:800; color:var(--blue-primary);">Desired Style Photo Attached</div>
+                  <div style="font-size:11px; color:var(--text-secondary); cursor:pointer;" onclick="openImagePreviewModal('${r.photoUrl}', 'Desired Style Photo')">Tap to inspect style before bidding</div>
+                </div>
+              </div>
+            ` : ''}
 
             ${myExistingOffer ? `
               <div style="background:var(--blue-soft); border:1px solid var(--blue-border); border-radius:12px; padding:8px 11px; display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:8px;">
@@ -5253,32 +5574,56 @@ function renderCallModal() {
     root.innerHTML = '';
     return;
   }
-  root.innerHTML = `
-    <div class="modal-backdrop">
-      <div class="indrive-modal-sheet" style="text-align:center; padding:32px 20px;">
-        <div style="font-size:11.5px; color:var(--blue-primary); font-weight:800; text-transform:uppercase; letter-spacing:0.06em; display:inline-flex; align-items:center; gap:6px;">
-          ${uiIcon('lock', 14)}
-          <span>Findit Masked Agora Voice Call</span>
-        </div>
-        <div style="font-size:23px; font-weight:800; margin-top:10px;">${state.activeCall.peerName}</div>
-        <div style="font-size:13px; color:var(--text-secondary); margin-top:4px;">${state.activeCall.contextTitle}</div>
-        <div id="callTimerText" style="font-size:32px; font-weight:800; color:var(--blue-primary); margin:24px 0;">00:00</div>
+  const peerName = state.activeCall.peerName || 'Specialist';
+  const contextTitle = state.activeCall.contextTitle || 'Harare Home Visit';
+  const proMatch = state.db.providers?.find((p) => p.name === peerName || p.shortName === peerName);
+  const custMatch = state.db.customers?.find((c) => c.name === peerName);
+  const avatarUrl = proMatch?.avatarUrl || custMatch?.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=240&q=80';
 
-        <div style="display:flex; justify-content:center; align-items:center; gap:14px;">
-          <button
-            type="button"
-            class="btn-dark-sec"
-            style="width:48px; height:48px; border-radius:50%; padding:0; display:inline-flex; align-items:center; justify-content:center;"
-            onclick="toggleCallMute()"
-            title="Mute / Unmute"
-          >
-            ${state.activeCall.isMuted ? uiIcon('close', 20) : uiIcon('phone', 20)}
-          </button>
-          <button class="cancel-request-red-pill" style="padding:0 28px; height:48px; font-size:15px;" onclick="endInAppCall()">
-            ${uiIcon('phone', 16)}
-            <span>End Call</span>
-          </button>
+  root.innerHTML = `
+    <div class="instagram-call-overlay">
+      <div class="ig-call-top-bar">
+        <button type="button" class="ig-call-icon-btn" onclick="endInAppCall()" title="Minimize / Hang Up">
+          ${uiIcon('chevronDown', 20)}
+        </button>
+        <div class="ig-call-header-info">
+          <div class="ig-call-title">Agora Audio Call</div>
+          <div class="ig-call-encrypted-tag">
+            ${uiIcon('lock', 11)}
+            <span>End-to-End Encrypted</span>
+          </div>
         </div>
+        <button type="button" class="ig-call-icon-btn" onclick="showToast('Audio route: Speaker mode enabled')" title="Speakerphone">
+          ${uiIcon('volume', 18)}
+        </button>
+      </div>
+
+      <div class="ig-call-center">
+        <div class="ig-call-avatar-wrap">
+          <div class="ig-call-ring ring-1"></div>
+          <div class="ig-call-ring ring-2"></div>
+          <img src="${avatarUrl}" class="ig-call-avatar" alt="${peerName}" />
+        </div>
+        <div class="ig-call-peer-name">${peerName}</div>
+        <div class="ig-call-peer-context">${contextTitle}</div>
+        <div id="callTimerText" class="ig-call-timer">00:00</div>
+      </div>
+
+      <div class="ig-call-bottom-dock">
+        <button type="button" class="ig-dock-btn ${state.activeCall.isMuted ? 'muted' : ''}" onclick="toggleCallMute()">
+          <span style="font-size:20px;">${state.activeCall.isMuted ? '🔇' : '🎙️'}</span>
+          <span>${state.activeCall.isMuted ? 'Unmute' : 'Mute'}</span>
+        </button>
+
+        <button type="button" class="ig-dock-btn hangup" onclick="endInAppCall()" title="End Call">
+          ${uiIcon('phone', 24)}
+          <span>End</span>
+        </button>
+
+        <button type="button" class="ig-dock-btn" onclick="openChatDrawer(state.activeRequestId || (state.db.requests?.[0]?.id))">
+          <span style="font-size:20px;">💬</span>
+          <span>Chat</span>
+        </button>
       </div>
     </div>
   `;

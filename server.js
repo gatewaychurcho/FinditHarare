@@ -245,7 +245,7 @@ const QUICK_MESSAGES = {
     provider: [
       'I am on my way to your home now—follow my pin on the map',
       'I will arrive at your gate in about 10 minutes',
-      'I have arrived outside your gate',
+      "I'm waiting outside",
       'Please share the 4-digit Start PIN so I can start the job',
       'Service finished! Please mark completed & rate my work'
     ]
@@ -376,7 +376,7 @@ function getInitialDatabase() {
         phone: '+263 77 100 2001',
         suburbId: 'avondale',
         suburbName: 'Avondale',
-        rating: 5.0,
+        rating: 0,
         reviewCount: 0,
         completedBookings: 0,
         avatarInitials: 'TC',
@@ -563,9 +563,9 @@ function getInitialDatabase() {
         lng: 31.0415,
         serviceRadiusKm: 15,
         startingPriceUsd: 25,
-        rating: 4.98,
-        reviewCount: 34,
-        completedBookings: 34,
+        rating: 0,
+        reviewCount: 0,
+        completedBookings: 0,
         bio: 'Platinum mobile braider (6 yrs exp). Clean knotless, boho goddess braids, and neat stitch cornrows at your home in Harare.',
         badges: { phoneVerified: true, idVerified: true, businessVerified: true, faceVerified: true },
         walletBalanceUsd: 25.00,
@@ -619,9 +619,9 @@ function getInitialDatabase() {
         lng: 31.0920,
         serviceRadiusKm: 18,
         startingPriceUsd: 15,
-        rating: 4.95,
-        reviewCount: 48,
-        completedBookings: 48,
+        rating: 0,
+        reviewCount: 0,
+        completedBookings: 0,
         bio: 'Executive mobile barber in Harare. Cordless clippers, hot towel shave, beard sculpting at your home.',
         badges: { phoneVerified: true, idVerified: true, businessVerified: true, faceVerified: true },
         walletBalanceUsd: 25.00,
@@ -666,9 +666,9 @@ function getInitialDatabase() {
         lng: 31.0450,
         serviceRadiusKm: 20,
         startingPriceUsd: 20,
-        rating: 4.97,
-        reviewCount: 29,
-        completedBookings: 29,
+        rating: 0,
+        reviewCount: 0,
+        completedBookings: 0,
         bio: 'Mobile nail technician bringing portable dust collector, UV lamps & spa pedicure basin to your home.',
         badges: { phoneVerified: true, idVerified: true, businessVerified: true, faceVerified: true },
         walletBalanceUsd: 25.00,
@@ -713,9 +713,9 @@ function getInitialDatabase() {
         lng: 31.0430,
         serviceRadiusKm: 25,
         startingPriceUsd: 25,
-        rating: 5.0,
-        reviewCount: 38,
-        completedBookings: 38,
+        rating: 0,
+        reviewCount: 0,
+        completedBookings: 0,
         bio: 'Bridal & Roora mobile MUA in Harare. Sweatproof skin-like soft glam with portable ring light & luxury kit.',
         badges: { phoneVerified: true, idVerified: true, businessVerified: true, faceVerified: true },
         walletBalanceUsd: 25.00,
@@ -2094,13 +2094,14 @@ const server = http.createServer(async (req, res) => {
         id: 'req_' + Date.now().toString().slice(-5),
         customerId: body.customerId || 'cust_1',
         customerFinditId: cust?.finditId || 'FH-USR-391044',
-        customerName: body.customerName || cust?.name || 'Tendai Moyo',
-        customerRating: cust?.rating || 5.0,
-        customerCompletedVisits: cust?.completedBookings || 8,
+        customerName: body.customerName || cust?.name || 'Client',
+        customerRating: cust?.rating || 0,
+        customerCompletedVisits: cust?.completedBookings || 0,
         categoryId: category.id,
         categoryName: category.fullName || category.name,
         title: body.title || `${category.name} Service`,
         description: body.description || 'Looking for a reliable verified mobile provider to come to my home.',
+        photoUrl: body.photoUrl || null,
         suburbId: suburb.id,
         suburbName: body.suburbName || suburb.name,
         exactAddress: body.exactAddress || `${suburb.sampleStreet}, Harare`,
@@ -2123,7 +2124,7 @@ const server = http.createServer(async (req, res) => {
 
       db.requests.unshift(newReq);
       saveDb(db);
-      broadcastUpdate('REQUEST_CREATED', { requestId: newReq.id });
+      broadcastUpdate('REQUEST_CREATED', { requestId: newReq.id, request: newReq });
       scheduleStaggeredProviderBids(newReq.id);
 
       return sendJson(res, 201, { request: newReq });
@@ -2286,7 +2287,7 @@ const server = http.createServer(async (req, res) => {
       }
 
       saveDb(db);
-      broadcastUpdate('OFFER_SUBMITTED', { requestId: reqItem.id, offerId: existingOffer.id, providerName: provider.name, priceUsd });
+      broadcastUpdate('OFFER_SUBMITTED', { requestId: reqItem.id, offerId: existingOffer.id, providerName: provider.name, priceUsd, offer: existingOffer, request: reqItem });
       return sendJson(res, 200, { offer: existingOffer, request: reqItem });
     } catch (e) {
       return sendJson(res, 400, { error: e.message });
@@ -2400,7 +2401,7 @@ const server = http.createServer(async (req, res) => {
       });
 
       saveDb(db);
-      broadcastUpdate('BOOKING_CONFIRMED', { requestId: reqItem.id, offerId: offer.id });
+      broadcastUpdate('BOOKING_CONFIRMED', { requestId: reqItem.id, offerId: offer.id, acceptedProviderId: offer.providerId, request: reqItem });
       return sendJson(res, 200, { request: reqItem });
     } catch (e) {
       return sendJson(res, 400, { error: e.message });
@@ -2444,15 +2445,19 @@ const server = http.createServer(async (req, res) => {
       if (body.status === 'ARRIVED') {
         const offer = reqItem.offers.find((o) => o.id === reqItem.acceptedOfferId);
         if (!reqItem.messages) reqItem.messages = [];
-        reqItem.messages.push({
+        const arrivalMsg = {
           id: 'msg_' + Date.now(),
           senderRole: 'PROVIDER',
           senderName: offer ? offer.providerName : 'Service Provider',
           providerId: offer ? offer.providerId : null,
           type: 'ARRIVED',
-          text: `I have arrived outside your gate at ${reqItem.exactAddress}. Please share your 4-digit Start PIN so we can begin.`,
+          text: "I'm waiting outside! Please share your 4-digit Start PIN so we can begin.",
           timestamp: new Date().toISOString()
-        });
+        };
+        reqItem.messages.push(arrivalMsg);
+        saveDb(db);
+        broadcastUpdate('PROVIDER_ARRIVED', { requestId: reqItem.id, message: arrivalMsg, request: reqItem });
+        return sendJson(res, 200, { request: reqItem });
       }
 
       if (body.status === 'IN_PROGRESS') {
@@ -2470,7 +2475,7 @@ const server = http.createServer(async (req, res) => {
           timestamp: new Date().toISOString()
         });
         saveDb(db);
-        broadcastUpdate('PIN_VERIFIED', { requestId: reqItem.id });
+        broadcastUpdate('PIN_VERIFIED', { requestId: reqItem.id, request: reqItem });
         return sendJson(res, 200, { request: reqItem });
       }
 
