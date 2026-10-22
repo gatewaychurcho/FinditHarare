@@ -12,35 +12,25 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet" />
   <!-- Leaflet Map CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-  <link rel="stylesheet" href="styles.css?v=2.3.0" />
+  <link rel="icon" type="image/png" href="/favicon.png" />
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+  <link rel="stylesheet" href="styles.css?v=2.3.1" />
 </head>
 <body>
   <div id="appViewport" class="app-viewport">
-    <!-- Electric Blue Animated Splash Screen -->
+    <!-- Electric Blue Premium Animated Splash Screen -->
     <div id="splashScreen" class="splash-screen">
       <div class="splash-content">
-        <div class="splash-logo-wrap">
-          <svg class="splash-logo-svg" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect width="120" height="120" rx="30" fill="#FFFFFF" />
-            <path d="M26 84C26 52 48 30 82 30" stroke="#38BDF8" stroke-width="11" stroke-linecap="round" />
-            <path d="M48 90V56C48 45.5 55.5 39 66 39H74" stroke="#0066FF" stroke-width="11" stroke-linecap="round" />
-            <path d="M38 64H66" stroke="#0066FF" stroke-width="10" stroke-linecap="round" />
-            <path d="M84 62V90" stroke="#0066FF" stroke-width="11" stroke-linecap="round" />
-            <circle cx="84" cy="44" r="7.5" fill="#0066FF" />
-          </svg>
+        <div class="splash-logo-wrap" style="background:transparent; box-shadow:none; width:auto; height:auto; margin-bottom:16px;">
+          <img src="/assets/brand-logo-full.png" alt="Findit Harare" style="max-width:260px; width:80vw; height:auto; filter:drop-shadow(0 6px 20px rgba(0,102,255,0.25)); animation:splashLogoBounce 1.2s ease-out;" />
         </div>
 
-        <div class="splash-brand-title">
-          find<span class="splash-brand-accent">it</span>
+        <div class="splash-catchphrase" style="font-weight:700; color:#1E3A8A; letter-spacing:0.02em; margin-bottom:20px;">
+          Your Price • Your Pro • At Your Door
         </div>
 
-        <div class="splash-catchphrase">
-          Your Price. Your Pro. At Your Door.
-        </div>
-
-        <div class="splash-loader-track">
-          <div class="splash-loader-fill" id="splashLoaderFill"></div>
+        <div class="splash-loader-track" style="background:#E2E8F0; height:4px; border-radius:99px; overflow:hidden; width:180px;">
+          <div class="splash-loader-fill" id="splashLoaderFill" style="background:linear-gradient(90deg, #0066FF, #00B4D8); height:100%; width:0%; transition:width 1s cubic-bezier(0.4, 0, 0.2, 1);"></div>
         </div>
       </div>
     </div>

@@ -184,48 +184,82 @@ function formatProRatingAndJobs(rating, completedBookings) {
 
 let arrivalVibrateInterval = null;
 let arrivalAudioCtx = null;
+let isAudioContextUnlocked = false;
 
-function playArrivalChimeSound() {
+function unlockArrivalAudioContext() {
+  const AudioContext = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContext) return;
+  if (!arrivalAudioCtx) {
+    arrivalAudioCtx = new AudioContext();
+  }
+  if (arrivalAudioCtx.state === 'suspended') {
+    arrivalAudioCtx.resume().then(() => {
+      isAudioContextUnlocked = true;
+    }).catch(() => {});
+  } else {
+    isAudioContextUnlocked = true;
+  }
+}
+
+if (typeof document !== 'undefined') {
+  ['touchstart', 'touchend', 'click', 'keydown'].forEach((evt) => {
+    document.addEventListener(evt, unlockArrivalAudioContext, { passive: true });
+  });
+}
+
+function playArrivalUrgentAlarmSound() {
   try {
-    const AudioContext = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContext) return;
-    if (!arrivalAudioCtx) {
-      arrivalAudioCtx = new AudioContext();
-    }
-    if (arrivalAudioCtx.state === 'suspended') {
-      arrivalAudioCtx.resume();
-    }
+    unlockArrivalAudioContext();
+    if (!arrivalAudioCtx) return;
     const now = arrivalAudioCtx.currentTime;
 
+    // Dual-tone urgent telephone siren / penetrating alarm warble (880Hz / 1100Hz)
     const osc1 = arrivalAudioCtx.createOscillator();
-    const gain1 = arrivalAudioCtx.createGain();
-    osc1.type = 'sine';
-    osc1.frequency.setValueAtTime(659.25, now); // E5
-    gain1.gain.setValueAtTime(0.32, now);
-    gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
-    osc1.connect(gain1);
-    gain1.connect(arrivalAudioCtx.destination);
-    osc1.start(now);
-    osc1.stop(now + 0.5);
-
     const osc2 = arrivalAudioCtx.createOscillator();
+    const gain1 = arrivalAudioCtx.createGain();
     const gain2 = arrivalAudioCtx.createGain();
-    osc2.type = 'sine';
-    osc2.frequency.setValueAtTime(523.25, now + 0.22); // C5
-    gain2.gain.setValueAtTime(0.32, now + 0.22);
-    gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.75);
+
+    osc1.type = 'sawtooth';
+    osc2.type = 'triangle';
+
+    // Fast urgent warble alternation
+    osc1.frequency.setValueAtTime(880, now);
+    osc1.frequency.setValueAtTime(1100, now + 0.12);
+    osc1.frequency.setValueAtTime(880, now + 0.24);
+    osc1.frequency.setValueAtTime(1100, now + 0.36);
+    osc1.frequency.setValueAtTime(880, now + 0.48);
+
+    osc2.frequency.setValueAtTime(440, now);
+    osc2.frequency.setValueAtTime(550, now + 0.12);
+    osc2.frequency.setValueAtTime(440, now + 0.24);
+    osc2.frequency.setValueAtTime(550, now + 0.36);
+    osc2.frequency.setValueAtTime(440, now + 0.48);
+
+    gain1.gain.setValueAtTime(0.75, now);
+    gain1.gain.exponentialRampToValueAtTime(0.01, now + 0.65);
+
+    gain2.gain.setValueAtTime(0.65, now);
+    gain2.gain.exponentialRampToValueAtTime(0.01, now + 0.65);
+
+    osc1.connect(gain1);
     osc2.connect(gain2);
+    gain1.connect(arrivalAudioCtx.destination);
     gain2.connect(arrivalAudioCtx.destination);
-    osc2.start(now + 0.22);
-    osc2.stop(now + 0.8);
-  } catch (e) {}
+
+    osc1.start(now);
+    osc2.start(now);
+    osc1.stop(now + 0.7);
+    osc2.stop(now + 0.7);
+  } catch (e) {
+    console.warn('Urgent alarm note:', e.message);
+  }
 }
 
 function startArrivalVibrationAlert(req) {
   if (arrivalVibrateInterval) return;
-  playArrivalChimeSound();
+  playArrivalUrgentAlarmSound();
   if ('vibrate' in navigator) {
-    try { navigator.vibrate([600, 250, 600, 250, 1000]); } catch (e) {}
+    try { navigator.vibrate([800, 250, 800, 250, 1000, 300]); } catch (e) {}
   }
   arrivalVibrateInterval = setInterval(() => {
     const activeReq = getCustomerActiveRequest();
@@ -233,11 +267,11 @@ function startArrivalVibrationAlert(req) {
       stopArrivalVibrationAlert();
       return;
     }
-    playArrivalChimeSound();
+    playArrivalUrgentAlarmSound();
     if ('vibrate' in navigator) {
-      try { navigator.vibrate([600, 250, 600, 250, 1000]); } catch (e) {}
+      try { navigator.vibrate([800, 250, 800, 250, 1000, 300]); } catch (e) {}
     }
-  }, 2400);
+  }, 1900);
 }
 
 function stopArrivalVibrationAlert() {
@@ -2435,24 +2469,24 @@ function renderBookedTrackingOverlay(req) {
 
           if (req.status === 'ARRIVED') {
             return `
-              <div class="pulsating-arrival-banner" style="background:#FEF2F2; border:1.5px solid #FCA5A5; border-radius:14px; padding:12px 14px; margin-bottom:12px; display:flex; align-items:center; justify-content:space-between; gap:12px;">
+              <div class="pulsating-arrival-banner" style="background:#FEF2F2; border:1.5px solid #FCA5A5; border-radius:12px; padding:10px 12px; margin-bottom:8px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
                 <div style="flex:1; min-width:0;">
-                  <div style="font-size:11.5px; font-weight:800; color:#DC2626; text-transform:uppercase; letter-spacing:0.04em; display:flex; align-items:center; gap:5px; margin-bottom:3px;">
+                  <div style="font-size:11.5px; font-weight:800; color:#DC2626; text-transform:uppercase; letter-spacing:0.04em; display:flex; align-items:center; gap:5px; margin-bottom:2px;">
                     <span style="width:7px; height:7px; border-radius:50%; background:#EF4444; display:inline-block;"></span>
                     <span>${prov?.shortName || prov?.name || 'Specialist'} is Waiting Outside</span>
                   </div>
-                  <div style="font-size:12px; color:#991B1B;">
+                  <div style="font-size:11.5px; color:#991B1B; font-weight:600;">
                     Share this Start PIN with your specialist to begin:
                   </div>
                   ${isWithin20m ? `
-                    <div style="font-size:11px; font-weight:700; color:#059669; margin-top:4px; display:flex; align-items:center; gap:4px;">
+                    <div style="font-size:10.5px; font-weight:700; color:#059669; margin-top:3px; display:flex; align-items:center; gap:4px;">
                       <span style="width:5px; height:5px; border-radius:50%; background:#10B981;"></span>
                       <span>Within 20m • Auto-pairs in <span class="proximity-autopair-timer">${autoPairRemaining}s</span></span>
                     </div>
                   ` : ''}
                 </div>
-                <div style="background:#FFFFFF; border:2px solid #EF4444; border-radius:12px; padding:6px 14px; text-align:center; box-shadow:0 2px 8px rgba(239,68,68,0.15); flex-shrink:0;">
-                  <div style="font-size:9.5px; font-weight:800; color:#DC2626; letter-spacing:0.05em;">START PIN</div>
+                <div style="background:#FFFFFF; border:2px solid #EF4444; border-radius:10px; padding:5px 12px; text-align:center; box-shadow:0 2px 8px rgba(239,68,68,0.12); flex-shrink:0;">
+                  <div style="font-size:9px; font-weight:800; color:#DC2626; letter-spacing:0.05em;">START PIN</div>
                   <div style="font-size:18px; font-weight:900; color:#DC2626; letter-spacing:2px; line-height:1.2;">#${req.startPinCode || '4829'}</div>
                 </div>
               </div>
@@ -2461,7 +2495,7 @@ function renderBookedTrackingOverlay(req) {
 
           if (distMeters <= 50 && req.status !== 'IN_PROGRESS') {
             return `
-              <div style="background:#EFF6FF; border:1px solid #BFDBFE; border-radius:12px; padding:9px 12px; margin-bottom:12px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
+              <div style="background:#EFF6FF; border:1px solid #BFDBFE; border-radius:12px; padding:8px 11px; margin-bottom:8px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
                 <div style="font-size:12px; font-weight:700; color:#1E40AF; display:flex; align-items:center; gap:6px;">
                   <span style="color:#2563EB;">${uiIcon('pin', 14)}</span>
                   <span>Specialist approaching (~${distMeters}m away)</span>
@@ -2473,36 +2507,45 @@ function renderBookedTrackingOverlay(req) {
           return '';
         })()}
 
-        <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:12px;">
+        <!-- Service Info Row -->
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:8px;">
           <div>
-            <div style="font-size:16px; font-weight:800; color:var(--text-main); display:flex; align-items:center; gap:7px;">
-              <span style="color:var(--blue-primary); display:inline-flex;">${statusIcon}</span>
-              <span>${statusHeadline}</span>
-            </div>
-            <div style="font-size:12.5px; color:var(--text-secondary); margin-top:2px;">
-              ${req.title} • <strong style="color:var(--blue-primary);">${formatUsdPrice(agreedPrice)}</strong> (${req.paymentMethod})
-            </div>
+            ${req.status === 'ARRIVED' ? `
+              <div style="font-size:14.5px; font-weight:800; color:var(--text-main); display:flex; align-items:center; gap:6px;">
+                <span style="color:var(--blue-primary); display:inline-flex;">${uiIcon('briefcase', 14)}</span>
+                <span>${req.title}</span>
+              </div>
+              <div style="font-size:12px; color:var(--text-secondary); margin-top:1px;">
+                Agreed Fare: <strong style="color:var(--blue-primary);">${formatUsdPrice(agreedPrice)}</strong> (${req.paymentMethod})
+              </div>
+            ` : `
+              <div style="font-size:15px; font-weight:800; color:var(--text-main); display:flex; align-items:center; gap:6px;">
+                <span style="color:var(--blue-primary); display:inline-flex;">${statusIcon}</span>
+                <span>${statusHeadline}</span>
+              </div>
+              <div style="font-size:12px; color:var(--text-secondary); margin-top:2px;">
+                ${req.title} • <strong style="color:var(--blue-primary);">${formatUsdPrice(agreedPrice)}</strong> (${req.paymentMethod})
+              </div>
+            `}
           </div>
           ${req.status !== 'ARRIVED' ? `
-            <div style="background:var(--blue-soft); border:1.5px solid var(--blue-border); padding:6px 12px; border-radius:12px; text-align:center; flex-shrink:0;">
-              <div style="font-size:9.5px; color:var(--blue-primary); font-weight:800;">START PIN</div>
-              <div style="font-size:16.5px; font-weight:800; color:var(--blue-primary); letter-spacing:2px;">${req.startPinCode || '4829'}</div>
+            <div style="background:var(--blue-soft); border:1.5px solid var(--blue-border); padding:5px 10px; border-radius:10px; text-align:center; flex-shrink:0;">
+              <div style="font-size:9px; color:var(--blue-primary); font-weight:800;">START PIN</div>
+              <div style="font-size:15px; font-weight:800; color:var(--blue-primary); letter-spacing:1.5px;">${req.startPinCode || '4829'}</div>
             </div>
           ` : ''}
         </div>
 
         ${req.photoUrl ? `
-          <div style="display:flex; align-items:center; gap:9px; background:var(--blue-soft); border:1px solid var(--blue-border); border-radius:12px; padding:7px 11px; margin-bottom:12px;">
-            <img src="${req.photoUrl}" style="width:40px; height:40px; border-radius:8px; object-fit:cover; cursor:pointer;" onclick="openImagePreviewModal('${req.photoUrl}', 'Desired Style Photo')" alt="Reference Style" />
-            <div style="flex:1; min-width:0;">
-              <div style="font-size:12px; font-weight:800; color:var(--blue-primary);">Your Desired Style Reference Photo</div>
-              <div style="font-size:11px; color:var(--text-secondary); cursor:pointer;" onclick="openImagePreviewModal('${req.photoUrl}', 'Desired Style Photo')">Tap to view full image</div>
-            </div>
+          <div style="display:inline-flex; align-items:center; gap:7px; background:#F0FDF4; border:1px solid #BBF7D0; border-radius:8px; padding:3px 9px; margin-bottom:8px; cursor:pointer;" onclick="openImagePreviewModal('${req.photoUrl}', 'Desired Style Photo')">
+            <img src="${req.photoUrl}" style="width:20px; height:20px; border-radius:4px; object-fit:cover;" alt="Reference" />
+            <span style="font-size:11px; font-weight:700; color:#15803D;">View Reference Photo</span>
+            ${uiIcon('chevronRight', 10)}
           </div>
         ` : ''}
 
         <!-- Accepted Service Provider Card -->
-        <div class="indrive-selected-tier-box" style="margin-bottom:12px; padding:11px 13px;">
+        <div class="indrive-selected-tier-box" style="margin-bottom:8px; padding:8px 10px;">
           <div class="offer-pro-row" style="margin-bottom:0;">
             <div class="offer-avatar-wrap platinum">
               <img src="${avatarUrl}" alt="${prov?.name}" />
@@ -2513,7 +2556,7 @@ function renderBookedTrackingOverlay(req) {
                 <span>${prov?.name || 'Tariro Moyo'}</span>
                 ${formatProRatingAndJobs(prov?.rating, prov?.completedBookings)}
               </div>
-              <div class="offer-pro-kit-line">${prov?.brandName || 'Mobile Service'} • ${acceptedOffer?.distanceKm || 2.4} km away</div>
+              <div class="offer-pro-kit-line">${prov?.brandName || 'Mobile Service'} • ${req.status === 'ARRIVED' ? '<span style="color:#059669; font-weight:800;">Outside your gate</span>' : (acceptedOffer?.distanceKm ? `${acceptedOffer.distanceKm} km away` : 'En route')}</div>
               <div class="offer-pro-platinum-line">${prov?.skillTier || 'Platinum pro'}</div>
             </div>
             <button class="offer-catalogue-pill" onclick="openProviderCatalogueModal('${prov?.id}')">
@@ -2525,7 +2568,7 @@ function renderBookedTrackingOverlay(req) {
 
         <!-- Latest Message Snippet Pill (if messages exist) -->
         ${(req.messages && req.messages.length > 0) ? `
-          <div class="chat-preview-pill" onclick="openChatDrawer('${req.id}', '${prov?.id}')">
+          <div class="chat-preview-pill" style="margin-bottom:8px;" onclick="openChatDrawer('${req.id}', '${prov?.id}')">
             <div class="chat-preview-dot"></div>
             <div class="chat-preview-text">
               <span class="chat-preview-sender">${req.messages[req.messages.length - 1].senderName}:</span>
@@ -4133,6 +4176,7 @@ function removeDraftStylePhoto() {
 function openImagePreviewModal(photoUrl, title = 'Desired Style Photo') {
   state.activeModal = 'IMAGE_PREVIEW';
   state.modalData = { photoUrl, title };
+  pushNavigationHistoryState({ imagePreview: true });
   renderModalLayer();
 }
 
@@ -4291,6 +4335,7 @@ function closeModal() {
 
 function openSideDrawerModal() {
   state.activeModal = 'DRAWER';
+  pushNavigationHistoryState({ drawer: true });
   renderModalLayer();
 }
 
@@ -5373,6 +5418,7 @@ function escapeHtml(str) {
 
 function openChatDrawer(requestIdOrProviderId = null, optionalProviderId = null) {
   state.chatDrawerOpen = true;
+  pushNavigationHistoryState({ chat: true });
   let targetRequestId = null;
   let targetProviderId = null;
 
@@ -5983,4 +6029,64 @@ function renderCallModal() {
       </div>
     </div>
   `;
+}
+
+// ============================================================================
+// MOBILE & ANDROID HARDWARE / GESTURE BACK BUTTON CONTROLLER (1-STEP BACK)
+// ============================================================================
+function pushNavigationHistoryState(stateObj = {}) {
+  try {
+    if (typeof window !== 'undefined' && window.history && window.history.pushState) {
+      window.history.pushState(stateObj, '');
+    }
+  } catch (e) {}
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('popstate', (e) => {
+    // 1. If an active modal is open, dismiss it
+    if (state.activeModal) {
+      closeModal();
+      return;
+    }
+
+    // 2. If chat drawer is open, close it
+    if (state.chatDrawerOpen) {
+      closeChatDrawer();
+      return;
+    }
+
+    // 3. If side drawer is open, close it
+    const sideDrawer = document.getElementById('sideDrawerModal');
+    if (sideDrawer && !sideDrawer.classList.contains('hidden')) {
+      closeSideDrawerModal();
+      return;
+    }
+
+    // 4. If call screen is open, decline or end
+    if (state.incomingCall || state.activeCall) {
+      endInAppCall(true);
+      return;
+    }
+
+    // 5. If provider is on a secondary tab (WALLET, CATALOGUE), go back to FEED
+    if (state.role === 'PROVIDER' && state.providerTab && state.providerTab !== 'FEED' && state.providerTab !== 'ACTIVE_JOB') {
+      state.providerTab = 'FEED';
+      renderUiOverlay();
+      return;
+    }
+
+    // 6. If client is in CONFIGURE, return to HOME
+    if (state.role === 'CUSTOMER' && state.screenStep === 'CONFIGURE') {
+      state.screenStep = 'HOME';
+      renderAll();
+      return;
+    }
+
+    // 7. If client is SEARCHING for offers, cancel search & return to HOME
+    if (state.role === 'CUSTOMER' && state.screenStep === 'SEARCHING') {
+      cancelActiveCustomerRequest();
+      return;
+    }
+  });
 }
