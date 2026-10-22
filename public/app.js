@@ -651,12 +651,16 @@ function initRealtimeSync() {
   connectWebSocket();
   if (!realtimeSyncInterval) {
     realtimeSyncInterval = setInterval(() => {
-      const activeEl = document.activeElement;
-      const isUserTyping = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT');
-      if (!isUserTyping && state.activeModal !== 'SIGNUP_FLOW') {
-        fetchState(false);
+      // High performance: Only poll if WebSocket is disconnected!
+      // When WebSocket is active, all broadcasts arrive instantly with 0ms latency without hammering the server.
+      if (!isWsConnected) {
+        const activeEl = document.activeElement;
+        const isUserTyping = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT');
+        if (!isUserTyping && state.activeModal !== 'SIGNUP_FLOW') {
+          fetchState(false);
+        }
       }
-    }, 1200);
+    }, 2000);
   }
 }
 
@@ -705,6 +709,7 @@ function handleIncomingRealtimeEvent(data) {
       else state.db.requests.unshift(request);
     }
     lastUiOverlaySignature = ''; // Invalidate signature cache!
+    lastOffersSignature = ''; // Invalidate offers cache so card appears instantly!
     const currentActive = getCustomerActiveRequest();
     if (state.role === 'CUSTOMER' && currentActive && currentActive.id === requestId && 'vibrate' in navigator) {
       try { navigator.vibrate([150, 70, 150]); } catch (e) {}
@@ -721,6 +726,7 @@ function handleIncomingRealtimeEvent(data) {
       if (idx >= 0) state.db.requests[idx] = request;
     }
     lastUiOverlaySignature = ''; // Invalidate signature cache so accepted request card vanishes for all other providers!
+    lastOffersSignature = '';
     if (state.role === 'PROVIDER') {
       if (state.currentUser?.id === acceptedProviderId) {
         state.providerTab = 'ACTIVE_JOB';
@@ -869,6 +875,7 @@ function connectWebSocket() {
         try { realtimeEventSource.close(); } catch (e) {}
         realtimeEventSource = null;
       }
+      fetchState(true);
     };
 
     ws.onmessage = (event) => {

@@ -973,69 +973,68 @@ function setupWebSocketServer(httpServer) {
       }
     });
     console.log('Real-Time WebSocket (ws library) initialized on /ws');
-    return;
+  } else {
+    // Pure Node.js RFC 6455 WebSocket engine (Zero dependencies required)
+    httpServer.on('upgrade', (req, socket, head) => {
+      const { pathname } = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+      if (pathname !== '/ws') {
+        socket.destroy();
+        return;
+      }
+      const key = req.headers['sec-websocket-key'];
+      if (!key) {
+        socket.destroy();
+        return;
+      }
+      const GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
+      const accept = crypto.createHash('sha1').update(key + GUID).digest('base64');
+      const headers = [
+        'HTTP/1.1 101 Switching Protocols',
+        'Upgrade: websocket',
+        'Connection: Upgrade',
+        `Sec-WebSocket-Accept: ${accept}`,
+        '',
+        ''
+      ];
+      socket.write(headers.join('\r\n'));
+
+      const client = {
+        socket,
+        send: (data) => {
+          try {
+            const payload = Buffer.from(typeof data === 'string' ? data : JSON.stringify(data));
+            const len = payload.length;
+            let header;
+            if (len < 126) {
+              header = Buffer.from([0x81, len]);
+            } else if (len <= 65535) {
+              header = Buffer.alloc(4);
+              header[0] = 0x81;
+              header[1] = 126;
+              header.writeUInt16BE(len, 2);
+            } else {
+              header = Buffer.alloc(10);
+              header[0] = 0x81;
+              header[1] = 127;
+              header.writeBigUInt64BE(BigInt(len), 2);
+            }
+            socket.write(Buffer.concat([header, payload]));
+          } catch (e) {
+            wsClients.delete(client);
+          }
+        }
+      };
+
+      wsClients.add(client);
+      client.send({ eventType: 'CONNECTED', transport: 'node-rfc6455', timestamp: new Date().toISOString() });
+
+      socket.on('close', () => wsClients.delete(client));
+      socket.on('error', () => wsClients.delete(client));
+    });
+    console.log('Real-Time WebSocket (native Node RFC 6455) initialized on /ws');
   }
 
-  // Pure Node.js RFC 6455 WebSocket engine (Zero dependencies required)
-  httpServer.on('upgrade', (req, socket, head) => {
-    const { pathname } = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
-    if (pathname !== '/ws') {
-      socket.destroy();
-      return;
-    }
-    const key = req.headers['sec-websocket-key'];
-    if (!key) {
-      socket.destroy();
-      return;
-    }
-    const GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
-    const accept = crypto.createHash('sha1').update(key + GUID).digest('base64');
-    const headers = [
-      'HTTP/1.1 101 Switching Protocols',
-      'Upgrade: websocket',
-      'Connection: Upgrade',
-      `Sec-WebSocket-Accept: ${accept}`,
-      '',
-      ''
-    ];
-    socket.write(headers.join('\r\n'));
-
-    const client = {
-      socket,
-      send: (data) => {
-        try {
-          const payload = Buffer.from(typeof data === 'string' ? data : JSON.stringify(data));
-          const len = payload.length;
-          let header;
-          if (len < 126) {
-            header = Buffer.from([0x81, len]);
-          } else if (len <= 65535) {
-            header = Buffer.alloc(4);
-            header[0] = 0x81;
-            header[1] = 126;
-            header.writeUInt16BE(len, 2);
-          } else {
-            header = Buffer.alloc(10);
-            header[0] = 0x81;
-            header[1] = 127;
-            header.writeBigUInt64BE(BigInt(len), 2);
-          }
-          socket.write(Buffer.concat([header, payload]));
-        } catch (e) {
-          wsClients.delete(client);
-        }
-      }
-    };
-
-    wsClients.add(client);
-    client.send({ eventType: 'CONNECTED', transport: 'node-rfc6455', timestamp: new Date().toISOString() });
-
-    socket.on('close', () => wsClients.delete(client));
-    socket.on('error', () => wsClients.delete(client));
-  });
-  console.log('Real-Time WebSocket (native Node RFC 6455) initialized on /ws');
-
-  // Keep-alive heartbeat every 20 seconds so Render / Cloudflare / proxies never drop idle WebSockets
+  // Keep-alive heartbeat every 15 seconds so Render / Cloudflare / proxies never drop idle WebSockets
   setInterval(() => {
     const pingMsg = JSON.stringify({ eventType: 'PING', timestamp: new Date().toISOString() });
     for (const client of wsClients) {
@@ -1047,7 +1046,7 @@ function setupWebSocketServer(httpServer) {
         wsClients.delete(client);
       }
     }
-  }, 20000);
+  }, 15000);
 }
 
 function scheduleStaggeredProviderBids(requestId) {
