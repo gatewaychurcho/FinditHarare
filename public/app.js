@@ -137,6 +137,7 @@ function uiIcon(name, size = 16) {
     plus: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
     dotOnline: `<svg width="${s}" height="${s}" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;"><circle cx="8" cy="8" r="6" fill="#FFFFFF"/><circle cx="8" cy="8" r="3.5" fill="#10B981"/></svg>`,
     dotOffline: `<svg width="${s}" height="${s}" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;"><circle cx="8" cy="8" r="5" stroke="#FFFFFF" stroke-width="2"/></svg>`,
+    refresh: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>`,
     zwFlag: `<svg width="${s}" height="${Math.round(s * 0.72)}" viewBox="0 0 28 20" fill="none" style="border-radius:3px; flex-shrink:0;"><rect width="28" height="20" fill="#006400"/><rect y="3" width="28" height="14" fill="#FFD200"/><rect y="6" width="28" height="8" fill="#D40000"/><rect y="8.5" width="28" height="3" fill="#000000"/><polygon points="0,0 11,10 0,20" fill="#FFFFFF"/></svg>`
   };
   return icons[name] || icons.sparkle;
@@ -304,13 +305,24 @@ function loadSavedSession() {
     const raw = localStorage.getItem(SESSION_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (parsed.loggedOut || !parsed.accountId) {
+      if (parsed.loggedOut) {
         state.isAuthenticated = false;
         state.currentUser = null;
         state.savedAccountId = null;
-      } else if (parsed.role && parsed.accountId) {
-        state.role = parsed.role;
+      } else if (parsed.user && typeof parsed.user === 'object') {
+        state.role = parsed.role || parsed.user.role || 'CUSTOMER';
+        state.currentUser = parsed.user;
+        state.savedAccountId = parsed.user.id || parsed.accountId;
+        state.isAuthenticated = true;
+      } else if (parsed.accountId) {
+        state.role = parsed.role || 'CUSTOMER';
         state.savedAccountId = parsed.accountId;
+        state.currentUser = {
+          id: parsed.accountId,
+          name: 'Verified User',
+          phone: '',
+          role: state.role
+        };
         state.isAuthenticated = true;
       }
     } else {
@@ -324,9 +336,41 @@ function loadSavedSession() {
   }
 }
 
-function saveSession(role, accountId, loggedOut = false) {
+function saveSession(role, userOrId, loggedOut = false) {
   try {
-    localStorage.setItem(SESSION_KEY, JSON.stringify({ role, accountId, loggedOut }));
+    if (loggedOut || !userOrId) {
+      localStorage.removeItem(SESSION_KEY);
+      state.isAuthenticated = false;
+      state.currentUser = null;
+      state.savedAccountId = null;
+      return;
+    }
+    const resolvedRole = role || state.role || 'CUSTOMER';
+    let user = null;
+    if (typeof userOrId === 'object' && userOrId !== null) {
+      user = userOrId;
+    } else if (state.currentUser && state.currentUser.id === userOrId) {
+      user = state.currentUser;
+    } else {
+      user = {
+        id: userOrId,
+        role: resolvedRole,
+        name: state.authName || 'Findit User',
+        phone: state.authPhone || ''
+      };
+    }
+    const payload = {
+      role: resolvedRole,
+      accountId: user.id,
+      user,
+      loggedOut: false,
+      timestamp: Date.now()
+    };
+    localStorage.setItem(SESSION_KEY, JSON.stringify(payload));
+    state.isAuthenticated = true;
+    state.currentUser = user;
+    state.savedAccountId = user.id;
+    state.role = resolvedRole;
   } catch (e) {}
 }
 
@@ -367,31 +411,24 @@ async function fetchState() {
 
     state.db = newDb;
 
-    if (state.isAuthenticated && state.savedAccountId) {
-      if (state.role === 'PROVIDER') {
-        const found = (state.db.providers || []).find((p) => p.id === state.savedAccountId);
-        if (found) {
-          state.currentUser = found;
-          state.isAuthenticated = true;
-        } else {
-          state.currentUser = null;
-          state.isAuthenticated = false;
-          state.savedAccountId = null;
-        }
+    // Rock-solid session retention: NEVER log out or nullify an active user!
+    if (state.isAuthenticated && state.currentUser) {
+      const list = state.role === 'PROVIDER' ? (state.db.providers || []) : (state.db.customers || []);
+      const found = list.find((item) => item.id === state.currentUser.id || (item.phone && state.currentUser.phone && item.phone.replace(/\D/g, '') === state.currentUser.phone.replace(/\D/g, '')));
+      if (found) {
+        state.currentUser = { ...state.currentUser, ...found };
       } else {
-        const found = (state.db.customers || []).find((c) => c.id === state.savedAccountId);
-        if (found) {
-          state.currentUser = found;
-          state.isAuthenticated = true;
-        } else {
-          state.currentUser = null;
-          state.isAuthenticated = false;
-          state.savedAccountId = null;
-        }
+        // Keep user in local memory DB array so they are always recognized
+        list.push(state.currentUser);
       }
-    } else {
-      state.currentUser = null;
-      state.isAuthenticated = false;
+      state.isAuthenticated = true;
+    } else if (state.savedAccountId) {
+      const list = state.role === 'PROVIDER' ? (state.db.providers || []) : (state.db.customers || []);
+      const found = list.find((item) => item.id === state.savedAccountId);
+      if (found) {
+        state.currentUser = found;
+        state.isAuthenticated = true;
+      }
     }
 
     syncRecommendedFare();
@@ -437,6 +474,12 @@ function connectRealtimeStream() {
           }
           updateChatFeedDomOnly(targetReq);
         }
+      }
+
+      // If user is currently typing in an input or on sign up flow, never interrupt their screen!
+      const activeEl = document.activeElement;
+      const isUserTyping = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT');
+      if (state.activeModal === 'SIGNUP_FLOW' || isUserTyping) {
         return;
       }
 
@@ -1970,9 +2013,10 @@ function renderNativeAuthScreen() {
 }
 
 function renderSignUpWizardInnerHtml(isFullScreen = false) {
-  const suburbs = state.db.suburbs || [];
-  const activeCategories = (state.db.categories || []).filter((c) => c.status === 'ACTIVE');
+  const suburbs = state.db?.suburbs || [];
+  const activeCategories = (state.db?.categories || []).filter((c) => c.status === 'ACTIVE');
 
+  // STEP 1: PHONE NUMBER & ACCOUNT DETAILS
   if (state.authStep === 'PHONE') {
     return `
       <div>
@@ -1981,21 +2025,22 @@ function renderSignUpWizardInnerHtml(isFullScreen = false) {
             <img src="/assets/logo-icon.svg" width="38" height="38" style="border-radius:11px; display:block;" alt="Findit Logo" />
             <div>
               <div style="font-size:18px; font-weight:800; color:var(--text-main);">Findit Harare</div>
-              <div style="font-size:11.5px; color:var(--text-secondary); font-weight:600;">Sign Up / Log In with WhatsApp</div>
+              <div style="font-size:11.5px; color:var(--text-secondary); font-weight:600;">Sign Up / Sign In (Step 1 of 2)</div>
             </div>
           </div>
           ${!isFullScreen ? `<button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>` : ''}
         </div>
 
         <div style="font-size:21px; font-weight:800; color:var(--text-main); margin-bottom:4px;">
-          Enter your WhatsApp number
+          Enter your details
         </div>
         <div style="font-size:13px; color:var(--text-secondary); margin-bottom:16px;">
-          We'll send a 4-digit verification code to verify your account
+          Existing accounts log in instantly; new accounts proceed to face scan.
         </div>
 
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:14px;">
           <button
+            type="button"
             class="${state.authRole === 'CUSTOMER' ? 'btn-primary-blue' : 'btn-dark-sec'}"
             style="height:44px; font-size:13px;"
             onclick="state.authRole='CUSTOMER'; renderAll();"
@@ -2004,6 +2049,7 @@ function renderSignUpWizardInnerHtml(isFullScreen = false) {
             <span>Client Account</span>
           </button>
           <button
+            type="button"
             class="${state.authRole === 'PROVIDER' ? 'btn-primary-blue' : 'btn-dark-sec'}"
             style="height:44px; font-size:13px;"
             onclick="state.authRole='PROVIDER'; renderAll();"
@@ -2013,23 +2059,58 @@ function renderSignUpWizardInnerHtml(isFullScreen = false) {
           </button>
         </div>
 
-        <div style="display:flex; gap:10px; margin-bottom:16px;">
-          <div style="background:var(--blue-soft); border:1.5px solid var(--blue-border); border-radius:13px; padding:11px 13px; font-weight:800; color:var(--blue-primary); display:inline-flex; align-items:center; gap:7px; white-space:nowrap;">
-            ${uiIcon('zwFlag', 20)}
-            <span>+263</span>
+        <div style="display:flex; flex-direction:column; gap:12px; margin-bottom:16px;">
+          <div>
+            <label style="font-size:11.5px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px; display:block;">Full Name</label>
+            <input
+              class="dark-input"
+              placeholder="e.g. Nyasha Mutasa"
+              value="${state.authName || ''}"
+              oninput="state.authName = this.value"
+            />
           </div>
-          <input
-            type="tel"
-            class="dark-input"
-            style="font-size:16.5px; font-weight:800; flex:1;"
-            placeholder="77 200 1001"
-            value="${state.authPhone.replace(/^\+?263\s*/, '')}"
-            oninput="state.authPhone = '+263 ' + this.value"
-          />
+
+          <div>
+            <label style="font-size:11.5px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px; display:block;">WhatsApp / Phone Number</label>
+            <div style="display:flex; gap:10px;">
+              <div style="background:var(--blue-soft); border:1.5px solid var(--blue-border); border-radius:13px; padding:11px 13px; font-weight:800; color:var(--blue-primary); display:inline-flex; align-items:center; gap:7px; white-space:nowrap;">
+                ${uiIcon('zwFlag', 20)}
+                <span>+263</span>
+              </div>
+              <input
+                type="tel"
+                class="dark-input"
+                style="font-size:16px; font-weight:800; flex:1;"
+                placeholder="77 200 1001"
+                value="${(state.authPhone || '').replace(/^\+?263\s*/, '')}"
+                oninput="state.authPhone = '+263 ' + this.value"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label style="font-size:11.5px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px; display:block;">Harare Suburb</label>
+            <select class="dark-input" onchange="state.authSuburbId = this.value">
+              ${suburbs.map((s) => `<option value="${s.id}" ${s.id === state.authSuburbId ? 'selected' : ''}>${s.name}, Harare</option>`).join('')}
+            </select>
+          </div>
+
+          ${state.authRole === 'PROVIDER' ? `
+            <div>
+              <label style="font-size:11.5px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px; display:block;">Profession / Trade</label>
+              <select class="dark-input" onchange="state.authCategoryId = this.value">
+                ${activeCategories.map((c) => `<option value="${c.id}" ${c.id === state.authCategoryId ? 'selected' : ''}>${c.fullName || c.name}</option>`).join('')}
+              </select>
+            </div>
+            <div>
+              <label style="font-size:11.5px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px; display:block;">Starting Rate in USD ($)</label>
+              <input type="number" class="dark-input" placeholder="25" value="${state.authStartingPrice || 25}" oninput="state.authStartingPrice = this.value" />
+            </div>
+          ` : ''}
         </div>
 
-        <label style="display:flex; align-items:flex-start; gap:9px; font-size:12.5px; color:var(--text-secondary); margin-bottom:18px; line-height:1.45;">
-          <input type="checkbox" ${state.authTermsAccepted ? 'checked' : ''} onchange="state.authTermsAccepted=this.checked" style="margin-top:3px; accent-color:#0066FF;" />
+        <label style="display:flex; align-items:flex-start; gap:9px; font-size:12px; color:var(--text-secondary); margin-bottom:18px; line-height:1.45;">
+          <input type="checkbox" ${state.authTermsAccepted ? 'checked' : ''} onchange="state.authTermsAccepted = this.checked" style="margin-top:3px; accent-color:#0066FF;" />
           <span>
             I agree to Findit Harare's
             <a href="javascript:void(0)" onclick="state.activeModal='TERMS_MODAL'; renderModalLayer();" style="color:var(--blue-primary); font-weight:700;">Terms &amp; Conditions</a>
@@ -2038,300 +2119,203 @@ function renderSignUpWizardInnerHtml(isFullScreen = false) {
           </span>
         </label>
 
-        <button class="btn-primary-blue" style="height:50px;" onclick="submitPhoneForOtp()">
-          ${uiIcon('shield', 16)}
-          <span>Continue with WhatsApp</span>
+        <button type="button" class="btn-primary-blue" style="height:52px; font-size:15px; font-weight:800;" onclick="submitPhoneForFaceStep()">
+          ${uiIcon('camera', 18)}
+          <span>Continue to Step 2: Scan Face for Logo</span>
         </button>
       </div>
     `;
   }
 
-  if (state.authStep === 'OTP') {
-    return `
-      <div>
-        <div class="cancel-sheet-header">
-          <button class="btn-dark-sec" style="padding:6px 12px;" onclick="state.authStep='PHONE'; renderAll();">
-            ${uiIcon('arrowLeft', 14)}
-            <span>Back</span>
-          </button>
-          ${!isFullScreen ? `<button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>` : ''}
-        </div>
-
-        <div style="font-size:21px; font-weight:800; margin-bottom:4px;">WhatsApp Verification</div>
-        <div style="font-size:13px; color:var(--text-secondary); margin-bottom:14px;">
-          Number: <strong style="color:var(--text-main);">${state.authPhone}</strong>
-        </div>
-
-        <div style="background:#ECFDF5; border:1px solid #10B981; border-radius:12px; padding:11px 14px; margin-bottom:18px; display:flex; align-items:center; gap:10px;">
-          <span style="color:#059669; display:inline-flex;">${uiIcon('shield', 18)}</span>
-          <div style="font-size:12px; color:#065F46; line-height:1.4;">
-            <strong>Real WhatsApp Verification:</strong> Fast, protected login for verified Harare clients and specialists.
-          </div>
-        </div>
-
-        <div style="display:flex; justify-content:center; gap:12px; margin-bottom:18px;">
-          ${[0, 1, 2, 3].map((i) => `
-            <input
-              id="auth_otp_${i}"
-              class="otp-digit-input"
-              maxlength="1"
-              value="${state.authOtpDigits[i] || ''}"
-              oninput="onAuthOtpInput(${i}, this.value)"
-            />
-          `).join('')}
-        </div>
-
-        <button class="btn-primary-blue" style="height:48px; margin-bottom:10px;" onclick="verifyAuthOtpCode()">
-          ${uiIcon('check', 16)}
-          <span>Verify &amp; Continue</span>
-        </button>
-
-        <button class="btn-dark-sec" style="height:46px; width:100%; font-weight:700; color:var(--blue-primary); margin-bottom:10px; display:inline-flex; align-items:center; justify-content:center; gap:8px;" onclick="fastTrackVerifyOtp()">
-          ${uiIcon('sparkle', 16)}
-          <span>Fast-Track Instant Verify</span>
-        </button>
-
-        <a
-          href="https://wa.me/263713475131?text=${encodeURIComponent('Hi Findit Harare! My phone is ' + state.authPhone + '. Please send my 4-digit verification code.')}"
-          target="_blank"
-          class="btn-dark-sec"
-          style="display:inline-flex; align-items:center; justify-content:center; gap:8px; width:100%; height:46px; text-decoration:none; font-size:13px; font-weight:700; color:#059669; border-color:#A7F3D0; background:#ECFDF5;"
-        >
-          ${uiIcon('chat', 15)}
-          <span>Message @FinditHarare on WhatsApp</span>
-        </a>
-      </div>
-    `;
-  }
-
-  // STEP 2: REAL IDENTITY VERIFICATION (NO CAMERAS, ZERO HEADACHES)
-  const initialChars = (state.authName || 'FH').trim().split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2) || 'FH';
-
+  // STEP 2: SCAN FACE FOR VERIFICATION & OFFICIAL PROFILE LOGO
   return `
     <div>
       <div class="cancel-sheet-header">
-        <div class="cancel-sheet-title">
-          ${state.authRole === 'PROVIDER' ? 'Verify Specialist Identity' : 'Verify Client Identity'}
-        </div>
+        <button type="button" class="btn-dark-sec" style="padding:6px 12px;" onclick="stopFaceCameraStream(); state.authStep='PHONE'; renderAll();">
+          ${uiIcon('arrowLeft', 14)}
+          <span>Back</span>
+        </button>
         ${!isFullScreen ? `<button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>` : ''}
       </div>
 
-      <!-- Real Zimbabwe Verified Digital ID Badge -->
-      <div style="background:linear-gradient(135deg, #0F172A 0%, #1E293B 100%); border-radius:18px; padding:16px 18px; color:#FFFFFF; margin-bottom:16px; box-shadow:0 8px 24px rgba(15,23,42,0.25); position:relative; overflow:hidden;">
-        <div style="position:absolute; right:-15px; top:-15px; width:90px; height:90px; border-radius:50%; background:rgba(0,102,255,0.12);"></div>
-
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-          <div style="display:flex; align-items:center; gap:8px;">
-            ${uiIcon('zwFlag', 20)}
-            <span style="font-size:11px; font-weight:800; letter-spacing:0.08em; text-transform:uppercase; color:#94A3B8;">
-              ${state.authRole === 'PROVIDER' ? 'FINDIT VERIFIED SPECIALIST' : 'FINDIT VERIFIED CLIENT'}
-            </span>
-          </div>
-          <div style="background:#10B981; color:#FFFFFF; font-size:10px; font-weight:800; padding:3px 9px; border-radius:99px; display:inline-flex; align-items:center; gap:4px;">
-            ${uiIcon('check', 11)}
-            <span>OFFICIAL ID</span>
-          </div>
-        </div>
-
-        <div style="display:flex; align-items:center; gap:14px;">
-          <div id="cardBadgeAvatar" style="width:48px; height:48px; border-radius:14px; background:#0066FF; color:#FFFFFF; display:flex; align-items:center; justify-content:center; font-size:18px; font-weight:800; flex-shrink:0; box-shadow:0 4px 12px rgba(0,102,255,0.4);">
-            ${initialChars}
-          </div>
-          <div style="flex:1; min-width:0;">
-            <div id="cardBadgeName" style="font-size:16px; font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-              ${escapeHtml(state.authName || 'Enter Your Full Legal Name')}
-            </div>
-            <div style="font-size:12px; color:#94A3B8; margin-top:2px;">
-              WhatsApp: <strong style="color:#FFFFFF;">${state.authPhone}</strong>
-            </div>
-          </div>
-        </div>
+      <div style="font-size:21px; font-weight:800; color:var(--text-main); margin-bottom:4px;">
+        Scan Face for Logo
+      </div>
+      <div style="font-size:13px; color:var(--text-secondary); margin-bottom:18px;">
+        Step 2 of 2: Snap your face photo to use as your official logo on Findit Harare.
       </div>
 
-      <div style="display:flex; flex-direction:column; gap:11px; margin-bottom:16px;">
-        <div>
-          <label style="font-size:11.5px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px; display:block;">Full Legal Name</label>
-          <input
-            class="dark-input"
-            placeholder="e.g. Nyasha Mutasa"
-            value="${state.authName}"
-            oninput="state.authName=this.value; const b=document.getElementById('cardBadgeName'); if(b) b.textContent=this.value||'Enter Your Full Legal Name'; const a=document.getElementById('cardBadgeAvatar'); if(a) a.textContent=this.value.trim().split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2)||'FH';"
-          />
+      <!-- Biometric Circular Face Logo Scanner Frame -->
+      <div style="display:flex; flex-direction:column; align-items:center; margin-bottom:20px;">
+        <div style="position:relative; width:220px; height:220px; border-radius:50%; border:3.5px solid var(--blue-primary); box-shadow:0 0 28px rgba(0,102,255,0.4); overflow:hidden; background:#0F172A; display:flex; align-items:center; justify-content:center;">
+          ${state.authCapturedSelfieUrl ? `
+            <img src="${state.authCapturedSelfieUrl}" alt="Face Logo" style="width:100%; height:100%; object-fit:cover; display:block;" />
+          ` : `
+            <video id="authSelfieVideo" autoplay playsinline muted style="width:100%; height:100%; object-fit:cover; display:block;"></video>
+          `}
+          <canvas id="authSelfieCanvas" style="display:none;"></canvas>
+          <input type="file" id="authFaceFileInput" accept="image/*" style="display:none;" onchange="handleAuthFaceFileUpload(this)" />
         </div>
 
-        <div>
-          <label style="font-size:11.5px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px; display:block;">Zimbabwe National ID Number</label>
-          <input
-            class="dark-input"
-            placeholder="e.g. 63-2948102-F-42"
-            value="${state.authNationalId || '63-2948102-F-42'}"
-            oninput="state.authNationalId=this.value"
-          />
-        </div>
-
-        <div>
-          <label style="font-size:11.5px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px; display:block;">Home Suburb in Harare</label>
-          <select class="dark-input" onchange="state.authSuburbId=this.value">
-            ${suburbs.map((s) => `<option value="${s.id}" ${s.id === state.authSuburbId ? 'selected' : ''}>${s.name}, Harare</option>`).join('')}
-          </select>
-        </div>
-
-        ${state.authRole === 'PROVIDER' ? `
-          <div>
-            <label style="font-size:11.5px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px; display:block;">Profession / Trade</label>
-            <select class="dark-input" onchange="state.authCategoryId=this.value">
-              ${activeCategories.map((c) => `<option value="${c.id}" ${c.id === state.authCategoryId ? 'selected' : ''}>${c.fullName || c.name}</option>`).join('')}
-            </select>
+        ${state.authCapturedSelfieUrl ? `
+          <div style="background:#ECFDF5; border:1px solid #10B981; color:#065F46; padding:7px 14px; border-radius:99px; font-weight:800; font-size:12px; display:inline-flex; align-items:center; gap:6px; margin-top:14px;">
+            ${uiIcon('check', 14)}
+            <span>Face Logo Ready ✓</span>
           </div>
-
-          <div>
-            <label style="font-size:11.5px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px; display:block;">Experience / Skill Level</label>
-            <select class="dark-input" onchange="state.authSkillTier=this.value">
-              <option value="Platinum pro" ${state.authSkillTier === 'Platinum pro' ? 'selected' : ''}>Platinum Master Pro</option>
-              <option value="Verified pro" ${state.authSkillTier === 'Verified pro' ? 'selected' : ''}>Verified Specialist</option>
-              <option value="Junior pro" ${state.authSkillTier === 'Junior pro' ? 'selected' : ''}>Junior / Rising Talent</option>
-            </select>
+        ` : `
+          <div id="authCameraHint" style="font-size:12px; color:var(--text-secondary); margin-top:12px; font-weight:600; text-align:center;">
+            Position your face inside the circle &amp; tap Snap
           </div>
-
-          <div>
-            <label style="font-size:11.5px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px; display:block;">Brand / Mobile Kit Name</label>
-            <input class="dark-input" placeholder="e.g. Mobile Knotless Studio" value="${state.authBrandName}" oninput="state.authBrandName=this.value" />
-          </div>
-
-          <div>
-            <label style="font-size:11.5px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px; display:block;">Starting Rate in USD ($)</label>
-            <input type="number" class="dark-input" placeholder="e.g. 25" value="${state.authStartingPrice}" oninput="state.authStartingPrice=this.value" />
-          </div>
-        ` : ''}
+        `}
       </div>
 
-      <div style="background:#ECFDF5; border:1px solid #10B981; border-radius:12px; padding:10px 13px; margin-bottom:14px; display:flex; align-items:center; gap:9px;">
-        <span style="color:#059669; display:inline-flex;">${uiIcon('shield', 16)}</span>
-        <div style="font-size:11.5px; color:#065F46; line-height:1.4;">
-          <strong>1-Time Verification:</strong> You verify once and never see this again. All bookings are protected inside Findit Harare.
-        </div>
-      </div>
-
-      <button class="btn-primary-blue" style="height:52px; font-size:15px; font-weight:800;" onclick="finishNativeRegistration()">
-        ${uiIcon('check', 17)}
-        <span>${state.authRole === 'PROVIDER' ? 'Activate Verified Provider Account' : 'Activate Verified Client Account'}</span>
-      </button>
+      ${!state.authCapturedSelfieUrl ? `
+        <button type="button" class="btn-primary-blue" style="height:52px; font-size:15px; font-weight:800; margin-bottom:10px;" onclick="captureAuthFaceSelfie()">
+          ${uiIcon('camera', 18)}
+          <span>Snap Face for Logo</span>
+        </button>
+        <button type="button" class="btn-dark-sec" style="height:46px; font-size:13px; font-weight:700; width:100%; display:inline-flex; align-items:center; justify-content:center; gap:8px;" onclick="document.getElementById('authFaceFileInput').click()">
+          ${uiIcon('image', 16)}
+          <span>Choose Photo from Device</span>
+        </button>
+      ` : `
+        <button type="button" class="btn-primary-blue" style="height:52px; font-size:15px; font-weight:800; margin-bottom:10px;" onclick="finishNativeRegistration()">
+          ${uiIcon('sparkle', 18)}
+          <span>Join Findit Harare</span>
+        </button>
+        <button type="button" class="btn-dark-sec" style="height:46px; font-size:13px; font-weight:700; width:100%; display:inline-flex; align-items:center; justify-content:center; gap:8px;" onclick="retakeAuthFaceSelfie()">
+          ${uiIcon('refresh', 15)}
+          <span>Retake Photo</span>
+        </button>
+      `}
     </div>
   `;
 }
 
-function handleSignupPortfolioFile(inputEl) {
-  const file = inputEl.files && inputEl.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    state.authPortfolioPhotoUrl = e.target.result;
-    renderAll();
-  };
-  reader.readAsDataURL(file);
-}
+async function submitPhoneForFaceStep() {
+  const name = (state.authName || '').trim();
+  const rawPhone = (state.authPhone || '').trim();
+  const digits = rawPhone.replace(/\D/g, '');
 
-async function submitPhoneForOtp() {
+  if (digits.length < 8) {
+    showToast('Please enter a valid Zimbabwe phone number (+263...)', 'error');
+    return;
+  }
+  if (!name) {
+    showToast('Please enter your full name', 'error');
+    return;
+  }
   if (!state.authTermsAccepted) {
     showToast('Please accept the Terms & Conditions and Privacy Policy', 'error');
     return;
   }
-  const cleaned = state.authPhone.trim();
-  const digits = cleaned.replace(/\D/g, '');
-  if (digits.length < 8) {
-    showToast('Enter a valid Zimbabwe WhatsApp number', 'error');
-    return;
-  }
 
-  // 1-Click Instant Login for any existing account (no OTP delay or headache!)
+  // 1-Click Instant Sign-In for Existing Accounts (ZERO WAIT, NO CODES!)
   const last9 = digits.slice(-9);
   if (state.db) {
     const list = state.authRole === 'PROVIDER' ? (state.db.providers || []) : (state.db.customers || []);
     const existing = list.find((item) => (item.phone || '').replace(/\D/g, '').slice(-9) === last9 && !item.isBanned);
     if (existing) {
+      stopFaceCameraStream();
       state.currentUser = existing;
       state.isAuthenticated = true;
       state.activeModal = null;
-      saveSession(state.authRole, existing.id, false);
+      state.authStep = 'PHONE';
+      saveSession(state.authRole, existing, false);
       showToast(`Welcome back, ${existing.name}!`);
       renderAll();
       return;
     }
   }
 
-  // If new user, fast-track directly to Real Identity Verification
-  state.authStep = 'PROFILE';
+  // Proceed to Step 2: Scan Face for Logo
+  state.authStep = 'FACE';
   renderAll();
+  setTimeout(startAuthFaceCamera, 120);
 }
 
-function onAuthOtpInput(idx, val) {
-  state.authOtpDigits[idx] = val.replace(/\D/g, '').slice(0, 1);
-  if (val && idx < 3) {
-    const next = document.getElementById(`auth_otp_${idx + 1}`);
-    if (next) next.focus();
+async function startAuthFaceCamera() {
+  stopFaceCameraStream();
+  const videoEl = document.getElementById('authSelfieVideo');
+  if (!videoEl) return;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: 'user',
+        width: { ideal: 640 },
+        height: { ideal: 640 }
+      },
+      audio: false
+    });
+    mediaStreamRef = stream;
+    videoEl.srcObject = stream;
+    await videoEl.play().catch(() => {});
+  } catch (err) {
+    console.warn('Camera preview note:', err.message);
+    const hintEl = document.getElementById('authCameraHint');
+    if (hintEl) {
+      hintEl.textContent = 'Camera unavailable or blocked. Tap "Choose Photo from Device" below.';
+    }
   }
-  if (state.authOtpDigits.join('').length === 4) {
-    verifyAuthOtpCode();
-  }
 }
 
-function fastTrackVerifyOtp() {
-  state.authOtpDigits = ['1', '2', '3', '4'];
-  state.authStep = 'PROFILE';
-  renderAll();
-}
-
-async function verifyAuthOtpCode() {
-  const code = state.authOtpDigits.join('');
-  if (code.length < 4) {
-    showToast('Enter the 4-digit WhatsApp code, or tap Fast-Track', 'error');
+function captureAuthFaceSelfie() {
+  const videoEl = document.getElementById('authSelfieVideo');
+  const canvas = document.getElementById('authSelfieCanvas') || document.createElement('canvas');
+  if (!videoEl || !videoEl.videoWidth) {
+    showToast('Starting camera... please wait a moment or choose a photo', 'info');
     return;
   }
-  try {
-    const res = await apiPost('/api/auth/verify-whatsapp-otp', {
-      phone: state.authPhone,
-      code
-    });
-    const root = document.getElementById('whatsappBannerRoot');
-    if (root) root.innerHTML = '';
+  const size = Math.min(videoEl.videoWidth, videoEl.videoHeight) || 400;
+  canvas.width = 400;
+  canvas.height = 400;
+  const ctx = canvas.getContext('2d');
+  const sx = (videoEl.videoWidth - size) / 2;
+  const sy = (videoEl.videoHeight - size) / 2;
+  ctx.drawImage(videoEl, sx, sy, size, size, 0, 0, 400, 400);
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.88);
+  state.authCapturedSelfieUrl = dataUrl;
+  stopFaceCameraStream();
+  renderAll();
+}
 
-    // If an existing customer or provider profile matches this phone, log in immediately!
-    const cleanPhoneDigits = (state.authPhone || '').replace(/\D/g, '').slice(-9);
-    let existingAcc = state.authRole === 'PROVIDER' ? res.existingProvider : res.existingCustomer;
-    if (!existingAcc && state.db) {
-      const list = state.authRole === 'PROVIDER' ? (state.db.providers || []) : (state.db.customers || []);
-      existingAcc = list.find((item) => (item.phone || '').replace(/\D/g, '').slice(-9) === cleanPhoneDigits) || null;
-    }
-    if (existingAcc) {
-      state.currentUser = existingAcc;
-      state.isAuthenticated = true;
-      state.activeModal = null;
-      saveSession(state.authRole, existingAcc.id, false);
-      showToast(`Welcome back, ${existingAcc.name}!`);
-      renderAll();
-      return;
-    }
+function retakeAuthFaceSelfie() {
+  state.authCapturedSelfieUrl = null;
+  renderAll();
+  setTimeout(startAuthFaceCamera, 120);
+}
 
-    state.authStep = 'PROFILE';
+function handleAuthFaceFileUpload(inputEl) {
+  const file = inputEl.files && inputEl.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    state.authCapturedSelfieUrl = e.target.result;
+    stopFaceCameraStream();
     renderAll();
-  } catch (err) {
-    showToast(err.message, 'error');
-  }
+  };
+  reader.readAsDataURL(file);
 }
 
 async function finishNativeRegistration() {
   const name = (state.authName || '').trim();
   if (!name) {
     showToast('Please enter your full legal name', 'error');
+    state.authStep = 'PHONE';
+    renderAll();
     return;
   }
 
-  // Clean vector initials monogram avatar (fast, authentic, zero camera bugs)
-  const initials = name.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2) || 'FH';
-  const svgAvatar = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="22" fill="#0066FF"/><text x="50" y="62" font-size="38" font-weight="bold" fill="#FFFFFF" text-anchor="middle" font-family="Inter, -apple-system, sans-serif">${initials}</text></svg>`;
-  const finalAvatar = `data:image/svg+xml;utf8,${encodeURIComponent(svgAvatar)}`;
+  // Ensure an avatar is available (captured face logo, or fallback SVG monogram)
+  let finalAvatar = state.authCapturedSelfieUrl;
+  if (!finalAvatar) {
+    const initials = name.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2) || 'FH';
+    const svgAvatar = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="22" fill="#0066FF"/><text x="50" y="62" font-size="38" font-weight="bold" fill="#FFFFFF" text-anchor="middle" font-family="Inter, -apple-system, sans-serif">${initials}</text></svg>`;
+    finalAvatar = `data:image/svg+xml;utf8,${encodeURIComponent(svgAvatar)}`;
+  }
 
   try {
+    showToast('Creating your account...', 'info');
     const res = await apiPost('/api/auth/complete-signup', {
       role: state.authRole,
       name: name,
@@ -2346,12 +2330,26 @@ async function finishNativeRegistration() {
       portfolioImageUrl: state.authPortfolioPhotoUrl || ''
     });
 
+    stopFaceCameraStream();
     state.role = res.role;
     state.currentUser = res.user;
     state.isAuthenticated = true;
     state.activeModal = null;
-    saveSession(res.role, res.user.id, false);
-    showToast(`Welcome ${res.user.name}! Your account is verified.`);
+    state.authStep = 'PHONE';
+
+    // Insert or update in local in-memory DB immediately
+    if (state.db) {
+      const list = res.role === 'PROVIDER' ? (state.db.providers = state.db.providers || []) : (state.db.customers = state.db.customers || []);
+      const idx = list.findIndex((item) => item.id === res.user.id);
+      if (idx >= 0) {
+        list[idx] = res.user;
+      } else {
+        list.push(res.user);
+      }
+    }
+
+    saveSession(res.role, res.user, false);
+    showToast(`Welcome to Findit Harare, ${res.user.name}!`);
     renderAll();
   } catch (err) {
     showToast(err.message, 'error');
@@ -3672,13 +3670,14 @@ async function toggleClientAndProviderMode() {
       state.role = 'PROVIDER';
       state.currentUser = matchedProv;
       state.providerTab = 'FEED';
-      saveSession('PROVIDER', matchedProv.id, false);
+      saveSession('PROVIDER', matchedProv, false);
       showToast(`Switched to Provider: ${matchedProv.name}`);
       renderAll();
     } else {
       // Start authentic provider sign-in / registration wizard (like inDrive)
       state.authRole = 'PROVIDER';
       state.authStep = 'PHONE';
+      state.authName = state.currentUser?.name || '';
       state.authPhone = state.currentUser?.phone || '+263 77 ';
       state.activeModal = 'SIGNUP_FLOW';
       renderAll();
@@ -3694,14 +3693,23 @@ async function toggleClientAndProviderMode() {
     if (matchedCust) {
       state.role = 'CUSTOMER';
       state.currentUser = matchedCust;
-      saveSession('CUSTOMER', matchedCust.id, false);
+      saveSession('CUSTOMER', matchedCust, false);
       showToast('Switched to Client Mode');
       renderAll();
     } else {
+      const clientUser = {
+        id: 'cust_' + (state.currentUser?.id || Date.now().toString().slice(-4)),
+        finditId: 'FH-USR-' + Math.floor(100000 + Math.random() * 900000),
+        name: state.currentUser?.name || 'Findit Client',
+        phone: state.currentUser?.phone || '+263 77 ',
+        avatarUrl: state.currentUser?.avatarUrl || null,
+        suburbName: state.currentUser?.suburbName || 'Avondale'
+      };
+      if (state.db && state.db.customers) state.db.customers.push(clientUser);
       state.role = 'CUSTOMER';
-      state.currentUser = null;
-      state.isAuthenticated = false;
-      saveSession('CUSTOMER', null, true);
+      state.currentUser = clientUser;
+      saveSession('CUSTOMER', clientUser, false);
+      showToast('Switched to Client Mode');
       renderAll();
     }
   }
