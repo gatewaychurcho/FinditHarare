@@ -179,11 +179,49 @@ function formatProRatingAndJobs(rating, completedBookings) {
 }
 
 let arrivalVibrateInterval = null;
+let arrivalAudioCtx = null;
+
+function playArrivalChimeSound() {
+  try {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+    if (!arrivalAudioCtx) {
+      arrivalAudioCtx = new AudioContext();
+    }
+    if (arrivalAudioCtx.state === 'suspended') {
+      arrivalAudioCtx.resume();
+    }
+    const now = arrivalAudioCtx.currentTime;
+
+    const osc1 = arrivalAudioCtx.createOscillator();
+    const gain1 = arrivalAudioCtx.createGain();
+    osc1.type = 'sine';
+    osc1.frequency.setValueAtTime(659.25, now); // E5
+    gain1.gain.setValueAtTime(0.32, now);
+    gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+    osc1.connect(gain1);
+    gain1.connect(arrivalAudioCtx.destination);
+    osc1.start(now);
+    osc1.stop(now + 0.5);
+
+    const osc2 = arrivalAudioCtx.createOscillator();
+    const gain2 = arrivalAudioCtx.createGain();
+    osc2.type = 'sine';
+    osc2.frequency.setValueAtTime(523.25, now + 0.22); // C5
+    gain2.gain.setValueAtTime(0.32, now + 0.22);
+    gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.75);
+    osc2.connect(gain2);
+    gain2.connect(arrivalAudioCtx.destination);
+    osc2.start(now + 0.22);
+    osc2.stop(now + 0.8);
+  } catch (e) {}
+}
 
 function startArrivalVibrationAlert(req) {
   if (arrivalVibrateInterval) return;
+  playArrivalChimeSound();
   if ('vibrate' in navigator) {
-    try { navigator.vibrate([500, 200, 500, 200, 800]); } catch (e) {}
+    try { navigator.vibrate([600, 250, 600, 250, 1000]); } catch (e) {}
   }
   arrivalVibrateInterval = setInterval(() => {
     const activeReq = getCustomerActiveRequest();
@@ -191,8 +229,9 @@ function startArrivalVibrationAlert(req) {
       stopArrivalVibrationAlert();
       return;
     }
+    playArrivalChimeSound();
     if ('vibrate' in navigator) {
-      try { navigator.vibrate([500, 200, 500, 200, 800]); } catch (e) {}
+      try { navigator.vibrate([600, 250, 600, 250, 1000]); } catch (e) {}
     }
   }, 2400);
 }
@@ -529,7 +568,11 @@ async function fetchState(force = false) {
     const fp = computeStateFingerprint(state.db);
     if (force || fp !== lastStateFingerprint) {
       lastStateFingerprint = fp;
-      renderAll();
+      const activeEl = document.activeElement;
+      const isUserTyping = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT');
+      if (!isUserTyping || force) {
+        renderAll();
+      }
     }
   } catch (err) {
     console.error('Failed to load state:', err);
@@ -560,18 +603,33 @@ let realtimeEventSource = null;
 let realtimeReconnectTimer = null;
 let isWsConnected = false;
 
+let realtimeSyncInterval = null;
+
 function initRealtimeSync() {
   connectWebSocket();
+  if (!realtimeSyncInterval) {
+    realtimeSyncInterval = setInterval(() => {
+      const activeEl = document.activeElement;
+      const isUserTyping = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT');
+      if (!isUserTyping && state.activeModal !== 'SIGNUP_FLOW') {
+        fetchState(false);
+      }
+    }, 1500);
+  }
 }
 
 function handleIncomingRealtimeEvent(data) {
   if (!data || data.eventType === 'CONNECTED') return;
 
-  // 1. CHAT MESSAGE SENT
+  // 1. CHAT MESSAGE SENT (Encrypted & private between customer and assigned provider only)
   if (data.eventType === 'MESSAGE_SENT' && data.payload) {
     const { requestId, message } = data.payload;
     const targetReq = (state.db?.requests || []).find((r) => r.id === requestId);
     if (targetReq && message) {
+      const isParty = (state.role === 'CUSTOMER' && targetReq.customerId === state.currentUser?.id) ||
+                      (state.role === 'PROVIDER' && targetReq.acceptedProviderId === state.currentUser?.id);
+      if (!isParty) return;
+
       if (!targetReq.messages) targetReq.messages = [];
       if (!targetReq.messages.some((m) => m.id === message.id)) {
         targetReq.messages.push(message);
@@ -627,13 +685,12 @@ function handleIncomingRealtimeEvent(data) {
     if (state.role === 'PROVIDER') {
       if (state.currentUser?.id === acceptedProviderId) {
         state.providerTab = 'ACTIVE_JOB';
-        showToast(`Offer accepted by ${request.customerName}! Route active.`);
         if ('vibrate' in navigator) {
           try { navigator.vibrate([200, 100, 200]); } catch (e) {}
         }
       } else {
-        // Another provider took the job! It vanishes from this provider's feed immediately!
-        showToast(`Job "${request.title}" was accepted by another specialist.`);
+        // Another provider took the job: silently purge from feed with zero pop-ups
+        state.providerTab = 'FEED';
       }
     }
     if (state.role === 'CUSTOMER') {
@@ -712,8 +769,10 @@ function connectWebSocket() {
   }
 
   try {
+    const isVercel = typeof window !== 'undefined' && window.location.hostname.includes('vercel.app');
     const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${wsProto}//${window.location.host}/ws`;
+    const targetHost = isVercel ? 'finditharare.onrender.com' : window.location.host;
+    const wsUrl = `${wsProto}//${targetHost}/ws`;
     const ws = new WebSocket(wsUrl);
     realtimeWebSocket = ws;
 
@@ -1073,6 +1132,13 @@ async function drawRoadRouteOnMap(lat1, lng1, lat2, lng2, color = '#0066FF', wei
     weight,
     opacity: 0.92
   }).addTo(leafletMap);
+
+  // Automatically zoom and center the map so the full route to the client is visible
+  if (coords && coords.length > 1) {
+    try {
+      leafletMap.fitBounds(L.latLngBounds(coords), { padding: [60, 60], maxZoom: 16 });
+    } catch (e) {}
+  }
 }
 
 function useBrowserGeolocation(silent = false) {
@@ -1997,23 +2063,23 @@ function renderConfigureFareOverlay() {
           </div>
 
           <!-- Style Reference Photo Upload (1 photo of hairstyle, nails, fade) -->
-          <div style="margin-bottom:12px;">
+          <div style="margin-bottom:14px;">
             <input type="file" id="stylePhotoInput" accept="image/*" style="display:none;" onchange="handleDraftStylePhotoUpload(this)" />
             ${state.draftPhotoUrl ? `
-              <div class="style-photo-preview-wrap">
-                <img src="${state.draftPhotoUrl}" class="style-photo-thumb" onclick="openImagePreviewModal('${state.draftPhotoUrl}', 'Desired Style Photo')" alt="Style Photo" />
+              <div class="style-photo-preview-wrap" style="background:#EFF6FF; border:1.5px solid #0066FF; border-radius:14px; padding:10px 12px; display:flex; align-items:center; gap:10px;">
+                <img src="${state.draftPhotoUrl}" class="style-photo-thumb" style="width:52px; height:52px; border-radius:10px; object-fit:cover; cursor:pointer;" onclick="openImagePreviewModal('${state.draftPhotoUrl}', 'Desired Style Photo')" alt="Style Photo" />
                 <div style="flex:1; min-width:0;">
-                  <div style="font-size:12px; font-weight:800; color:var(--blue-primary);">1 Style Reference Photo Attached</div>
-                  <div style="font-size:11px; color:var(--text-secondary); cursor:pointer;" onclick="openImagePreviewModal('${state.draftPhotoUrl}', 'Desired Style Photo')">Tap thumbnail to view full size</div>
+                  <div style="font-size:13px; font-weight:800; color:#0066FF;">Desired Style Photo Attached</div>
+                  <div style="font-size:11.5px; color:#1E40AF; cursor:pointer;" onclick="openImagePreviewModal('${state.draftPhotoUrl}', 'Desired Style Photo')">Tap photo to view full size</div>
                 </div>
-                <button type="button" class="small-pill-btn" style="color:var(--danger-red); border-color:rgba(239,68,68,0.3); background:#FFF5F5;" onclick="removeDraftStylePhoto()">
+                <button type="button" class="small-pill-btn" style="color:#DC2626; border-color:rgba(220,38,38,0.3); background:#FEF2F2;" onclick="removeDraftStylePhoto()">
                   Remove
                 </button>
               </div>
             ` : `
-              <button type="button" class="btn-dark-sec" style="width:100%; height:40px; font-size:12px; justify-content:center; gap:7px; border-style:dashed;" onclick="document.getElementById('stylePhotoInput').click()">
-                <span style="color:var(--blue-primary); display:inline-flex;">${uiIcon('camera', 16)}</span>
-                <span>Attach 1 Photo of Desired Style (Hairstyle, Nails, Fade)</span>
+              <button type="button" class="btn-dark-sec" style="width:100%; height:44px; font-size:13px; font-weight:700; justify-content:center; gap:8px; border:1.5px dashed var(--blue-border); background:var(--blue-soft);" onclick="document.getElementById('stylePhotoInput').click()">
+                <span style="color:var(--blue-primary); display:inline-flex;">${uiIcon('camera', 18)}</span>
+                <span>Attach 1 Photo of Desired Style (Hair, Nails, Fade)</span>
               </button>
             `}
           </div>
@@ -4664,19 +4730,12 @@ function renderProviderRequestsFeedTab(prov, openRequests, activeJob) {
             ` : ''}
 
             ${myExistingOffer ? `
-              <div style="background:var(--blue-soft); border:1px solid var(--blue-border); border-radius:12px; padding:8px 11px; display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:8px;">
-                <span style="font-size:12px; font-weight:800; color:var(--blue-primary); display:inline-flex; align-items:center; gap:5px;">
-                  ${uiIcon('clock', 13)}
-                  <span>Offered ${formatUsdPrice(myExistingOffer.priceUsd)} (120s timer)</span>
+              <div style="background:var(--blue-soft); border:1.5px solid var(--blue-border); border-radius:12px; padding:9px 12px; display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:8px;">
+                <span style="font-size:12.5px; font-weight:800; color:var(--blue-primary); display:inline-flex; align-items:center; gap:6px;">
+                  ${uiIcon('clock', 14)}
+                  <span>You offered ${formatUsdPrice(myExistingOffer.priceUsd)} • Waiting for client</span>
                 </span>
-                <button
-                  class="btn-primary-blue"
-                  style="width:auto; height:32px; padding:0 11px; font-size:11.5px;"
-                  onclick="acceptOffer('${r.id}', '${myExistingOffer.id}')"
-                >
-                  ${uiIcon('check', 12)}
-                  <span>Client Accept</span>
-                </button>
+                <span style="font-size:11px; font-weight:700; color:var(--blue-primary); background:rgba(0,102,255,0.12); padding:3px 9px; border-radius:99px;">120s timer</span>
               </div>
             ` : ''}
 
@@ -5150,7 +5209,6 @@ async function providerSubmitBid(requestId, priceUsd) {
       providerId: prov.id,
       priceUsd: Number(priceUsd)
     });
-    showToast(`Offered ${formatUsdPrice(priceUsd)} — Client notified (120s timer)`);
     await fetchState();
   } catch (err) {
     showToast(err.message, 'error');
@@ -5581,47 +5639,50 @@ function renderCallModal() {
   const avatarUrl = proMatch?.avatarUrl || custMatch?.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=240&q=80';
 
   root.innerHTML = `
-    <div class="instagram-call-overlay">
-      <div class="ig-call-top-bar">
-        <button type="button" class="ig-call-icon-btn" onclick="endInAppCall()" title="Minimize / Hang Up">
+    <div class="indrive-call-overlay">
+      <div class="indrive-call-top-bar">
+        <button type="button" class="indrive-call-icon-btn" onclick="endInAppCall()" title="Minimize / Hang Up">
           ${uiIcon('chevronDown', 20)}
         </button>
-        <div class="ig-call-header-info">
-          <div class="ig-call-title">Agora Audio Call</div>
-          <div class="ig-call-encrypted-tag">
-            ${uiIcon('lock', 11)}
-            <span>End-to-End Encrypted</span>
+        <div class="indrive-call-header-info">
+          <div class="indrive-call-title">
+            <span style="color:#0066FF;">${uiIcon('shield', 14)}</span>
+            <span>inDrive VoIP Call</span>
+          </div>
+          <div class="indrive-call-encrypted-tag">
+            <span style="width:6px; height:6px; border-radius:50%; background:#10B981; display:inline-block;"></span>
+            <span>Masked • End-to-End Encrypted</span>
           </div>
         </div>
-        <button type="button" class="ig-call-icon-btn" onclick="showToast('Audio route: Speaker mode enabled')" title="Speakerphone">
+        <button type="button" class="indrive-call-icon-btn" onclick="toggleCallMute()" title="Mute Microphone">
           ${uiIcon('volume', 18)}
         </button>
       </div>
 
-      <div class="ig-call-center">
-        <div class="ig-call-avatar-wrap">
-          <div class="ig-call-ring ring-1"></div>
-          <div class="ig-call-ring ring-2"></div>
-          <img src="${avatarUrl}" class="ig-call-avatar" alt="${peerName}" />
+      <div class="indrive-call-center">
+        <div class="indrive-call-avatar-wrap">
+          <div class="indrive-call-ring ring-1"></div>
+          <div class="indrive-call-ring ring-2"></div>
+          <img src="${avatarUrl}" class="indrive-call-avatar" alt="${peerName}" />
         </div>
-        <div class="ig-call-peer-name">${peerName}</div>
-        <div class="ig-call-peer-context">${contextTitle}</div>
-        <div id="callTimerText" class="ig-call-timer">00:00</div>
+        <div class="indrive-call-peer-name">${peerName}</div>
+        <div class="indrive-call-peer-context">${contextTitle}</div>
+        <div id="callTimerText" class="indrive-call-timer">00:00</div>
       </div>
 
-      <div class="ig-call-bottom-dock">
-        <button type="button" class="ig-dock-btn ${state.activeCall.isMuted ? 'muted' : ''}" onclick="toggleCallMute()">
-          <span style="font-size:20px;">${state.activeCall.isMuted ? '🔇' : '🎙️'}</span>
+      <div class="indrive-call-bottom-dock">
+        <button type="button" class="indrive-dock-btn ${state.activeCall.isMuted ? 'muted' : ''}" onclick="toggleCallMute()">
+          <span style="font-size:22px;">${state.activeCall.isMuted ? '🔇' : '🎙️'}</span>
           <span>${state.activeCall.isMuted ? 'Unmute' : 'Mute'}</span>
         </button>
 
-        <button type="button" class="ig-dock-btn hangup" onclick="endInAppCall()" title="End Call">
+        <button type="button" class="indrive-dock-btn hangup" onclick="endInAppCall()" title="End Call">
           ${uiIcon('phone', 24)}
           <span>End</span>
         </button>
 
-        <button type="button" class="ig-dock-btn" onclick="openChatDrawer(state.activeRequestId || (state.db.requests?.[0]?.id))">
-          <span style="font-size:20px;">💬</span>
+        <button type="button" class="indrive-dock-btn" onclick="openChatDrawer(state.activeRequestId || (state.db.requests?.[0]?.id))">
+          <span style="font-size:22px;">💬</span>
           <span>Chat</span>
         </button>
       </div>
