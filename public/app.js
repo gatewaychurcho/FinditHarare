@@ -457,44 +457,70 @@ function syncRecommendedFare() {
   }
 }
 
+let realtimeEventSource = null;
+let realtimeReconnectTimer = null;
+
 function connectRealtimeStream() {
-  const es = new EventSource('/api/stream');
-  es.onmessage = async (event) => {
-    try {
-      const data = JSON.parse(event.data);
-      if (data.eventType === 'CONNECTED') return;
+  if (realtimeEventSource) {
+    try { realtimeEventSource.close(); } catch (e) {}
+    realtimeEventSource = null;
+  }
+  if (realtimeReconnectTimer) {
+    clearTimeout(realtimeReconnectTimer);
+    realtimeReconnectTimer = null;
+  }
 
-      if (data.eventType === 'MESSAGE_SENT' && data.payload) {
-        const { requestId, message } = data.payload;
-        const targetReq = (state.db?.requests || []).find((r) => r.id === requestId);
-        if (targetReq && message) {
-          if (!targetReq.messages) targetReq.messages = [];
-          if (!targetReq.messages.some((m) => m.id === message.id)) {
-            targetReq.messages.push(message);
+  try {
+    const es = new EventSource('/api/stream');
+    realtimeEventSource = es;
+
+    es.onmessage = async (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.eventType === 'CONNECTED') return;
+
+        if (data.eventType === 'MESSAGE_SENT' && data.payload) {
+          const { requestId, message } = data.payload;
+          const targetReq = (state.db?.requests || []).find((r) => r.id === requestId);
+          if (targetReq && message) {
+            if (!targetReq.messages) targetReq.messages = [];
+            if (!targetReq.messages.some((m) => m.id === message.id)) {
+              targetReq.messages.push(message);
+            }
+            updateChatFeedDomOnly(targetReq);
           }
-          updateChatFeedDomOnly(targetReq);
         }
-      }
 
-      // If user is currently typing in an input or on sign up flow, never interrupt their screen!
-      const activeEl = document.activeElement;
-      const isUserTyping = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT');
-      if (state.activeModal === 'SIGNUP_FLOW' || isUserTyping) {
-        return;
-      }
+        // If user is currently typing in an input or on sign up flow, never interrupt their screen!
+        const activeEl = document.activeElement;
+        const isUserTyping = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT');
+        if (state.activeModal === 'SIGNUP_FLOW' || isUserTyping) {
+          return;
+        }
 
-      await fetchState();
+        await fetchState();
 
-      if (data.eventType === 'TASK_CANCELLED' && state.role === 'CUSTOMER') {
-        state.screenStep = 'HOME';
-        state.activeRequestId = null;
-        state.pendingSearchFareUsd = null;
-        renderAll();
+        if (data.eventType === 'TASK_CANCELLED' && state.role === 'CUSTOMER') {
+          state.screenStep = 'HOME';
+          state.activeRequestId = null;
+          state.pendingSearchFareUsd = null;
+          renderAll();
+        }
+      } catch (e) {
+        console.error('SSE parse error:', e);
       }
-    } catch (e) {
-      console.error('SSE parse error:', e);
-    }
-  };
+    };
+
+    es.onerror = () => {
+      try { es.close(); } catch (e) {}
+      realtimeEventSource = null;
+      if (!realtimeReconnectTimer) {
+        realtimeReconnectTimer = setTimeout(connectRealtimeStream, 2500);
+      }
+    };
+  } catch (err) {
+    realtimeReconnectTimer = setTimeout(connectRealtimeStream, 3000);
+  }
 }
 
 // ============================================================================
@@ -565,8 +591,24 @@ function startOfferCountdownLoop() {
   }, 1000);
 }
 
+let lastBackgroundSyncTime = Date.now();
+
 async function tickCountdowns() {
   checkProximityAutoPairTick();
+
+  // Multi-device real-time sync every 3s during active search, active booking, or provider job feed
+  if (Date.now() - lastBackgroundSyncTime > 3000) {
+    lastBackgroundSyncTime = Date.now();
+    const activeEl = document.activeElement;
+    const isUserTyping = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT');
+    if (!isUserTyping && state.activeModal !== 'SIGNUP_FLOW') {
+      const needsSync = (state.role === 'CUSTOMER' && (state.screenStep === 'SEARCHING' || state.screenStep === 'BOOKED')) ||
+                        (state.role === 'PROVIDER' && state.providerTab === 'FEED');
+      if (needsSync) {
+        fetchState();
+      }
+    }
+  }
 
   if (!state.db || !state.isAuthenticated || state.role !== 'CUSTOMER') return;
   const activeReq = getCustomerActiveRequest();
