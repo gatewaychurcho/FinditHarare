@@ -923,18 +923,117 @@ function saveDb(currentDb) {
 let db = loadDb();
 
 const sseClients = new Set();
+const wsClients = new Set();
 const pendingOtpStore = new Map();
 const staggeredBidTimers = new Map();
 
 function broadcastUpdate(eventType, payload = {}) {
-  const message = `data: ${JSON.stringify({ eventType, payload, timestamp: new Date().toISOString() })}\n\n`;
+  const jsonStr = JSON.stringify({ eventType, payload, timestamp: new Date().toISOString() });
+  const sseMsg = `data: ${jsonStr}\n\n`;
+
+  // 1. Broadcast to Server-Sent Events clients
   for (const res of sseClients) {
     try {
-      res.write(message);
+      res.write(sseMsg);
     } catch (e) {
       sseClients.delete(res);
     }
   }
+
+  // 2. Broadcast to Real-Time WebSockets clients
+  for (const client of wsClients) {
+    try {
+      client.send(jsonStr);
+    } catch (e) {
+      wsClients.delete(client);
+    }
+  }
+}
+
+function setupWebSocketServer(httpServer) {
+  let wsLib = null;
+  try {
+    wsLib = require('ws');
+  } catch (e) {
+    wsLib = null;
+  }
+
+  if (wsLib && (wsLib.WebSocketServer || wsLib.Server)) {
+    const WSServer = wsLib.WebSocketServer || wsLib.Server;
+    const wss = new WSServer({ noServer: true });
+    httpServer.on('upgrade', (request, socket, head) => {
+      const { pathname } = new URL(request.url, `http://${request.headers.host || 'localhost'}`);
+      if (pathname === '/ws') {
+        wss.handleUpgrade(request, socket, head, (ws) => {
+          wsClients.add(ws);
+          ws.send(JSON.stringify({ eventType: 'CONNECTED', transport: 'ws-lib', timestamp: new Date().toISOString() }));
+          ws.on('close', () => wsClients.delete(ws));
+          ws.on('error', () => wsClients.delete(ws));
+        });
+      }
+    });
+    console.log('Real-Time WebSocket (ws library) initialized on /ws');
+    return;
+  }
+
+  // Pure Node.js RFC 6455 WebSocket engine (Zero dependencies required)
+  httpServer.on('upgrade', (req, socket, head) => {
+    const { pathname } = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+    if (pathname !== '/ws') {
+      socket.destroy();
+      return;
+    }
+    const key = req.headers['sec-websocket-key'];
+    if (!key) {
+      socket.destroy();
+      return;
+    }
+    const GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
+    const accept = crypto.createHash('sha1').update(key + GUID).digest('base64');
+    const headers = [
+      'HTTP/1.1 101 Switching Protocols',
+      'Upgrade: websocket',
+      'Connection: Upgrade',
+      `Sec-WebSocket-Accept: ${accept}`,
+      '',
+      ''
+    ];
+    socket.write(headers.join('\r\n'));
+
+    const client = {
+      socket,
+      send: (data) => {
+        try {
+          const payload = Buffer.from(typeof data === 'string' ? data : JSON.stringify(data));
+          const len = payload.length;
+          let header;
+          if (len < 126) {
+            header = Buffer.from([0x81, len]);
+          } else if (len <= 65535) {
+            header = Buffer.alloc(4);
+            header[0] = 0x81;
+            header[1] = 126;
+            header.writeUInt16BE(len, 2);
+          } else {
+            header = Buffer.alloc(10);
+            header[0] = 0x81;
+            header[1] = 127;
+            header.writeBigUInt64BE(BigInt(len), 2);
+          }
+          socket.write(Buffer.concat([header, payload]));
+        } catch (e) {
+          wsClients.delete(client);
+        }
+      }
+    };
+
+    wsClients.add(client);
+    client.send({ eventType: 'CONNECTED', transport: 'node-rfc6455', timestamp: new Date().toISOString() });
+
+    socket.on('close', () => wsClients.delete(client));
+    socket.on('error', () => wsClients.delete(client));
+  });
+  console.log('Real-Time WebSocket (native Node RFC 6455) initialized on /ws');
 }
 
 function scheduleStaggeredProviderBids(requestId) {
@@ -2775,6 +2874,8 @@ const server = http.createServer(async (req, res) => {
     });
   });
 });
+
+setupWebSocketServer(server);
 
 if (require.main === module) {
   server.listen(PORT, () => {

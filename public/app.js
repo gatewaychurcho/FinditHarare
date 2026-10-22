@@ -293,11 +293,17 @@ function checkAntiLeakageClient(text) {
 document.addEventListener('DOMContentLoaded', async () => {
   initSplashScreen();
   loadSavedSession();
-  await fetchState();
+  await fetchState(true);
   initLeafletMap();
   useBrowserGeolocation(true);
-  connectRealtimeStream();
+  initRealtimeSync();
   startOfferCountdownLoop();
+});
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    stopFaceCameraStream();
+  }
 });
 
 function loadSavedSession() {
@@ -389,7 +395,18 @@ function initSplashScreen() {
   }, 1050);
 }
 
-async function fetchState() {
+let lastStateFingerprint = '';
+
+function computeStateFingerprint(db) {
+  if (!db) return '';
+  const reqSig = (db.requests || []).map((r) => `${r.id}:${r.status}:${(r.offers || []).length}:${r.acceptedOfferId || ''}:${r.budgetUsd}`).join(';');
+  const userSig = state.currentUser ? `${state.currentUser.id}:${state.currentUser.walletBalanceUsd}:${state.currentUser.warningsCount || 0}:${state.currentUser.isBanned}` : '';
+  const provSig = (db.providers || []).map((p) => `${p.id}:${p.isOnline}`).join(';');
+  const modalSig = state.activeModal || '';
+  return `${reqSig}|${userSig}|${provSig}|${modalSig}|${state.screenStep}|${state.providerTab}|${state.role}`;
+}
+
+async function fetchState(force = false) {
   try {
     const res = await fetch('/api/state');
     const newDb = await res.json();
@@ -418,7 +435,6 @@ async function fetchState() {
       if (found) {
         state.currentUser = { ...state.currentUser, ...found };
       } else {
-        // Keep user in local memory DB array so they are always recognized
         list.push(state.currentUser);
       }
       state.isAuthenticated = true;
@@ -432,7 +448,12 @@ async function fetchState() {
     }
 
     syncRecommendedFare();
-    renderAll();
+
+    const fp = computeStateFingerprint(state.db);
+    if (force || fp !== lastStateFingerprint) {
+      lastStateFingerprint = fp;
+      renderAll();
+    }
   } catch (err) {
     console.error('Failed to load state:', err);
   }
@@ -457,55 +478,115 @@ function syncRecommendedFare() {
   }
 }
 
+let realtimeWebSocket = null;
 let realtimeEventSource = null;
 let realtimeReconnectTimer = null;
+let isWsConnected = false;
+
+function initRealtimeSync() {
+  connectWebSocket();
+}
+
+function handleIncomingRealtimeEvent(data) {
+  if (!data || data.eventType === 'CONNECTED') return;
+
+  if (data.eventType === 'MESSAGE_SENT' && data.payload) {
+    const { requestId, message } = data.payload;
+    const targetReq = (state.db?.requests || []).find((r) => r.id === requestId);
+    if (targetReq && message) {
+      if (!targetReq.messages) targetReq.messages = [];
+      if (!targetReq.messages.some((m) => m.id === message.id)) {
+        targetReq.messages.push(message);
+      }
+      updateChatFeedDomOnly(targetReq);
+    }
+  }
+
+  // If user is currently typing in an input or on sign up flow, never interrupt their screen!
+  const activeEl = document.activeElement;
+  const isUserTyping = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT');
+  if (state.activeModal === 'SIGNUP_FLOW' || isUserTyping) {
+    return;
+  }
+
+  fetchState();
+
+  if (data.eventType === 'TASK_CANCELLED' && state.role === 'CUSTOMER') {
+    state.screenStep = 'HOME';
+    state.activeRequestId = null;
+    state.pendingSearchFareUsd = null;
+    renderAll();
+  }
+}
+
+function connectWebSocket() {
+  if (realtimeWebSocket) {
+    try { realtimeWebSocket.close(); } catch (e) {}
+    realtimeWebSocket = null;
+  }
+
+  if (typeof WebSocket === 'undefined') {
+    connectRealtimeStream();
+    return;
+  }
+
+  try {
+    const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${wsProto}//${window.location.host}/ws`;
+    const ws = new WebSocket(wsUrl);
+    realtimeWebSocket = ws;
+
+    ws.onopen = () => {
+      isWsConnected = true;
+      if (realtimeEventSource) {
+        try { realtimeEventSource.close(); } catch (e) {}
+        realtimeEventSource = null;
+      }
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        handleIncomingRealtimeEvent(data);
+      } catch (e) {}
+    };
+
+    ws.onerror = () => {
+      isWsConnected = false;
+      // Graceful fallback to Server-Sent Events
+      if (!realtimeEventSource) {
+        connectRealtimeStream();
+      }
+    };
+
+    ws.onclose = () => {
+      isWsConnected = false;
+      if (!realtimeReconnectTimer) {
+        realtimeReconnectTimer = setTimeout(() => {
+          realtimeReconnectTimer = null;
+          connectWebSocket();
+        }, 3000);
+      }
+    };
+  } catch (e) {
+    connectRealtimeStream();
+  }
+}
 
 function connectRealtimeStream() {
   if (realtimeEventSource) {
     try { realtimeEventSource.close(); } catch (e) {}
     realtimeEventSource = null;
   }
-  if (realtimeReconnectTimer) {
-    clearTimeout(realtimeReconnectTimer);
-    realtimeReconnectTimer = null;
-  }
 
   try {
     const es = new EventSource('/api/stream');
     realtimeEventSource = es;
 
-    es.onmessage = async (event) => {
+    es.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        if (data.eventType === 'CONNECTED') return;
-
-        if (data.eventType === 'MESSAGE_SENT' && data.payload) {
-          const { requestId, message } = data.payload;
-          const targetReq = (state.db?.requests || []).find((r) => r.id === requestId);
-          if (targetReq && message) {
-            if (!targetReq.messages) targetReq.messages = [];
-            if (!targetReq.messages.some((m) => m.id === message.id)) {
-              targetReq.messages.push(message);
-            }
-            updateChatFeedDomOnly(targetReq);
-          }
-        }
-
-        // If user is currently typing in an input or on sign up flow, never interrupt their screen!
-        const activeEl = document.activeElement;
-        const isUserTyping = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT');
-        if (state.activeModal === 'SIGNUP_FLOW' || isUserTyping) {
-          return;
-        }
-
-        await fetchState();
-
-        if (data.eventType === 'TASK_CANCELLED' && state.role === 'CUSTOMER') {
-          state.screenStep = 'HOME';
-          state.activeRequestId = null;
-          state.pendingSearchFareUsd = null;
-          renderAll();
-        }
+        handleIncomingRealtimeEvent(data);
       } catch (e) {
         console.error('SSE parse error:', e);
       }
@@ -514,12 +595,14 @@ function connectRealtimeStream() {
     es.onerror = () => {
       try { es.close(); } catch (e) {}
       realtimeEventSource = null;
-      if (!realtimeReconnectTimer) {
+      if (!realtimeReconnectTimer && !isWsConnected) {
         realtimeReconnectTimer = setTimeout(connectRealtimeStream, 2500);
       }
     };
   } catch (err) {
-    realtimeReconnectTimer = setTimeout(connectRealtimeStream, 3000);
+    if (!realtimeReconnectTimer && !isWsConnected) {
+      realtimeReconnectTimer = setTimeout(connectRealtimeStream, 3000);
+    }
   }
 }
 
@@ -874,7 +957,9 @@ function updateLiveGpsMarker() {
   }
 }
 
-function updateMapMarkers() {
+let lastMapSignature = '';
+
+function updateMapMarkers(force = false) {
   const centerPin = document.getElementById('centerMapPin');
   const whereFromBubble = document.getElementById('whereFromBubble');
   const radarPulses = document.getElementById('mapRadarPulses');
@@ -901,6 +986,14 @@ function updateMapMarkers() {
   }
 
   if (!leafletMap || !leafletMarkersLayer || !state.db) return;
+
+  const onlinePros = (state.db.providers || []).filter((p) => p.isOnline !== false);
+  const mapSig = `${state.role}|${state.screenStep}|${state.selectedCategoryId}|${isSearching}|${isBooked}|${activeReq?.id || ''}|${activeReq?.acceptedProviderId || ''}|${onlinePros.length}`;
+  if (!force && mapSig === lastMapSignature) {
+    return;
+  }
+  lastMapSignature = mapSig;
+
   leafletMarkersLayer.clearLayers();
   if (leafletRoutePolyline) {
     leafletMap.removeLayer(leafletRoutePolyline);
@@ -937,7 +1030,6 @@ function updateMapMarkers() {
   }
 
   // Draw provider markers with their real avatar + profession icon badge
-  const onlinePros = state.db.providers.filter((p) => p.isOnline !== false);
   onlinePros.forEach((p, idx) => {
     const showThinkingDots = isSearching && (p.categoryId === activeReq.categoryId || idx < 2);
     const markerHtml = `
@@ -1048,6 +1140,8 @@ function renderAll() {
       }
     } else if (activeReq && isBookedStatus(activeReq.status)) {
       state.screenStep = 'BOOKED';
+    } else if (state.activeRequestId && state.screenStep === 'SEARCHING') {
+      // Retain searching state while server completes broadcast
     } else if (state.screenStep === 'SEARCHING' || state.screenStep === 'BOOKED') {
       state.screenStep = 'HOME';
     }
@@ -1063,20 +1157,21 @@ function renderAll() {
 
 function getCustomerActiveRequest() {
   if (!state.db || !state.currentUser || !state.isAuthenticated) return null;
+  const reqs = Array.isArray(state.db.requests) ? state.db.requests : [];
   if (state.activeRequestId) {
-    const found = state.db.requests.find(
-      (r) => r.id === state.activeRequestId && r.customerId === state.currentUser.id && (r.status === 'OPEN' || isBookedStatus(r.status))
+    const found = reqs.find(
+      (r) => r.id === state.activeRequestId && (r.status === 'OPEN' || isBookedStatus(r.status))
     );
     if (found) return found;
   }
-  const myOpen = state.db.requests.find(
-    (r) => r.customerId === state.currentUser.id && (r.status === 'OPEN' || isBookedStatus(r.status))
+  const myOpen = reqs.find(
+    (r) => (r.customerId === state.currentUser.id || (state.currentUser.phone && r.customerPhone === state.currentUser.phone)) &&
+           (r.status === 'OPEN' || isBookedStatus(r.status))
   );
   if (myOpen) {
     state.activeRequestId = myOpen.id;
     return myOpen;
   }
-  state.activeRequestId = null;
   return null;
 }
 
@@ -1094,20 +1189,28 @@ function getProviderActiveBooking(providerId) {
 // ============================================================================
 // "CHOOSE A PRO" INCOMING OFFER CARDS OVERLAY (WITH 120S SHRINKING ACCEPT FILL)
 // ============================================================================
-function renderFloatingOffersOverlay() {
+let lastOffersSignature = '';
+
+function renderFloatingOffersOverlay(force = false) {
   const root = document.getElementById('floatingOffersRoot');
   if (!root) return;
 
   if (!state.isAuthenticated || state.role !== 'CUSTOMER') {
-    root.className = 'floating-offers-root';
-    root.innerHTML = '';
+    if (root.innerHTML !== '') {
+      root.className = 'floating-offers-root';
+      root.innerHTML = '';
+      lastOffersSignature = '';
+    }
     return;
   }
 
   const req = getCustomerActiveRequest();
   if (!req || req.status !== 'OPEN' || !req.offers || req.offers.length === 0) {
-    root.className = 'floating-offers-root';
-    root.innerHTML = '';
+    if (root.innerHTML !== '') {
+      root.className = 'floating-offers-root';
+      root.innerHTML = '';
+      lastOffersSignature = '';
+    }
     return;
   }
 
@@ -1118,10 +1221,19 @@ function renderFloatingOffersOverlay() {
   });
 
   if (activeOffers.length === 0) {
-    root.className = 'floating-offers-root';
-    root.innerHTML = '';
+    if (root.innerHTML !== '') {
+      root.className = 'floating-offers-root';
+      root.innerHTML = '';
+      lastOffersSignature = '';
+    }
     return;
   }
+
+  const offersSig = `${req.id}|${state.isOffersMinimized}|${activeOffers.length}|${activeOffers.map((o) => `${o.id}:${o.priceUsd}`).join(',')}`;
+  if (!force && offersSig === lastOffersSignature) {
+    return;
+  }
+  lastOffersSignature = offersSig;
 
   if (state.isOffersMinimized) {
     root.className = 'floating-offers-root';
@@ -1232,12 +1344,15 @@ function renderFloatingOffersOverlay() {
 // ============================================================================
 // MAIN UI OVERLAY
 // ============================================================================
-function renderUiOverlay() {
+let lastUiOverlaySignature = '';
+
+function renderUiOverlay(force = false) {
   const overlay = document.getElementById('uiOverlay');
   if (!overlay) return;
 
   if (!state.isAuthenticated) {
     overlay.innerHTML = renderNativeAuthScreen();
+    lastUiOverlaySignature = 'UNAUTH';
     return;
   }
 
@@ -1260,8 +1375,30 @@ function renderUiOverlay() {
         <button class="btn-dark-sec" style="max-width:200px;" onclick="logoutCurrentAccount()">Log Out</button>
       </div>
     `;
+    lastUiOverlaySignature = 'BANNED';
     return;
   }
+
+  const activeReq = state.role === 'CUSTOMER' ? getCustomerActiveRequest() : null;
+  const overlaySig = [
+    state.role,
+    state.screenStep,
+    state.providerTab,
+    state.isSheetMinimized,
+    state.selectedCategoryId,
+    state.selectedSubServiceIdx,
+    state.selectedTierKey,
+    state.draftFareUsd,
+    state.currentUser?.id,
+    state.currentUser?.walletBalanceUsd,
+    state.currentUser?.activeWarnings?.length || 0,
+    activeReq ? `${activeReq.id}:${activeReq.status}:${activeReq.budgetUsd}:${activeReq.startPinVerified}` : 'NO_REQ'
+  ].join('|');
+
+  if (!force && overlaySig === lastUiOverlaySignature) {
+    return;
+  }
+  lastUiOverlaySignature = overlaySig;
 
   // Warning Banner Wrapper if user has active warnings
   const warningBannerHtml = (state.currentUser?.activeWarnings?.length > 0)
@@ -1288,7 +1425,6 @@ function renderUiOverlay() {
   if (state.role === 'PROVIDER') {
     contentHtml = renderProviderModeOverlay();
   } else {
-    const activeReq = getCustomerActiveRequest();
     if (activeReq && isBookedStatus(activeReq.status)) {
       contentHtml = renderBookedTrackingOverlay(activeReq);
     } else if (activeReq && activeReq.status === 'OPEN') {
@@ -3527,6 +3663,14 @@ async function submitServiceRequest() {
       autoAccept: state.draftAutoAccept
     });
 
+    if (res.request) {
+      if (!state.db) state.db = {};
+      if (!Array.isArray(state.db.requests)) state.db.requests = [];
+      const idx = state.db.requests.findIndex((r) => r.id === res.request.id);
+      if (idx >= 0) state.db.requests[idx] = res.request;
+      else state.db.requests.unshift(res.request);
+    }
+
     state.activeRequestId = res.request.id;
     state.pendingSearchFareUsd = Number(res.request.budgetUsd);
     state.isSheetMinimized = false;
@@ -3534,7 +3678,7 @@ async function submitServiceRequest() {
     state.screenStep = 'SEARCHING';
     renderAll();
     showToast(`Broadcast live! Waiting for verified specialists to respond.`);
-    await fetchState();
+    await fetchState(true);
   } catch (err) {
     showToast(err.message, 'error');
     renderAll();
@@ -3855,8 +3999,19 @@ function openNotesModal() {
 
 function stopFaceCameraStream() {
   if (mediaStreamRef) {
-    mediaStreamRef.getTracks().forEach((t) => t.stop());
+    try {
+      mediaStreamRef.getTracks().forEach((t) => {
+        try { t.stop(); } catch (e) {}
+      });
+    } catch (e) {}
     mediaStreamRef = null;
+  }
+  const videoEl = document.getElementById('authSelfieVideo');
+  if (videoEl) {
+    try {
+      videoEl.pause();
+      videoEl.srcObject = null;
+    } catch (e) {}
   }
 }
 
@@ -3869,7 +4024,7 @@ function renderProviderModeOverlay() {
   const openRequests = (state.db.requests || []).filter((r) => r.status === 'OPEN');
   const myPendingApprovals = (state.db.approvalQueue || []).filter((a) => a.providerId === prov.id && a.status === 'PENDING');
 
-  const currentTab = activeJob && state.providerTab === 'FEED' ? 'ACTIVE_JOB' : state.providerTab;
+  const currentTab = state.providerTab || (activeJob ? 'ACTIVE_JOB' : 'FEED');
 
   return `
     <div class="provider-top-bar">
