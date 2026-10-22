@@ -4940,9 +4940,18 @@ async function startInAppCall(peerName, contextTitle, channelId = 'findit_harare
           user.audioTrack.play();
         }
       });
-      const appId = state.db?.config?.agoraAppId || 'aab8b8f8d67246b9bf73a87995eb871a';
+      const appId = state.db?.config?.agoraAppId || '645ba1db83884888b288953d1fd3c533';
       const cleanChannel = (channelId || 'harare_call').replace(/[^a-zA-Z0-9_-]/g, '_');
-      await agoraClient.join(appId, cleanChannel, null, null);
+      let rtcToken = null;
+      try {
+        const tokenRes = await apiGet(`/api/agora/token?channel=${encodeURIComponent(cleanChannel)}&uid=0`);
+        if (tokenRes && tokenRes.token) {
+          rtcToken = tokenRes.token;
+        }
+      } catch (tokenErr) {
+        console.warn('Agora token generation note:', tokenErr.message);
+      }
+      await agoraClient.join(appId, cleanChannel, rtcToken, 0);
       localAudioTrack = await AgoraRTC.createMicrophoneAudioTrack();
       await agoraClient.publish([localAudioTrack]);
       showToast('Agora Voice connected (encrypted)');

@@ -4,6 +4,26 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
+// Lightweight .env loader
+try {
+  const envPath = path.join(__dirname, '.env');
+  if (fs.existsSync(envPath)) {
+    const envLines = fs.readFileSync(envPath, 'utf8').split('\n');
+    for (const line of envLines) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const eqIdx = trimmed.indexOf('=');
+      if (eqIdx !== -1) {
+        const key = trimmed.slice(0, eqIdx).trim();
+        const val = trimmed.slice(eqIdx + 1).trim();
+        if (!process.env[key]) {
+          process.env[key] = val;
+        }
+      }
+    }
+  }
+} catch (e) {}
+
 const PORT = process.env.PORT || 3030;
 const DATA_DIR = path.join(__dirname, 'data');
 const DB_FILE = path.join(DATA_DIR, 'db.json');
@@ -25,6 +45,20 @@ const WHATSAPP_BUSINESS_ACCOUNT_ID =
   '1422874912704593';
 
 const ADMIN_WHATSAPP_PHONE = process.env.ADMIN_WHATSAPP_PHONE || '263713475131';
+
+// Agora Real-Time RTC Voice & Chat Credentials (FinditHarare)
+let AgoraToken = null;
+try {
+  AgoraToken = require('agora-token');
+} catch (e) {
+  AgoraToken = null;
+}
+
+const AGORA_APP_ID = process.env.AGORA_APP_ID || '645ba1db83884888b288953d1fd3c533';
+const AGORA_APP_CERTIFICATE = process.env.AGORA_APP_CERTIFICATE || process.env.AGORA_PRIMARY_CERTIFICATE || '0ba336cff21f42a3b32bf5a7e2311b21';
+const AGORA_CHAT_TOKEN = process.env.AGORA_CHAT_TOKEN || '007eJxTYJDZ8JJ1Sl3zxbd3TnK94ZHuztO6zrmtf0vv7P63nO4C674qMJiZmCYlGqYkWRhbWJhYWFgkGVlYWJoapximpRgnmxob/3lwM6shkJFB79YjRkYGVgZGBiYGEJ+BAQDjLh+v';
+const AGORA_WS_API = process.env.AGORA_WS_API || 'msync-api-61.chat.agora.io';
+const AGORA_REST_API = process.env.AGORA_REST_API || 'a61.chat.agora.io';
 
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -1223,8 +1257,55 @@ const server = http.createServer(async (req, res) => {
       suburbs: HARARE_SUBURBS,
       quickMessages: QUICK_MESSAGES,
       config: {
-        agoraAppId: process.env.AGORA_APP_ID || 'aab8b8f8d67246b9bf73a87995eb871a'
+        agoraAppId: AGORA_APP_ID,
+        agoraChatToken: AGORA_CHAT_TOKEN,
+        agoraWsApi: AGORA_WS_API,
+        agoraRestApi: AGORA_REST_API
       }
+    });
+  }
+
+  // Dynamic Agora RTC Voice / Video Token Generator for Findit Harare
+  if (pathname === '/api/agora/token' && (req.method === 'GET' || req.method === 'POST')) {
+    const channelName = (parsedUrl.searchParams.get('channel') || 'findit_harare_call').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const uid = Number(parsedUrl.searchParams.get('uid') || 0) || 0;
+    const role = (parsedUrl.searchParams.get('role') === 'subscriber' && AgoraToken?.RtcRole) ? AgoraToken.RtcRole.SUBSCRIBER : (AgoraToken?.RtcRole?.PUBLISHER || 1);
+    const expirationTimeInSeconds = 3600 * 24; // 24 hours
+    const currentTimestamp = Math.floor(Date.now() / 1000);
+    const privilegeExpiredTs = currentTimestamp + expirationTimeInSeconds;
+
+    if (AgoraToken && AgoraToken.RtcTokenBuilder && AGORA_APP_ID && AGORA_APP_CERTIFICATE) {
+      try {
+        const token = AgoraToken.RtcTokenBuilder.buildTokenWithUid(
+          AGORA_APP_ID,
+          AGORA_APP_CERTIFICATE,
+          channelName,
+          uid,
+          role,
+          privilegeExpiredTs
+        );
+        return sendJson(res, 200, {
+          appId: AGORA_APP_ID,
+          channel: channelName,
+          uid,
+          token,
+          expiresAt: privilegeExpiredTs,
+          wsApi: AGORA_WS_API,
+          restApi: AGORA_REST_API
+        });
+      } catch (err) {
+        return sendJson(res, 500, { error: 'Failed to generate Agora token', details: err.message });
+      }
+    }
+
+    return sendJson(res, 200, {
+      appId: AGORA_APP_ID,
+      channel: channelName,
+      uid,
+      token: null,
+      chatTempToken: AGORA_CHAT_TOKEN,
+      wsApi: AGORA_WS_API,
+      restApi: AGORA_REST_API
     });
   }
 
