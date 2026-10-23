@@ -552,49 +552,26 @@ function saveSession(role, userOrId, loggedOut = false) {
 function initSplashScreen() {
   const splashEl = document.getElementById('splashScreen');
   const fillEl = document.getElementById('splashLoaderFill');
-  const statusEl = document.getElementById('splashStatusText');
   if (!splashEl) return;
 
   const hasOnboarded = localStorage.getItem('findit_onboarded_v2');
-  if (!hasOnboarded) {
-    state.onboardingActive = true;
-  } else {
-    state.onboardingActive = false;
-  }
-
-  // Multi-Hub is the default landing view
+  state.onboardingActive = !hasOnboarded;
   state.hubView = 'HUB';
 
   if (fillEl) {
     setTimeout(() => {
-      fillEl.style.width = '30%';
-    }, 60);
-
-    setTimeout(() => {
-      fillEl.style.width = '65%';
-      if (statusEl) statusEl.textContent = 'Synchronizing Harare Specialists...';
-    }, 550);
-
-    setTimeout(() => {
-      fillEl.style.width = '92%';
-      if (statusEl) statusEl.textContent = 'Securing Direct Bidding Mesh...';
-    }, 1100);
-
-    setTimeout(() => {
       fillEl.style.width = '100%';
-      if (statusEl) statusEl.textContent = 'Welcome to Findit Harare';
-    }, 1550);
+    }, 50);
   }
 
   setTimeout(() => {
-    splashEl.classList.add('splash-dismissed');
-    setTimeout(() => {
-      splashEl.style.display = 'none';
-      state.splashDismissed = true;
-      renderAll();
-    }, 400);
-  }, 1900);
+    splashEl.classList.add('hidden');
+    state.splashDismissed = true;
+    renderAll();
+  }, 900);
 }
+
+let lastRenderedOnboardingSig = '';
 
 function renderOnboardingLayer() {
   let container = document.getElementById('onboardingRoot');
@@ -605,14 +582,20 @@ function renderOnboardingLayer() {
   }
 
   if (!state.onboardingActive) {
-    container.innerHTML = '';
+    if (container.innerHTML !== '') container.innerHTML = '';
+    lastRenderedOnboardingSig = 'INACTIVE';
     return;
   }
 
   const slide = state.onboardingSlide || 0;
+  const sig = `ACTIVE_${slide}`;
+  if (sig === lastRenderedOnboardingSig && container.firstElementChild) {
+    return;
+  }
+  lastRenderedOnboardingSig = sig;
 
   if (slide === 0) {
-    // Slide 1: Pure Vector SVG / CSS 3D Smartphone Composition (No stock photos)
+    // Step 1: Clean & authentic (no sci-fi / AI hyper visuals)
     container.innerHTML = `
       <div class="fh-onboarding-screen">
         <div class="onboarding-top-nav">
@@ -620,63 +603,24 @@ function renderOnboardingLayer() {
         </div>
 
         <div class="onboarding-graphic-container">
-          <div class="fh-vector-phone-frame">
-            <div class="fh-vector-phone-speaker"></div>
-            <div class="fh-vector-phone-screen">
-              <!-- Harare Vector Map Grid -->
-              <div class="fh-vector-map-grid"></div>
+          <div class="onboarding-mock-phone">
+            <div class="onboarding-mock-map-bg" style="background-image: radial-gradient(#CBD5E1 1.5px, transparent 1.5px), radial-gradient(#CBD5E1 1.5px, #F8FAFC 1.5px);"></div>
+            
+            <div class="onboarding-pin-bubble" style="top:25px; left:40px;">${uiIcon('pin', 12)}</div>
+            <div class="onboarding-pin-bubble" style="top:45px; right:35px;">${uiIcon('pin', 12)}</div>
+            <div class="onboarding-pin-bubble" style="bottom:60px; left:30px;">${uiIcon('pin', 12)}</div>
 
-              <!-- Pulsing Harare Beacon Pins -->
-              <div class="fh-vector-map-pin" style="top:20%; left:26%;">
-                <div class="fh-pin-radar"></div>
-                <div class="fh-pin-core"></div>
-              </div>
-              <div class="fh-vector-map-pin" style="top:36%; right:20%;">
-                <div class="fh-pin-radar" style="animation-delay:0.7s;"></div>
-                <div class="fh-pin-core" style="background:#00D2FF;"></div>
-              </div>
-              <div class="fh-vector-map-pin" style="bottom:24%; left:44%;">
-                <div class="fh-pin-radar" style="animation-delay:1.4s;"></div>
-                <div class="fh-pin-core"></div>
-              </div>
-
-              <!-- Floating Direct Bid Card 1 -->
-              <div class="fh-vector-floating-card fh-float-1">
-                <div class="fh-card-avatar" style="background:linear-gradient(135deg, #0066FF, #00D2FF);">TM</div>
-                <div class="fh-card-info">
-                  <div class="fh-card-title">Tinashe M. <span class="fh-star-badge">★ 4.9</span></div>
-                  <div class="fh-card-price">$25 USD • Direct Bid</div>
-                </div>
-              </div>
-
-              <!-- Floating Direct Bid Card 2 -->
-              <div class="fh-vector-floating-card fh-float-2">
-                <div class="fh-card-avatar" style="background:linear-gradient(135deg, #10B981, #059669);">FK</div>
-                <div class="fh-card-info">
-                  <div class="fh-card-title">Farai K. <span class="fh-star-badge">★ 5.0</span></div>
-                  <div class="fh-card-price">$30 USD • Solar Pro</div>
-                </div>
-              </div>
-
-              <!-- Pure Vector SVG Client Illustration -->
-              <div class="fh-vector-character-svg">
-                <svg viewBox="0 0 200 180" width="100%" height="100%">
-                  <defs>
-                    <linearGradient id="bodyGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
-                      <stop offset="0%" stop-color="#0066FF"/>
-                      <stop offset="100%" stop-color="#0A2540"/>
-                    </linearGradient>
-                  </defs>
-                  <circle cx="100" cy="48" r="24" fill="#FBBF24"/>
-                  <path d="M90 38 Q100 30 112 34 Q118 42 114 50" stroke="#1E293B" stroke-width="4" fill="none" stroke-linecap="round"/>
-                  <path d="M72 135 C72 95 82 82 100 82 C118 82 128 95 128 135 Z" fill="url(#bodyGrad1)"/>
-                  <rect x="108" y="86" width="22" height="38" rx="4" fill="#0F172A" stroke="#38BDF8" stroke-width="2"/>
-                  <circle cx="119" cy="118" r="2" fill="#38BDF8"/>
-                  <path d="M134 92 A12 12 0 0 1 134 112" stroke="#00D2FF" stroke-width="2.5" fill="none" stroke-linecap="round"/>
-                  <path d="M140 86 A20 20 0 0 1 140 118" stroke="#38BDF8" stroke-width="2" fill="none" stroke-linecap="round" opacity="0.6"/>
-                </svg>
-              </div>
+            <div class="onboarding-bid-card" style="top:55px; left:18px;">
+              <span style="color:#0066FF; font-weight:800;">★ 4.9</span>
+              <span style="font-weight:800;">$25 USD</span>
             </div>
+
+            <div class="onboarding-bid-card" style="top:110px; right:12px; animation-delay:1.5s;">
+              <span style="color:#10B981; font-weight:800;">★ 5.0</span>
+              <span style="font-weight:800;">$30 USD</span>
+            </div>
+
+            <img class="onboarding-character-img" src="https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=600&q=80" alt="Client" />
           </div>
         </div>
 
@@ -698,7 +642,7 @@ function renderOnboardingLayer() {
       </div>
     `;
   } else {
-    // Slide 2: Pure Vector SVG / CSS Active Radar Scanner Composition (No stock photos)
+    // Step 2: Clean & authentic specialist alert
     container.innerHTML = `
       <div class="fh-onboarding-screen">
         <div class="onboarding-top-nav">
@@ -706,53 +650,22 @@ function renderOnboardingLayer() {
         </div>
 
         <div class="onboarding-graphic-container">
-          <div class="fh-vector-phone-frame">
-            <div class="fh-vector-phone-speaker"></div>
-            <div class="fh-vector-phone-screen fh-radar-dark-theme">
-              <!-- Glowing Radar Scanner with Rotating Beam -->
-              <div class="fh-vector-radar-scanner">
-                <div class="fh-radar-grid-rings"></div>
-                <div class="fh-radar-sweep-beam"></div>
-                
-                <div class="fh-radar-blip" style="top:30%; left:42%;"></div>
-                <div class="fh-radar-blip" style="top:56%; right:28%; animation-delay:0.8s;"></div>
-                <div class="fh-radar-blip" style="bottom:28%; left:32%; animation-delay:1.5s;"></div>
-              </div>
+          <div class="onboarding-mock-phone">
+            <div class="onboarding-mock-map-bg" style="background-image: radial-gradient(#CBD5E1 1.5px, transparent 1.5px), radial-gradient(#CBD5E1 1.5px, #F8FAFC 1.5px);"></div>
 
-              <!-- Floating Dispatch Card 1 -->
-              <div class="fh-vector-floating-card fh-float-1" style="background:#0F172A; border-color:rgba(56,189,248,0.3); color:#FFFFFF;">
-                <div class="fh-card-avatar" style="background:linear-gradient(135deg, #00D2FF, #0066FF);">⚡</div>
-                <div class="fh-card-info">
-                  <div class="fh-card-title" style="color:#FFFFFF;">New Task: Electrical</div>
-                  <div class="fh-card-price" style="color:#10B981;">Borrowdale • $45 Offer</div>
-                </div>
-              </div>
+            <div class="onboarding-pin-bubble" style="top:30px; left:50px;">${uiIcon('pin', 12)}</div>
+            <div class="onboarding-pin-bubble" style="top:40px; right:40px;">${uiIcon('pin', 12)}</div>
 
-              <!-- Floating Dispatch Card 2 -->
-              <div class="fh-vector-floating-card fh-float-2" style="background:#0F172A; border-color:rgba(56,189,248,0.3); color:#FFFFFF;">
-                <div class="fh-card-avatar" style="background:linear-gradient(135deg, #10B981, #059669);">📍</div>
-                <div class="fh-card-info">
-                  <div class="fh-card-title" style="color:#FFFFFF;">1.8 km Distance</div>
-                  <div class="fh-card-price" style="color:#38BDF8;">Avondale • Immediate</div>
-                </div>
-              </div>
-
-              <!-- Pure Vector SVG Specialist Illustration -->
-              <div class="fh-vector-character-svg">
-                <svg viewBox="0 0 200 180" width="100%" height="100%">
-                  <circle cx="100" cy="48" r="24" fill="#FBBF24"/>
-                  <!-- Hardhat / Cap in Findit Electric Blue -->
-                  <path d="M74 44 Q100 24 126 44 Z" fill="#0066FF"/>
-                  <rect x="70" y="42" width="60" height="5" rx="2.5" fill="#38BDF8"/>
-                  <!-- Pro Body & Vest -->
-                  <path d="M72 135 C72 95 82 82 100 82 C118 82 128 95 128 135 Z" fill="#0F172A"/>
-                  <path d="M84 82 L78 135 M116 82 L122 135" stroke="#10B981" stroke-width="5"/>
-                  <!-- Verified Badge -->
-                  <circle cx="100" cy="104" r="9" fill="#0066FF"/>
-                  <path d="M96 104 L99 107 L105 101" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-                </svg>
-              </div>
+            <div class="onboarding-bid-card" style="top:70px; left:16px;">
+              <span style="color:#0066FF; font-weight:800;">⚡ New Task</span>
+              <span style="font-weight:800;">Borrowdale</span>
             </div>
+
+            <div class="onboarding-bid-card" style="top:125px; right:14px; animation-delay:1.2s;">
+              <span style="color:#10B981; font-weight:800;">💵 $45 Offer</span>
+            </div>
+
+            <img class="onboarding-character-img" src="https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=600&q=80" alt="Specialist" />
           </div>
         </div>
 
@@ -768,7 +681,6 @@ function renderOnboardingLayer() {
 
           <button class="onboarding-cta-btn" onclick="finishOnboarding()">
             <span>Get Started</span>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
           </button>
         </div>
       </div>
@@ -1379,10 +1291,16 @@ async function apiPost(url, body, retries = 2) {
       });
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || 'Request failed');
+        const error = new Error(data.error || 'Request failed');
+        error.data = data;
+        error.status = res.status;
+        throw error;
       }
       return data;
     } catch (err) {
+      if (err.status && err.status < 500) {
+        throw err;
+      }
       if (attempt < retries) {
         await new Promise((r) => setTimeout(r, 350 * (attempt + 1)));
         continue;
@@ -1778,6 +1696,8 @@ function buildCurvedPreviewPoints(lat1, lng1, lat2, lng2) {
 // ============================================================================
 // MAP VISIBILITY & MULTI-HUB SYNC CONTROLLER
 // ============================================================================
+let lastMapDisplayState = '';
+
 function syncMapVisibility() {
   const mapContainer = document.getElementById('harareMapContainer');
   const centerPin = document.getElementById('centerMapPin');
@@ -1791,21 +1711,23 @@ function syncMapVisibility() {
   const isProvider = (state.role === 'PROVIDER');
 
   const shouldShowMap = isProvider || isBooked || isSearching || isConfiguring || isMarketplace;
+  const targetDisplay = shouldShowMap ? 'block' : 'none';
 
-  if (shouldShowMap) {
-    mapContainer.style.display = 'block';
-    if (centerPin) {
-      centerPin.style.display = (isSearching || isBooked || isProvider) ? 'none' : 'block';
-    }
-    if (leafletMap) {
+  if (mapContainer.style.display !== targetDisplay) {
+    mapContainer.style.display = targetDisplay;
+    lastMapDisplayState = targetDisplay;
+    if (targetDisplay === 'block' && leafletMap) {
       setTimeout(() => {
         try { leafletMap.invalidateSize(); } catch (e) {}
-      }, 50);
+      }, 80);
     }
-  } else {
-    // Multi-Hub front door: map layer remains hidden and dormant
-    mapContainer.style.display = 'none';
-    if (centerPin) centerPin.style.display = 'none';
+  }
+
+  if (centerPin) {
+    const pinTarget = (shouldShowMap && !isSearching && !isBooked && !isProvider) ? 'block' : 'none';
+    if (centerPin.style.display !== pinTarget) {
+      centerPin.style.display = pinTarget;
+    }
   }
 }
 
@@ -2398,27 +2320,30 @@ function getHubServiceVectorBanner(serviceId) {
 
 function renderMainHubOverlay() {
   const changelog = (state.db?.changelogs && state.db.changelogs[0]) || null;
-  const hubServices = state.db?.hubServices || [
+  const hubServices = [
     {
       id: 'job_marketplace',
       title: 'Job Marketplace',
       subtitle: 'Hire verified local trades & pros',
       status: 'ACTIVE',
-      badge: '7 Categories'
+      badge: '7 Categories',
+      imageUrl: 'https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=600&q=80'
     },
     {
       id: 'online_shopping',
       title: 'Online Shopping',
       subtitle: 'Harare shops & fast delivery',
       status: 'COMING_SOON',
-      badge: 'Coming Soon'
+      badge: 'Coming Soon',
+      imageUrl: 'https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=600&q=80'
     },
     {
       id: 'transport_carriers',
       title: 'Transport & Carriers',
       subtitle: 'Bakkies, trucks & haulage',
       status: 'COMING_SOON',
-      badge: 'Coming Soon'
+      badge: 'Coming Soon',
+      imageUrl: 'https://images.unsplash.com/photo-1519003722824-194d4455a60c?auto=format&fit=crop&w=600&q=80'
     }
   ];
 
@@ -2440,7 +2365,7 @@ function renderMainHubOverlay() {
             ${state.currentUser?.avatarInitials || (state.currentUser?.name ? state.currentUser.name.slice(0, 2).toUpperCase() : 'FH')}
           </button>
         ` : `
-          <button class="btn-primary-blue" style="height:34px; padding:0 12px; font-size:12px; border-radius:99px; width:auto;" onclick="openSignUpModal('CUSTOMER')">
+          <button class="btn-primary-blue" style="height:34px; padding:0 12px; font-size:12px; border-radius:99px; width:auto;" onclick="openSignInRoleChoiceModal()">
             <span>Sign In</span>
           </button>
         `}
@@ -2466,7 +2391,7 @@ function renderMainHubOverlay() {
         <div class="fh-hub-subtitle">What do you need today?</div>
       </div>
 
-      <!-- 3 Service Hub Grid (Pure Vector Illustrations) -->
+      <!-- 3 Service Hub Grid (With High Quality Real Images) -->
       <div class="fh-hub-grid">
         ${hubServices.map((srv, idx) => {
           const isMarketplace = srv.id === 'job_marketplace';
@@ -2477,8 +2402,8 @@ function renderMainHubOverlay() {
               style="${isFullWidth ? 'grid-column: span 2;' : ''}"
               onclick="${isMarketplace ? 'openJobMarketplaceView()' : `openComingSoonServiceModal('${srv.title}', '${srv.subtitle}')`}"
             >
-              <div style="position:relative;">
-                ${getHubServiceVectorBanner(srv.id)}
+              <div class="fh-hub-card-img-wrap" style="${isFullWidth ? 'height:130px;' : 'height:145px;'}">
+                <img class="fh-hub-card-img" src="${srv.imageUrl}" alt="${srv.title}" />
                 <span class="fh-hub-card-badge ${srv.status === 'ACTIVE' ? 'active-pro' : ''}">
                   ${srv.badge || (srv.status === 'ACTIVE' ? 'Active' : 'Coming Soon')}
                 </span>
@@ -2503,27 +2428,20 @@ function renderHomeDiscoveryOverlay() {
   const topServices = getPersonalizedAndTopServices();
 
   return `
-    <!-- Top Row: Hub Navigation + Hamburger Menu -->
+    <!-- Top Row: Left Hamburger Menu + Profile / Sign In -->
     <div class="indrive-top-left-row">
-      <div style="display:flex; align-items:center; gap:8px;">
-        <button class="fh-back-to-hub-btn" onclick="returnToMainHub()" title="Back to Multi-Service Hub">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M15 18l-6-6 6-6"/></svg>
-          <span>Hub</span>
-        </button>
-
-        <button class="indrive-circle-btn" onclick="openSideDrawerModal()" title="Menu">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
-            <path d="M4 7h16M4 12h16M4 17h16"/>
-          </svg>
-        </button>
-      </div>
+      <button class="indrive-circle-btn" onclick="openSideDrawerModal()" title="Menu">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
+          <path d="M4 7h16M4 12h16M4 17h16"/>
+        </svg>
+      </button>
 
       ${state.isAuthenticated ? `
         <button class="indrive-circle-btn" onclick="openSideDrawerModal()" title="Profile" style="background:var(--blue-soft); color:var(--blue-primary); font-weight:800; font-size:12px;">
           ${state.currentUser?.avatarInitials || (state.currentUser?.name ? state.currentUser.name.slice(0, 2).toUpperCase() : 'FH')}
         </button>
       ` : `
-        <button class="btn-primary-blue" style="height:34px; padding:0 12px; font-size:12px; border-radius:99px; width:auto;" onclick="openSignUpModal('CUSTOMER')">
+        <button class="btn-primary-blue" style="height:34px; padding:0 12px; font-size:12px; border-radius:99px; width:auto;" onclick="openSignInRoleChoiceModal()">
           <span>Sign In</span>
         </button>
       `}
@@ -3433,7 +3351,6 @@ function renderSignUpWizardInnerHtml(isFullScreen = false) {
               <div class="ios-face-scanning-radar"></div>
             `}
             <canvas id="authSelfieCanvas" style="display:none;"></canvas>
-            <input type="file" id="authFaceFileInput" accept="image/*" style="display:none;" onchange="handleAuthFaceFileUpload(this)" />
           </div>
 
           ${state.faceVerifiedSuccess ? `
@@ -3448,7 +3365,7 @@ function renderSignUpWizardInnerHtml(isFullScreen = false) {
             </div>
           ` : `
             <div id="authCameraHint" style="font-size:12px; color:var(--text-secondary); margin-top:12px; font-weight:600; text-align:center;">
-              Hold phone steady &amp; tap Verify Face
+              Hold phone at eye level inside the circle &amp; tap Verify Face
             </div>
           `}
         </div>
@@ -3457,10 +3374,6 @@ function renderSignUpWizardInnerHtml(isFullScreen = false) {
           <button type="button" class="btn-primary-blue" style="height:50px; font-size:15px; font-weight:800; margin-bottom:8px;" onclick="captureAndVerifyFaceId()">
             ${uiIcon('camera', 18)}
             <span>Verify Face with Face ID</span>
-          </button>
-          <button type="button" class="btn-dark-sec" style="height:44px; font-size:12.5px; font-weight:700; width:100%; display:inline-flex; align-items:center; justify-content:center; gap:8px;" onclick="document.getElementById('authFaceFileInput').click()">
-            ${uiIcon('image', 16)}
-            <span>Choose Photo from Device</span>
           </button>
         ` : `
           <button type="button" class="btn-primary-blue" style="height:50px; font-size:15px; font-weight:800; background:#10B981;" onclick="finishNativeRegistration()">
@@ -3686,7 +3599,6 @@ function renderSignUpWizardInnerHtml(isFullScreen = false) {
               <div class="ios-face-scanning-radar"></div>
             `}
             <canvas id="authSelfieCanvas" style="display:none;"></canvas>
-            <input type="file" id="authFaceFileInput" accept="image/*" style="display:none;" onchange="handleAuthFaceFileUpload(this)" />
           </div>
 
           ${state.faceVerifiedSuccess ? `
@@ -3705,10 +3617,6 @@ function renderSignUpWizardInnerHtml(isFullScreen = false) {
           <button type="button" class="btn-primary-blue" style="height:50px; font-size:15px; font-weight:800; margin-bottom:8px;" onclick="captureAndVerifyFaceId()">
             ${uiIcon('camera', 18)}
             <span>Scan &amp; Match Face</span>
-          </button>
-          <button type="button" class="btn-dark-sec" style="height:44px; font-size:12.5px; font-weight:700; width:100%; display:inline-flex; align-items:center; justify-content:center; gap:8px;" onclick="document.getElementById('authFaceFileInput').click()">
-            ${uiIcon('image', 16)}
-            <span>Choose Photo from Device</span>
           </button>
         ` : `
           <button type="button" class="btn-primary-blue" style="height:50px; font-size:15px; font-weight:800;" onclick="state.authStep='CATEGORIES'; renderAll();">
@@ -3856,21 +3764,124 @@ function submitProviderIdStep() {
   setTimeout(startAuthFaceCamera, 120);
 }
 
+function analyzeFaceImageQuality(canvas, ctx) {
+  if (!canvas || !ctx || canvas.width < 100 || canvas.height < 100) {
+    return { ok: false, reason: 'Live camera feed not ready. Please allow camera access.' };
+  }
+
+  const width = canvas.width;
+  const height = canvas.height;
+  const imageData = ctx.getImageData(0, 0, width, height);
+  const data = imageData.data;
+
+  // Viewfinder central oval region
+  const cx = width / 2;
+  const cy = height / 2;
+  const rx = width * 0.32;
+  const ry = height * 0.40;
+
+  let sampledPixels = 0;
+  let totalLuminance = 0;
+  let skinCount = 0;
+  let edgeVarianceSum = 0;
+  let prevL = null;
+
+  const step = 2;
+  for (let y = Math.floor(cy - ry); y < Math.floor(cy + ry); y += step) {
+    if (y < 0 || y >= height) continue;
+    for (let x = Math.floor(cx - rx); x < Math.floor(cx + rx); x += step) {
+      if (x < 0 || x >= width) continue;
+
+      const normX = (x - cx) / rx;
+      const normY = (y - cy) / ry;
+      if (normX * normX + normY * normY > 1.0) continue;
+
+      const idx = (y * width + x) * 4;
+      const r = data[idx];
+      const g = data[idx + 1];
+      const b = data[idx + 2];
+
+      const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+      totalLuminance += lum;
+      sampledPixels++;
+
+      if (prevL !== null) {
+        edgeVarianceSum += Math.abs(lum - prevL);
+      }
+      prevL = lum;
+
+      // Universal skin locus in YCbCr color space
+      const cb = 128 - 0.168736 * r - 0.331264 * g + 0.5 * b;
+      const cr = 128 + 0.5 * r - 0.418688 * g - 0.081312 * b;
+      const isSkinYCbCr = cb >= 75 && cb <= 135 && cr >= 130 && cr <= 178;
+      const isSkinRGB = r > 45 && g > 30 && b > 20 && (r > b) && (r - g >= 8);
+
+      if (isSkinYCbCr || isSkinRGB) {
+        skinCount++;
+      }
+    }
+  }
+
+  if (sampledPixels < 100) {
+    return { ok: false, reason: 'Hold phone directly in front of your face inside the circle.' };
+  }
+
+  const avgLuminance = totalLuminance / sampledPixels;
+  const sharpness = edgeVarianceSum / sampledPixels;
+  const skinRatio = skinCount / sampledPixels;
+
+  if (avgLuminance < 35) {
+    return { ok: false, reason: 'Lighting is too dark. Move to a well-lit area or face a light.' };
+  }
+  if (avgLuminance > 240) {
+    return { ok: false, reason: 'Overexposed glare. Please tilt away from direct harsh light.' };
+  }
+  if (sharpness < 7.5) {
+    return { ok: false, reason: 'Image is blurry. Hold phone steady at eye level.' };
+  }
+  if (skinRatio < 0.14) {
+    return { ok: false, reason: 'No face detected in the circle. Look directly into the camera.' };
+  }
+
+  return { ok: true, confidence: Math.min(99, Math.round(75 + skinRatio * 20 + sharpness * 0.5)) };
+}
+
 async function captureAndVerifyFaceId() {
   const videoEl = document.getElementById('authSelfieVideo');
   const canvas = document.getElementById('authSelfieCanvas') || document.createElement('canvas');
-  if (videoEl && videoEl.videoWidth) {
-    const size = Math.min(videoEl.videoWidth, videoEl.videoHeight) || 400;
-    canvas.width = 400;
-    canvas.height = 400;
-    const ctx = canvas.getContext('2d');
-    const sx = (videoEl.videoWidth - size) / 2;
-    const sy = (videoEl.videoHeight - size) / 2;
-    ctx.drawImage(videoEl, sx, sy, size, size, 0, 0, 400, 400);
-    state.authCapturedSelfieUrl = canvas.toDataURL('image/jpeg', 0.88);
+  const hintEl = document.getElementById('authCameraHint');
+
+  if (!videoEl || !videoEl.videoWidth || videoEl.videoWidth === 0) {
+    showToast('Live camera is preparing. Please ensure camera permission is granted.', 'info');
+    return;
   }
 
-  // iOS Face ID Success Simulation: Vibration & Green Animated Checkmark
+  const size = Math.min(videoEl.videoWidth, videoEl.videoHeight) || 400;
+  canvas.width = 400;
+  canvas.height = 400;
+  const ctx = canvas.getContext('2d');
+  const sx = (videoEl.videoWidth - size) / 2;
+  const sy = (videoEl.videoHeight - size) / 2;
+  ctx.drawImage(videoEl, sx, sy, size, size, 0, 0, 400, 400);
+
+  // Authenticate live face presence & clarity
+  const quality = analyzeFaceImageQuality(canvas, ctx);
+  if (!quality.ok) {
+    if (hintEl) {
+      hintEl.textContent = quality.reason;
+      hintEl.style.color = '#EF4444';
+      hintEl.style.fontWeight = '800';
+    }
+    showToast(quality.reason, 'error');
+    if ('vibrate' in navigator) {
+      try { navigator.vibrate(150); } catch (e) {}
+    }
+    return;
+  }
+
+  state.authCapturedSelfieUrl = canvas.toDataURL('image/jpeg', 0.88);
+
+  // iOS Face ID Success Indication
   if ('vibrate' in navigator) {
     try { navigator.vibrate([100, 50, 100]); } catch (e) {}
   }
@@ -3878,7 +3889,7 @@ async function captureAndVerifyFaceId() {
   stopFaceCameraStream();
   renderAll();
 
-  // If customer, auto-finish in 800ms
+  // If customer, auto-finish in 850ms
   if (state.authRole === 'CUSTOMER') {
     setTimeout(() => {
       finishNativeRegistration();
@@ -4068,15 +4079,177 @@ async function finishNativeRegistration() {
 // ============================================================================
 // SLIDE-OUT LEFT DRAWER, CANCELLATION SHEET, WAITLIST, RATING & MODALS
 // ============================================================================
+let lastRenderedModalKey = '';
+
+function openSignInRoleChoiceModal() {
+  state.activeModal = 'SIGNIN_ROLE_CHOICE';
+  renderModalLayer();
+}
+
+function startSignInForRole(role) {
+  state.authRole = role;
+  state.authStep = 'PHONE';
+  state.activeModal = 'SIGNUP_FLOW';
+  state.faceVerifiedSuccess = false;
+  lastRenderedModalKey = '';
+  renderModalLayer();
+}
+
 function renderModalLayer() {
   const root = document.getElementById('pickerModalRoot');
   if (!root) return;
   if (!state.activeModal) {
-    root.innerHTML = '';
+    if (root.innerHTML !== '') root.innerHTML = '';
+    lastRenderedModalKey = '';
     return;
   }
 
-  // SIGN-UP WIZARD MODAL
+  // Generate unique modal rendering key to prevent wiping inputs or camera streams on periodic polling
+  const modalKey = state.activeModal === 'SIGNUP_FLOW'
+    ? `SIGNUP_${state.authRole}_${state.authStep}_${state.faceVerifiedSuccess ? 'VERIFIED' : 'SCAN'}`
+    : `${state.activeModal}_${JSON.stringify(state.modalData || {})}`;
+
+  if (modalKey === lastRenderedModalKey && root.firstElementChild) {
+    return;
+  }
+  lastRenderedModalKey = modalKey;
+
+  // 1. SIGN-IN ROLE CHOICE MODAL ("Sign in as Client" vs "Sign in as Service Provider")
+  if (state.activeModal === 'SIGNIN_ROLE_CHOICE') {
+    root.innerHTML = `
+      <div class="modal-backdrop" onclick="closeModal()">
+        <div class="indrive-modal-sheet" onclick="event.stopPropagation()">
+          <div class="cancel-sheet-header">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <img src="/assets/logo-icon.svg" width="28" height="28" style="border-radius:8px;" alt="Logo" />
+              <div class="cancel-sheet-title">Sign in to Findit Harare</div>
+            </div>
+            <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
+          </div>
+
+          <div style="font-size:13px; color:var(--text-secondary); margin-bottom:16px; line-height:1.45;">
+            Choose your account type to proceed:
+          </div>
+
+          <div style="display:flex; flex-direction:column; gap:12px; margin-bottom:14px;">
+            <div class="role-choice-card" onclick="startSignInForRole('CUSTOMER')">
+              <div class="role-choice-icon-wrap" style="background:#EFF6FF; color:#0066FF;">
+                ${uiIcon('user', 24)}
+              </div>
+              <div style="flex:1;">
+                <div style="font-size:15px; font-weight:800; color:var(--text-main); margin-bottom:3px;">
+                  Sign in as Client
+                </div>
+                <div style="font-size:12px; color:var(--text-secondary); line-height:1.4;">
+                  Find Harare home pros, propose your own price, and book verified services.
+                </div>
+              </div>
+              <div style="color:var(--text-secondary); display:flex; align-items:center;">
+                ${uiIcon('chevronRight', 18)}
+              </div>
+            </div>
+
+            <div class="role-choice-card" onclick="startSignInForRole('PROVIDER')">
+              <div class="role-choice-icon-wrap" style="background:#ECFDF5; color:#10B981;">
+                ${uiIcon('briefcase', 24)}
+              </div>
+              <div style="flex:1;">
+                <div style="display:flex; align-items:center; gap:8px; margin-bottom:3px;">
+                  <span style="font-size:15px; font-weight:800; color:var(--text-main);">Sign in as Service Provider</span>
+                  <span style="background:#FEF3C7; color:#92400E; font-size:10px; font-weight:800; padding:2px 6px; border-radius:99px;">+$5 Welcome Bonus</span>
+                </div>
+                <div style="font-size:12px; color:var(--text-secondary); line-height:1.4;">
+                  Direct bids on nearby Harare tasks, direct cash payouts, and professional workspace.
+                </div>
+              </div>
+              <div style="color:var(--text-secondary); display:flex; align-items:center;">
+                ${uiIcon('chevronRight', 18)}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // 2. EXPLANATORY LOW BALANCE MODAL (11% Commission & $2 Min Reserve & Top-Up Rule)
+  if (state.activeModal === 'LOW_BALANCE_EXPLANATORY') {
+    const data = state.modalData || {};
+    const currentBalance = Number(data.currentBalanceUsd || 0);
+    const minReserve = Number(data.minReserveUsd || 2.00);
+    const commPercent = Number(data.commissionPercent || 11);
+    const bidPrice = Number(data.bidPriceUsd || 0);
+    const commFee = Number(data.commissionFeeUsd || Math.round(bidPrice * (commPercent / 100) * 100) / 100);
+    const reqTopUp = Number(data.requiredTopUpUsd || Math.max(5.00, commFee));
+
+    root.innerHTML = `
+      <div class="modal-backdrop" onclick="closeModal()">
+        <div class="indrive-modal-sheet low-balance-sheet" onclick="event.stopPropagation()">
+          <div class="cancel-sheet-header">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <div style="width:36px; height:36px; border-radius:10px; background:#FEF2F2; color:#DC2626; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                ${uiIcon('alertTriangle', 20)}
+              </div>
+              <div>
+                <div class="cancel-sheet-title">Low Account Balance</div>
+                <div style="font-size:11.5px; color:#DC2626; font-weight:700;">Account Top-Up Required to Bid</div>
+              </div>
+            </div>
+            <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
+          </div>
+
+          <div style="background:#FFFBEB; border:1.5px solid #FDE68A; border-radius:14px; padding:12px 14px; margin-bottom:14px;">
+            <div style="font-size:13px; font-weight:800; color:#92400E; margin-bottom:4px;">
+              Why is a top-up needed?
+            </div>
+            <div style="font-size:12px; color:#78350F; line-height:1.5;">
+              Every provider receives a <strong>$5.00 Welcome Balance</strong> upon joining. As you work, an <strong>${commPercent}% platform commission</strong> ($${commFee.toFixed(2)} USD) is deducted upon successful job completion. Your wallet reserve cannot fall below <strong>$${minReserve.toFixed(2)} USD</strong>.
+            </div>
+          </div>
+
+          <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:14px; padding:14px; margin-bottom:14px; display:flex; flex-direction:column; gap:8px;">
+            <div style="display:flex; justify-content:space-between; font-size:12.5px;">
+              <span style="color:#64748B;">Current Wallet Balance:</span>
+              <span style="font-weight:800; color:${currentBalance < minReserve ? '#DC2626' : '#0F172A'};">$${currentBalance.toFixed(2)} USD</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; font-size:12.5px;">
+              <span style="color:#64748B;">Minimum Account Reserve:</span>
+              <span style="font-weight:700; color:#0F172A;">$${minReserve.toFixed(2)} USD</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; font-size:12.5px;">
+              <span style="color:#64748B;">Task Bid Amount:</span>
+              <span style="font-weight:700; color:#0066FF;">$${bidPrice.toFixed(2)} USD</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; font-size:12.5px; border-top:1px dashed #CBD5E1; padding-top:8px;">
+              <span style="color:#64748B;">Platform Fee (${commPercent}%):</span>
+              <span style="font-weight:700; color:#0F172A;">$${commFee.toFixed(2)} USD</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; font-size:13.5px; border-top:1px solid #CBD5E1; padding-top:8px;">
+              <span style="font-weight:800; color:#0F172A;">Required Top-Up:</span>
+              <span style="font-weight:900; color:#16A34A; font-size:15px;">+$${reqTopUp.toFixed(2)} USD</span>
+            </div>
+          </div>
+
+          <div style="font-size:11.5px; color:#64748B; line-height:1.45; margin-bottom:16px;">
+            <strong>Top-up Rule:</strong> Top up at least <strong>$${reqTopUp.toFixed(2)} USD</strong> (11% of bid = $${commFee.toFixed(2)} USD. If the 11% figure is below $5.00, minimum top-up is $5.00; if 11% is above $5.00, top up the exact 11% figure).
+          </div>
+
+          <button class="btn-primary-blue" style="height:48px; font-size:14.5px; font-weight:800; background:#10B981; margin-bottom:8px;" onclick="triggerEcoCashTopUp(${reqTopUp})">
+            ${uiIcon('wallet', 18)}
+            <span>Top Up $${reqTopUp.toFixed(2)} USD via EcoCash</span>
+          </button>
+
+          <button class="btn-dark-sec" style="height:40px; font-size:13px; font-weight:700;" onclick="closeModal()">
+            Return to Available Tasks
+          </button>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // 3. SIGN-UP WIZARD MODAL
   if (state.activeModal === 'SIGNUP_FLOW') {
     root.innerHTML = `
       <div class="modal-backdrop" onclick="closeModal()">
@@ -4340,14 +4513,14 @@ function renderModalLayer() {
                 <span style="color:var(--text-secondary); display:inline-flex;">${uiIcon('chevronRight', 14)}</span>
               </div>
             ` : `
-              <div class="drawer-profile-header" onclick="state.authRole='CUSTOMER'; state.authStep='PHONE'; state.activeModal='SIGNUP_FLOW'; renderModalLayer();">
+              <div class="drawer-profile-header" onclick="openSignInRoleChoiceModal()">
                 <div class="drawer-avatar-circle" style="background:var(--blue-soft); color:var(--blue-primary);">
                   ${uiIcon('user', 20)}
                 </div>
                 <div style="flex:1; min-width:0;">
-                  <div style="font-size:15px; font-weight:800; color:var(--text-main);">Sign in with WhatsApp</div>
+                  <div style="font-size:15px; font-weight:800; color:var(--text-main);">Sign in to Findit</div>
                   <div style="font-size:12px; color:var(--blue-primary); font-weight:700; margin-top:2px;">
-                    Tap to verify &amp; access bookings
+                    Client or Service Provider
                   </div>
                 </div>
                 <span style="color:var(--text-secondary); display:inline-flex;">${uiIcon('chevronRight', 14)}</span>
@@ -4355,9 +4528,15 @@ function renderModalLayer() {
             `}
 
             <div class="drawer-menu-list">
+              <!-- Multi-Service Hub Pinned to Side Panel -->
+              <div class="drawer-menu-item" style="background:#EFF6FF; border:1.5px solid #BFDBFE; border-radius:12px; margin-bottom:8px; font-weight:800; color:#1E40AF;" onclick="closeModal(); returnToMainHub();">
+                <span style="font-size:18px;">🏠</span>
+                <span style="color:#1E40AF;">Multi-Service Hub</span>
+              </div>
+
               <div class="drawer-menu-item active" onclick="closeModal()">
                 ${uiIcon('home', 18)}
-                <span>${isProvider ? 'Provider Workspace' : 'City / Home Services'}</span>
+                <span>${isProvider ? 'Provider Workspace' : 'Job Marketplace Map'}</span>
               </div>
 
               ${isProvider ? `
@@ -5594,10 +5773,15 @@ function closeModal() {
   stopFaceCameraStream();
   state.activeModal = null;
   state.modalData = null;
+  lastRenderedModalKey = '';
   renderModalLayer();
 }
 
 function openSideDrawerModal() {
+  if (state.activeModal === 'SIGNUP_FLOW' || !state.isAuthenticated) {
+    openSignInRoleChoiceModal();
+    return;
+  }
   state.activeModal = 'DRAWER';
   pushNavigationHistoryState({ drawer: true });
   renderModalLayer();
@@ -6667,16 +6851,56 @@ async function toggleProviderOnlineStatus() {
 
 async function providerSubmitBid(requestId, priceUsd) {
   const prov = state.currentUser || state.db.providers[0];
+  const currentBalance = Number(prov.walletBalanceUsd || 0);
+  const minReserve = Number(state.db?.settings?.minWalletBalanceUsd || 2.00);
+  const commPercent = Number(state.db?.settings?.commissionPercent || 11);
+  const commFee = Math.round(Number(priceUsd) * (commPercent / 100) * 100) / 100;
+  const reqTopUp = Math.max(5.00, commFee);
+
+  // Proactive wallet balance and reserve check
+  if (currentBalance < minReserve || (currentBalance - commFee) < minReserve) {
+    openLowBalanceExplanatoryModal({
+      currentBalanceUsd: currentBalance,
+      minReserveUsd: minReserve,
+      commissionPercent: commPercent,
+      bidPriceUsd: Number(priceUsd),
+      commissionFeeUsd: commFee,
+      requiredTopUpUsd: reqTopUp,
+      requestId
+    });
+    return;
+  }
+
   try {
     await apiPost('/api/offers', {
       requestId,
       providerId: prov.id,
       priceUsd: Number(priceUsd)
     });
+    showToast(`Bid of $${Number(priceUsd)} USD submitted!`, 'info');
     await fetchState();
   } catch (err) {
+    if (err.data && (err.data.code === 'LOW_WALLET_BALANCE' || err.status === 402)) {
+      openLowBalanceExplanatoryModal({
+        ...err.data,
+        requestId
+      });
+      return;
+    }
     showToast(err.message, 'error');
   }
+}
+
+function openLowBalanceExplanatoryModal(data) {
+  state.modalData = data || {};
+  state.activeModal = 'LOW_BALANCE_EXPLANATORY';
+  renderModalLayer();
+}
+
+async function triggerEcoCashTopUp(amountUsd) {
+  closeModal();
+  await topUpProviderWallet(amountUsd, 'EcoCash USD');
+  showToast(`Topped up +$${Number(amountUsd).toFixed(2)} USD via EcoCash. You can now submit your bid.`, 'info');
 }
 
 function openUploadCatalogueModal() {

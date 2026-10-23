@@ -2826,220 +2826,79 @@ html, body {
  * FINDIT HARARE PURE CODE & VECTOR ART: SPLASH, ONBOARDING & MULTI-HUB
  * ============================================================================ */
 
-/* 1. Luxury Pure Code & Vector SVG Splash Screen */
-.fh-splash-overlay {
+/* ============================================================================
+ * FINDIT HARARE AUTHENTIC SPLASH, ONBOARDING & MULTI-HUB
+ * ============================================================================ */
+
+/* 1. Clean Authentic Brand Splash Screen (No AI / Hyper Fake Graphics) */
+.splash-screen {
   position: fixed;
   inset: 0;
   z-index: 99999;
-  background: radial-gradient(circle at 50% 25%, #0B1B3D 0%, #060D1F 75%, #020617 100%);
+  background: #FFFFFF;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 24px;
-  overflow: hidden;
-  transition: opacity 0.45s cubic-bezier(0.4, 0, 0.2, 1), transform 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: opacity 0.35s ease, transform 0.35s ease;
 }
 
-.fh-splash-overlay.splash-dismissed {
+.splash-screen.hidden {
   opacity: 0;
-  transform: scale(1.03);
+  transform: scale(0.98);
   pointer-events: none;
+  display: none !important;
 }
 
-.fh-splash-backdrop-mesh {
-  position: absolute;
-  inset: 0;
-  background-image: 
-    radial-gradient(rgba(0, 102, 255, 0.15) 1.5px, transparent 1.5px),
-    radial-gradient(rgba(56, 189, 248, 0.08) 1.5px, transparent 1.5px);
-  background-size: 32px 32px;
-  background-position: 0 0, 16px 16px;
-  opacity: 0.8;
-  pointer-events: none;
-}
-
-.fh-splash-stage {
-  position: relative;
-  z-index: 2;
+.splash-content {
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
-  width: 100%;
-  max-width: 360px;
+  max-width: 320px;
 }
 
-/* Concentric Radar Sonar Ripples */
-.fh-splash-sonar-box {
-  position: relative;
-  width: 160px;
-  height: 160px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 22px;
-}
-
-.fh-sonar-pulse {
-  position: absolute;
-  border-radius: 50%;
-  border: 1.5px solid rgba(0, 210, 255, 0.45);
-  box-shadow: 0 0 20px rgba(0, 102, 255, 0.3), inset 0 0 15px rgba(0, 210, 255, 0.2);
-  pointer-events: none;
-  animation: fhSonarRipple 3s cubic-bezier(0.1, 0.8, 0.3, 1) infinite;
-}
-
-.fh-sonar-pulse-1 {
-  width: 110px;
-  height: 110px;
-  animation-delay: 0s;
-}
-
-.fh-sonar-pulse-2 {
-  width: 140px;
-  height: 140px;
-  animation-delay: 0.9s;
-}
-
-.fh-sonar-pulse-3 {
-  width: 170px;
-  height: 170px;
-  animation-delay: 1.8s;
-}
-
-@keyframes fhSonarRipple {
-  0% {
-    transform: scale(0.65);
-    opacity: 0.85;
-  }
-  75% {
-    opacity: 0.35;
-  }
-  100% {
-    transform: scale(1.6);
-    opacity: 0;
-  }
-}
-
-/* Luminous Orbital Satellite Track */
-.fh-orbital-track {
-  position: absolute;
-  width: 136px;
-  height: 136px;
-  border-radius: 50%;
-  border: 1px dashed rgba(56, 189, 248, 0.35);
-  animation: fhOrbitalSpin 12s linear infinite;
-  pointer-events: none;
-}
-
-.fh-orbital-satellite {
-  position: absolute;
-  top: -4px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #00D2FF;
-  box-shadow: 0 0 12px #00D2FF, 0 0 20px #0066FF;
-}
-
-@keyframes fhOrbitalSpin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-.fh-emblem-svg-wrap {
-  position: relative;
-  z-index: 3;
-  width: 104px;
-  height: 104px;
-  animation: fhEmblemFloat 3.2s ease-in-out infinite;
-}
-
-@keyframes fhEmblemFloat {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-7px); }
-}
-
-.fh-emblem-svg {
-  width: 100%;
-  height: 100%;
-  display: block;
-  filter: drop-shadow(0 10px 25px rgba(0, 102, 255, 0.45));
-}
-
-.fh-splash-brand-title {
-  font-size: 27px;
+.splash-brand-mark {
+  font-size: 34px;
   font-weight: 900;
-  letter-spacing: 0.08em;
-  color: #FFFFFF;
-  margin-bottom: 6px;
-  display: flex;
-  align-items: center;
-  gap: 7px;
+  letter-spacing: -0.6px;
+  margin-bottom: 10px;
 }
 
-.fh-brand-gradient-text {
-  background: linear-gradient(135deg, #00D2FF 0%, #38BDF8 60%, #FFFFFF 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+.splash-findit-txt {
+  color: #0066FF;
 }
 
-.fh-splash-tagline-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 12px;
-  border-radius: 99px;
-  background: rgba(0, 102, 255, 0.16);
-  border: 1px solid rgba(56, 189, 248, 0.35);
-  color: #38BDF8;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  margin-bottom: 22px;
+.splash-harare-txt {
+  color: #0B1B3D;
+  margin-left: 6px;
 }
 
-.fh-splash-status-label {
-  font-size: 12.5px;
-  color: #94A3B8;
-  font-weight: 600;
-  margin-bottom: 12px;
-  min-height: 18px;
-  transition: opacity 0.2s ease;
+.splash-catchphrase {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #64748B;
+  letter-spacing: 0.02em;
+  margin-bottom: 24px;
 }
 
-.fh-splash-progress-track {
-  width: 220px;
-  height: 5px;
-  background: rgba(255, 255, 255, 0.1);
+.splash-loader-track {
+  width: 160px;
+  height: 4px;
+  background: #E2E8F0;
   border-radius: 99px;
   overflow: hidden;
-  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.4);
-  margin-bottom: 18px;
 }
 
-.fh-splash-progress-fill {
+.splash-loader-fill {
   width: 0%;
   height: 100%;
-  background: linear-gradient(90deg, #0066FF, #00D2FF);
+  background: #0066FF;
   border-radius: 99px;
-  box-shadow: 0 0 12px #00D2FF;
-  transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: width 0.9s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.fh-splash-bottom-bullets {
-  font-size: 11px;
-  color: #64748B;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-}
-
-.fh-splash-bottom-bullets span {
-  color: #94A3B8;
-}
-
-/* 2. Pure Vector Art Onboarding Screens (Zero Photos) */
+/* 2. Onboarding Carousel Screens (Grounded & Authentic Style) */
 .fh-onboarding-screen {
   position: fixed;
   inset: 0;
@@ -3048,7 +2907,7 @@ html, body {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  padding: 20px 24px 32px;
+  padding: 16px 20px 28px;
   overflow-y: auto;
   box-sizing: border-box;
 }
@@ -3057,14 +2916,14 @@ html, body {
   display: flex;
   justify-content: flex-end;
   align-items: center;
-  height: 40px;
+  height: 36px;
 }
 
 .onboarding-skip-btn {
   background: none;
   border: none;
   color: #64748B;
-  font-size: 14px;
+  font-size: 14.5px;
   font-weight: 800;
   cursor: pointer;
   padding: 6px 12px;
@@ -3082,229 +2941,75 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: center;
-  margin: 10px 0 20px;
+  margin: 6px 0 16px;
   min-height: 280px;
   position: relative;
 }
 
-/* Modern Vector Isometric Device Mockup */
-.fh-vector-phone-frame {
+.onboarding-mock-phone {
   width: 250px;
   height: 350px;
-  background: #FFFFFF;
-  border: 5px solid #0F172A;
-  border-radius: 38px;
-  position: relative;
-  overflow: hidden;
-  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.16), 0 0 0 1px rgba(0, 102, 255, 0.15);
-  display: flex;
-  flex-direction: column;
-}
-
-.fh-vector-phone-speaker {
-  width: 54px;
-  height: 5px;
-  background: #0F172A;
-  border-radius: 99px;
-  margin: 8px auto 6px;
-  flex-shrink: 0;
-}
-
-.fh-vector-phone-screen {
-  position: relative;
-  flex: 1;
   background: #F8FAFC;
+  border: 4px solid #E2E8F0;
+  border-radius: 36px;
+  position: relative;
   overflow: hidden;
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.08);
   display: flex;
-  flex-direction: column;
-  align-items: center;
+  align-items: flex-end;
   justify-content: center;
 }
 
-.fh-vector-phone-screen.fh-radar-dark-theme {
-  background: #060D1F;
-}
-
-/* Harare Vector Grid Background */
-.fh-vector-map-grid {
+.onboarding-mock-map-bg {
   position: absolute;
   inset: 0;
-  background-image: 
-    radial-gradient(#CBD5E1 1.5px, transparent 1.5px),
-    linear-gradient(to right, rgba(226, 232, 240, 0.6) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(226, 232, 240, 0.6) 1px, transparent 1px);
-  background-size: 20px 20px, 40px 40px, 40px 40px;
-  opacity: 0.85;
+  opacity: 0.9;
+  background-size: 24px 24px;
 }
 
-/* Pulsing Harare Vector Pins */
-.fh-vector-map-pin {
+.onboarding-pin-bubble {
   position: absolute;
+  background: #0066FF;
+  color: #FFFFFF;
+  border-radius: 50%;
   width: 24px;
   height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
+  box-shadow: 0 4px 10px rgba(0, 102, 255, 0.35);
+  z-index: 2;
 }
 
-.fh-pin-radar {
+.onboarding-bid-card {
   position: absolute;
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
-  background: rgba(0, 102, 255, 0.25);
-  animation: fhPinPulse 2.2s ease-out infinite;
-}
-
-.fh-pin-core {
-  position: relative;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: #0066FF;
-  border: 2px solid #FFFFFF;
-  box-shadow: 0 2px 6px rgba(0, 102, 255, 0.5);
-}
-
-@keyframes fhPinPulse {
-  0% { transform: scale(0.6); opacity: 0.9; }
-  100% { transform: scale(2.4); opacity: 0; }
-}
-
-/* Floating Vector Bid & Alert Cards */
-.fh-vector-floating-card {
-  position: absolute;
-  z-index: 10;
+  z-index: 4;
   background: #FFFFFF;
-  border-radius: 14px;
-  padding: 8px 12px;
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.14);
+  border-radius: 12px;
+  padding: 6px 10px;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.12);
   display: flex;
   align-items: center;
-  gap: 8px;
-  border: 1.5px solid #E2E8F0;
-  white-space: nowrap;
-}
-
-.fh-float-1 {
-  top: 14%;
-  left: 10px;
-  animation: fhFloatSmooth1 3.5s ease-in-out infinite alternate;
-}
-
-.fh-float-2 {
-  top: 48%;
-  right: 10px;
-  animation: fhFloatSmooth2 4s ease-in-out infinite alternate;
-}
-
-@keyframes fhFloatSmooth1 {
-  0% { transform: translateY(0) scale(1); }
-  100% { transform: translateY(-7px) scale(1.02); }
-}
-
-@keyframes fhFloatSmooth2 {
-  0% { transform: translateY(0) scale(1); }
-  100% { transform: translateY(6px) scale(0.99); }
-}
-
-.fh-card-avatar {
-  width: 26px;
-  height: 26px;
-  border-radius: 8px;
-  color: #FFFFFF;
+  gap: 6px;
   font-size: 11px;
-  font-weight: 800;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.fh-card-info {
-  display: flex;
-  flex-direction: column;
-}
-
-.fh-card-title {
-  font-size: 11.5px;
   font-weight: 800;
   color: #0F172A;
-  display: flex;
-  align-items: center;
-  gap: 4px;
+  border: 1px solid #E2E8F0;
+  animation: floatBid 3s ease-in-out infinite alternate;
 }
 
-.fh-star-badge {
-  color: #F59E0B;
-  font-weight: 800;
-  font-size: 10.5px;
+@keyframes floatBid {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(-6px); }
 }
 
-.fh-card-price {
-  font-size: 11px;
-  font-weight: 700;
-  color: #0066FF;
-}
-
-/* Pure Vector SVG Character Artwork */
-.fh-vector-character-svg {
-  position: absolute;
-  bottom: -4px;
-  width: 170px;
-  height: 155px;
-  z-index: 5;
-  filter: drop-shadow(0 12px 20px rgba(0, 102, 255, 0.15));
-}
-
-/* Slide 1 Vector Radar Scanner */
-.fh-vector-radar-scanner {
-  position: absolute;
-  width: 210px;
-  height: 210px;
-  border-radius: 50%;
-  border: 1.5px solid rgba(0, 210, 255, 0.25);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-}
-
-.fh-radar-grid-rings {
-  position: absolute;
-  width: 140px;
-  height: 140px;
-  border-radius: 50%;
-  border: 1px dashed rgba(56, 189, 248, 0.3);
-}
-
-.fh-radar-sweep-beam {
-  position: absolute;
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
-  background: conic-gradient(from 0deg, rgba(0, 210, 255, 0.4) 0deg, transparent 70deg);
-  animation: fhRadarSweep 3s linear infinite;
-}
-
-@keyframes fhRadarSweep {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-.fh-radar-blip {
-  position: absolute;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: #00D2FF;
-  box-shadow: 0 0 10px #00D2FF;
-  animation: fhBlipFlash 1.6s ease-out infinite;
-}
-
-@keyframes fhBlipFlash {
-  0%, 100% { opacity: 0.2; transform: scale(0.8); }
-  50% { opacity: 1; transform: scale(1.3); }
+.onboarding-character-img {
+  position: relative;
+  z-index: 3;
+  height: 270px;
+  max-width: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 10px 18px rgba(15, 23, 42, 0.18));
 }
 
 .onboarding-footer-area {
@@ -3319,7 +3024,7 @@ html, body {
   line-height: 1.45;
   font-weight: 800;
   color: #0F172A;
-  margin-bottom: 24px;
+  margin-bottom: 20px;
   max-width: 320px;
 }
 
@@ -3332,7 +3037,7 @@ html, body {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  margin-bottom: 24px;
+  margin-bottom: 20px;
 }
 
 .onboarding-dot {
@@ -3351,12 +3056,12 @@ html, body {
 .onboarding-cta-btn {
   width: 100%;
   max-width: 360px;
-  height: 52px;
+  height: 50px;
   background: #0066FF;
   color: #FFFFFF;
   border: none;
-  border-radius: 26px;
-  font-size: 16px;
+  border-radius: 25px;
+  font-size: 15.5px;
   font-weight: 800;
   cursor: pointer;
   box-shadow: 0 8px 24px rgba(0, 102, 255, 0.35);
@@ -3364,19 +3069,18 @@ html, body {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  transition: transform 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+  transition: transform 0.15s ease, background 0.15s ease;
 }
 
 .onboarding-cta-btn:hover {
   background: #0052CC;
-  box-shadow: 0 10px 28px rgba(0, 102, 255, 0.45);
 }
 
 .onboarding-cta-btn:active {
   transform: scale(0.98);
 }
 
-/* 3. Main Multi-Service Hub ("What do you need today?") */
+/* 3. Main Multi-Service Hub */
 .fh-hub-wrapper {
   position: fixed;
   inset: 0;
@@ -3391,11 +3095,11 @@ html, body {
 }
 
 .fh-hub-header {
-  padding: 10px 4px 16px;
+  padding: 8px 4px 16px;
 }
 
 .fh-hub-title {
-  font-size: 25px;
+  font-size: 24px;
   font-weight: 900;
   color: #0B1B3D;
   letter-spacing: -0.4px;
@@ -3421,52 +3125,46 @@ html, body {
   box-shadow: 0 6px 18px rgba(15, 23, 42, 0.05);
   border: 1.5px solid #F1F5F9;
   cursor: pointer;
-  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
   display: flex;
   flex-direction: column;
   position: relative;
-}
-
-.fh-hub-card:hover {
-  border-color: #BFDBFE;
-  box-shadow: 0 10px 24px rgba(0, 102, 255, 0.1);
-  transform: translateY(-2px);
 }
 
 .fh-hub-card:active {
   transform: scale(0.97);
 }
 
-.fh-hub-card-svg-wrap {
+.fh-hub-card-img-wrap {
   position: relative;
   width: 100%;
   height: 145px;
-  background: #0B1B3D;
+  background: #E2E8F0;
   overflow: hidden;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+}
+
+.fh-hub-card-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .fh-hub-card-badge {
   position: absolute;
   top: 10px;
   right: 10px;
-  background: rgba(15, 23, 42, 0.8);
+  background: rgba(15, 23, 42, 0.78);
   color: #FFFFFF;
-  padding: 4px 10px;
+  padding: 4px 9px;
   border-radius: 99px;
-  font-size: 10.5px;
+  font-size: 10px;
   font-weight: 800;
-  backdrop-filter: blur(6px);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  z-index: 5;
+  backdrop-filter: blur(4px);
 }
 
 .fh-hub-card-badge.active-pro {
   background: #0066FF;
-  border-color: rgba(56, 189, 248, 0.4);
-  box-shadow: 0 2px 8px rgba(0, 102, 255, 0.4);
 }
 
 .fh-hub-card-label {
@@ -3481,23 +3179,104 @@ html, body {
 }
 
 .fh-hub-card-sub {
-  font-size: 11.5px;
+  font-size: 11px;
   color: #64748B;
   font-weight: 600;
   margin-top: 3px;
   line-height: 1.3;
 }
 
-/* 4. Top Hub Navigation Pill Inside Marketplace */
-.fh-back-to-hub-btn {
-  height: 36px;
-  padding: 0 14px;
-  font-size: 12.5px;
-  border-radius: 11px;
-  width: auto;
-  display: inline-flex;
+/* 4. Role Selection Cards for Sign In */
+.role-choice-card {
+  background: #FFFFFF;
+  border: 1.5px solid #E2E8F0;
+  border-radius: 16px;
+  padding: 14px 16px;
+  display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 14px;
+  margin-bottom: 12px;
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.role-choice-card:hover {
+  border-color: #0066FF;
+  box-shadow: 0 4px 14px rgba(0, 102, 255, 0.1);
+  transform: translateY(-1px);
+}
+
+.role-choice-card:active {
+  transform: scale(0.98);
+}
+
+.role-choice-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* 5. Biometric Live Camera Viewfinder (Authentic Phone Unlock Style) */
+.ios-face-viewfinder {
+  position: relative;
+  width: 220px;
+  height: 220px;
+  border-radius: 50%;
+  border: 4px solid #0066FF;
+  box-shadow: 0 0 0 6px rgba(0, 102, 255, 0.15), 0 12px 28px rgba(15, 23, 42, 0.15);
+  overflow: hidden;
+  background: #0F172A;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.ios-face-viewfinder.face-verified {
+  border-color: #10B981;
+  box-shadow: 0 0 0 6px rgba(16, 185, 129, 0.25), 0 12px 28px rgba(16, 185, 129, 0.25);
+}
+
+.ios-face-viewfinder video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.ios-face-id-success-tick {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: #10B981;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: tickPopIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes tickPopIn {
+  from { transform: scale(0); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+/* 6. Low Balance Explanatory Modal */
+.low-balance-sheet {
+  background: #FFFFFF;
+  border-radius: 20px;
+  padding: 18px 20px;
+}
+
+.low-balance-amount-box {
+  background: #FEF2F2;
+  border: 1.5px solid #FECACA;
+  border-radius: 14px;
+  padding: 14px 16px;
+  margin: 14px 0;
+}
   background: rgba(255, 255, 255, 0.96);
   backdrop-filter: blur(8px);
   border: 1px solid rgba(226, 232, 240, 0.95);

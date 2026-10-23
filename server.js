@@ -1516,8 +1516,17 @@ const server = http.createServer(async (req, res) => {
             nationalIdNumber: idDocument.number || nationalIdNumber,
             idDocument,
             biometricVerified: true,
-            walletBalanceUsd: 0.00,
-            walletTransactions: [],
+            walletBalanceUsd: 5.00, // $5.00 Welcome Balance given to every new provider!
+            walletTransactions: [
+              {
+                id: 'tx_welcome_' + Date.now(),
+                date: new Date().toISOString(),
+                type: 'WELCOME_BONUS',
+                method: 'Findit Welcome Bonus',
+                amountUsd: 5.00,
+                note: 'Findit Harare $5.00 Welcome Account Credit'
+              }
+            ],
             portfolio: [],
             reviews: []
           };
@@ -2284,14 +2293,30 @@ const server = http.createServer(async (req, res) => {
         return sendJson(res, 403, { error: `Your account (${provider.finditId}) is suspended: ${provider.banReason}` });
       }
 
-      if (!db.settings.launchPromoActive && provider.walletBalanceUsd < db.settings.minWalletBalanceUsd) {
+      const priceUsd = Number(body.priceUsd);
+      const minReserveUsd = Number(db.settings.minWalletBalanceUsd || 2.00);
+      const commissionPercent = Number(db.settings.commissionPercent || 11);
+      const commissionFeeUsd = Math.round(priceUsd * (commissionPercent / 100) * 100) / 100;
+      const currentBalanceUsd = Number(provider.walletBalanceUsd || 0);
+
+      // Top-up calculation: at least $5 or 11% of bid amount (whichever is higher)
+      const requiredTopUpUsd = Math.max(5.00, commissionFeeUsd);
+
+      if (!db.settings.launchPromoActive && (currentBalanceUsd < minReserveUsd || (currentBalanceUsd - commissionFeeUsd) < minReserveUsd)) {
         return sendJson(res, 402, {
-          error: `Your Findit Wallet balance ($${provider.walletBalanceUsd.toFixed(2)} Pts) is below the minimum required ($${db.settings.minWalletBalanceUsd.toFixed(2)}). Please top up via EcoCash USD in your Wallet tab.`
+          code: 'LOW_WALLET_BALANCE',
+          error: `Low wallet balance ($${currentBalanceUsd.toFixed(2)} USD). Minimum account reserve is $${minReserveUsd.toFixed(2)} USD.`,
+          currentBalanceUsd,
+          minReserveUsd,
+          commissionPercent,
+          bidPriceUsd: priceUsd,
+          commissionFeeUsd,
+          requiredTopUpUsd,
+          explanation: `Your account balance is $${currentBalanceUsd.toFixed(2)} USD. To place a bid on this $${priceUsd} task, your balance must remain at or above the $${minReserveUsd.toFixed(2)} minimum reserve after the ${commissionPercent}% platform commission ($${commissionFeeUsd.toFixed(2)}). Please top up at least $${requiredTopUpUsd.toFixed(2)} USD (${commissionFeeUsd > 5 ? '11% of bid amount' : '$5.00 minimum top-up'}) into your account.`
         });
       }
 
       const distKm = getDistanceKm(provider.lat, provider.lng, reqItem.lat, reqItem.lng);
-      const priceUsd = Number(body.priceUsd);
       const travelFeeUsd = Number(body.travelFeeUsd || 0);
       const isExactAccept = priceUsd === Number(reqItem.budgetUsd);
       const nowMs = Date.now();
