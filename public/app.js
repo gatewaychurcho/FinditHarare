@@ -414,9 +414,13 @@ function checkAntiLeakageClient(text) {
   if (zimPhoneRegex.test(text)) {
     return 'Phone numbers (077..., +263...) are blocked to protect in-app bookings.';
   }
-  const socialRegex = /(whatsapp|call\s+me|text\s+me|dm\s+me|@[a-zA-Z0-9_]{3,}|wa\.me|t\.me)/i;
+  const socialLinksRegex = /(instagram\.com|instagr\.am|facebook\.com|fb\.com|fb\.me|ig\.me|tiktok\.com|wa\.me|t\.me|https?:\/\/|www\.)/i;
+  if (socialLinksRegex.test(text)) {
+    return 'Instagram links (instagram.com), Facebook links (facebook.com), and external URLs are strictly prohibited.';
+  }
+  const socialRegex = /(whatsapp|call\s+me|text\s+me|dm\s+me|@[a-zA-Z0-9_]{3,}|\binstagram\b|\bfacebook\b|\binsta\b)/i;
   if (socialRegex.test(text)) {
-    return 'Off-platform handles (@...) and "WhatsApp/Call me" links are blocked.';
+    return 'Off-platform handles (@...), Instagram, Facebook, and WhatsApp solicitations are blocked.';
   }
   return null;
 }
@@ -5238,39 +5242,177 @@ function renderModalLayer() {
     return;
   }
 
-  // SUPPORT & HELPLINE MODAL
+  // ==========================================================================
+  // IN-APP iOS WHATSAPP BUSINESS CLONE SUPPORT CHAT (AI-POWERED)
+  // ==========================================================================
   if (state.activeModal === 'SUPPORT') {
+    if (!Array.isArray(state.supportChatMessages) || state.supportChatMessages.length === 0) {
+      state.supportChatMessages = [
+        {
+          id: 'sup_welcome',
+          sender: 'BUSINESS',
+          text: `Hello ${state.currentUser?.name || 'there'}! 👋 Welcome to *Findit Harare Official* Support.\n\nHow can we help you with your Findit Harare booking, EcoCash USD top-up, $5 provider bonus, or account today?`,
+          time: formatChatTime(new Date().toISOString())
+        }
+      ];
+    }
+    const showBizProfile = Boolean(state.supportShowBizInfo);
+    const formatWaBold = (str) => escapeHtml(str || '').replace(/\*([^*]+)\*/g, '<strong>$1</strong>').replace(/\n/g, '<br/>');
+
     root.innerHTML = `
-      <div class="modal-backdrop" onclick="closeModal()">
-        <div class="indrive-modal-sheet" onclick="event.stopPropagation()">
-          <div class="cancel-sheet-header">
-            <div class="cancel-sheet-title">Support &amp; Helpline</div>
-            <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
-          </div>
-
-          <div style="margin-bottom:14px; font-size:12.5px; color:var(--text-secondary); line-height:1.45;">
-            Our Harare member support team is available 24/7 to assist with bookings, dispute mediation, and EcoCash top-up inquiries.
-          </div>
-
-          <a href="https://wa.me/263713475131?text=Hi%20Findit%20Harare%20Support,%20I%20need%20assistance%20with%20my%20account" target="_blank" rel="noopener" class="indrive-cancel-row" style="text-decoration:none;">
-            <div class="cancel-row-left">
-              <span style="color:#059669; display:inline-flex;">${uiIcon('check', 18)}</span>
-              <div>
-                <div style="font-size:13.5px; font-weight:800; color:var(--text-main);">Chat on WhatsApp Support</div>
-                <div style="font-size:11.5px; color:var(--text-secondary);">@FinditHarare • Typically replies in 2 mins</div>
+      <div class="fullscreen-chat-backdrop" style="z-index:99999;" onclick="closeModal()">
+        <div class="fullscreen-chat-modal" style="background:#EFEAE2; display:flex; flex-direction:column; height:100%; width:100%; max-width:480px; margin:0 auto;" onclick="event.stopPropagation()">
+          <!-- iOS WhatsApp Business Top Navigation Bar -->
+          <div style="background:#F6F6F6; border-bottom:1px solid #D1D1D6; padding:10px 12px; display:flex; align-items:center; justify-content:space-between; gap:8px; flex-shrink:0;">
+            <div style="display:flex; align-items:center; gap:8px; min-width:0; flex:1; cursor:pointer;" onclick="toggleSupportBizInfo()">
+              <button type="button" onclick="event.stopPropagation(); closeModal();" style="background:none; border:none; color:#007AFF; display:flex; align-items:center; gap:2px; font-size:16px; font-weight:600; padding:4px 4px 4px 0; cursor:pointer;">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#007AFF" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+              </button>
+              <div style="position:relative; width:40px; height:40px; border-radius:50%; overflow:hidden; border:1.5px solid #25D366; background:#0066FF; flex-shrink:0; display:flex; align-items:center; justify-content:center;">
+                <img src="/assets/logo-icon.svg" alt="Findit Harare DP" style="width:100%; height:100%; object-fit:cover;" onerror="this.src='/favicon.png'" />
+              </div>
+              <div style="min-width:0; flex:1;">
+                <div style="display:flex; align-items:center; gap:4px;">
+                  <span style="font-size:15px; font-weight:700; color:#000000; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Findit Harare Official</span>
+                  <!-- iOS WhatsApp Verified Business Green Badge -->
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="#25D366" style="flex-shrink:0;"><path d="M12 2l2.4 2.1 3.1-.4.9 3 2.8 1.5-.8 3 1.6 2.7-2.2 2.2.4 3.1-3 .9-1.5 2.8-3-.8-2.7 1.6-2.2-2.2-3.1.4-.9-3-2.8-1.5.8-3-1.6-2.7 2.2-2.2-.4-3.1 3-.9 1.5-2.8 3 .8 2.7-1.6z"/><path d="M9.5 12.5l2 2 4-4.5" stroke="#FFFFFF" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </div>
+                <div style="font-size:11.5px; color:#6E6E73; font-weight:500;">
+                  Business Account • Tap here for business info
+                </div>
               </div>
             </div>
-            ${uiIcon('chevronRight', 16)}
-          </a>
 
+            <div style="display:flex; align-items:center; gap:8px;">
+              <button type="button" onclick="toggleSupportBizInfo()" title="Business Profile & Linked IG/FB" style="width:34px; height:34px; border-radius:50%; border:none; background:rgba(0,122,255,0.1); color:#007AFF; display:flex; align-items:center; justify-content:center; cursor:pointer;">
+                ${uiIcon('info', 18)}
+              </button>
+            </div>
+          </div>
 
-          <div style="margin-top:14px; padding:12px; background:var(--bg-card); border-radius:12px; border:1px solid var(--border-light); font-size:11.5px; color:var(--text-secondary); line-height:1.4;">
-            <strong>Support Hours:</strong> Monday – Sunday, 24 Hours<br/>
-            <strong>Physical Desk:</strong> Samora Machel Ave / First St, Harare CBD
+          <!-- Expandable iOS WhatsApp Business Profile & Linked IG/FB Sheet -->
+          ${showBizProfile ? `
+            <div style="background:#FFFFFF; border-bottom:1px solid #D1D1D6; padding:14px 16px; box-shadow:0 6px 18px rgba(0,0,0,0.08); flex-shrink:0;">
+              <div style="display:flex; align-items:center; gap:12px; margin-bottom:10px;">
+                <img src="/assets/logo-icon.svg" alt="DP" style="width:54px; height:54px; border-radius:50%; border:2px solid #25D366;" />
+                <div style="flex:1;">
+                  <div style="font-size:16px; font-weight:800; color:#000; display:flex; align-items:center; gap:5px;">
+                    <span>Findit Harare Official</span>
+                    <span style="font-size:10px; background:#DCFCE7; color:#15803D; padding:2px 6px; border-radius:99px; font-weight:800;">VERIFIED BUSINESS</span>
+                  </div>
+                  <div style="font-size:12px; color:#54656F; margin-top:2px;">+263 71 347 5131 • On-Demand Home Services</div>
+                  <div style="font-size:11.5px; color:#16A34A; font-weight:600; margin-top:2px;">● Open 24 Hours • Harare, Zimbabwe</div>
+                </div>
+                <button type="button" onclick="toggleSupportBizInfo()" style="background:#F2F2F7; border:none; border-radius:50%; width:28px; height:28px; cursor:pointer; font-weight:800;">✕</button>
+              </div>
+              <div style="font-size:12px; color:#3C3C43; background:#F2F2F7; padding:9px 11px; border-radius:10px; margin-bottom:10px; line-height:1.4;">
+                Your Price • Your Pro • At Your Door. Official Harare Marketplace Support &amp; EcoCash Verification Desk (Merchant: <strong>0713 475 131</strong>).
+              </div>
+              <div style="font-size:11px; font-weight:700; color:#8E8E93; text-transform:uppercase; margin-bottom:6px;">Linked Business Accounts (IG &amp; FB)</div>
+              <div style="display:flex; gap:8px;">
+                <a href="https://www.instagram.com/findithahare/" target="_blank" rel="noopener" style="flex:1; display:flex; align-items:center; gap:7px; padding:8px 10px; background:#FDF2F8; border:1px solid #FBCFE8; border-radius:10px; text-decoration:none; color:#9D174D; font-size:12px; font-weight:700;">
+                  <span style="color:#E1306C; display:inline-flex;">${uiIcon('instagram', 16)}</span>
+                  <div>
+                    <div>Instagram</div>
+                    <div style="font-size:10.5px; opacity:0.8;">@findithahare</div>
+                  </div>
+                </a>
+                <a href="https://www.facebook.com/profile.php?id=61595501858201" target="_blank" rel="noopener" style="flex:1; display:flex; align-items:center; gap:7px; padding:8px 10px; background:#EFF6FF; border:1px solid #BFDBFE; border-radius:10px; text-decoration:none; color:#1E40AF; font-size:12px; font-weight:700;">
+                  <span style="color:#1877F2; display:inline-flex;">${uiIcon('facebook', 16)}</span>
+                  <div>
+                    <div>Facebook</div>
+                    <div style="font-size:10.5px; opacity:0.8;">Findit Harare</div>
+                  </div>
+                </a>
+              </div>
+            </div>
+          ` : ''}
+
+          <!-- iOS WhatsApp Business Chat Feed -->
+          <div id="waSupportChatFeed" style="flex:1; overflow-y:auto; padding:12px 14px; display:flex; flex-direction:column; gap:8px; background-color:#EFEAE2; background-image:radial-gradient(rgba(0,0,0,0.03) 1px, transparent 0); background-size:18px 18px;">
+            <!-- iOS WhatsApp Business Encryption & Business Notice -->
+            <div style="background:#FFF5C4; color:#54656F; font-size:11.5px; text-align:center; padding:8px 12px; border-radius:10px; margin:2px auto 6px auto; max-width:92%; line-height:1.35; box-shadow:0 1px 1px rgba(0,0,0,0.06);">
+              🔒 Messages in this chat are protected. This chat is with the official business account of <strong>Findit Harare Official</strong>.
+            </div>
+
+            <!-- Compact Business Identity Card inside Chat -->
+            <div style="background:#FFFFFF; border-radius:12px; padding:10px 12px; margin:0 auto 6px auto; width:94%; box-shadow:0 1px 2px rgba(0,0,0,0.06); display:flex; align-items:center; justify-content:space-between; gap:8px;">
+              <div style="display:flex; align-items:center; gap:9px; min-width:0;">
+                <img src="/assets/logo-icon.svg" alt="DP" style="width:36px; height:36px; border-radius:50%; flex-shrink:0;" />
+                <div style="min-width:0;">
+                  <div style="font-size:12.5px; font-weight:800; color:#111B21;">Findit Harare Business Support</div>
+                  <div style="font-size:11px; color:#667781;">Official IG: @findithahare • FB: Findit Harare</div>
+                </div>
+              </div>
+              <button type="button" onclick="toggleSupportBizInfo()" style="background:#F0F2F5; border:none; border-radius:8px; padding:5px 9px; font-size:11px; font-weight:700; color:#007AFF; cursor:pointer; flex-shrink:0;">
+                Profile
+              </button>
+            </div>
+
+            ${state.supportChatMessages.map((m) => {
+              const isUser = m.sender === 'USER';
+              return `
+                <div style="display:flex; justify-content:${isUser ? 'flex-end' : 'flex-start'};">
+                  <div style="max-width:82%; background:${isUser ? '#DCF8C6' : '#FFFFFF'}; color:#111B21; padding:8px 11px 6px 11px; border-radius:${isUser ? '14px 14px 3px 14px' : '14px 14px 14px 3px'}; box-shadow:0 1px 1.5px rgba(0,0,0,0.08); font-size:13.5px; line-height:1.42; position:relative;">
+                    <div>${formatWaBold(m.text)}</div>
+                    <div style="display:flex; align-items:center; justify-content:flex-end; gap:4px; font-size:10.5px; color:#667781; margin-top:3px;">
+                      <span>${m.time || ''}</span>
+                      ${isUser ? `<span style="color:#34B7F1; font-weight:800;">✓✓</span>` : ''}
+                    </div>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+
+            ${state.supportAiTyping ? `
+              <div style="display:flex; justify-content:flex-start;">
+                <div style="background:#FFFFFF; color:#667781; padding:8px 13px; border-radius:14px 14px 14px 3px; font-size:12.5px; font-style:italic; box-shadow:0 1px 1.5px rgba(0,0,0,0.08);">
+                  Findit Harare Official is typing…
+                </div>
+              </div>
+            ` : ''}
+          </div>
+
+          <!-- Quick FAQ Chips (Strictly Findit Harare Support Topics) -->
+          <div style="background:#F6F6F6; padding:6px 10px 2px 10px; display:flex; gap:6px; overflow-x:auto; border-top:1px solid #E5E5EA; flex-shrink:0;">
+            <button type="button" class="chat-preset-chip" style="background:#FFFFFF; border:1px solid #D1D1D6; color:#007AFF; font-size:11.5px; white-space:nowrap;" onclick="sendSupportAiMessage('How does the $5 welcome bonus and 11% commission work?')">
+              💳 $5 Bonus &amp; 11% Rule
+            </button>
+            <button type="button" class="chat-preset-chip" style="background:#FFFFFF; border:1px solid #D1D1D6; color:#007AFF; font-size:11.5px; white-space:nowrap;" onclick="sendSupportAiMessage('How do I top up my provider wallet with EcoCash USD?')">
+              💵 EcoCash Top-Up
+            </button>
+            <button type="button" class="chat-preset-chip" style="background:#FFFFFF; border:1px solid #D1D1D6; color:#007AFF; font-size:11.5px; white-space:nowrap;" onclick="sendSupportAiMessage('How do I order a service or schedule for later?')">
+              📍 How to Book
+            </button>
+            <button type="button" class="chat-preset-chip" style="background:#FFFFFF; border:1px solid #D1D1D6; color:#007AFF; font-size:11.5px; white-space:nowrap;" onclick="sendSupportAiMessage('How does the 4-digit Start PIN work?')">
+              🔐 4-Digit Start PIN
+            </button>
+          </div>
+
+          <!-- iOS WhatsApp Bottom Input Bar -->
+          <div style="background:#F6F6F6; padding:8px 10px 14px 10px; display:flex; align-items:center; gap:8px; flex-shrink:0;">
+            <input
+              id="waSupportInput"
+              type="text"
+              placeholder="Ask Findit Harare Support..."
+              style="flex:1; height:38px; border-radius:19px; border:1px solid #C7C7CC; background:#FFFFFF; padding:0 14px; font-size:14px; color:#000000; outline:none;"
+              onkeydown="if(event.key==='Enter') sendSupportAiMessage()"
+            />
+            <button
+              type="button"
+              onclick="sendSupportAiMessage()"
+              style="width:38px; height:38px; border-radius:50%; border:none; background:#007AFF; color:#FFFFFF; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0;"
+            >
+              ${uiIcon('send', 16)}
+            </button>
           </div>
         </div>
       </div>
     `;
+    setTimeout(() => {
+      const feed = document.getElementById('waSupportChatFeed');
+      if (feed) feed.scrollTop = feed.scrollHeight;
+    }, 30);
     return;
   }
 
@@ -7468,12 +7610,14 @@ function renderChatDrawer() {
           </div>
 
           <div class="chat-inline-input-row">
-            <button class="whatsapp-ios-plus-btn" onclick="document.getElementById('chatPhotoInput').click()" title="Attach Photo">+</button>
-            <input type="file" id="chatPhotoInput" accept="image/*" style="display:none;" onchange="handleChatPhotoUpload(this, '${req?.id || ''}')" />
+            ${state.role !== 'PROVIDER' ? `
+              <button class="whatsapp-ios-plus-btn" onclick="document.getElementById('chatPhotoInput').click()" title="Attach Reference Photo">+</button>
+              <input type="file" id="chatPhotoInput" accept="image/*" style="display:none;" onchange="handleChatPhotoUpload(this, '${req?.id || ''}')" />
+            ` : ''}
             <input
               id="chatTextInput"
               class="whatsapp-ios-input"
-              placeholder="Message"
+              placeholder="${state.role === 'PROVIDER' ? 'Message client (No links/images allowed)' : 'Message'}"
               onkeydown="if(event.key==='Enter') sendCustomChat('${req?.id || ''}')"
             />
             <button
@@ -7551,12 +7695,63 @@ function renderChatMessagesHtml(messages) {
   return encryptionBanner + msgsHtml;
 }
 
+function toggleSupportBizInfo() {
+  state.supportShowBizInfo = !state.supportShowBizInfo;
+  renderModalLayer();
+}
+
+async function sendSupportAiMessage(presetText = null) {
+  const inp = document.getElementById('waSupportInput');
+  const text = (presetText !== null ? presetText : (inp ? inp.value : '')).trim();
+  if (!text || state.supportAiTyping) return;
+  if (inp) inp.value = '';
+
+  if (!Array.isArray(state.supportChatMessages)) state.supportChatMessages = [];
+  state.supportChatMessages.push({
+    id: 'sup_u_' + Date.now(),
+    sender: 'USER',
+    text,
+    time: formatChatTime(new Date().toISOString())
+  });
+  state.supportAiTyping = true;
+  renderModalLayer();
+
+  try {
+    const res = await apiPost('/api/support/chat', {
+      message: text,
+      role: state.role,
+      userName: state.currentUser?.name || 'Member'
+    });
+    state.supportAiTyping = false;
+    state.supportChatMessages.push({
+      id: 'sup_b_' + Date.now(),
+      sender: 'BUSINESS',
+      text: res?.reply || 'How can we help you with Findit Harare today?',
+      time: formatChatTime(res?.timestamp || new Date().toISOString())
+    });
+    renderModalLayer();
+  } catch (e) {
+    state.supportAiTyping = false;
+    state.supportChatMessages.push({
+      id: 'sup_b_' + Date.now(),
+      sender: 'BUSINESS',
+      text: 'Welcome to *Findit Harare Official Support*! Please let us know if you need help with a booking, EcoCash top-up (0713 475 131), or your provider account.',
+      time: formatChatTime(new Date().toISOString())
+    });
+    renderModalLayer();
+  }
+}
+
 async function handleChatPhotoUpload(input, requestId) {
+  if (state.role === 'PROVIDER') {
+    showToast('Providers are not allowed to upload images or flyers in chat. Use your Catalogue instead.', 'error');
+    return;
+  }
   if (!input.files || !input.files[0]) return;
   const file = input.files[0];
   const reader = new FileReader();
-  reader.onload = async (e) => {
-    sendChatMessage('📷 Photo sent for reference', requestId);
+  reader.onload = async () => {
+    sendChatMessage('📷 Client reference photo attached', requestId);
   };
   reader.readAsDataURL(file);
 }
@@ -7578,6 +7773,11 @@ function updateChatFeedDomOnly(req) {
 function sendChatMessage(text, requestId = null) {
   if (!text || !text.trim()) return;
   const cleanText = text.trim();
+  const leakWarning = checkAntiLeakageClient(cleanText);
+  if (leakWarning) {
+    showToast(leakWarning, 'error');
+    return;
+  }
 
   const targetReqId = requestId || state.activeChatRequestId;
   const fallbackReq = state.role === 'PROVIDER'
