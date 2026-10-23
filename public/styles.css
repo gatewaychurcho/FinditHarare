@@ -2823,62 +2823,224 @@ html, body {
 }
 
 /* ============================================================================
- * AIRMASS-STYLE SPLASH, ONBOARDING & MULTI-HUB ARCHITECTURE
+ * FINDIT HARARE PURE CODE & VECTOR ART: SPLASH, ONBOARDING & MULTI-HUB
  * ============================================================================ */
 
-/* 1. Initial Brand Splash */
-.airmass-splash-screen {
+/* 1. Luxury Pure Code & Vector SVG Splash Screen */
+.fh-splash-overlay {
   position: fixed;
   inset: 0;
-  z-index: 10000;
-  background: #FFFFFF;
+  z-index: 99999;
+  background: radial-gradient(circle at 50% 25%, #0B1B3D 0%, #060D1F 75%, #020617 100%);
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 24px;
-  animation: splashFadeIn 0.35s ease-out;
+  overflow: hidden;
+  transition: opacity 0.45s cubic-bezier(0.4, 0, 0.2, 1), transform 0.45s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-@keyframes splashFadeIn {
-  from { opacity: 0; transform: scale(0.97); }
-  to { opacity: 1; transform: scale(1); }
+.fh-splash-overlay.splash-dismissed {
+  opacity: 0;
+  transform: scale(1.03);
+  pointer-events: none;
 }
 
-.airmass-splash-logo-box {
+.fh-splash-backdrop-mesh {
+  position: absolute;
+  inset: 0;
+  background-image: 
+    radial-gradient(rgba(0, 102, 255, 0.15) 1.5px, transparent 1.5px),
+    radial-gradient(rgba(56, 189, 248, 0.08) 1.5px, transparent 1.5px);
+  background-size: 32px 32px;
+  background-position: 0 0, 16px 16px;
+  opacity: 0.8;
+  pointer-events: none;
+}
+
+.fh-splash-stage {
+  position: relative;
+  z-index: 2;
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
+  width: 100%;
+  max-width: 360px;
 }
 
-.airmass-splash-brand-title {
-  font-size: 26px;
-  font-weight: 900;
-  color: #0F172A;
-  margin-top: 16px;
-  letter-spacing: -0.5px;
+/* Concentric Radar Sonar Ripples */
+.fh-splash-sonar-box {
+  position: relative;
+  width: 160px;
+  height: 160px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 22px;
 }
 
-.airmass-splash-subtitle {
-  font-size: 13.5px;
-  color: #64748B;
-  font-weight: 600;
-  margin-top: 4px;
-}
-
-.airmass-splash-spinner {
-  margin-top: 32px;
-  width: 24px;
-  height: 24px;
-  border: 2.5px solid #E2E8F0;
-  border-top-color: #0066FF;
+.fh-sonar-pulse {
+  position: absolute;
   border-radius: 50%;
-  animation: spin 0.8s linear infinite;
+  border: 1.5px solid rgba(0, 210, 255, 0.45);
+  box-shadow: 0 0 20px rgba(0, 102, 255, 0.3), inset 0 0 15px rgba(0, 210, 255, 0.2);
+  pointer-events: none;
+  animation: fhSonarRipple 3s cubic-bezier(0.1, 0.8, 0.3, 1) infinite;
 }
 
-/* 2. Onboarding Carousel Screens (Matches Screenshots 2 & 3) */
-.airmass-onboarding-screen {
+.fh-sonar-pulse-1 {
+  width: 110px;
+  height: 110px;
+  animation-delay: 0s;
+}
+
+.fh-sonar-pulse-2 {
+  width: 140px;
+  height: 140px;
+  animation-delay: 0.9s;
+}
+
+.fh-sonar-pulse-3 {
+  width: 170px;
+  height: 170px;
+  animation-delay: 1.8s;
+}
+
+@keyframes fhSonarRipple {
+  0% {
+    transform: scale(0.65);
+    opacity: 0.85;
+  }
+  75% {
+    opacity: 0.35;
+  }
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+
+/* Luminous Orbital Satellite Track */
+.fh-orbital-track {
+  position: absolute;
+  width: 136px;
+  height: 136px;
+  border-radius: 50%;
+  border: 1px dashed rgba(56, 189, 248, 0.35);
+  animation: fhOrbitalSpin 12s linear infinite;
+  pointer-events: none;
+}
+
+.fh-orbital-satellite {
+  position: absolute;
+  top: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #00D2FF;
+  box-shadow: 0 0 12px #00D2FF, 0 0 20px #0066FF;
+}
+
+@keyframes fhOrbitalSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.fh-emblem-svg-wrap {
+  position: relative;
+  z-index: 3;
+  width: 104px;
+  height: 104px;
+  animation: fhEmblemFloat 3.2s ease-in-out infinite;
+}
+
+@keyframes fhEmblemFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-7px); }
+}
+
+.fh-emblem-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  filter: drop-shadow(0 10px 25px rgba(0, 102, 255, 0.45));
+}
+
+.fh-splash-brand-title {
+  font-size: 27px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  color: #FFFFFF;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.fh-brand-gradient-text {
+  background: linear-gradient(135deg, #00D2FF 0%, #38BDF8 60%, #FFFFFF 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.fh-splash-tagline-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: 99px;
+  background: rgba(0, 102, 255, 0.16);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  color: #38BDF8;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  margin-bottom: 22px;
+}
+
+.fh-splash-status-label {
+  font-size: 12.5px;
+  color: #94A3B8;
+  font-weight: 600;
+  margin-bottom: 12px;
+  min-height: 18px;
+  transition: opacity 0.2s ease;
+}
+
+.fh-splash-progress-track {
+  width: 220px;
+  height: 5px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 99px;
+  overflow: hidden;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.4);
+  margin-bottom: 18px;
+}
+
+.fh-splash-progress-fill {
+  width: 0%;
+  height: 100%;
+  background: linear-gradient(90deg, #0066FF, #00D2FF);
+  border-radius: 99px;
+  box-shadow: 0 0 12px #00D2FF;
+  transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.fh-splash-bottom-bullets {
+  font-size: 11px;
+  color: #64748B;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.fh-splash-bottom-bullets span {
+  color: #94A3B8;
+}
+
+/* 2. Pure Vector Art Onboarding Screens (Zero Photos) */
+.fh-onboarding-screen {
   position: fixed;
   inset: 0;
   z-index: 9999;
@@ -2902,10 +3064,17 @@ html, body {
   background: none;
   border: none;
   color: #64748B;
-  font-size: 15px;
-  font-weight: 700;
+  font-size: 14px;
+  font-weight: 800;
   cursor: pointer;
-  padding: 8px 12px;
+  padding: 6px 12px;
+  border-radius: 99px;
+  transition: background 0.15s ease;
+}
+
+.onboarding-skip-btn:hover {
+  background: #F1F5F9;
+  color: #0F172A;
 }
 
 .onboarding-graphic-container {
@@ -2914,72 +3083,228 @@ html, body {
   align-items: center;
   justify-content: center;
   margin: 10px 0 20px;
-  min-height: 260px;
+  min-height: 280px;
   position: relative;
 }
 
-.onboarding-mock-phone {
-  width: 240px;
-  height: 340px;
-  background: #F8FAFC;
-  border: 4px solid #F1F5F9;
-  border-radius: 36px;
+/* Modern Vector Isometric Device Mockup */
+.fh-vector-phone-frame {
+  width: 250px;
+  height: 350px;
+  background: #FFFFFF;
+  border: 5px solid #0F172A;
+  border-radius: 38px;
   position: relative;
   overflow: hidden;
-  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.16), 0 0 0 1px rgba(0, 102, 255, 0.15);
   display: flex;
+  flex-direction: column;
+}
+
+.fh-vector-phone-speaker {
+  width: 54px;
+  height: 5px;
+  background: #0F172A;
+  border-radius: 99px;
+  margin: 8px auto 6px;
+  flex-shrink: 0;
+}
+
+.fh-vector-phone-screen {
+  position: relative;
+  flex: 1;
+  background: #F8FAFC;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
 }
 
-.onboarding-mock-map-bg {
+.fh-vector-phone-screen.fh-radar-dark-theme {
+  background: #060D1F;
+}
+
+/* Harare Vector Grid Background */
+.fh-vector-map-grid {
   position: absolute;
   inset: 0;
+  background-image: 
+    radial-gradient(#CBD5E1 1.5px, transparent 1.5px),
+    linear-gradient(to right, rgba(226, 232, 240, 0.6) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(226, 232, 240, 0.6) 1px, transparent 1px);
+  background-size: 20px 20px, 40px 40px, 40px 40px;
   opacity: 0.85;
-  background-size: cover;
-  background-position: center;
 }
 
-.onboarding-pin-bubble {
+/* Pulsing Harare Vector Pins */
+.fh-vector-map-pin {
   position: absolute;
-  background: #FF4D4D;
-  color: #FFFFFF;
-  border-radius: 50%;
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 10px rgba(255, 77, 77, 0.4);
 }
 
-.onboarding-bid-card {
+.fh-pin-radar {
   position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: rgba(0, 102, 255, 0.25);
+  animation: fhPinPulse 2.2s ease-out infinite;
+}
+
+.fh-pin-core {
+  position: relative;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #0066FF;
+  border: 2px solid #FFFFFF;
+  box-shadow: 0 2px 6px rgba(0, 102, 255, 0.5);
+}
+
+@keyframes fhPinPulse {
+  0% { transform: scale(0.6); opacity: 0.9; }
+  100% { transform: scale(2.4); opacity: 0; }
+}
+
+/* Floating Vector Bid & Alert Cards */
+.fh-vector-floating-card {
+  position: absolute;
+  z-index: 10;
   background: #FFFFFF;
-  border-radius: 12px;
-  padding: 6px 10px;
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+  border-radius: 14px;
+  padding: 8px 12px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.14);
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  border: 1.5px solid #E2E8F0;
+  white-space: nowrap;
+}
+
+.fh-float-1 {
+  top: 14%;
+  left: 10px;
+  animation: fhFloatSmooth1 3.5s ease-in-out infinite alternate;
+}
+
+.fh-float-2 {
+  top: 48%;
+  right: 10px;
+  animation: fhFloatSmooth2 4s ease-in-out infinite alternate;
+}
+
+@keyframes fhFloatSmooth1 {
+  0% { transform: translateY(0) scale(1); }
+  100% { transform: translateY(-7px) scale(1.02); }
+}
+
+@keyframes fhFloatSmooth2 {
+  0% { transform: translateY(0) scale(1); }
+  100% { transform: translateY(6px) scale(0.99); }
+}
+
+.fh-card-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  color: #FFFFFF;
   font-size: 11px;
   font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.fh-card-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.fh-card-title {
+  font-size: 11.5px;
+  font-weight: 800;
   color: #0F172A;
-  border: 1px solid #E2E8F0;
-  animation: floatBid 3s ease-in-out infinite alternate;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
-@keyframes floatBid {
-  0% { transform: translateY(0); }
-  100% { transform: translateY(-6px); }
+.fh-star-badge {
+  color: #F59E0B;
+  font-weight: 800;
+  font-size: 10.5px;
 }
 
-.onboarding-character-img {
-  position: relative;
-  z-index: 2;
-  height: 230px;
-  object-fit: contain;
-  filter: drop-shadow(0 12px 20px rgba(0, 0, 0, 0.15));
+.fh-card-price {
+  font-size: 11px;
+  font-weight: 700;
+  color: #0066FF;
+}
+
+/* Pure Vector SVG Character Artwork */
+.fh-vector-character-svg {
+  position: absolute;
+  bottom: -4px;
+  width: 170px;
+  height: 155px;
+  z-index: 5;
+  filter: drop-shadow(0 12px 20px rgba(0, 102, 255, 0.15));
+}
+
+/* Slide 1 Vector Radar Scanner */
+.fh-vector-radar-scanner {
+  position: absolute;
+  width: 210px;
+  height: 210px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(0, 210, 255, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.fh-radar-grid-rings {
+  position: absolute;
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  border: 1px dashed rgba(56, 189, 248, 0.3);
+}
+
+.fh-radar-sweep-beam {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg, rgba(0, 210, 255, 0.4) 0deg, transparent 70deg);
+  animation: fhRadarSweep 3s linear infinite;
+}
+
+@keyframes fhRadarSweep {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.fh-radar-blip {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #00D2FF;
+  box-shadow: 0 0 10px #00D2FF;
+  animation: fhBlipFlash 1.6s ease-out infinite;
+}
+
+@keyframes fhBlipFlash {
+  0%, 100% { opacity: 0.2; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.3); }
 }
 
 .onboarding-footer-area {
@@ -2999,7 +3324,7 @@ html, body {
 }
 
 .onboarding-headline-text .highlight-accent {
-  color: #FF4D4D;
+  color: #0066FF;
 }
 
 .onboarding-pagination-dots {
@@ -3020,134 +3345,178 @@ html, body {
 
 .onboarding-dot.active {
   width: 24px;
-  background: #FF4D4D;
+  background: #0066FF;
 }
 
 .onboarding-cta-btn {
   width: 100%;
   max-width: 360px;
   height: 52px;
-  background: #FF4D4D;
+  background: #0066FF;
   color: #FFFFFF;
   border: none;
   border-radius: 26px;
   font-size: 16px;
   font-weight: 800;
   cursor: pointer;
-  box-shadow: 0 8px 24px rgba(255, 77, 77, 0.35);
+  box-shadow: 0 8px 24px rgba(0, 102, 255, 0.35);
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  transition: transform 0.15s ease, background 0.15s ease;
+  transition: transform 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.onboarding-cta-btn:hover {
+  background: #0052CC;
+  box-shadow: 0 10px 28px rgba(0, 102, 255, 0.45);
 }
 
 .onboarding-cta-btn:active {
   transform: scale(0.98);
 }
 
-/* 3. Main Multi-Service Hub ("What do you need today?") - Matches Screenshot 1 */
-.airmass-hub-wrapper {
+/* 3. Main Multi-Service Hub ("What do you need today?") */
+.fh-hub-wrapper {
+  position: fixed;
+  inset: 0;
+  background: #F8FAFC;
+  overflow-y: auto;
+  pointer-events: auto;
+  z-index: 30;
   padding: 16px 18px 84px;
-  max-width: 500px;
+  max-width: 520px;
   margin: 0 auto;
+  box-sizing: border-box;
 }
 
-.airmass-hub-header {
-  padding: 12px 4px 18px;
+.fh-hub-header {
+  padding: 10px 4px 16px;
 }
 
-.airmass-hub-title {
-  font-size: 24px;
+.fh-hub-title {
+  font-size: 25px;
   font-weight: 900;
   color: #0B1B3D;
   letter-spacing: -0.4px;
 }
 
-.airmass-hub-subtitle {
+.fh-hub-subtitle {
   font-size: 14px;
   color: #64748B;
   font-weight: 600;
   margin-top: 4px;
 }
 
-.airmass-hub-grid {
+.fh-hub-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 14px;
 }
 
-.airmass-hub-card {
+.fh-hub-card {
   background: #FFFFFF;
   border-radius: 20px;
   overflow: hidden;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.05);
   border: 1.5px solid #F1F5F9;
   cursor: pointer;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
   display: flex;
   flex-direction: column;
   position: relative;
 }
 
-.airmass-hub-card:active {
+.fh-hub-card:hover {
+  border-color: #BFDBFE;
+  box-shadow: 0 10px 24px rgba(0, 102, 255, 0.1);
+  transform: translateY(-2px);
+}
+
+.fh-hub-card:active {
   transform: scale(0.97);
 }
 
-.airmass-hub-card-img-wrap {
+.fh-hub-card-svg-wrap {
   position: relative;
   width: 100%;
-  height: 155px;
-  background: #E2E8F0;
+  height: 145px;
+  background: #0B1B3D;
   overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.airmass-hub-card-img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
-.airmass-hub-card-badge {
+.fh-hub-card-badge {
   position: absolute;
   top: 10px;
   right: 10px;
-  background: rgba(15, 23, 42, 0.78);
+  background: rgba(15, 23, 42, 0.8);
   color: #FFFFFF;
-  padding: 3px 8px;
+  padding: 4px 10px;
   border-radius: 99px;
-  font-size: 10px;
+  font-size: 10.5px;
   font-weight: 800;
-  backdrop-filter: blur(4px);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  z-index: 5;
 }
 
-.airmass-hub-card-badge.active-pro {
+.fh-hub-card-badge.active-pro {
   background: #0066FF;
+  border-color: rgba(56, 189, 248, 0.4);
+  box-shadow: 0 2px 8px rgba(0, 102, 255, 0.4);
 }
 
-.airmass-hub-card-label {
+.fh-hub-card-label {
   padding: 12px 14px 14px;
   background: #FFFFFF;
 }
 
-.airmass-hub-card-name {
+.fh-hub-card-name {
   font-size: 14.5px;
   font-weight: 800;
   color: #0F172A;
 }
 
-.airmass-hub-card-sub {
-  font-size: 11px;
+.fh-hub-card-sub {
+  font-size: 11.5px;
   color: #64748B;
   font-weight: 600;
   margin-top: 3px;
   line-height: 1.3;
 }
 
-/* 4. The 7 Job Categories in Marketplace */
+/* 4. Top Hub Navigation Pill Inside Marketplace */
+.fh-back-to-hub-btn {
+  height: 36px;
+  padding: 0 14px;
+  font-size: 12.5px;
+  border-radius: 11px;
+  width: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.1);
+  color: #0F172A;
+  font-weight: 800;
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.fh-back-to-hub-btn:active {
+  transform: scale(0.96);
+  background: #F1F5F9;
+}
+
+/* 5. The 7 Job Categories in Marketplace */
 .job-categories-container {
   padding: 12px 16px 84px;
+}
 }
 
 .job-category-row-card {

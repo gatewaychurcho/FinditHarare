@@ -41,7 +41,7 @@ const state = {
   recipientName: '',
   recipientPhone: '',
 
-  // Airmass Express Dispatch: Immediate vs Scheduled Visit
+  // Findit Dispatch: Immediate vs Scheduled Visit
   timingType: 'IMMEDIATE', // 'IMMEDIATE' | 'SCHEDULED'
   scheduledDate: '',
   scheduledTime: '',
@@ -74,7 +74,7 @@ const state = {
   uploadedFileName: '',
   uploadSuspectedWatermark: false,
 
-  // Full inDrive & Airmass Style Multi-Hub & Biometrics State
+  // Full inDrive & Findit Style Multi-Hub & Biometrics State
   hubView: 'HUB', // 'HUB' | 'MARKETPLACE'
   onboardingSlide: 0, // 0 | 1
   onboardingActive: false,
@@ -552,22 +552,48 @@ function saveSession(role, userOrId, loggedOut = false) {
 function initSplashScreen() {
   const splashEl = document.getElementById('splashScreen');
   const fillEl = document.getElementById('splashLoaderFill');
+  const statusEl = document.getElementById('splashStatusText');
   if (!splashEl) return;
 
   const hasOnboarded = localStorage.getItem('findit_onboarded_v2');
   if (!hasOnboarded) {
     state.onboardingActive = true;
+  } else {
+    state.onboardingActive = false;
+  }
+
+  // Multi-Hub is the default landing view
+  state.hubView = 'HUB';
+
+  if (fillEl) {
+    setTimeout(() => {
+      fillEl.style.width = '30%';
+    }, 60);
+
+    setTimeout(() => {
+      fillEl.style.width = '65%';
+      if (statusEl) statusEl.textContent = 'Synchronizing Harare Specialists...';
+    }, 550);
+
+    setTimeout(() => {
+      fillEl.style.width = '92%';
+      if (statusEl) statusEl.textContent = 'Securing Direct Bidding Mesh...';
+    }, 1100);
+
+    setTimeout(() => {
+      fillEl.style.width = '100%';
+      if (statusEl) statusEl.textContent = 'Welcome to Findit Harare';
+    }, 1550);
   }
 
   setTimeout(() => {
-    if (fillEl) fillEl.style.width = '100%';
-  }, 50);
-
-  setTimeout(() => {
-    splashEl.classList.add('hidden');
-    state.splashDismissed = true;
-    renderAll();
-  }, 1200);
+    splashEl.classList.add('splash-dismissed');
+    setTimeout(() => {
+      splashEl.style.display = 'none';
+      state.splashDismissed = true;
+      renderAll();
+    }, 400);
+  }, 1900);
 }
 
 function renderOnboardingLayer() {
@@ -586,32 +612,71 @@ function renderOnboardingLayer() {
   const slide = state.onboardingSlide || 0;
 
   if (slide === 0) {
-    // Slide 1: Matches Screenshot 3 (Post task and receive competitive bids)
+    // Slide 1: Pure Vector SVG / CSS 3D Smartphone Composition (No stock photos)
     container.innerHTML = `
-      <div class="airmass-onboarding-screen">
+      <div class="fh-onboarding-screen">
         <div class="onboarding-top-nav">
           <button class="onboarding-skip-btn" onclick="finishOnboarding()">Skip</button>
         </div>
 
         <div class="onboarding-graphic-container">
-          <div class="onboarding-mock-phone">
-            <div class="onboarding-mock-map-bg" style="background-image: radial-gradient(#CBD5E1 1.5px, transparent 1.5px), radial-gradient(#CBD5E1 1.5px, #F8FAFC 1.5px); background-size: 20px 20px;"></div>
-            
-            <div class="onboarding-pin-bubble" style="top:25px; left:40px;">${uiIcon('pin', 12)}</div>
-            <div class="onboarding-pin-bubble" style="top:45px; right:35px;">${uiIcon('pin', 12)}</div>
-            <div class="onboarding-pin-bubble" style="bottom:60px; left:30px;">${uiIcon('pin', 12)}</div>
+          <div class="fh-vector-phone-frame">
+            <div class="fh-vector-phone-speaker"></div>
+            <div class="fh-vector-phone-screen">
+              <!-- Harare Vector Map Grid -->
+              <div class="fh-vector-map-grid"></div>
 
-            <div class="onboarding-bid-card" style="top:55px; left:18px;">
-              <span style="color:#FF4D4D;">★ 4.9</span>
-              <span>$25 USD</span>
+              <!-- Pulsing Harare Beacon Pins -->
+              <div class="fh-vector-map-pin" style="top:20%; left:26%;">
+                <div class="fh-pin-radar"></div>
+                <div class="fh-pin-core"></div>
+              </div>
+              <div class="fh-vector-map-pin" style="top:36%; right:20%;">
+                <div class="fh-pin-radar" style="animation-delay:0.7s;"></div>
+                <div class="fh-pin-core" style="background:#00D2FF;"></div>
+              </div>
+              <div class="fh-vector-map-pin" style="bottom:24%; left:44%;">
+                <div class="fh-pin-radar" style="animation-delay:1.4s;"></div>
+                <div class="fh-pin-core"></div>
+              </div>
+
+              <!-- Floating Direct Bid Card 1 -->
+              <div class="fh-vector-floating-card fh-float-1">
+                <div class="fh-card-avatar" style="background:linear-gradient(135deg, #0066FF, #00D2FF);">TM</div>
+                <div class="fh-card-info">
+                  <div class="fh-card-title">Tinashe M. <span class="fh-star-badge">★ 4.9</span></div>
+                  <div class="fh-card-price">$25 USD • Direct Bid</div>
+                </div>
+              </div>
+
+              <!-- Floating Direct Bid Card 2 -->
+              <div class="fh-vector-floating-card fh-float-2">
+                <div class="fh-card-avatar" style="background:linear-gradient(135deg, #10B981, #059669);">FK</div>
+                <div class="fh-card-info">
+                  <div class="fh-card-title">Farai K. <span class="fh-star-badge">★ 5.0</span></div>
+                  <div class="fh-card-price">$30 USD • Solar Pro</div>
+                </div>
+              </div>
+
+              <!-- Pure Vector SVG Client Illustration -->
+              <div class="fh-vector-character-svg">
+                <svg viewBox="0 0 200 180" width="100%" height="100%">
+                  <defs>
+                    <linearGradient id="bodyGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stop-color="#0066FF"/>
+                      <stop offset="100%" stop-color="#0A2540"/>
+                    </linearGradient>
+                  </defs>
+                  <circle cx="100" cy="48" r="24" fill="#FBBF24"/>
+                  <path d="M90 38 Q100 30 112 34 Q118 42 114 50" stroke="#1E293B" stroke-width="4" fill="none" stroke-linecap="round"/>
+                  <path d="M72 135 C72 95 82 82 100 82 C118 82 128 95 128 135 Z" fill="url(#bodyGrad1)"/>
+                  <rect x="108" y="86" width="22" height="38" rx="4" fill="#0F172A" stroke="#38BDF8" stroke-width="2"/>
+                  <circle cx="119" cy="118" r="2" fill="#38BDF8"/>
+                  <path d="M134 92 A12 12 0 0 1 134 112" stroke="#00D2FF" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+                  <path d="M140 86 A20 20 0 0 1 140 118" stroke="#38BDF8" stroke-width="2" fill="none" stroke-linecap="round" opacity="0.6"/>
+                </svg>
+              </div>
             </div>
-
-            <div class="onboarding-bid-card" style="top:110px; right:12px; animation-delay:1.5s;">
-              <span style="color:#FF4D4D;">★ 5.0</span>
-              <span>$30 USD</span>
-            </div>
-
-            <img class="onboarding-character-img" src="https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=600&q=80" alt="Client" />
           </div>
         </div>
 
@@ -633,30 +698,61 @@ function renderOnboardingLayer() {
       </div>
     `;
   } else {
-    // Slide 2: Matches Screenshot 2 (Receive instant alerts when clients nearby request your services)
+    // Slide 2: Pure Vector SVG / CSS Active Radar Scanner Composition (No stock photos)
     container.innerHTML = `
-      <div class="airmass-onboarding-screen">
+      <div class="fh-onboarding-screen">
         <div class="onboarding-top-nav">
           <button class="onboarding-skip-btn" onclick="finishOnboarding()">Skip</button>
         </div>
 
         <div class="onboarding-graphic-container">
-          <div class="onboarding-mock-phone">
-            <div class="onboarding-mock-map-bg" style="background-image: radial-gradient(#CBD5E1 1.5px, transparent 1.5px), radial-gradient(#CBD5E1 1.5px, #F8FAFC 1.5px); background-size: 20px 20px;"></div>
+          <div class="fh-vector-phone-frame">
+            <div class="fh-vector-phone-speaker"></div>
+            <div class="fh-vector-phone-screen fh-radar-dark-theme">
+              <!-- Glowing Radar Scanner with Rotating Beam -->
+              <div class="fh-vector-radar-scanner">
+                <div class="fh-radar-grid-rings"></div>
+                <div class="fh-radar-sweep-beam"></div>
+                
+                <div class="fh-radar-blip" style="top:30%; left:42%;"></div>
+                <div class="fh-radar-blip" style="top:56%; right:28%; animation-delay:0.8s;"></div>
+                <div class="fh-radar-blip" style="bottom:28%; left:32%; animation-delay:1.5s;"></div>
+              </div>
 
-            <div class="onboarding-pin-bubble" style="top:30px; left:50px;">${uiIcon('pin', 12)}</div>
-            <div class="onboarding-pin-bubble" style="top:40px; right:40px;">${uiIcon('pin', 12)}</div>
+              <!-- Floating Dispatch Card 1 -->
+              <div class="fh-vector-floating-card fh-float-1" style="background:#0F172A; border-color:rgba(56,189,248,0.3); color:#FFFFFF;">
+                <div class="fh-card-avatar" style="background:linear-gradient(135deg, #00D2FF, #0066FF);">⚡</div>
+                <div class="fh-card-info">
+                  <div class="fh-card-title" style="color:#FFFFFF;">New Task: Electrical</div>
+                  <div class="fh-card-price" style="color:#10B981;">Borrowdale • $45 Offer</div>
+                </div>
+              </div>
 
-            <div class="onboarding-bid-card" style="top:70px; left:16px;">
-              <span style="color:#0066FF;">⚡ New Task</span>
-              <span>Borrowdale</span>
+              <!-- Floating Dispatch Card 2 -->
+              <div class="fh-vector-floating-card fh-float-2" style="background:#0F172A; border-color:rgba(56,189,248,0.3); color:#FFFFFF;">
+                <div class="fh-card-avatar" style="background:linear-gradient(135deg, #10B981, #059669);">📍</div>
+                <div class="fh-card-info">
+                  <div class="fh-card-title" style="color:#FFFFFF;">1.8 km Distance</div>
+                  <div class="fh-card-price" style="color:#38BDF8;">Avondale • Immediate</div>
+                </div>
+              </div>
+
+              <!-- Pure Vector SVG Specialist Illustration -->
+              <div class="fh-vector-character-svg">
+                <svg viewBox="0 0 200 180" width="100%" height="100%">
+                  <circle cx="100" cy="48" r="24" fill="#FBBF24"/>
+                  <!-- Hardhat / Cap in Findit Electric Blue -->
+                  <path d="M74 44 Q100 24 126 44 Z" fill="#0066FF"/>
+                  <rect x="70" y="42" width="60" height="5" rx="2.5" fill="#38BDF8"/>
+                  <!-- Pro Body & Vest -->
+                  <path d="M72 135 C72 95 82 82 100 82 C118 82 128 95 128 135 Z" fill="#0F172A"/>
+                  <path d="M84 82 L78 135 M116 82 L122 135" stroke="#10B981" stroke-width="5"/>
+                  <!-- Verified Badge -->
+                  <circle cx="100" cy="104" r="9" fill="#0066FF"/>
+                  <path d="M96 104 L99 107 L105 101" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                </svg>
+              </div>
             </div>
-
-            <div class="onboarding-bid-card" style="top:125px; right:14px; animation-delay:1.2s;">
-              <span style="color:#10B981;">💵 $45 Offer</span>
-            </div>
-
-            <img class="onboarding-character-img" src="https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=600&q=80" alt="Specialist" />
           </div>
         </div>
 
@@ -672,6 +768,7 @@ function renderOnboardingLayer() {
 
           <button class="onboarding-cta-btn" onclick="finishOnboarding()">
             <span>Get Started</span>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
           </button>
         </div>
       </div>
@@ -984,7 +1081,7 @@ function handleIncomingRealtimeEvent(data) {
     return;
   }
 
-  // 11. AIRMASS EXPRESS: PROVIDER TRANSIT DELAY NOTICE
+  // 11. Findit : PROVIDER TRANSIT DELAY NOTICE
   if (data.eventType === 'BOOKING_DELAYED' && data.payload?.request) {
     const { requestId, request, delayNotice } = data.payload;
     if (state.db?.requests) {
@@ -1679,6 +1776,40 @@ function buildCurvedPreviewPoints(lat1, lng1, lat2, lng2) {
 }
 
 // ============================================================================
+// MAP VISIBILITY & MULTI-HUB SYNC CONTROLLER
+// ============================================================================
+function syncMapVisibility() {
+  const mapContainer = document.getElementById('harareMapContainer');
+  const centerPin = document.getElementById('centerMapPin');
+  if (!mapContainer) return;
+
+  const activeReq = getCustomerActiveRequest();
+  const isMarketplace = (state.hubView === 'MARKETPLACE');
+  const isConfiguring = (state.screenStep === 'CONFIGURE');
+  const isSearching = (state.screenStep === 'SEARCHING' || (activeReq && activeReq.status === 'OPEN'));
+  const isBooked = (state.screenStep === 'BOOKED' || (activeReq && isBookedStatus(activeReq.status)));
+  const isProvider = (state.role === 'PROVIDER');
+
+  const shouldShowMap = isProvider || isBooked || isSearching || isConfiguring || isMarketplace;
+
+  if (shouldShowMap) {
+    mapContainer.style.display = 'block';
+    if (centerPin) {
+      centerPin.style.display = (isSearching || isBooked || isProvider) ? 'none' : 'block';
+    }
+    if (leafletMap) {
+      setTimeout(() => {
+        try { leafletMap.invalidateSize(); } catch (e) {}
+      }, 50);
+    }
+  } else {
+    // Multi-Hub front door: map layer remains hidden and dormant
+    mapContainer.style.display = 'none';
+    if (centerPin) centerPin.style.display = 'none';
+  }
+}
+
+// ============================================================================
 // MAIN RENDER CONTROLLER
 // ============================================================================
 function renderAll() {
@@ -1700,6 +1831,7 @@ function renderAll() {
     }
   }
 
+  syncMapVisibility();
   updateMapMarkers();
   renderFloatingOffersOverlay();
   renderUiOverlay();
@@ -1994,7 +2126,7 @@ function renderUiOverlay(force = false) {
     } else if (state.screenStep === 'CONFIGURE') {
       contentHtml = renderConfigureFareOverlay();
     } else if (state.hubView === 'MARKETPLACE') {
-      contentHtml = renderJobMarketplaceOverlay();
+      contentHtml = renderHomeDiscoveryOverlay();
     } else {
       contentHtml = renderMainHubOverlay();
     }
@@ -2105,7 +2237,7 @@ function getPersonalizedAndTopServices() {
 }
 
 // ----------------------------------------------------------------------------
-// AIRMASS-STYLE MULTI-SERVICE HUB & JOB MARKETPLACE OVERLAYS
+// FINDIT HARARE MULTI-SERVICE HUB & JOB MARKETPLACE OVERLAYS
 // ----------------------------------------------------------------------------
 function openJobMarketplaceView() {
   state.hubView = 'MARKETPLACE';
@@ -2138,6 +2270,132 @@ function selectCategoryForJobPosting(catId) {
   renderAll();
 }
 
+// Pure Vector SVG Illustration Banners for Multi-Service Hub Cards (Zero Stock Photos)
+function getHubServiceVectorBanner(serviceId) {
+  if (serviceId === 'job_marketplace') {
+    return `
+      <div class="fh-hub-card-svg-wrap">
+        <svg viewBox="0 0 280 145" width="100%" height="100%" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="hubJmGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#060D1F"/>
+              <stop offset="50%" stop-color="#0B1B3D"/>
+              <stop offset="100%" stop-color="#003B99"/>
+            </linearGradient>
+            <linearGradient id="neonGlow1" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#00D2FF"/>
+              <stop offset="100%" stop-color="#0066FF"/>
+            </linearGradient>
+          </defs>
+          <rect width="280" height="145" fill="url(#hubJmGrad)"/>
+          
+          <!-- Blueprint Circuit & Grid Lines -->
+          <line x1="20" y1="20" x2="260" y2="20" stroke="rgba(0,210,255,0.12)" stroke-width="1"/>
+          <line x1="20" y1="50" x2="260" y2="50" stroke="rgba(0,210,255,0.08)" stroke-width="1"/>
+          <line x1="20" y1="80" x2="260" y2="80" stroke="rgba(0,210,255,0.08)" stroke-width="1"/>
+          <line x1="20" y1="110" x2="260" y2="110" stroke="rgba(0,210,255,0.12)" stroke-width="1"/>
+          <line x1="70" y1="0" x2="70" y2="145" stroke="rgba(0,210,255,0.08)" stroke-width="1"/>
+          <line x1="140" y1="0" x2="140" y2="145" stroke="rgba(0,210,255,0.1)" stroke-width="1"/>
+          <line x1="210" y1="0" x2="210" y2="145" stroke="rgba(0,210,255,0.08)" stroke-width="1"/>
+
+          <!-- Glowing Radar Rings in Background -->
+          <circle cx="140" cy="72" r="50" stroke="rgba(0,210,255,0.2)" stroke-width="1.2" stroke-dasharray="4 4"/>
+          <circle cx="140" cy="72" r="28" stroke="rgba(0,210,255,0.3)" stroke-width="1.5"/>
+
+          <!-- Stylized Handshake & Direct Pro Vector Shapes -->
+          <g transform="translate(100, 36)">
+            <path d="M5 45 L25 35 L40 45 L30 58 Z" fill="#0066FF"/>
+            <rect x="0" y="42" width="12" height="18" rx="2" fill="#38BDF8"/>
+            <path d="M75 45 L55 35 L40 45 L50 58 Z" fill="#00D2FF"/>
+            <rect x="68" y="42" width="12" height="18" rx="2" fill="#38BDF8"/>
+            <circle cx="40" cy="46" r="14" fill="#0B1B3D" stroke="#00D2FF" stroke-width="2.5"/>
+            <path d="M40 38 L42 44 L48 46 L42 48 L40 54 L38 48 L32 46 L38 44 Z" fill="#FFFFFF"/>
+          </g>
+
+          <!-- Solar / Electrical Lightning Pin -->
+          <circle cx="42" cy="72" r="18" fill="rgba(0,102,255,0.35)" stroke="#38BDF8" stroke-width="1.5"/>
+          <path d="M42 62 L37 72 H43 L41 82 L48 71 H42 L45 62 Z" fill="#00D2FF"/>
+
+          <!-- Construction Wrench & Hammer Pin -->
+          <circle cx="238" cy="72" r="18" fill="rgba(16,185,129,0.25)" stroke="#10B981" stroke-width="1.5"/>
+          <path d="M233 66 L243 76 M243 66 L233 76" stroke="#10B981" stroke-width="2.5" stroke-linecap="round"/>
+        </svg>
+      </div>
+    `;
+  }
+
+  if (serviceId === 'online_shopping') {
+    return `
+      <div class="fh-hub-card-svg-wrap">
+        <svg viewBox="0 0 280 145" width="100%" height="100%" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="hubShopGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#0F172A"/>
+              <stop offset="60%" stop-color="#1E1B4B"/>
+              <stop offset="100%" stop-color="#312E81"/>
+            </linearGradient>
+          </defs>
+          <rect width="280" height="145" fill="url(#hubShopGrad)"/>
+
+          <!-- Delivery Route Trails -->
+          <path d="M10 115 Q90 120 140 75 T270 45" stroke="rgba(129, 140, 248, 0.25)" stroke-width="2" stroke-dasharray="6 4" fill="none"/>
+          <circle cx="140" cy="75" r="3" fill="#818CF8"/>
+          <circle cx="270" cy="45" r="4" fill="#C7D2FE"/>
+
+          <!-- Vector Shopping Bag & Delivery Box -->
+          <g transform="translate(105, 30)">
+            <rect x="10" y="24" width="48" height="52" rx="10" fill="rgba(99, 102, 241, 0.35)" stroke="#818CF8" stroke-width="2.2"/>
+            <path d="M22 24 V16 C22 10 26 6 34 6 C42 6 46 10 46 16 V24" stroke="#C7D2FE" stroke-width="2.4" stroke-linecap="round" fill="none"/>
+            <circle cx="34" cy="50" r="10" fill="#4338CA"/>
+            <path d="M30 50 L33 53 L39 47" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </g>
+
+          <!-- Speed lines -->
+          <line x1="30" y1="55" x2="65" y2="55" stroke="rgba(165, 180, 252, 0.3)" stroke-width="2" stroke-linecap="round"/>
+          <line x1="20" y1="70" x2="50" y2="70" stroke="rgba(165, 180, 252, 0.2)" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </div>
+    `;
+  }
+
+  // Transport & Carriers
+  return `
+    <div class="fh-hub-card-svg-wrap">
+      <svg viewBox="0 0 280 145" width="100%" height="100%" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="hubTransGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#0B132B"/>
+            <stop offset="60%" stop-color="#1C2541"/>
+            <stop offset="100%" stop-color="#0F4C5C"/>
+          </linearGradient>
+        </defs>
+        <rect width="280" height="145" fill="url(#hubTransGrad)"/>
+
+        <!-- Highway Perspective Lines -->
+        <polygon points="110,145 170,145 145,85 135,85" fill="rgba(56, 189, 248, 0.08)"/>
+        <line x1="140" y1="88" x2="140" y2="145" stroke="#38BDF8" stroke-width="1.8" stroke-dasharray="8 6" opacity="0.4"/>
+
+        <!-- Vector Utility Bakkie / Cargo Truck -->
+        <g transform="translate(85, 35)">
+          <rect x="15" y="32" width="50" height="26" rx="4" fill="rgba(14, 116, 144, 0.45)" stroke="#38BDF8" stroke-width="2"/>
+          <rect x="22" y="20" width="16" height="14" rx="2" fill="#0E7490" stroke="#67E8F9" stroke-width="1.2"/>
+          <rect x="42" y="22" width="18" height="12" rx="2" fill="#155E75" stroke="#67E8F9" stroke-width="1.2"/>
+          <path d="M65 34 L82 34 L95 44 L95 58 L65 58 Z" fill="#0284C7" stroke="#38BDF8" stroke-width="2"/>
+          <path d="M69 38 L80 38 L88 45 L69 45 Z" fill="#E0F2FE"/>
+          <circle cx="35" cy="60" r="9" fill="#0B132B" stroke="#38BDF8" stroke-width="2"/>
+          <circle cx="35" cy="60" r="3" fill="#FFFFFF"/>
+          <circle cx="82" cy="60" r="9" fill="#0B132B" stroke="#38BDF8" stroke-width="2"/>
+          <circle cx="82" cy="60" r="3" fill="#FFFFFF"/>
+        </g>
+
+        <!-- GPS Pin Anchor -->
+        <circle cx="218" cy="50" r="14" fill="rgba(0,210,255,0.25)" stroke="#00D2FF" stroke-width="1.5"/>
+        <circle cx="218" cy="50" r="5" fill="#00D2FF"/>
+      </svg>
+    </div>
+  `;
+}
+
 function renderMainHubOverlay() {
   const changelog = (state.db?.changelogs && state.db.changelogs[0]) || null;
   const hubServices = state.db?.hubServices || [
@@ -2146,29 +2404,26 @@ function renderMainHubOverlay() {
       title: 'Job Marketplace',
       subtitle: 'Hire verified local trades & pros',
       status: 'ACTIVE',
-      badge: '7 Categories',
-      imageUrl: 'https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=800&q=80'
+      badge: '7 Categories'
     },
     {
       id: 'online_shopping',
       title: 'Online Shopping',
       subtitle: 'Harare shops & fast delivery',
       status: 'COMING_SOON',
-      badge: 'Coming Soon',
-      imageUrl: 'https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=800&q=80'
+      badge: 'Coming Soon'
     },
     {
       id: 'transport_carriers',
       title: 'Transport & Carriers',
       subtitle: 'Bakkies, trucks & haulage',
       status: 'COMING_SOON',
-      badge: 'Coming Soon',
-      imageUrl: 'https://images.unsplash.com/photo-1519003722824-194d4455a60c?auto=format&fit=crop&w=800&q=80'
+      badge: 'Coming Soon'
     }
   ];
 
   return `
-    <div class="airmass-hub-wrapper">
+    <div class="fh-hub-wrapper">
       <!-- Top Navigation Row -->
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
         <button class="indrive-circle-btn" onclick="openSideDrawerModal()" title="Menu">
@@ -2205,89 +2460,36 @@ function renderMainHubOverlay() {
         </div>
       ` : ''}
 
-      <!-- Main Welcome Header (Matches Screenshot 1) -->
-      <div class="airmass-hub-header">
-        <div class="airmass-hub-title">Welcome to Findit</div>
-        <div class="airmass-hub-subtitle">What do you need today?</div>
+      <!-- Main Welcome Header -->
+      <div class="fh-hub-header">
+        <div class="fh-hub-title">Welcome to Findit Harare</div>
+        <div class="fh-hub-subtitle">What do you need today?</div>
       </div>
 
-      <!-- 3 Service Hub Grid (Matches Screenshot 1) -->
-      <div class="airmass-hub-grid">
+      <!-- 3 Service Hub Grid (Pure Vector Illustrations) -->
+      <div class="fh-hub-grid">
         ${hubServices.map((srv, idx) => {
           const isMarketplace = srv.id === 'job_marketplace';
           const isFullWidth = idx === 2;
           return `
             <div
-              class="airmass-hub-card"
+              class="fh-hub-card"
               style="${isFullWidth ? 'grid-column: span 2;' : ''}"
               onclick="${isMarketplace ? 'openJobMarketplaceView()' : `openComingSoonServiceModal('${srv.title}', '${srv.subtitle}')`}"
             >
-              <div class="airmass-hub-card-img-wrap" style="${isFullWidth ? 'height:130px;' : 'height:150px;'}">
-                <img class="airmass-hub-card-img" src="${srv.imageUrl || 'https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=600&q=80'}" alt="${srv.title}" />
-                <span class="airmass-hub-card-badge ${srv.status === 'ACTIVE' ? 'active-pro' : ''}">
+              <div style="position:relative;">
+                ${getHubServiceVectorBanner(srv.id)}
+                <span class="fh-hub-card-badge ${srv.status === 'ACTIVE' ? 'active-pro' : ''}">
                   ${srv.badge || (srv.status === 'ACTIVE' ? 'Active' : 'Coming Soon')}
                 </span>
               </div>
-              <div class="airmass-hub-card-label">
-                <div class="airmass-hub-card-name">${srv.title}</div>
-                <div class="airmass-hub-card-sub">${srv.subtitle}</div>
+              <div class="fh-hub-card-label">
+                <div class="fh-hub-card-name">${srv.title}</div>
+                <div class="fh-hub-card-sub">${srv.subtitle}</div>
               </div>
             </div>
           `;
         }).join('')}
-      </div>
-    </div>
-  `;
-}
-
-function renderJobMarketplaceOverlay() {
-  const categories = state.db?.categories || [];
-
-  return `
-    <div class="airmass-hub-wrapper">
-      <!-- Top Navigation: Back to Hub + Menu -->
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-        <button class="btn-dark-sec" style="height:36px; padding:0 12px; font-size:12.5px; border-radius:10px; width:auto; display:inline-flex; align-items:center; gap:4px;" onclick="returnToMainHub()">
-          ${uiIcon('chevronLeft', 16)}
-          <span>Hub</span>
-        </button>
-
-        <div style="font-size:15px; font-weight:900; color:#0B1B3D;">Job Marketplace</div>
-
-        <button class="indrive-circle-btn" onclick="openSideDrawerModal()" title="Menu">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
-        </button>
-      </div>
-
-      <div style="margin-bottom:14px;">
-        <div style="font-size:20px; font-weight:900; color:#0B1B3D;">Select a Job Category</div>
-        <div style="font-size:12.5px; color:#64748B; margin-top:2px;">Post your task, describe what you need, and receive bids</div>
-      </div>
-
-      <!-- The 7 Job Categories -->
-      <div class="job-categories-container" style="padding:0;">
-        ${categories.map((cat) => `
-          <div class="job-category-row-card" onclick="selectCategoryForJobPosting('${cat.id}')">
-            <div class="job-category-header-line">
-              <div class="job-category-icon-box">
-                ${getCategoryVectorSvg(cat.id, false)}
-              </div>
-              <div style="flex:1; min-width:0;">
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                  <span style="font-size:14.5px; font-weight:800; color:#0F172A;">${cat.fullName || cat.name}</span>
-                  <span style="font-size:12px; color:#0066FF; font-weight:800;">From $${cat.suggestedMinUsd || 15}</span>
-                </div>
-                <div style="font-size:11.5px; color:#64748B; margin-top:2px; line-height:1.35;">${cat.tagline || ''}</div>
-              </div>
-            </div>
-
-            <div class="job-category-subtasks-chips">
-              ${(cat.subServices || []).slice(0, 5).map(s => `
-                <span class="job-subtask-chip">${s.name}</span>
-              `).join('')}
-            </div>
-          </div>
-        `).join('')}
       </div>
     </div>
   `;
@@ -2301,13 +2503,30 @@ function renderHomeDiscoveryOverlay() {
   const topServices = getPersonalizedAndTopServices();
 
   return `
-    <!-- Top Row: Left Hamburger Drawer -->
+    <!-- Top Row: Hub Navigation + Hamburger Menu -->
     <div class="indrive-top-left-row">
-      <button class="indrive-circle-btn" onclick="openSideDrawerModal()" title="Menu">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
-          <path d="M4 7h16M4 12h16M4 17h16"/>
-        </svg>
-      </button>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <button class="fh-back-to-hub-btn" onclick="returnToMainHub()" title="Back to Multi-Service Hub">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M15 18l-6-6 6-6"/></svg>
+          <span>Hub</span>
+        </button>
+
+        <button class="indrive-circle-btn" onclick="openSideDrawerModal()" title="Menu">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
+            <path d="M4 7h16M4 12h16M4 17h16"/>
+          </svg>
+        </button>
+      </div>
+
+      ${state.isAuthenticated ? `
+        <button class="indrive-circle-btn" onclick="openSideDrawerModal()" title="Profile" style="background:var(--blue-soft); color:var(--blue-primary); font-weight:800; font-size:12px;">
+          ${state.currentUser?.avatarInitials || (state.currentUser?.name ? state.currentUser.name.slice(0, 2).toUpperCase() : 'FH')}
+        </button>
+      ` : `
+        <button class="btn-primary-blue" style="height:34px; padding:0 12px; font-size:12px; border-radius:99px; width:auto;" onclick="openSignUpModal('CUSTOMER')">
+          <span>Sign In</span>
+        </button>
+      `}
     </div>
 
     <div>
@@ -2526,7 +2745,7 @@ function renderConfigureFareOverlay() {
             </div>
           ` : ''}
 
-          <!-- Airmass Express Dispatch: Need It Now vs Schedule for Later -->
+          <!-- Findit Dispatch: Need It Now vs Schedule for Later -->
           <div style="display:flex; background:rgba(0,0,0,0.04); border-radius:12px; padding:3px; margin-bottom:10px;">
             <button type="button" style="flex:1; border:none; padding:7px 10px; border-radius:9px; font-size:12px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; ${state.timingType !== 'SCHEDULED' ? 'background:#FFFFFF; color:var(--blue-primary); box-shadow:0 1px 3px rgba(0,0,0,0.08);' : 'background:transparent; color:var(--text-secondary);'}" onclick="state.timingType='IMMEDIATE'; renderUiOverlay();">
               <span>⚡ Now (Immediate)</span>
@@ -2541,7 +2760,7 @@ function renderConfigureFareOverlay() {
             <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px; padding:10px 12px; margin-bottom:10px;">
               <div style="font-size:11.5px; font-weight:800; color:#334155; margin-bottom:6px; display:flex; align-items:center; gap:4px;">
                 ${uiIcon('clock', 12)}
-                <span>Airmass Express Scheduling (Date &amp; Time)</span>
+                <span>Findit Direct Schedule (Date &amp; Time)</span>
               </div>
               <div style="display:flex; gap:8px;">
                 <input type="date" value="${state.scheduledDate || ''}" onchange="state.scheduledDate=this.value" style="flex:1.2; height:36px; border:1px solid #CBD5E1; border-radius:8px; padding:0 8px; font-size:12.5px; background:#fff;" />
