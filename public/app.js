@@ -17,7 +17,7 @@ const state = {
   // Screen flow: 'HOME' -> 'CONFIGURE' -> 'SEARCHING' -> 'BOOKED'
   screenStep: 'HOME',
 
-  selectedCategoryId: 'braiding',
+  selectedCategoryId: 'repairs_construction',
   selectedSuburbId: 'avondale',
   selectedSubServiceIdx: 0,
   selectedTierKey: 'STANDARD', // 'STANDARD' | 'PLATINUM' | 'ONE_CLICK' | 'BUDGET'
@@ -732,7 +732,7 @@ async function fetchState(force = false) {
     }
 
     state.db = newDb;
-
+    const prevBanned = Boolean(state.currentUser?.isBanned);
     // Rock-solid session retention: NEVER log out or nullify an active user!
     if (state.isAuthenticated && state.currentUser) {
       const list = state.role === 'PROVIDER' ? (state.db.providers || []) : (state.db.customers || []);
@@ -753,6 +753,17 @@ async function fetchState(force = false) {
     }
 
     syncRecommendedFare();
+
+    // Admin ban / unban takes effect instantly — no refresh needed
+    if (state.currentUser && Boolean(state.currentUser.isBanned) !== prevBanned) {
+      force = true;
+      lastUiOverlaySignature = '';
+      if (state.currentUser.isBanned) {
+        state.activeModal = null;
+        lastRenderedModalKey = '';
+        try { renderModalLayer(); } catch (e) {}
+      }
+    }
 
     const fp = computeStateFingerprint(state.db);
     if (force || fp !== lastStateFingerprint) {
@@ -814,6 +825,58 @@ function initRealtimeSync() {
 function handleIncomingRealtimeEvent(data) {
   if (!data || data.eventType === 'CONNECTED' || data.eventType === 'PING') return;
 
+  // 0. ADMIN BAN / UNBAN / WARN — apply in 0ms to the affected user (zero refresh needed)
+  if (data.eventType === 'ACCOUNT_DISCIPLINE_UPDATED' && data.payload) {
+    const { accountId, finditId, role, action, reason } = data.payload;
+    if (state.db) {
+      const list = role === 'CUSTOMER' ? (state.db.customers || []) : (state.db.providers || []);
+      const target = list.find((u) => u.id === accountId || (finditId && u.finditId === finditId));
+      if (target) {
+        if (action === 'BAN') {
+          target.isBanned = true;
+          target.banReason = reason || 'Safety policy violation';
+          if (role === 'PROVIDER') target.isOnline = false;
+        } else if (action === 'UNBAN') {
+          target.isBanned = false;
+          target.banReason = '';
+        } else if (action === 'WARN') {
+          target.warningsCount = (target.warningsCount || 0) + 1;
+          target.activeWarnings = target.activeWarnings || [];
+          target.activeWarnings.unshift({
+            id: 'warn_' + Date.now(),
+            date: new Date().toISOString(),
+            reason: reason || 'Official Admin Warning'
+          });
+        }
+      }
+    }
+    if (state.currentUser && (state.currentUser.id === accountId || (finditId && state.currentUser.finditId === finditId))) {
+      if (action === 'BAN') {
+        state.currentUser.isBanned = true;
+        state.currentUser.banReason = reason || 'Safety policy violation';
+        state.activeModal = null;
+        lastRenderedModalKey = '';
+      } else if (action === 'UNBAN') {
+        state.currentUser.isBanned = false;
+        state.currentUser.banReason = '';
+        showToast('Your account has been reinstated by Admin!', 'success');
+      } else if (action === 'WARN') {
+        state.currentUser.warningsCount = (state.currentUser.warningsCount || 0) + 1;
+        state.currentUser.activeWarnings = state.currentUser.activeWarnings || [];
+        state.currentUser.activeWarnings.unshift({
+          id: 'warn_' + Date.now(),
+          date: new Date().toISOString(),
+          reason: reason || 'Official Admin Warning'
+        });
+      }
+      saveSession(state.role, state.currentUser, false);
+      lastUiOverlaySignature = '';
+      renderAll();
+    }
+    fetchState(true);
+    return;
+  }
+
   // 1. CHAT MESSAGE SENT (Encrypted & private between customer and assigned provider only)
   if (data.eventType === 'MESSAGE_SENT' && data.payload) {
     const { requestId, message } = data.payload;
@@ -840,7 +903,9 @@ function handleIncomingRealtimeEvent(data) {
     if (existingIdx >= 0) state.db.requests[existingIdx] = req;
     else state.db.requests.unshift(req);
     lastUiOverlaySignature = ''; // Invalidate signature cache so card appears without delay!
-    if (state.role === 'PROVIDER' && 'vibrate' in navigator) {
+    const myCats = state.role === 'PROVIDER' ? getProviderCategoryIds(state.currentUser) : [];
+    const matchesMe = myCats.length === 0 || myCats.includes(req.categoryId);
+    if (state.role === 'PROVIDER' && matchesMe && 'vibrate' in navigator) {
       try { navigator.vibrate([120, 60, 120]); } catch (e) {}
     }
     renderAll();
@@ -1364,7 +1429,7 @@ function initLeafletMap() {
       if (!leafletMap) return;
 
       const activeReq = getCustomerActiveRequest();
-      if (state.role === 'CUSTOMER' && !activeReq && state.screenStep === 'HOME') {
+      if (state.role !== 'PROVIDER' && !activeReq && (state.screenStep === 'HOME' || state.screenStep === 'CONFIGURE')) {
         const center = leafletMap.getCenter();
         state.pinnedLat = Number(center.lat.toFixed(5));
         state.pinnedLng = Number(center.lng.toFixed(5));
@@ -1372,12 +1437,42 @@ function initLeafletMap() {
       }
     });
 
+    updateLiveGpsMarker();
     updateMapMarkers();
   } catch (err) {
     console.warn('Using built-in Harare street map fallback:', err.message);
     const fb = document.getElementById('fallbackRadarMap');
     if (fb) fb.style.display = 'block';
   }
+}
+
+function syncPinDomLabels() {
+  const pinLabel = document.getElementById('centerPinLabel');
+  if (pinLabel) {
+    pinLabel.textContent = `${state.customAddress}, ${(state.customSuburbLabel || 'Harare').split(',')[0]}`;
+  }
+  const routeAddrEl = document.querySelector('.indrive-top-route-card .top-route-row .top-route-text');
+  if (routeAddrEl) {
+    routeAddrEl.textContent = `${state.customAddress}, ${(state.customSuburbLabel || 'Harare').split(',')[0]}`;
+  }
+}
+
+function handleCenterPinBubbleClick() {
+  openSuburbPickerModal();
+}
+
+function orderFromCurrentMapPin() {
+  if (state.role === 'PROVIDER') return;
+  const activeReq = getCustomerActiveRequest();
+  if (activeReq) return;
+  state.hubView = 'MARKETPLACE';
+  if (state.screenStep !== 'CONFIGURE') {
+    openConfigureStep(state.selectedSubServiceIdx || 0);
+  } else {
+    state.isSheetMinimized = false;
+    renderUiOverlay(true);
+  }
+  showToast(`Ordering service at: ${state.customAddress}`);
 }
 
 function reverseGeocodeHararePin(lat, lng) {
@@ -1393,6 +1488,9 @@ function reverseGeocodeHararePin(lat, lng) {
     }
   }
   state.selectedSuburbId = nearest.id;
+  state.customAddress = nearest.name;
+  state.customSuburbLabel = `${nearest.name}, Harare`;
+  syncPinDomLabels();
 
   if (geocodeDebounceTimer) clearTimeout(geocodeDebounceTimer);
   geocodeDebounceTimer = setTimeout(async () => {
@@ -1409,16 +1507,14 @@ function reverseGeocodeHararePin(lat, lng) {
         const houseNumber = addr.house_number ? ` ${addr.house_number}` : '';
         state.customAddress = `${road}${houseNumber}`;
         state.customSuburbLabel = `${suburb}, Harare`;
-        const pinLabel = document.getElementById('centerPinLabel');
-        if (pinLabel) pinLabel.textContent = `${state.customAddress}, ${suburb}`;
+        syncPinDomLabels();
         return;
       }
     } catch (e) {}
 
     state.customAddress = nearest.name;
     state.customSuburbLabel = `${nearest.name}, Harare`;
-    const pinLabel = document.getElementById('centerPinLabel');
-    if (pinLabel) pinLabel.textContent = `${nearest.name}, Harare`;
+    syncPinDomLabels();
   }, 260);
 }
 
@@ -1520,8 +1616,23 @@ function updateLiveGpsMarker() {
   if (userLiveGpsMarker) {
     userLiveGpsMarker.setLatLng([lat, lng]);
   } else {
-    userLiveGpsMarker = L.marker([lat, lng], { icon: gpsIcon, zIndexOffset: 1000 }).addTo(leafletMap);
-    userLiveGpsMarker.bindTooltip(state.role === 'PROVIDER' ? 'Your Live Location (Pro)' : 'Your Live Location', { direction: 'top', offset: [0, -10] });
+    userLiveGpsMarker = L.marker([lat, lng], {
+      icon: gpsIcon,
+      zIndexOffset: 1000,
+      draggable: state.role !== 'PROVIDER'
+    }).addTo(leafletMap);
+    userLiveGpsMarker.bindTooltip(
+      state.role === 'PROVIDER' ? 'Your Live Location (Pro)' : 'Your GPS Location (Drag map or pin to move)',
+      { direction: 'top', offset: [0, -10] }
+    );
+    userLiveGpsMarker.on('dragend', (evt) => {
+      if (state.role === 'PROVIDER') return;
+      const pos = evt.target.getLatLng();
+      state.pinnedLat = Number(pos.lat.toFixed(5));
+      state.pinnedLng = Number(pos.lng.toFixed(5));
+      if (leafletMap) leafletMap.panTo([state.pinnedLat, state.pinnedLng]);
+      reverseGeocodeHararePin(state.pinnedLat, state.pinnedLng);
+    });
   }
 }
 
@@ -1530,23 +1641,43 @@ let lastMapSignature = '';
 function updateMapMarkers(force = false) {
   const centerPin = document.getElementById('centerMapPin');
   const whereFromBubble = document.getElementById('whereFromBubble');
+  const whereFromOrderAction = document.getElementById('whereFromOrderAction');
   const radarPulses = document.getElementById('mapRadarPulses');
   const pinLabel = document.getElementById('centerPinLabel');
+  const pinAvatarImg = document.getElementById('centerPinUserAvatar');
+  const pinDefaultSvg = document.getElementById('centerPinDefaultSvg');
 
   const activeReq = getCustomerActiveRequest();
   const isSearching = Boolean(activeReq && activeReq.status === 'OPEN');
   const isBooked = Boolean(activeReq && isBookedStatus(activeReq.status));
 
   if (centerPin) {
-    if (state.isAuthenticated && state.role === 'CUSTOMER' && !isBooked) {
+    if (state.role !== 'PROVIDER' && !isBooked) {
       centerPin.style.display = 'flex';
       centerPin.classList.toggle('searching-mode', isSearching);
-      if (pinLabel) pinLabel.textContent = `${state.customAddress}`;
+      if (pinLabel) {
+        pinLabel.textContent = `${state.customAddress}, ${(state.customSuburbLabel || 'Harare').split(',')[0]}`;
+      }
       if (whereFromBubble) {
-        whereFromBubble.style.display = state.screenStep === 'HOME' && !isSearching ? 'block' : 'none';
+        whereFromBubble.style.display = !isSearching ? 'block' : 'none';
+      }
+      if (whereFromOrderAction) {
+        whereFromOrderAction.style.display = state.screenStep === 'HOME' && !isSearching ? 'flex' : 'none';
       }
       if (radarPulses) {
         radarPulses.style.display = isSearching ? 'block' : 'none';
+      }
+      // Show user's verified avatar photo inside the map pin when signed in
+      const userAvatar = state.isAuthenticated && state.currentUser?.avatarUrl ? state.currentUser.avatarUrl : '';
+      if (pinAvatarImg && pinDefaultSvg) {
+        if (userAvatar) {
+          pinAvatarImg.src = userAvatar;
+          pinAvatarImg.style.display = 'block';
+          pinDefaultSvg.style.display = 'none';
+        } else {
+          pinAvatarImg.style.display = 'none';
+          pinDefaultSvg.style.display = 'block';
+        }
       }
     } else {
       centerPin.style.display = 'none';
@@ -1724,7 +1855,7 @@ function syncMapVisibility() {
   }
 
   if (centerPin) {
-    const pinTarget = (shouldShowMap && !isSearching && !isBooked && !isProvider) ? 'block' : 'none';
+    const pinTarget = (shouldShowMap && !isBooked && !isProvider) ? 'flex' : 'none';
     if (centerPin.style.display !== pinTarget) {
       centerPin.style.display = pinTarget;
     }
@@ -2114,10 +2245,10 @@ function getPersonalizedAndTopServices() {
   });
 
   const topDefaults = [
-    { catId: 'braiding', subIdx: 0, badge: 'Most requested in Harare' },
-    { catId: 'barber', subIdx: 0, badge: 'Popular home visit' },
-    { catId: 'nails', subIdx: 0, badge: 'Top rated service' },
-    { catId: 'makeup', subIdx: 0, badge: 'Trending in Harare' }
+    { catId: 'repairs_construction', subIdx: 0, badge: 'Most requested in Harare' },
+    { catId: 'beauty_care', subIdx: 0, badge: 'Popular home visit' },
+    { catId: 'solar_power_water', subIdx: 0, badge: 'Top rated service' },
+    { catId: 'cleaning_domestic', subIdx: 0, badge: 'Trending in Harare' }
   ];
 
   const selectedCat = categories.find((c) => c.id === state.selectedCategoryId);
@@ -3255,7 +3386,7 @@ function renderSignUpWizardInnerHtml(isFullScreen = false) {
             Create Your Account
           </div>
           <div style="font-size:12.5px; color:var(--text-secondary); margin-bottom:16px;">
-            Existing accounts log in instantly; new accounts verify face ID in Step 2.
+            Already have an account? <a href="javascript:void(0)" style="color:var(--blue-primary); font-weight:800;" onclick="openSignInRoleChoiceModal('LOGIN')">Log in here</a>
           </div>
 
           <div style="display:flex; flex-direction:column; gap:12px; margin-bottom:14px;">
@@ -3730,20 +3861,17 @@ async function submitProviderPhoneStep() {
     return;
   }
 
-  // 1-Click Instant Sign-In for Existing Accounts
+  // Number already has a Provider profile → must log in with password
   const last9 = digits.slice(-9);
   if (state.db) {
     const list = state.db.providers || [];
-    const existing = list.find((item) => (item.phone || '').replace(/\D/g, '').slice(-9) === last9 && !item.isBanned);
+    const existing = list.find((item) => (item.phone || '').replace(/\D/g, '').slice(-9) === last9);
     if (existing) {
       stopFaceCameraStream();
-      state.currentUser = existing;
-      state.isAuthenticated = true;
-      state.role = 'PROVIDER';
-      state.activeModal = null;
-      state.authStep = 'PHONE';
-      saveSession('PROVIDER', existing, false);
-      showToast(`Welcome back, ${existing.name}!`);
+      state.loginPhone = rawPhone;
+      state.modalData = { tab: 'LOGIN', loginRole: 'PROVIDER', notice: { tone: 'warn', text: 'This number already has a Provider account. Please log in with your password.' } };
+      state.activeModal = 'SIGNIN_ROLE_CHOICE';
+      lastRenderedModalKey = '';
       renderAll();
       return;
     }
@@ -3782,15 +3910,15 @@ function analyzeFaceImageQuality(canvas, ctx) {
 
   let sampledPixels = 0;
   let totalLuminance = 0;
+  let totalLumSq = 0;
   let skinCount = 0;
-  let edgeVarianceSum = 0;
-  let prevL = null;
+  let gradientSum = 0;
 
   const step = 2;
   for (let y = Math.floor(cy - ry); y < Math.floor(cy + ry); y += step) {
-    if (y < 0 || y >= height) continue;
+    if (y < 1 || y >= height - 1) continue;
     for (let x = Math.floor(cx - rx); x < Math.floor(cx + rx); x += step) {
-      if (x < 0 || x >= width) continue;
+      if (x < 1 || x >= width - 1) continue;
 
       const normX = (x - cx) / rx;
       const normY = (y - cy) / ry;
@@ -3803,18 +3931,29 @@ function analyzeFaceImageQuality(canvas, ctx) {
 
       const lum = 0.299 * r + 0.587 * g + 0.114 * b;
       totalLuminance += lum;
+      totalLumSq += lum * lum;
       sampledPixels++;
 
-      if (prevL !== null) {
-        edgeVarianceSum += Math.abs(lum - prevL);
+      // Multi-scale 2D gradient (1px + 4px stride) — immune to phone ISP noise smoothing
+      const iR = idx + 4;
+      const iD = idx + width * 4;
+      const lumR = 0.299 * data[iR] + 0.587 * data[iR + 1] + 0.114 * data[iR + 2];
+      const lumD = 0.299 * data[iD] + 0.587 * data[iD + 1] + 0.114 * data[iD + 2];
+      let localGrad = Math.abs(lum - lumR) + Math.abs(lum - lumD);
+      if (x + 4 < width && y + 4 < height) {
+        const iR4 = idx + 16;
+        const iD4 = idx + width * 16;
+        const lumR4 = 0.299 * data[iR4] + 0.587 * data[iR4 + 1] + 0.114 * data[iR4 + 2];
+        const lumD4 = 0.299 * data[iD4] + 0.587 * data[iD4 + 1] + 0.114 * data[iD4 + 2];
+        localGrad = Math.max(localGrad, (Math.abs(lum - lumR4) + Math.abs(lum - lumD4)) * 0.65);
       }
-      prevL = lum;
+      gradientSum += localGrad;
 
-      // Universal skin locus in YCbCr color space
+      // Universal skin locus in YCbCr + RGB color space (works across all Zimbabwean skin tones & indoor lighting)
       const cb = 128 - 0.168736 * r - 0.331264 * g + 0.5 * b;
       const cr = 128 + 0.5 * r - 0.418688 * g - 0.081312 * b;
-      const isSkinYCbCr = cb >= 75 && cb <= 135 && cr >= 130 && cr <= 178;
-      const isSkinRGB = r > 45 && g > 30 && b > 20 && (r > b) && (r - g >= 8);
+      const isSkinYCbCr = cb >= 65 && cb <= 145 && cr >= 120 && cr <= 185;
+      const isSkinRGB = r > 28 && g > 15 && b > 10 && (r >= b) && (r - g >= 2);
 
       if (isSkinYCbCr || isSkinRGB) {
         skinCount++;
@@ -3827,59 +3966,94 @@ function analyzeFaceImageQuality(canvas, ctx) {
   }
 
   const avgLuminance = totalLuminance / sampledPixels;
-  const sharpness = edgeVarianceSum / sampledPixels;
+  const lumStdDev = Math.sqrt(Math.max(0, totalLumSq / sampledPixels - avgLuminance * avgLuminance));
+  const sharpness = gradientSum / sampledPixels;
   const skinRatio = skinCount / sampledPixels;
+  const score = { avgLuminance, lumStdDev, sharpness, skinRatio };
 
-  if (avgLuminance < 35) {
-    return { ok: false, reason: 'Lighting is too dark. Move to a well-lit area or face a light.' };
+  if (avgLuminance < 18) {
+    return { ok: false, reason: 'Too dark. Move to a brighter spot or face a light.', score };
   }
-  if (avgLuminance > 240) {
-    return { ok: false, reason: 'Overexposed glare. Please tilt away from direct harsh light.' };
+  if (avgLuminance > 248) {
+    return { ok: false, reason: 'Too bright. Tilt away from direct light.', score };
   }
-  if (sharpness < 7.5) {
-    return { ok: false, reason: 'Image is blurry. Hold phone steady at eye level.' };
+  // Camera covered / pointing at a blank wall
+  if (lumStdDev < 4 && sharpness < 0.3) {
+    return { ok: false, reason: 'No face detected. Look directly into the camera.', score };
   }
-  if (skinRatio < 0.14) {
-    return { ok: false, reason: 'No face detected in the circle. Look directly into the camera.' };
+  if (sharpness < 0.25 && lumStdDev < 6) {
+    return { ok: false, reason: 'Camera lens covered or out of focus. Look into the camera.', score };
+  }
+  if (skinRatio < 0.06 && lumStdDev < 9) {
+    return { ok: false, reason: 'No face detected in the circle. Centre your face in the oval.', score };
   }
 
-  return { ok: true, confidence: Math.min(99, Math.round(75 + skinRatio * 20 + sharpness * 0.5)) };
+  return { ok: true, score, confidence: Math.min(99, Math.round(85 + skinRatio * 12 + Math.min(sharpness, 8))) };
 }
 
+function grabFaceFrame(videoEl, canvas) {
+  const size = Math.min(videoEl.videoWidth, videoEl.videoHeight) || 400;
+  canvas.width = 400;
+  canvas.height = 400;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  const sx = (videoEl.videoWidth - size) / 2;
+  const sy = (videoEl.videoHeight - size) / 2;
+  ctx.drawImage(videoEl, sx, sy, size, size, 0, 0, 400, 400);
+  return ctx;
+}
+
+let faceVerifyInProgress = false;
+
 async function captureAndVerifyFaceId() {
+  if (faceVerifyInProgress) return;
   const videoEl = document.getElementById('authSelfieVideo');
   const canvas = document.getElementById('authSelfieCanvas') || document.createElement('canvas');
   const hintEl = document.getElementById('authCameraHint');
 
   if (!videoEl || !videoEl.videoWidth || videoEl.videoWidth === 0) {
-    showToast('Live camera is preparing. Please ensure camera permission is granted.', 'info');
+    showToast('Camera is starting. Please allow camera access and try again.', 'error');
     return;
   }
 
-  const size = Math.min(videoEl.videoWidth, videoEl.videoHeight) || 400;
-  canvas.width = 400;
-  canvas.height = 400;
-  const ctx = canvas.getContext('2d');
-  const sx = (videoEl.videoWidth - size) / 2;
-  const sy = (videoEl.videoHeight - size) / 2;
-  ctx.drawImage(videoEl, sx, sy, size, size, 0, 0, 400, 400);
+  faceVerifyInProgress = true;
+  if (hintEl) {
+    hintEl.textContent = 'Scanning… hold still';
+    hintEl.style.color = 'var(--blue-primary)';
+    hintEl.style.fontWeight = '800';
+  }
 
-  // Authenticate live face presence & clarity
-  const quality = analyzeFaceImageQuality(canvas, ctx);
-  if (!quality.ok) {
+  // Sample several frames over ~1.2s and keep the best one (like Face ID does)
+  let best = null;
+  let bestDataUrl = null;
+  for (let i = 0; i < 6; i++) {
+    const ctx = grabFaceFrame(videoEl, canvas);
+    const q = analyzeFaceImageQuality(canvas, ctx);
+    if (q.ok) {
+      best = q;
+      bestDataUrl = canvas.toDataURL('image/jpeg', 0.88);
+      break;
+    }
+    if (!best || (q.score && best.score && q.score.sharpness + q.score.skinRatio * 10 > best.score.sharpness + best.score.skinRatio * 10)) {
+      best = q;
+    }
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  faceVerifyInProgress = false;
+
+  if (!best || !best.ok) {
+    const reason = (best && best.reason) || 'Face not detected. Please try again.';
     if (hintEl) {
-      hintEl.textContent = quality.reason;
+      hintEl.textContent = reason;
       hintEl.style.color = '#EF4444';
       hintEl.style.fontWeight = '800';
     }
-    showToast(quality.reason, 'error');
     if ('vibrate' in navigator) {
       try { navigator.vibrate(150); } catch (e) {}
     }
     return;
   }
 
-  state.authCapturedSelfieUrl = canvas.toDataURL('image/jpeg', 0.88);
+  state.authCapturedSelfieUrl = bestDataUrl;
 
   // iOS Face ID Success Indication
   if ('vibrate' in navigator) {
@@ -3915,19 +4089,17 @@ async function submitPhoneForFaceStep() {
     return;
   }
 
-  // 1-Click Instant Sign-In for Existing Accounts (ZERO WAIT, NO CODES!)
+  // Number already registered → must log in with password (no password-less sign-in)
   const last9 = digits.slice(-9);
   if (state.db) {
     const list = state.authRole === 'PROVIDER' ? (state.db.providers || []) : (state.db.customers || []);
-    const existing = list.find((item) => (item.phone || '').replace(/\D/g, '').slice(-9) === last9 && !item.isBanned);
+    const existing = list.find((item) => (item.phone || '').replace(/\D/g, '').slice(-9) === last9);
     if (existing) {
       stopFaceCameraStream();
-      state.currentUser = existing;
-      state.isAuthenticated = true;
-      state.activeModal = null;
-      state.authStep = 'PHONE';
-      saveSession(state.authRole, existing, false);
-      showToast(`Welcome back, ${existing.name}!`);
+      state.loginPhone = rawPhone;
+      state.modalData = { tab: 'LOGIN', loginRole: state.authRole, notice: { tone: 'warn', text: 'This number already has an account. Please log in with your password.' } };
+      state.activeModal = 'SIGNIN_ROLE_CHOICE';
+      lastRenderedModalKey = '';
       renderAll();
       return;
     }
@@ -4081,8 +4253,75 @@ async function finishNativeRegistration() {
 // ============================================================================
 let lastRenderedModalKey = '';
 
-function openSignInRoleChoiceModal() {
+function openSignInRoleChoiceModal(tab = 'LOGIN') {
+  state.modalData = { tab: typeof tab === 'string' ? tab : 'LOGIN', loginRole: 'CUSTOMER', notice: null };
   state.activeModal = 'SIGNIN_ROLE_CHOICE';
+  renderModalLayer();
+}
+
+function setSignInModalData(patch) {
+  state.modalData = { ...(state.modalData || {}), ...patch };
+  renderModalLayer();
+}
+
+async function submitExistingAccountLogin() {
+  const md = state.modalData || {};
+  const role = md.loginRole || 'CUSTOMER';
+  const phone = (state.loginPhone || document.getElementById('loginPhoneInput')?.value || '').trim();
+  const password = state.loginPassword || document.getElementById('loginPasswordInput')?.value || '';
+  if (phone.replace(/\D/g, '').length < 8) {
+    setSignInModalData({ notice: { tone: 'error', text: 'Please enter a valid phone number.' } });
+    return;
+  }
+  if (!password) {
+    setSignInModalData({ notice: { tone: 'error', text: 'Please enter your password.' } });
+    return;
+  }
+
+  try {
+    const res = await apiPost('/api/auth/login', { phone, password, role }, 0);
+    const user = res.user;
+    const list = role === 'PROVIDER' ? (state.db.providers || []) : (state.db.customers || []);
+    if (!list.some((u) => u.id === user.id)) list.push(user);
+    state.currentUser = user;
+    state.isAuthenticated = true;
+    state.role = role;
+    state.providerTab = 'FEED';
+    state.loginPassword = '';
+    state.activeModal = null;
+    state.modalData = null;
+    lastRenderedModalKey = '';
+    saveSession(role, user, false);
+    showToast(`Welcome back, ${user.name}!`);
+    if (role === 'PROVIDER') {
+      try { openJobMarketplaceView(); } catch (e) {}
+    }
+    renderAll();
+  } catch (err) {
+    const d = err.data || {};
+    if (d.code === 'NO_PROVIDER_PROFILE') {
+      setSignInModalData({ notice: { tone: 'warn', text: `Hi ${d.name || ''}, you have a Client account but no Provider profile yet. To work as a provider, complete the provider verification once (ID document + face match + categories).`, actions: 'UPGRADE_TO_PROVIDER', name: d.name } });
+    } else if (d.code === 'NO_CLIENT_PROFILE') {
+      setSignInModalData({ notice: { tone: 'warn', text: 'This number is registered as a Service Provider. Log in as Provider — you can switch to Client mode from the side menu anytime.', actions: 'SWITCH_TO_PROVIDER' } });
+    } else if (d.code === 'NOT_FOUND') {
+      setSignInModalData({ notice: { tone: 'error', text: 'No account found with this number.', actions: 'CREATE' } });
+    } else {
+      setSignInModalData({ notice: { tone: 'error', text: err.message || 'Login failed. Please try again.' } });
+    }
+  }
+}
+
+function startProviderUpgradeFromLogin() {
+  const name = state.modalData?.notice?.name || '';
+  state.authRole = 'PROVIDER';
+  state.authStep = 'PHONE';
+  state.authName = name;
+  state.authPhone = state.loginPhone || '';
+  state.authPassword = state.loginPassword || '';
+  state.faceVerifiedSuccess = false;
+  state.modalData = null;
+  state.activeModal = 'SIGNUP_FLOW';
+  lastRenderedModalKey = '';
   renderModalLayer();
 }
 
@@ -4114,59 +4353,119 @@ function renderModalLayer() {
   }
   lastRenderedModalKey = modalKey;
 
-  // 1. SIGN-IN ROLE CHOICE MODAL ("Sign in as Client" vs "Sign in as Service Provider")
+  // 1. SIGN-IN MODAL: "Log In" (existing account) | "Create Account" (new), each as Client or Provider
   if (state.activeModal === 'SIGNIN_ROLE_CHOICE') {
+    const md = state.modalData || {};
+    const tab = md.tab || 'LOGIN';
+    const loginRole = md.loginRole || 'CUSTOMER';
+    const notice = md.notice || null;
+
+    const loginHtml = `
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:12px;">
+        <button type="button" class="${loginRole === 'CUSTOMER' ? 'btn-primary-blue' : 'btn-dark-sec'}" style="height:40px; font-size:12.5px;" onclick="setSignInModalData({ loginRole: 'CUSTOMER', notice: null })">
+          ${uiIcon('user', 14)}<span>As Client</span>
+        </button>
+        <button type="button" class="${loginRole === 'PROVIDER' ? 'btn-primary-blue' : 'btn-dark-sec'}" style="height:40px; font-size:12.5px;" onclick="setSignInModalData({ loginRole: 'PROVIDER', notice: null })">
+          ${uiIcon('briefcase', 14)}<span>As Provider</span>
+        </button>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:12px;">
+        <div>
+          <label style="font-size:11px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px; display:block;">Phone Number</label>
+          <div style="display:flex; gap:8px;">
+            <div style="background:var(--blue-soft); border:1.5px solid var(--blue-border); border-radius:12px; padding:10px 12px; font-weight:800; color:var(--blue-primary); display:inline-flex; align-items:center; gap:6px; white-space:nowrap; font-size:13px;">
+              ${uiIcon('zwFlag', 18)}<span>+263</span>
+            </div>
+            <input id="loginPhoneInput" type="tel" class="dark-input" style="font-size:15px; font-weight:800; flex:1;" placeholder="77 200 1001"
+              value="${escapeHtml((state.loginPhone || '').replace(/^\+?263\s*/, ''))}" oninput="state.loginPhone = '+263 ' + this.value" />
+          </div>
+        </div>
+        <div>
+          <label style="font-size:11px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px; display:block;">Password</label>
+          <input id="loginPasswordInput" type="password" class="dark-input" placeholder="••••••••"
+            value="${escapeHtml(state.loginPassword || '')}" oninput="state.loginPassword = this.value"
+            onkeydown="if(event.key==='Enter') submitExistingAccountLogin()" />
+        </div>
+      </div>
+
+      ${notice ? `
+        <div style="background:${notice.tone === 'warn' ? '#FFFBEB' : '#FEF2F2'}; border:1.5px solid ${notice.tone === 'warn' ? '#FDE68A' : '#FECACA'}; border-radius:12px; padding:10px 12px; margin-bottom:12px; font-size:12px; line-height:1.45; color:${notice.tone === 'warn' ? '#92400E' : '#B91C1C'};">
+          <div style="font-weight:800; margin-bottom:${notice.actions ? '8px' : '0'};">${escapeHtml(notice.text)}</div>
+          ${notice.actions === 'UPGRADE_TO_PROVIDER' ? `
+            <div style="display:flex; flex-direction:column; gap:6px;">
+              <button type="button" class="btn-primary-blue" style="height:38px; font-size:12.5px;" onclick="startProviderUpgradeFromLogin()">
+                ${uiIcon('shield', 14)}<span>Complete Provider Verification (ID + Face)</span>
+              </button>
+              <button type="button" class="btn-dark-sec" style="height:36px; font-size:12px;" onclick="setSignInModalData({ loginRole: 'CUSTOMER', notice: null }); setTimeout(submitExistingAccountLogin, 30);">
+                Log in as Client instead
+              </button>
+            </div>
+          ` : ''}
+          ${notice.actions === 'SWITCH_TO_PROVIDER' ? `
+            <button type="button" class="btn-primary-blue" style="height:38px; font-size:12.5px;" onclick="setSignInModalData({ loginRole: 'PROVIDER', notice: null }); setTimeout(submitExistingAccountLogin, 30);">
+              Log in as Provider instead
+            </button>
+          ` : ''}
+          ${notice.actions === 'CREATE' ? `
+            <button type="button" class="btn-primary-blue" style="height:38px; font-size:12.5px;" onclick="setSignInModalData({ tab: 'SIGNUP', notice: null })">
+              Create an Account
+            </button>
+          ` : ''}
+        </div>
+      ` : ''}
+
+      <button type="button" class="btn-primary-blue" style="height:48px; font-size:15px; font-weight:800;" onclick="submitExistingAccountLogin()">
+        <span>Log In as ${loginRole === 'PROVIDER' ? 'Service Provider' : 'Client'}</span>
+      </button>
+
+      <div style="font-size:11.5px; color:var(--text-secondary); text-align:center; margin-top:10px; line-height:1.45;">
+        One phone number can hold both a Client and a Provider profile. You can switch modes anytime from the side menu.
+      </div>
+    `;
+
+    const signupHtml = `
+      <div style="display:flex; flex-direction:column; gap:12px; margin-bottom:6px;">
+        <div class="role-choice-card" onclick="startSignInForRole('CUSTOMER')">
+          <div class="role-choice-icon-wrap" style="background:#EFF6FF; color:#0066FF;">${uiIcon('user', 24)}</div>
+          <div style="flex:1;">
+            <div style="font-size:15px; font-weight:800; color:var(--text-main); margin-bottom:3px;">Create Client Account</div>
+            <div style="font-size:12px; color:var(--text-secondary); line-height:1.4;">Name, phone, password + quick face check. Post jobs and get bids from verified pros.</div>
+          </div>
+          <div style="color:var(--text-secondary); display:flex; align-items:center;">${uiIcon('chevronRight', 18)}</div>
+        </div>
+
+        <div class="role-choice-card" onclick="startSignInForRole('PROVIDER')">
+          <div class="role-choice-icon-wrap" style="background:#ECFDF5; color:#10B981;">${uiIcon('briefcase', 24)}</div>
+          <div style="flex:1;">
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:3px; flex-wrap:wrap;">
+              <span style="font-size:15px; font-weight:800; color:var(--text-main);">Become a Service Provider</span>
+              <span style="background:#FEF3C7; color:#92400E; font-size:10px; font-weight:800; padding:2px 6px; border-radius:99px;">+$5 Welcome Bonus</span>
+            </div>
+            <div style="font-size:12px; color:var(--text-secondary); line-height:1.4;">ID + face match + up to 3 business categories. Bid on matching jobs near you.</div>
+          </div>
+          <div style="color:var(--text-secondary); display:flex; align-items:center;">${uiIcon('chevronRight', 18)}</div>
+        </div>
+      </div>
+    `;
+
     root.innerHTML = `
       <div class="modal-backdrop" onclick="closeModal()">
         <div class="indrive-modal-sheet" onclick="event.stopPropagation()">
           <div class="cancel-sheet-header">
             <div style="display:flex; align-items:center; gap:8px;">
               <img src="/assets/logo-icon.svg" width="28" height="28" style="border-radius:8px;" alt="Logo" />
-              <div class="cancel-sheet-title">Sign in to Findit Harare</div>
+              <div class="cancel-sheet-title">Findit Harare</div>
             </div>
             <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
           </div>
 
-          <div style="font-size:13px; color:var(--text-secondary); margin-bottom:16px; line-height:1.45;">
-            Choose your account type to proceed:
+          <div style="display:grid; grid-template-columns:1fr 1fr; background:#F1F5F9; border-radius:12px; padding:4px; margin-bottom:14px;">
+            <button type="button" onclick="setSignInModalData({ tab: 'LOGIN', notice: null })" style="height:36px; border:none; border-radius:9px; font-weight:800; font-size:13px; cursor:pointer; ${tab === 'LOGIN' ? 'background:#FFFFFF; color:#0F172A; box-shadow:0 1px 3px rgba(0,0,0,0.12);' : 'background:transparent; color:#64748B;'}">Log In</button>
+            <button type="button" onclick="setSignInModalData({ tab: 'SIGNUP', notice: null })" style="height:36px; border:none; border-radius:9px; font-weight:800; font-size:13px; cursor:pointer; ${tab === 'SIGNUP' ? 'background:#FFFFFF; color:#0F172A; box-shadow:0 1px 3px rgba(0,0,0,0.12);' : 'background:transparent; color:#64748B;'}">Create Account</button>
           </div>
 
-          <div style="display:flex; flex-direction:column; gap:12px; margin-bottom:14px;">
-            <div class="role-choice-card" onclick="startSignInForRole('CUSTOMER')">
-              <div class="role-choice-icon-wrap" style="background:#EFF6FF; color:#0066FF;">
-                ${uiIcon('user', 24)}
-              </div>
-              <div style="flex:1;">
-                <div style="font-size:15px; font-weight:800; color:var(--text-main); margin-bottom:3px;">
-                  Sign in as Client
-                </div>
-                <div style="font-size:12px; color:var(--text-secondary); line-height:1.4;">
-                  Find Harare home pros, propose your own price, and book verified services.
-                </div>
-              </div>
-              <div style="color:var(--text-secondary); display:flex; align-items:center;">
-                ${uiIcon('chevronRight', 18)}
-              </div>
-            </div>
-
-            <div class="role-choice-card" onclick="startSignInForRole('PROVIDER')">
-              <div class="role-choice-icon-wrap" style="background:#ECFDF5; color:#10B981;">
-                ${uiIcon('briefcase', 24)}
-              </div>
-              <div style="flex:1;">
-                <div style="display:flex; align-items:center; gap:8px; margin-bottom:3px;">
-                  <span style="font-size:15px; font-weight:800; color:var(--text-main);">Sign in as Service Provider</span>
-                  <span style="background:#FEF3C7; color:#92400E; font-size:10px; font-weight:800; padding:2px 6px; border-radius:99px;">+$5 Welcome Bonus</span>
-                </div>
-                <div style="font-size:12px; color:var(--text-secondary); line-height:1.4;">
-                  Direct bids on nearby Harare tasks, direct cash payouts, and professional workspace.
-                </div>
-              </div>
-              <div style="color:var(--text-secondary); display:flex; align-items:center;">
-                ${uiIcon('chevronRight', 18)}
-              </div>
-            </div>
-          </div>
+          ${tab === 'LOGIN' ? loginHtml : signupHtml}
         </div>
       </div>
     `;
@@ -5962,10 +6261,39 @@ function stopFaceCameraStream() {
 // ============================================================================
 // INDRIVE-INSPIRED SERVICE PROVIDER MODE (DRIVER / SPECIALIST WORKSPACE)
 // ============================================================================
+function normalizeCategoryId(catId) {
+  const map = {
+    braiding: 'beauty_care',
+    barber: 'beauty_care',
+    nails: 'beauty_care',
+    makeup: 'beauty_care',
+    wigs: 'beauty_care',
+    lashes: 'beauty_care',
+    cleaning: 'cleaning_domestic',
+    handyman: 'repairs_construction',
+    plumbing: 'repairs_construction'
+  };
+  return map[catId] || catId || 'repairs_construction';
+}
+
+function getProviderCategoryIds(prov) {
+  if (!prov) return [];
+  const raw = Array.isArray(prov.categoryIds) && prov.categoryIds.length
+    ? prov.categoryIds
+    : (prov.categoryId ? [prov.categoryId] : []);
+  return Array.from(new Set(raw.map(normalizeCategoryId))).slice(0, 3);
+}
+
 function renderProviderModeOverlay() {
   const prov = state.currentUser || state.db.providers[0];
   const activeJob = getProviderActiveBooking(prov.id);
-  const openRequests = (state.db.requests || []).filter((r) => r.status === 'OPEN');
+  // Strictly show ONLY job cards matching the provider's chosen categories (up to 3)
+  const myCategoryIds = getProviderCategoryIds(prov);
+  const openRequests = (state.db.requests || []).filter((r) => {
+    if (r.status !== 'OPEN') return false;
+    const reqCat = normalizeCategoryId(r.categoryId);
+    return myCategoryIds.includes(reqCat);
+  });
   const myPendingApprovals = (state.db.approvalQueue || []).filter((a) => a.providerId === prov.id && a.status === 'PENDING');
 
   const currentTab = state.providerTab || (activeJob ? 'ACTIVE_JOB' : 'FEED');
@@ -6314,9 +6642,17 @@ function renderProviderRequestsFeedTab(prov, openRequests, activeJob) {
         </div>
       ` : ''}
 
+      <div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-bottom:10px;">
+        <span style="font-size:11px; font-weight:700; color:var(--text-secondary);">Showing jobs in:</span>
+        ${getProviderCategoryIds(prov).map((cid) => {
+          const c = (state.db.categories || []).find((x) => x.id === cid);
+          return `<span style="font-size:11px; font-weight:800; background:var(--blue-soft); color:var(--blue-primary); padding:3px 9px; border-radius:99px;">${escapeHtml(c ? (c.name || c.fullName) : cid)}</span>`;
+        }).join('')}
+      </div>
+
       ${openRequests.length === 0 ? `
         <div style="text-align:center; padding:28px 14px; color:var(--text-secondary); font-size:13.5px; background:var(--bg-card); border-radius:16px;">
-          Radar active — waiting for new client requests in Harare...
+          No open jobs in your categories right now. New matching requests will appear here instantly.
         </div>
       ` : openRequests.map((r) => {
         const myExistingOffer = (r.offers || []).find((o) => o.providerId === prov.id);

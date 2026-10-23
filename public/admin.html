@@ -397,7 +397,7 @@
       return res.json();
     }
 
-    async function loadAdminData() {
+    async function loadAdminData(forceRender = false) {
       const token = getAdminToken();
       if (!token) {
         showAdminLockScreen();
@@ -412,12 +412,29 @@
         }
 
         hideAdminLockScreen();
-        db = await api('/api/state');
+        const activeEl = document.activeElement;
+        const isTyping = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT');
+        if (isTyping && !forceRender) return;
+
+        const nextDb = await api('/api/state');
         const pendingRes = await api('/api/admin/pending-verifications');
         if (Array.isArray(pendingRes)) {
-          db.pendingVerifications = pendingRes;
+          nextDb.pendingVerifications = pendingRes;
         }
-        renderAdmin();
+        const fp = JSON.stringify({
+          p: (nextDb.providers || []).map((x) => `${x.id}:${x.isBanned}:${x.warningsCount}:${x.walletBalanceUsd}`),
+          c: (nextDb.customers || []).map((x) => `${x.id}:${x.isBanned}:${x.warningsCount}`),
+          e: (nextDb.ecocashTopups || []).map((x) => `${x.id}:${x.status}`),
+          a: (nextDb.approvalQueue || []).map((x) => `${x.id}:${x.status}`),
+          k: (nextDb.kycVerifications || []).map((x) => `${x.id}:${x.status}`),
+          d: (nextDb.disciplineLogs || []).length,
+          v: (nextDb.pendingVerifications || []).length
+        });
+        db = nextDb;
+        if (forceRender || fp !== lastAdminFingerprint) {
+          lastAdminFingerprint = fp;
+          renderAdmin();
+        }
       } catch (err) {
         console.error('Failed to load admin state:', err);
         showAdminLockScreen();
@@ -550,26 +567,137 @@
       }
     }
 
-    async function disciplineAccount(role, accountId, action) {
-      let reason = '';
-      if (action === 'WARN') {
-        reason = prompt('Enter official warning reason to send to this user/provider:', 'Violation of Findit Harare fair booking rules');
-        if (!reason) return;
-      } else if (action === 'BAN') {
-        reason = prompt('Enter reason for permanently banning this account:', 'Safety policy violation & platform leakage');
-        if (!reason) return;
-        if (!confirm('Are you sure you want to BAN this account? They will be locked out of booking, bidding, and chat.')) return;
-      } else if (action === 'UNBAN') {
-        if (!confirm('Reinstate this account and allow them back onto the platform?')) return;
-        reason = 'Reinstated by Admin';
+    let adminRoleFilter = 'ALL'; // 'ALL' | 'PROVIDER' | 'CUSTOMER' | 'BANNED'
+    let adminSearchQuery = '';
+    let lastAdminFingerprint = '';
+
+    function showAdminToast(msg, tone = 'success') {
+      const existing = document.getElementById('adminFloatingToast');
+      if (existing) existing.remove();
+      const el = document.createElement('div');
+      el.id = 'adminFloatingToast';
+      const bg = tone === 'error' ? '#DC2626' : tone === 'warn' ? '#D97706' : '#059669';
+      el.style.cssText = `position:fixed; top:20px; right:24px; z-index:999999; background:${bg}; color:#FFFFFF; padding:12px 18px; border-radius:12px; font-weight:800; font-size:13.5px; box-shadow:0 10px 25px rgba(0,0,0,0.22); display:flex; align-items:center; gap:8px;`;
+      el.innerHTML = `<span>${tone === 'error' ? '🚫' : tone === 'warn' ? '⚠️' : '✅'}</span><span>${msg}</span>`;
+      document.body.appendChild(el);
+      setTimeout(() => el.remove(), 3000);
+    }
+
+    async function executeDisciplineActionNow(role, accountId, action, reason) {
+      const targetRole = role === 'CUSTOMER' ? 'CUSTOMER' : 'PROVIDER';
+      // 1. Instant 0ms optimistic local state update so UI updates immediately without refreshing!
+      if (db) {
+        const list = targetRole === 'CUSTOMER' ? (db.customers || []) : (db.providers || []);
+        const target = list.find((u) => u.id === accountId || u.finditId === accountId);
+        if (target) {
+          if (action === 'BAN') {
+            target.isBanned = true;
+            target.banReason = reason;
+            if (targetRole === 'PROVIDER') target.isOnline = false;
+          } else if (action === 'UNBAN') {
+            target.isBanned = false;
+            target.banReason = '';
+          } else if (action === 'WARN') {
+            target.warningsCount = (target.warningsCount || 0) + 1;
+            target.activeWarnings = target.activeWarnings || [];
+            target.activeWarnings.unshift({
+              id: 'warn_' + Date.now(),
+              date: new Date().toISOString(),
+              reason
+            });
+          }
+          db.disciplineLogs = db.disciplineLogs || [];
+          db.disciplineLogs.unshift({
+            id: 'disc_' + Date.now().toString().slice(-5),
+            timestamp: new Date().toISOString(),
+            role: targetRole,
+            accountId: target.id,
+            finditId: target.finditId,
+            name: target.name,
+            accountName: target.name,
+            action,
+            reason
+          });
+        }
+        lastAdminFingerprint = '';
+        renderAdmin();
       }
-      await api('/api/admin/discipline', 'POST', {
-        role,
-        accountId,
-        action,
-        reason
-      });
-      await loadAdminData();
+
+      if (action === 'BAN') showAdminToast('Account banned & locked out immediately!', 'error');
+      else if (action === 'UNBAN') showAdminToast('Account reinstated & active immediately!', 'success');
+      else if (action === 'WARN') showAdminToast('Official warning sent to user screen!', 'warn');
+
+      try {
+        await api('/api/admin/discipline', 'POST', {
+          role: targetRole,
+          accountId,
+          action,
+          reason
+        });
+        await loadAdminData(true);
+      } catch (e) {
+        showAdminToast('Error syncing discipline action: ' + e.message, 'error');
+      }
+    }
+
+    function disciplineAccount(role, accountId, action) {
+      if (action === 'UNBAN') {
+        executeDisciplineActionNow(role, accountId, 'UNBAN', 'Reinstated by Admin');
+        return;
+      }
+
+      const targetRole = role === 'CUSTOMER' ? 'CUSTOMER' : 'PROVIDER';
+      const list = db ? (targetRole === 'CUSTOMER' ? (db.customers || []) : (db.providers || [])) : [];
+      const acc = list.find((u) => u.id === accountId || u.finditId === accountId) || { name: accountId };
+      const isBan = action === 'BAN';
+      const presets = isBan
+        ? [
+            'Safety policy violation & sharing contact details off-platform',
+            'Avoiding Findit Harare platform commission after completing job',
+            'Fake or mismatched Government ID / Biometric verification',
+            'Repeated unexcused booking cancellations or client misconduct'
+          ]
+        : [
+            'Official Warning: Do not share phone numbers or WhatsApp links in chat',
+            'Official Warning: Late arrival or unannounced cancellation of confirmed visit',
+            'Official Warning: Attempting to negotiate off-platform payment'
+          ];
+
+      const existingModal = document.getElementById('adminDisciplineModal');
+      if (existingModal) existingModal.remove();
+
+      const modal = document.createElement('div');
+      modal.id = 'adminDisciplineModal';
+      modal.style.cssText = 'position:fixed; inset:0; background:rgba(15,23,42,0.75); z-index:999998; display:flex; align-items:center; justify-content:center; padding:20px;';
+      modal.onclick = () => modal.remove();
+      modal.innerHTML = `
+        <div style="background:#FFFFFF; border-radius:18px; padding:22px; max-width:480px; width:100%; box-shadow:0 24px 48px rgba(0,0,0,0.35);" onclick="event.stopPropagation()">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <div style="font-size:17px; font-weight:800; color:${isBan ? '#DC2626' : '#D97706'};">
+              ${isBan ? '🚫 Ban Account Instantly' : '⚠️ Send Official Warning'} — ${acc.name || accountId}
+            </div>
+            <button onclick="document.getElementById('adminDisciplineModal').remove()" style="border:none; background:none; font-size:22px; cursor:pointer; color:#64748B;">&times;</button>
+          </div>
+          <div style="font-size:12.5px; color:#475569; margin-bottom:12px;">
+            Select a preset reason below or type a custom reason. This takes effect on the user's phone in <strong>0ms without refreshing</strong>.
+          </div>
+          <div style="display:flex; flex-direction:column; gap:6px; margin-bottom:12px;">
+            ${presets.map((p) => `
+              <button type="button" class="btn-outline" style="text-align:left; padding:8px 11px; font-size:12px; font-weight:700;" onclick="document.getElementById('adminDiscReasonInput').value = this.innerText">
+                ${p}
+              </button>
+            `).join('')}
+          </div>
+          <input id="adminDiscReasonInput" type="text" value="${presets[0]}" style="width:100%; height:42px; border:1.5px solid #CBD5E1; border-radius:10px; padding:0 12px; font-size:13px; font-weight:700; margin-bottom:14px;" />
+          <div style="display:flex; justify-content:flex-end; gap:8px;">
+            <button type="button" class="btn-outline" style="height:40px; padding:0 14px;" onclick="document.getElementById('adminDisciplineModal').remove()">Cancel</button>
+            <button type="button" class="btn-blue" style="height:40px; padding:0 18px; background:${isBan ? '#DC2626' : '#D97706'};" onclick="const r = document.getElementById('adminDiscReasonInput').value.trim() || '${presets[0]}'; document.getElementById('adminDisciplineModal').remove(); executeDisciplineActionNow('${targetRole}', '${accountId}', '${action}', r);">
+              ${isBan ? '🚫 Confirm Instant Ban' : '⚠️ Send Warning Now'}
+            </button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
     }
 
     async function moderateApprovalItem(approvalId, action) {
@@ -996,90 +1124,175 @@
           ...(db.providers || []).map(p => ({ ...p, role: 'PROVIDER' })),
           ...(db.customers || []).map(c => ({ ...c, role: 'CUSTOMER' }))
         ];
+        const totalClients = (db.customers || []).length;
+        const totalProviders = (db.providers || []).length;
+
+        const filteredAccounts = allAccounts.filter((acc) => {
+          if (adminRoleFilter === 'PROVIDER' && acc.role !== 'PROVIDER') return false;
+          if (adminRoleFilter === 'CUSTOMER' && acc.role !== 'CUSTOMER') return false;
+          if (adminRoleFilter === 'BANNED' && !acc.isBanned) return false;
+          if (adminSearchQuery.trim()) {
+            const q = adminSearchQuery.trim().toLowerCase();
+            const hay = `${acc.name || ''} ${acc.brandName || ''} ${acc.phone || ''} ${acc.finditId || ''} ${acc.nationalIdNumber || ''} ${acc.idDocument?.number || ''} ${acc.suburbName || ''}`.toLowerCase();
+            if (!hay.includes(q)) return false;
+          }
+          return true;
+        });
 
         sectionHtml = `
           <div class="card" style="margin-bottom:20px;">
-            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:14px;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:14px; flex-wrap:wrap; gap:12px;">
               <div>
-                <h2 style="font-size:18px; font-weight:800;">⚠️ Discipline, Official Warnings &amp; Account Bans</h2>
+                <h2 style="font-size:18px; font-weight:800;">🛡️ Full Client &amp; Service Provider Security Directory + Instant Bans</h2>
                 <p style="font-size:13px; color:var(--muted); font-weight:500; margin-top:3px;">
-                  Manage platform integrity across Harare. Send official policy warning banners to clients or providers, or permanently ban violators. Banned users are completely locked out of bookings, bidding, and chat.
+                  Complete security oversight of all registered Clients (${totalClients}) and Service Providers (${totalProviders}) with full legal names, phone numbers, National ID / Passport / Licence records, Biometric Face photos, chosen categories, and 0ms instant Ban / Unban controls.
                 </p>
               </div>
-              <span style="padding:6px 14px; border-radius:99px; background:#FEF2F2; color:#DC2626; font-size:12.5px; font-weight:800;">
-                ${bannedAccountsCount} Banned Accounts
-              </span>
+              <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                <span style="padding:6px 12px; border-radius:99px; background:#EFF6FF; color:#0066FF; font-size:12px; font-weight:800;">
+                  ${totalClients} Clients • ${totalProviders} Providers
+                </span>
+                <span style="padding:6px 14px; border-radius:99px; background:#FEF2F2; color:#DC2626; font-size:12.5px; font-weight:800;">
+                  ${bannedAccountsCount} Banned
+                </span>
+              </div>
             </div>
 
-            <table>
-              <thead>
-                <tr>
-                  <th>User / Provider</th>
-                  <th>Role &amp; Findit ID</th>
-                  <th>Phone Number</th>
-                  <th>Rating &amp; Reviews</th>
-                  <th>Warnings</th>
-                  <th>Account Status</th>
-                  <th>Moderation Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${allAccounts.map((acc) => `
-                  <tr style="${acc.isBanned ? 'background:#FFF1F2;' : ''}">
-                    <td>
-                      <div style="display:flex; align-items:center; gap:9px;">
-                        <div style="width:34px; height:34px; border-radius:50%; overflow:hidden; background:#E2E8F0; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:12px;">
-                          ${acc.avatarUrl ? `<img src="${acc.avatarUrl}" style="width:100%; height:100%; object-fit:cover;" />` : `<span>${(acc.name || 'U').slice(0, 2).toUpperCase()}</span>`}
-                        </div>
-                        <div>
-                          <div style="font-weight:800; font-size:13.5px; color:var(--text);">${acc.name}</div>
-                          <div style="font-size:11px; color:var(--muted); font-weight:600;">${acc.suburbId || acc.exactAddress || 'Harare'}</div>
-                        </div>
-                      </div>
-                    </td>
-                    <td>
-                      <span style="padding:3px 8px; border-radius:6px; font-size:11px; font-weight:800; ${acc.role === 'PROVIDER' ? 'background:var(--blue-soft); color:var(--blue-primary);' : 'background:#F1F5F9; color:#475569;'}">
-                        ${acc.role}
-                      </span>
-                      <div style="font-family:monospace; font-size:11px; font-weight:800; color:var(--text); margin-top:3px;">
-                        ${acc.finditId || (acc.role === 'PROVIDER' ? 'FH-PRO' : 'FH-USR')}
-                      </div>
-                    </td>
-                    <td style="font-weight:700; font-size:12.5px;">${acc.phone}</td>
-                    <td>
-                      <span style="font-weight:800; color:#D97706;">⭐ ${acc.rating || '5.0'}</span>
-                      <span style="font-size:11.5px; color:var(--muted); font-weight:600;">(${(acc.reviews || []).length} reviews)</span>
-                    </td>
-                    <td>
-                      <span style="font-weight:800; color:${(acc.warningsCount || 0) > 0 ? '#DC2626' : 'var(--muted)'};">
-                        ${acc.warningsCount || 0} warning(s)
-                      </span>
-                    </td>
-                    <td>
-                      <span style="padding:4px 9px; border-radius:99px; font-size:11px; font-weight:800; ${acc.isBanned ? 'background:#FEE2E2; color:#DC2626;' : 'background:#ECFDF5; color:#059669;'}">
-                        ${acc.isBanned ? 'BANNED' : 'ACTIVE'}
-                      </span>
-                    </td>
-                    <td>
-                      <div style="display:flex; gap:6px;">
-                        <button class="btn-outline" style="padding:5px 9px; font-size:11.5px; color:#D97706; border-color:#FDE68A;" onclick="disciplineAccount('${acc.role}', '${acc.id}', 'WARN')">
-                          ⚠️ Warn
-                        </button>
-                        ${acc.isBanned ? `
-                          <button class="btn-outline" style="padding:5px 9px; font-size:11.5px; color:#059669; border-color:#A7F3D0;" onclick="disciplineAccount('${acc.role}', '${acc.id}', 'UNBAN')">
-                            Reinstate
-                          </button>
-                        ` : `
-                          <button class="btn-outline" style="padding:5px 9px; font-size:11.5px; color:#DC2626; border-color:#FECACA;" onclick="disciplineAccount('${acc.role}', '${acc.id}', 'BAN')">
-                            🚫 Ban
-                          </button>
-                        `}
-                      </div>
-                    </td>
+            <!-- Filter Pills & Search Input -->
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:14px; flex-wrap:wrap;">
+              <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                <button class="${adminRoleFilter === 'ALL' ? 'btn-blue' : 'btn-outline'}" style="padding:6px 12px; font-size:12px;" onclick="adminRoleFilter='ALL'; renderAdmin();">
+                  All Accounts (${allAccounts.length})
+                </button>
+                <button class="${adminRoleFilter === 'CUSTOMER' ? 'btn-blue' : 'btn-outline'}" style="padding:6px 12px; font-size:12px;" onclick="adminRoleFilter='CUSTOMER'; renderAdmin();">
+                  👤 Clients (${totalClients})
+                </button>
+                <button class="${adminRoleFilter === 'PROVIDER' ? 'btn-blue' : 'btn-outline'}" style="padding:6px 12px; font-size:12px;" onclick="adminRoleFilter='PROVIDER'; renderAdmin();">
+                  🛠️ Providers (${totalProviders})
+                </button>
+                <button class="${adminRoleFilter === 'BANNED' ? 'btn-blue' : 'btn-outline'}" style="padding:6px 12px; font-size:12px; ${adminRoleFilter !== 'BANNED' ? 'color:#DC2626; border-color:#FECACA;' : 'background:#DC2626;'}" onclick="adminRoleFilter='BANNED'; renderAdmin();">
+                  🚫 Banned (${bannedAccountsCount})
+                </button>
+              </div>
+              <input
+                type="text"
+                placeholder="Search name, phone, Findit ID, National ID..."
+                value="${adminSearchQuery.replace(/"/g, '&quot;')}"
+                oninput="adminSearchQuery = this.value; renderAdmin();"
+                style="height:36px; min-width:260px; border:1.5px solid var(--border); border-radius:10px; padding:0 12px; font-size:12.5px; font-weight:600;"
+              />
+            </div>
+
+            <div style="overflow-x:auto;">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Full Name &amp; Biometric Face</th>
+                    <th>Role &amp; Findit ID</th>
+                    <th>Phone &amp; Location</th>
+                    <th>National ID / KYC &amp; Categories</th>
+                    <th>Wallet &amp; Rating</th>
+                    <th>Account Status</th>
+                    <th>Instant Actions (No Refresh)</th>
                   </tr>
-                `).join('')}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  ${filteredAccounts.length === 0 ? `
+                    <tr><td colspan="7" style="text-align:center; padding:24px; color:var(--muted); font-weight:600;">No matching accounts found.</td></tr>
+                  ` : filteredAccounts.map((acc) => {
+                    const idType = acc.idDocument?.type || 'National ID';
+                    const idNum = acc.idDocument?.number || acc.nationalIdNumber || 'Verified on file';
+                    const idPhoto = acc.idDocument?.photoUrl || acc.selfieUrl || acc.avatarUrl || '';
+                    const selfiePhoto = acc.selfieUrl || acc.avatarUrl || '';
+                    const catNames = acc.role === 'PROVIDER'
+                      ? ((acc.categoryIds && acc.categoryIds.length ? acc.categoryIds : (acc.categoryId ? [acc.categoryId] : []))
+                          .map((cid) => {
+                            const cObj = (db.categories || []).find((x) => x.id === cid);
+                            return cObj ? cObj.name : cid;
+                          }).join(', '))
+                      : 'Client Home Visits';
+
+                    return `
+                      <tr style="${acc.isBanned ? 'background:#FFF1F2;' : ''}">
+                        <td>
+                          <div style="display:flex; align-items:center; gap:10px;">
+                            <div style="width:40px; height:40px; border-radius:50%; overflow:hidden; background:#E2E8F0; border:2px solid ${acc.role === 'PROVIDER' ? '#0066FF' : '#10B981'}; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:12px; flex-shrink:0;">
+                              ${acc.avatarUrl ? `<img src="${acc.avatarUrl}" style="width:100%; height:100%; object-fit:cover;" />` : `<span>${(acc.name || 'U').slice(0, 2).toUpperCase()}</span>`}
+                            </div>
+                            <div>
+                              <div style="font-weight:800; font-size:13.5px; color:var(--text);">${acc.name || 'Unnamed'}</div>
+                              ${acc.brandName ? `<div style="font-size:11.5px; color:var(--blue-primary); font-weight:700;">${acc.brandName}</div>` : ''}
+                              <div style="font-size:10.5px; color:#059669; font-weight:700;">
+                                ✓ Face ID Verified ${acc.hasPassword ? '• 🔒 Password Set' : ''}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td>
+                          <span style="padding:3px 8px; border-radius:6px; font-size:11px; font-weight:800; ${acc.role === 'PROVIDER' ? 'background:var(--blue-soft); color:var(--blue-primary);' : 'background:#ECFDF5; color:#059669;'}">
+                            ${acc.role === 'PROVIDER' ? 'PROVIDER' : 'CLIENT'}
+                          </span>
+                          <div style="font-family:monospace; font-size:11.5px; font-weight:800; color:var(--text); margin-top:4px;">
+                            ${acc.finditId || (acc.role === 'PROVIDER' ? 'FH-PRO' : 'FH-USR')}
+                          </div>
+                        </td>
+                        <td>
+                          <div style="font-weight:800; font-size:13px; color:var(--text);">${acc.phone || 'N/A'}</div>
+                          <div style="font-size:11.5px; color:var(--muted); font-weight:600; margin-top:2px;">📍 ${acc.suburbName || acc.suburbId || acc.exactAddress || 'Harare'}</div>
+                          ${acc.officeAddress ? `<div style="font-size:10.5px; color:#475569; margin-top:1px;">🏢 ${acc.officeAddress}</div>` : ''}
+                        </td>
+                        <td>
+                          <div style="font-size:11.5px; font-weight:800; color:var(--text);">🪪 ${idType}: <span style="font-family:monospace;">${idNum}</span></div>
+                          <div style="font-size:11px; color:var(--muted); font-weight:600; margin-top:2px;">📂 ${catNames}</div>
+                          ${(idPhoto || selfiePhoto) ? `
+                            <button class="btn-outline" style="padding:3px 8px; font-size:10.5px; margin-top:4px; color:var(--blue-primary); border-color:#BFDBFE;" onclick="viewIdProof('${idPhoto}', '${selfiePhoto}', '${(acc.name || '').replace(/'/g, "\\'")}')">
+                              🔍 Inspect ID &amp; Face
+                            </button>
+                          ` : ''}
+                        </td>
+                        <td>
+                          ${acc.role === 'PROVIDER' ? `
+                            <div style="font-weight:800; color:var(--blue-primary); font-size:13px;">$${Number(acc.walletBalanceUsd || 0).toFixed(2)} USD</div>
+                          ` : `
+                            <div style="font-size:11.5px; font-weight:700; color:#475569;">Client Account</div>
+                          `}
+                          <div style="font-size:11.5px; color:#D97706; font-weight:800; margin-top:2px;">
+                            ⭐ ${Number(acc.rating || 0) > 0 ? Number(acc.rating).toFixed(1) : 'New'} <span style="color:var(--muted); font-weight:600;">(${acc.completedBookings || 0} jobs)</span>
+                          </div>
+                        </td>
+                        <td>
+                          <span style="padding:4px 9px; border-radius:99px; font-size:11px; font-weight:800; display:inline-block; ${acc.isBanned ? 'background:#FEE2E2; color:#DC2626;' : 'background:#ECFDF5; color:#059669;'}">
+                            ${acc.isBanned ? '🚫 BANNED' : '✓ ACTIVE'}
+                          </span>
+                          <div style="font-size:11px; font-weight:700; margin-top:4px; color:${(acc.warningsCount || 0) > 0 ? '#DC2626' : 'var(--muted)'};">
+                            ${acc.warningsCount || 0} warning(s)
+                          </div>
+                          ${acc.isBanned && acc.banReason ? `
+                            <div style="font-size:10.5px; color:#BE123C; max-width:170px; margin-top:2px; line-height:1.3;">"${acc.banReason}"</div>
+                          ` : ''}
+                        </td>
+                        <td>
+                          <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                            <button type="button" class="btn-outline" style="padding:6px 10px; font-size:11.5px; color:#D97706; border-color:#FDE68A; font-weight:800;" onclick="disciplineAccount('${acc.role}', '${acc.id}', 'WARN')">
+                              ⚠️ Warn
+                            </button>
+                            ${acc.isBanned ? `
+                              <button type="button" class="btn-green" style="padding:6px 12px; font-size:11.5px; font-weight:800;" onclick="disciplineAccount('${acc.role}', '${acc.id}', 'UNBAN')">
+                                ✓ Unban Now
+                              </button>
+                            ` : `
+                              <button type="button" class="btn-outline" style="padding:6px 12px; font-size:11.5px; color:#DC2626; border-color:#FECACA; background:#FEF2F2; font-weight:800;" onclick="disciplineAccount('${acc.role}', '${acc.id}', 'BAN')">
+                                🚫 Ban Now
+                              </button>
+                            `}
+                          </div>
+                        </td>
+                      </tr>
+                    `;
+                  }).join('')}
+                </tbody>
+              </table>
+            </div>
           </div>
 
           <div class="card">
@@ -1091,7 +1304,7 @@
                 <div>
                   <div style="font-weight:800; font-size:13px; color:var(--text);">
                     <span style="color:${log.action === 'BAN' ? '#DC2626' : log.action === 'UNBAN' ? '#059669' : '#D97706'}; font-weight:800;">[${log.action}]</span>
-                    ${log.accountName} (${log.role}) • ID: ${log.accountId}
+                    ${log.accountName || log.name || log.accountId} (${log.role}) • ID: ${log.finditId || log.accountId}
                   </div>
                   <div style="font-size:12px; color:var(--muted); margin-top:2px;">Reason: "${log.reason}"</div>
                 </div>
@@ -1472,55 +1685,151 @@
         `;
       } else if (adminTab === 'PROVIDERS') {
         sectionHtml = `
-          <div class="card">
-            <h2 style="font-size:17px; font-weight:800; margin-bottom:12px;">✅ Harare Providers, Trust Badges & USD Wallets</h2>
-            <table>
-              <thead>
-                <tr>
-                  <th>Provider</th>
-                  <th>Suburb & Rating</th>
-                  <th>USD Wallet</th>
-                  <th>Trust Verification Badges</th>
-                  <th>Admin Wallet Top-Up</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${db.providers.map((p) => `
+          <div class="card" style="margin-bottom:20px;">
+            <h2 style="font-size:17px; font-weight:800; margin-bottom:12px;">✅ Harare Providers, ID Details, Trust Badges &amp; USD Wallets</h2>
+            <div style="overflow-x:auto;">
+              <table>
+                <thead>
                   <tr>
-                    <td>
-                      <div style="font-weight:800;">${p.name}</div>
-                      <div style="font-size:11.5px; color:var(--muted); font-weight:600;">${p.phone}</div>
-                    </td>
-                    <td>
-                      <div style="font-weight:700;">📍 ${p.suburbName}</div>
-                      <div style="font-size:11.5px; color:var(--muted); font-weight:600;">⭐ ${p.rating} (${p.completedBookings} jobs)</div>
-                    </td>
-                    <td style="font-weight:800; color:var(--blue-primary); font-size:15px;">$${p.walletBalanceUsd.toFixed(2)} USD</td>
-                    <td>
-                      <div style="display:flex; gap:6px; flex-wrap:wrap;">
-                        <button class="btn-outline" style="border-color:${p.badges.phoneVerified ? '#0066FF' : ''}; color:${p.badges.phoneVerified ? '#0066FF' : ''};" onclick="toggleProviderBadge('${p.id}', 'phoneVerified')">
-                          ${p.badges.phoneVerified ? '✓' : '+'} 💬 WhatsApp
-                        </button>
-                        <button class="btn-outline" style="border-color:${p.badges.faceVerified ? '#0066FF' : ''}; color:${p.badges.faceVerified ? '#0066FF' : ''};" onclick="toggleProviderBadge('${p.id}', 'faceVerified')">
-                          ${p.badges.faceVerified ? '✓' : '+'} 🤳 Face Scan
-                        </button>
-                        <button class="btn-outline" style="border-color:${p.badges.idVerified ? '#059669' : ''}; color:${p.badges.idVerified ? '#059669' : ''};" onclick="toggleProviderBadge('${p.id}', 'idVerified')">
-                          ${p.badges.idVerified ? '✓' : '+'} 🪪 National ID
-                        </button>
-                        <button class="btn-outline" style="border-color:${p.badges.businessVerified ? '#D97706' : ''}; color:${p.badges.businessVerified ? '#D97706' : ''};" onclick="toggleProviderBadge('${p.id}', 'businessVerified')">
-                          ${p.badges.businessVerified ? '✓' : '+'} 🏢 Business
-                        </button>
-                      </div>
-                    </td>
-                    <td>
-                      <button class="btn-blue" style="padding:7px 12px; font-size:12px;" onclick="adminTopUpProvider('${p.id}', 10)">
-                        +$10 USD Credit
-                      </button>
-                    </td>
+                    <th>Provider Full Details</th>
+                    <th>ID Document &amp; Categories</th>
+                    <th>Suburb &amp; Rating</th>
+                    <th>USD Wallet</th>
+                    <th>Trust Verification Badges</th>
+                    <th>Actions &amp; Top-Up</th>
                   </tr>
-                `).join('')}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  ${(db.providers || []).map((p) => {
+                    const idType = p.idDocument?.type || 'National ID';
+                    const idNum = p.idDocument?.number || p.nationalIdNumber || 'Verified';
+                    const idPhoto = p.idDocument?.photoUrl || p.selfieUrl || p.avatarUrl || '';
+                    const selfiePhoto = p.selfieUrl || p.avatarUrl || '';
+                    const catNames = (p.categoryIds && p.categoryIds.length ? p.categoryIds : (p.categoryId ? [p.categoryId] : []))
+                      .map((cid) => {
+                        const cObj = (db.categories || []).find((x) => x.id === cid);
+                        return cObj ? cObj.name : cid;
+                      }).join(', ');
+                    return `
+                    <tr style="${p.isBanned ? 'background:#FFF1F2;' : ''}">
+                      <td>
+                        <div style="font-weight:800; font-size:13.5px;">${p.name}</div>
+                        <div style="font-size:11.5px; color:var(--blue-primary); font-weight:700;">${p.brandName || ''}</div>
+                        <div style="font-size:11.5px; color:var(--muted); font-weight:600;">${p.phone} • <span style="font-family:monospace;">${p.finditId || p.id}</span></div>
+                      </td>
+                      <td>
+                        <div style="font-size:11.5px; font-weight:800;">🪪 ${idType}: <span style="font-family:monospace;">${idNum}</span></div>
+                        <div style="font-size:11px; color:var(--muted); font-weight:600; margin-top:2px;">📂 ${catNames}</div>
+                        ${(idPhoto || selfiePhoto) ? `
+                          <button class="btn-outline" style="padding:2px 7px; font-size:10.5px; margin-top:4px;" onclick="viewIdProof('${idPhoto}', '${selfiePhoto}', '${(p.name || '').replace(/'/g, "\\'")}')">
+                            🔍 View ID &amp; Face
+                          </button>
+                        ` : ''}
+                      </td>
+                      <td>
+                        <div style="font-weight:700;">📍 ${p.suburbName || 'Harare'}</div>
+                        <div style="font-size:11.5px; color:var(--muted); font-weight:600;">⭐ ${p.rating} (${p.completedBookings} jobs)</div>
+                      </td>
+                      <td style="font-weight:800; color:var(--blue-primary); font-size:15px;">$${Number(p.walletBalanceUsd || 0).toFixed(2)} USD</td>
+                      <td>
+                        <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                          <button class="btn-outline" style="border-color:${p.badges?.phoneVerified ? '#0066FF' : ''}; color:${p.badges?.phoneVerified ? '#0066FF' : ''};" onclick="toggleProviderBadge('${p.id}', 'phoneVerified')">
+                            ${p.badges?.phoneVerified ? '✓' : '+'} 💬 WhatsApp
+                          </button>
+                          <button class="btn-outline" style="border-color:${p.badges?.faceVerified ? '#0066FF' : ''}; color:${p.badges?.faceVerified ? '#0066FF' : ''};" onclick="toggleProviderBadge('${p.id}', 'faceVerified')">
+                            ${p.badges?.faceVerified ? '✓' : '+'} 🤳 Face Scan
+                          </button>
+                          <button class="btn-outline" style="border-color:${p.badges?.idVerified ? '#059669' : ''}; color:${p.badges?.idVerified ? '#059669' : ''};" onclick="toggleProviderBadge('${p.id}', 'idVerified')">
+                            ${p.badges?.idVerified ? '✓' : '+'} 🪪 National ID
+                          </button>
+                          <button class="btn-outline" style="border-color:${p.badges?.businessVerified ? '#D97706' : ''}; color:${p.badges?.businessVerified ? '#D97706' : ''};" onclick="toggleProviderBadge('${p.id}', 'businessVerified')">
+                            ${p.badges?.businessVerified ? '✓' : '+'} 🏢 Business
+                          </button>
+                        </div>
+                      </td>
+                      <td>
+                        <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                          <button class="btn-blue" style="padding:6px 10px; font-size:11.5px;" onclick="adminTopUpProvider('${p.id}', 10)">
+                            +$10 USD
+                          </button>
+                          ${p.isBanned ? `
+                            <button class="btn-green" style="padding:6px 10px; font-size:11.5px;" onclick="disciplineAccount('PROVIDER', '${p.id}', 'UNBAN')">
+                              ✓ Unban
+                            </button>
+                          ` : `
+                            <button class="btn-outline" style="padding:6px 10px; font-size:11.5px; color:#DC2626; border-color:#FECACA;" onclick="disciplineAccount('PROVIDER', '${p.id}', 'BAN')">
+                              🚫 Ban
+                            </button>
+                          `}
+                        </div>
+                      </td>
+                    </tr>
+                  `;}).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="card">
+            <h2 style="font-size:17px; font-weight:800; margin-bottom:12px;">👤 Registered Clients Directory (${(db.customers || []).length})</h2>
+            <div style="overflow-x:auto;">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Client Full Name</th>
+                    <th>Findit ID &amp; Phone</th>
+                    <th>Location / Suburb</th>
+                    <th>Biometric &amp; ID Details</th>
+                    <th>Status</th>
+                    <th>Moderation</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${(db.customers || []).map((c) => `
+                    <tr style="${c.isBanned ? 'background:#FFF1F2;' : ''}">
+                      <td>
+                        <div style="display:flex; align-items:center; gap:9px;">
+                          <div style="width:34px; height:34px; border-radius:50%; overflow:hidden; background:#E2E8F0; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:12px;">
+                            ${c.avatarUrl ? `<img src="${c.avatarUrl}" style="width:100%; height:100%; object-fit:cover;" />` : `<span>${(c.name || 'C').slice(0, 2).toUpperCase()}</span>`}
+                          </div>
+                          <div style="font-weight:800;">${c.name}</div>
+                        </div>
+                      </td>
+                      <td>
+                        <div style="font-weight:800;">${c.phone}</div>
+                        <div style="font-family:monospace; font-size:11px; color:var(--muted);">${c.finditId || c.id}</div>
+                      </td>
+                      <td style="font-weight:700;">📍 ${c.suburbName || c.suburbId || 'Harare'}</td>
+                      <td>
+                        <div style="font-size:11.5px; font-weight:700; color:#059669;">✓ Biometric Face Verified</div>
+                        <div style="font-size:11px; font-family:monospace; color:var(--muted);">ID: ${c.nationalIdNumber || 'Verified'}</div>
+                      </td>
+                      <td>
+                        <span style="padding:4px 9px; border-radius:99px; font-size:11px; font-weight:800; ${c.isBanned ? 'background:#FEE2E2; color:#DC2626;' : 'background:#ECFDF5; color:#059669;'}">
+                          ${c.isBanned ? '🚫 BANNED' : '✓ ACTIVE'}
+                        </span>
+                      </td>
+                      <td>
+                        <div style="display:flex; gap:6px;">
+                          <button class="btn-outline" style="padding:5px 9px; font-size:11.5px; color:#D97706; border-color:#FDE68A;" onclick="disciplineAccount('CUSTOMER', '${c.id}', 'WARN')">
+                            ⚠️ Warn
+                          </button>
+                          ${c.isBanned ? `
+                            <button class="btn-green" style="padding:5px 10px; font-size:11.5px;" onclick="disciplineAccount('CUSTOMER', '${c.id}', 'UNBAN')">
+                              ✓ Unban
+                            </button>
+                          ` : `
+                            <button class="btn-outline" style="padding:5px 10px; font-size:11.5px; color:#DC2626; border-color:#FECACA;" onclick="disciplineAccount('CUSTOMER', '${c.id}', 'BAN')">
+                              🚫 Ban
+                            </button>
+                          `}
+                        </div>
+                      </td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
           </div>
         `;
       } else if (adminTab === 'SHIELD') {

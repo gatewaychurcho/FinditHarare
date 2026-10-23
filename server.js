@@ -1123,8 +1123,16 @@ const server = http.createServer(async (req, res) => {
     if (!db || !Array.isArray(db.requests)) {
       db = loadDb();
     }
+    const isAdminViewer = validateAdminToken(req);
+    const stripPrivate = (u) => {
+      const { password, idDocument, nationalIdNumber, ...rest } = u;
+      return isAdminViewer ? { ...rest, idDocument, nationalIdNumber, hasPassword: Boolean(password) } : rest;
+    };
     return sendJson(res, 200, {
       ...db,
+      customers: (db.customers || []).map(stripPrivate),
+      providers: (db.providers || []).map(stripPrivate),
+      kycVerifications: isAdminViewer ? db.kycVerifications : [],
       suburbs: HARARE_SUBURBS,
       quickMessages: QUICK_MESSAGES,
       config: {
@@ -1369,6 +1377,51 @@ const server = http.createServer(async (req, res) => {
   }
 
   // Step 3 of Sign-Up: Complete Profile + Real Camera Biometric Face Verification + Issue Unique Findit App ID
+  // Log in to an EXISTING account (phone + password) as Client or Service Provider
+  if (pathname === '/api/auth/login' && req.method === 'POST') {
+    try {
+      const body = await parseBody(req);
+      const role = body.role === 'PROVIDER' ? 'PROVIDER' : 'CUSTOMER';
+      const last9 = String(body.phone || '').replace(/\D/g, '').slice(-9);
+      const password = String(body.password || '');
+      if (last9.length < 8) return sendJson(res, 400, { error: 'Please enter a valid phone number.' });
+
+      const matchPhone = (u) => (u.phone || '').replace(/\D/g, '').slice(-9) === last9;
+      const collection = role === 'PROVIDER' ? db.providers : db.customers;
+      const otherCollection = role === 'PROVIDER' ? db.customers : db.providers;
+      const account = collection.find(matchPhone);
+
+      if (!account) {
+        const other = otherCollection.find(matchPhone);
+        if (other) {
+          return sendJson(res, 404, {
+            code: role === 'PROVIDER' ? 'NO_PROVIDER_PROFILE' : 'NO_CLIENT_PROFILE',
+            existingRole: role === 'PROVIDER' ? 'CUSTOMER' : 'PROVIDER',
+            name: other.name,
+            error: role === 'PROVIDER'
+              ? 'You have a Client account but no Service Provider profile yet.'
+              : 'This number is registered as a Service Provider.'
+          });
+        }
+        return sendJson(res, 404, { code: 'NOT_FOUND', error: 'No account found with this number. Please create an account.' });
+      }
+
+      if (account.password && account.password !== password) {
+        return sendJson(res, 401, { code: 'WRONG_PASSWORD', error: 'Incorrect password. Please try again.' });
+      }
+      if (!account.password && password) {
+        account.password = password; // first login on legacy account sets the password
+        saveDb(db);
+      }
+      if (account.isBanned) {
+        return sendJson(res, 403, { code: 'BANNED', error: `This account (${account.finditId}) is suspended: ${account.banReason || 'Policy violation'}` });
+      }
+      return sendJson(res, 200, { role, user: account });
+    } catch (e) {
+      return sendJson(res, 400, { error: e.message });
+    }
+  }
+
   if (pathname === '/api/auth/complete-signup' && req.method === 'POST') {
     try {
       const body = await parseBody(req);
@@ -2036,6 +2089,7 @@ const server = http.createServer(async (req, res) => {
         accountId: target.id,
         finditId: target.finditId,
         name: target.name,
+        accountName: target.name,
         action,
         reason
       });
@@ -2044,6 +2098,7 @@ const server = http.createServer(async (req, res) => {
       broadcastUpdate('ACCOUNT_DISCIPLINE_UPDATED', {
         role: targetRole,
         accountId: target.id,
+        finditId: target.finditId,
         action,
         reason
       });
@@ -2291,6 +2346,11 @@ const server = http.createServer(async (req, res) => {
       const provider = db.providers.find((p) => p.id === body.providerId) || db.providers[0];
       if (provider.isBanned) {
         return sendJson(res, 403, { error: `Your account (${provider.finditId}) is suspended: ${provider.banReason}` });
+      }
+
+      const provCatIds = (Array.isArray(provider.categoryIds) && provider.categoryIds.length ? provider.categoryIds : [provider.categoryId]).filter(Boolean);
+      if (reqItem.categoryId && provCatIds.length && !provCatIds.includes(reqItem.categoryId)) {
+        return sendJson(res, 403, { code: 'CATEGORY_MISMATCH', error: 'This job is outside your registered business categories.' });
       }
 
       const priceUsd = Number(body.priceUsd);

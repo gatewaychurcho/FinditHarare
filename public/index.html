@@ -44,8 +44,8 @@
       <div id="leafletMap" class="leaflet-map"></div>
       <div id="fallbackRadarMap" class="fallback-radar-map"></div>
 
-      <!-- Center Home Location Pin + Blue Radar Circles -->
-      <div id="centerMapPin" class="center-map-pin" style="display:none;">
+      <!-- Center User Hailing Pin + Blue Radar Circles (inDrive Style: Move Map to Any Location & Order Services There) -->
+      <div id="centerMapPin" class="center-map-pin" style="display:flex;">
         <!-- Concentric Blue Radar Circles when Searching -->
         <div id="mapRadarPulses" class="map-radar-pulses" style="display:none;">
           <div class="radar-circle-outer"></div>
@@ -53,20 +53,27 @@
         </div>
 
         <!-- Home Visit Location Callout Bubble -->
-        <div class="indrive-where-from-bubble" id="whereFromBubble" onclick="openSuburbPickerModal()">
-          <div class="where-from-sub">Your home location</div>
+        <div class="indrive-where-from-bubble" id="whereFromBubble" onclick="handleCenterPinBubbleClick()">
+          <div class="where-from-sub">Drag map to move • Tap to change</div>
           <div class="where-from-row">
             <span id="centerPinLabel">Avondale, Harare</span>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
           </div>
+          <div id="whereFromOrderAction" class="where-from-order-pill" onclick="event.stopPropagation(); orderFromCurrentMapPin();">
+            <span>Order service here</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+          </div>
         </div>
 
-        <!-- Electric Blue & White Home Visit Pin on Stem -->
-        <div class="indrive-waving-pin-box">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-            <circle cx="13.5" cy="5.5" r="2.4" fill="#FFFFFF"/>
-            <path d="M7 4.5C7 8.5 9.5 11 13 11.5L15.5 19.5M10 11.2L8 19.5M13 11.5L18 14" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <!-- Electric Blue & White User Hailing Pin on Stem -->
+        <div class="indrive-waving-pin-box" id="centerUserPinBox" onclick="orderFromCurrentMapPin()">
+          <div class="user-pin-pulse-ring"></div>
+          <img id="centerPinUserAvatar" src="" alt="You" style="display:none; width:100%; height:100%; object-fit:cover; border-radius:11px;" />
+          <svg id="centerPinDefaultSvg" width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="5" r="2.6" fill="#FFFFFF"/>
+            <path d="M6.5 4.5C6.5 8.5 9 11 12 11.5L14.5 19.5M9.5 11.2L7.5 19.5M12 11.5L17.5 13.5" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
+          <div class="user-pin-you-badge">YOU</div>
         </div>
         <div class="indrive-pin-stem"></div>
         <div class="indrive-pin-anchor-dot"></div>
