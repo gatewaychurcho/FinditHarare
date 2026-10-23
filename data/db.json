@@ -49,236 +49,280 @@
   ],
   "categories": [
     {
-      "id": "braiding",
-      "name": "Hairdresser",
-      "fullName": "Hair Braiding & Styling",
-      "mapIcon": "HR",
-      "icon": "HR",
-      "tagline": "Mobile Braider: Knotless, Boho, Cornrows, Locs",
+      "id": "repairs_construction",
+      "name": "Home Repairs & Construction",
+      "fullName": "Home Repairs & Construction",
+      "mapIcon": "RC",
+      "icon": "hammer",
+      "tagline": "Plumbing, Carpentry, Painting, Bricklaying, Roof Repairs, Tiling",
       "status": "ACTIVE",
-      "suggestedMinUsd": 18,
-      "suggestedMaxUsd": 45,
+      "suggestedMinUsd": 15,
+      "suggestedMaxUsd": 120,
       "subServices": [
         {
-          "name": "Medium Boho Knotless Braids",
+          "name": "Plumbing Leak, Tap & Pipe Fix",
+          "defaultUsd": 20,
+          "duration": "1.5 hrs"
+        },
+        {
+          "name": "Carpentry, Doors & Cupboards",
+          "defaultUsd": 30,
+          "duration": "2.5 hrs"
+        },
+        {
+          "name": "Interior & Exterior House Painting",
+          "defaultUsd": 45,
+          "duration": "4 hrs"
+        },
+        {
+          "name": "Bricklaying & Plaster Repairs",
+          "defaultUsd": 35,
+          "duration": "3 hrs"
+        },
+        {
+          "name": "Roof Leak & Gutter Sealing",
+          "defaultUsd": 40,
+          "duration": "2 hrs"
+        },
+        {
+          "name": "Floor Tiling & Grout Repairs",
+          "defaultUsd": 35,
+          "duration": "3 hrs"
+        }
+      ]
+    },
+    {
+      "id": "beauty_care",
+      "name": "Beauty & Personal Care",
+      "fullName": "Beauty & Personal Care",
+      "mapIcon": "BC",
+      "icon": "sparkles",
+      "tagline": "Hair Braiding, Barbering, Nails, Makeup, Wigs, Lashes",
+      "status": "ACTIVE",
+      "suggestedMinUsd": 10,
+      "suggestedMaxUsd": 60,
+      "subServices": [
+        {
+          "name": "Knotless / Boho Hair Braiding",
           "defaultUsd": 25,
           "duration": "3.5 hrs"
         },
         {
-          "name": "Small Waist-Length Knotless",
+          "name": "VIP Home Barbering & Skin Fade",
+          "defaultUsd": 15,
+          "duration": "45 mins"
+        },
+        {
+          "name": "Acrylic Nails & Spa Pedicure",
+          "defaultUsd": 20,
+          "duration": "1.5 hrs"
+        },
+        {
+          "name": "Signature Soft Glam Makeup",
+          "defaultUsd": 25,
+          "duration": "1 hr"
+        },
+        {
+          "name": "HD Frontal Wig Install & Styling",
+          "defaultUsd": 22,
+          "duration": "1.5 hrs"
+        },
+        {
+          "name": "Hybrid Volume Lash Extensions",
+          "defaultUsd": 20,
+          "duration": "1 hr"
+        }
+      ]
+    },
+    {
+      "id": "cleaning_domestic",
+      "name": "Cleaning & Domestic Services",
+      "fullName": "Cleaning & Domestic Services",
+      "mapIcon": "CD",
+      "icon": "broom",
+      "tagline": "Deep Cleaning, Laundry & Ironing, Maid Service, Couch Wash",
+      "status": "ACTIVE",
+      "suggestedMinUsd": 15,
+      "suggestedMaxUsd": 50,
+      "subServices": [
+        {
+          "name": "Full House Deep Cleaning",
+          "defaultUsd": 30,
+          "duration": "4 hrs"
+        },
+        {
+          "name": "Laundry Wash, Dry & Ironing",
+          "defaultUsd": 20,
+          "duration": "3 hrs"
+        },
+        {
+          "name": "Couch & Carpet Steam Wash",
+          "defaultUsd": 25,
+          "duration": "2 hrs"
+        },
+        {
+          "name": "Move-In / Move-Out Clean",
           "defaultUsd": 35,
           "duration": "5 hrs"
         },
         {
-          "name": "Fulani / Stitch Cornrows",
-          "defaultUsd": 18,
-          "duration": "2 hrs"
-        },
-        {
-          "name": "Butterfly / Soft Faux Locs",
-          "defaultUsd": 28,
-          "duration": "3.5 hrs"
-        },
-        {
-          "name": "Kids Neat Cornrows & Beads",
+          "name": "Daily Maid Service",
           "defaultUsd": 15,
-          "duration": "1.5 hrs"
+          "duration": "Full Day"
         }
       ]
     },
     {
-      "id": "barber",
-      "name": "Barber",
-      "fullName": "Mobile Barber & Grooming",
-      "mapIcon": "BB",
-      "icon": "BB",
-      "tagline": "Mobile Skin Fade, Beard Sculpting, Kids Cut",
-      "status": "ACTIVE",
-      "suggestedMinUsd": 10,
-      "suggestedMaxUsd": 30,
-      "subServices": [
-        {
-          "name": "VIP Home Skin Fade + Beard Trim",
-          "defaultUsd": 15,
-          "duration": "45 mins"
-        },
-        {
-          "name": "Father & Son Home Combo Cut",
-          "defaultUsd": 22,
-          "duration": "1 hr"
-        },
-        {
-          "name": "Dreadlocks Retwist & Lineup",
-          "defaultUsd": 20,
-          "duration": "1.5 hrs"
-        }
-      ]
-    },
-    {
-      "id": "nails",
-      "name": "Nail Tech",
-      "fullName": "Mobile Nail Tech & Pedicure",
-      "mapIcon": "NT",
-      "icon": "NT",
-      "tagline": "Acrylics, Builder Gel, Spa Pedicure at Home",
+      "id": "automotive",
+      "name": "Automotive Services",
+      "fullName": "Automotive Services",
+      "mapIcon": "AS",
+      "icon": "car",
+      "tagline": "Mechanics, Auto Electrical, Mobile Car Wash, Battery Jump",
       "status": "ACTIVE",
       "suggestedMinUsd": 12,
-      "suggestedMaxUsd": 35,
+      "suggestedMaxUsd": 90,
       "subServices": [
         {
-          "name": "French Tip Acrylic Full Set",
-          "defaultUsd": 20,
+          "name": "Mobile Mechanical Diagnosis & Service",
+          "defaultUsd": 35,
           "duration": "2 hrs"
         },
         {
-          "name": "Builder Gel (BIAB) Overlay",
-          "defaultUsd": 15,
-          "duration": "1.5 hrs"
-        },
-        {
-          "name": "Luxury Jelly Spa Pedicure + Gel",
-          "defaultUsd": 20,
-          "duration": "1.5 hrs"
-        },
-        {
-          "name": "Acrylic Fill + Gel Toes Combo",
+          "name": "Auto Electrician & Alternator Check",
           "defaultUsd": 25,
-          "duration": "2 hrs"
+          "duration": "1.5 hrs"
+        },
+        {
+          "name": "Mobile Car Wash & Detailing at Home",
+          "defaultUsd": 15,
+          "duration": "1 hr"
+        },
+        {
+          "name": "Emergency Battery Jump & Tyre Change",
+          "defaultUsd": 15,
+          "duration": "30 mins"
+        },
+        {
+          "name": "Brake Pad Replacement",
+          "defaultUsd": 25,
+          "duration": "1.5 hrs"
         }
       ]
     },
     {
-      "id": "makeup",
-      "name": "Makeup (MUA)",
-      "fullName": "Mobile Makeup Artists",
-      "mapIcon": "MU",
-      "icon": "MU",
-      "tagline": "Home Soft Glam, Bridal, Roora Squad",
+      "id": "solar_power_water",
+      "name": "Solar, Electrical Power & Water",
+      "fullName": "Solar, Electrical Power & Water",
+      "mapIcon": "SW",
+      "icon": "sun",
+      "tagline": "Solar & Inverter Setup, Borehole Pumps, Wiring, Geysers",
       "status": "ACTIVE",
       "suggestedMinUsd": 20,
-      "suggestedMaxUsd": 65,
+      "suggestedMaxUsd": 150,
       "subServices": [
         {
-          "name": "Signature Soft Glam + Lashes",
-          "defaultUsd": 25,
-          "duration": "1 hr"
-        },
-        {
-          "name": "Roora / Lobola Bridal Glam",
-          "defaultUsd": 45,
-          "duration": "1.5 hrs"
-        },
-        {
-          "name": "Bridal Squad (2+ Faces)",
+          "name": "Solar Inverter & Lithium Battery Setup",
           "defaultUsd": 50,
+          "duration": "3 hrs"
+        },
+        {
+          "name": "Borehole Pump Fault & Pressure Fix",
+          "defaultUsd": 40,
           "duration": "2.5 hrs"
         },
         {
-          "name": "Graduation / Birthday Glam",
-          "defaultUsd": 22,
-          "duration": "1 hr"
+          "name": "Solar Geyser & Element Replacement",
+          "defaultUsd": 35,
+          "duration": "2 hrs"
+        },
+        {
+          "name": "DB Box Breaker & Electrical Wiring",
+          "defaultUsd": 30,
+          "duration": "2 hrs"
+        },
+        {
+          "name": "Generator Service & Changeover Switch",
+          "defaultUsd": 30,
+          "duration": "1.5 hrs"
         }
       ]
     },
     {
-      "id": "wigs",
-      "name": "Wig Stylist",
-      "fullName": "Wig Installation & Styling",
-      "mapIcon": "WG",
-      "icon": "WG",
-      "tagline": "HD Frontal Melt, Customization at Home",
+      "id": "gardening_outdoor",
+      "name": "Gardening & Outdoor Work",
+      "fullName": "Gardening & Outdoor Work",
+      "mapIcon": "GO",
+      "icon": "leaf",
+      "tagline": "Lawn Mowing, Tree Cutting, Rubble Removal, Landscaping",
       "status": "ACTIVE",
       "suggestedMinUsd": 15,
-      "suggestedMaxUsd": 40,
+      "suggestedMaxUsd": 70,
       "subServices": [
         {
-          "name": "HD Lace Frontal Melt + Baby Hairs",
-          "defaultUsd": 25,
-          "duration": "1.5 hrs"
-        },
-        {
-          "name": "Glueless Closure Install + Curls",
+          "name": "Lawn Mowing & Edge Trimming",
           "defaultUsd": 18,
+          "duration": "2 hrs"
+        },
+        {
+          "name": "Tree Felling & Branch Trimming",
+          "defaultUsd": 40,
+          "duration": "3 hrs"
+        },
+        {
+          "name": "Yard Waste & Rubble Removal",
+          "defaultUsd": 35,
+          "duration": "2.5 hrs"
+        },
+        {
+          "name": "Hedge Trimming & Flower Bedding",
+          "defaultUsd": 20,
+          "duration": "2 hrs"
+        },
+        {
+          "name": "Driveway & Paving High-Pressure Wash",
+          "defaultUsd": 25,
+          "duration": "2 hrs"
+        }
+      ]
+    },
+    {
+      "id": "general_labour",
+      "name": "General Labour & Other Jobs",
+      "fullName": "General Labour & Other Jobs",
+      "mapIcon": "GL",
+      "icon": "box",
+      "tagline": "Heavy Loading, Handyman Fixes, Errand Runner, Event Setup",
+      "status": "ACTIVE",
+      "suggestedMinUsd": 10,
+      "suggestedMaxUsd": 50,
+      "subServices": [
+        {
+          "name": "Furniture & Heavy Item Loading/Offloading",
+          "defaultUsd": 20,
+          "duration": "2 hrs"
+        },
+        {
+          "name": "General Handyman & Wall Mounting",
+          "defaultUsd": 15,
           "duration": "1 hr"
         },
         {
-          "name": "Wig Wash, Treatment & Revamp",
-          "defaultUsd": 15,
-          "duration": "2 hrs"
-        }
-      ]
-    },
-    {
-      "id": "lashes",
-      "name": "Lashes & Brows",
-      "fullName": "Mobile Eyelashes & Brows",
-      "mapIcon": "LB",
-      "icon": "LB",
-      "tagline": "Volume Lashes, Hybrid Set, Brow Tint",
-      "status": "ACTIVE",
-      "suggestedMinUsd": 15,
-      "suggestedMaxUsd": 35,
-      "subServices": [
-        {
-          "name": "Hybrid Volume Lash Extensions",
-          "defaultUsd": 20,
+          "name": "Harare Urgent Errands & Grocery Run",
+          "defaultUsd": 12,
           "duration": "1.5 hrs"
         },
         {
-          "name": "Mega Volume Full Set",
-          "defaultUsd": 25,
-          "duration": "2 hrs"
+          "name": "Event Gazebo, Tent & Chair Setup",
+          "defaultUsd": 30,
+          "duration": "3 hrs"
         },
         {
-          "name": "Brow Lamination, Wax & Tint",
-          "defaultUsd": 15,
-          "duration": "45 mins"
+          "name": "Gate Welding & Locksmith Fixes",
+          "defaultUsd": 25,
+          "duration": "1.5 hrs"
         }
       ]
-    },
-    {
-      "id": "cleaning",
-      "name": "Home Cleaning",
-      "fullName": "Home Cleaning & Maid Service",
-      "mapIcon": "HC",
-      "icon": "HC",
-      "tagline": "Deep Cleaning, Laundry, Move-In",
-      "status": "COMING_SOON",
-      "waitlistCount": 142,
-      "subServices": []
-    },
-    {
-      "id": "handyman",
-      "name": "Handyman",
-      "fullName": "Handyman & Home Repairs",
-      "mapIcon": "HM",
-      "icon": "HM",
-      "tagline": "TV Mounting, Carpentry, Repairs",
-      "status": "COMING_SOON",
-      "waitlistCount": 98,
-      "subServices": []
-    },
-    {
-      "id": "plumbing",
-      "name": "Plumbing & Solar",
-      "fullName": "Plumbing & Solar/Electrical",
-      "mapIcon": "PS",
-      "icon": "PS",
-      "tagline": "Geyser, Borehole, Solar & Inverter",
-      "status": "COMING_SOON",
-      "waitlistCount": 116,
-      "subServices": []
-    },
-    {
-      "id": "delivery",
-      "name": "Errands",
-      "fullName": "Errands & Parcel Runner",
-      "mapIcon": "ER",
-      "icon": "ER",
-      "tagline": "Same-Day Harare Bike & Car Runner",
-      "status": "COMING_SOON",
-      "waitlistCount": 84,
-      "subServices": []
     }
   ],
   "providers": [
@@ -297,7 +341,7 @@
       "warningsCount": 0,
       "activeWarnings": [],
       "acceptedConductRules": true,
-      "categoryId": "braiding",
+      "categoryId": "beauty_care",
       "skillTier": "Platinum pro",
       "isPlatinum": true,
       "experienceYears": 6,
@@ -351,7 +395,17 @@
       "reviews": [],
       "hasOffice": true,
       "officeAddress": "Shop 4, Avondale Shopping Centre, King George Rd",
-      "officeSuburb": "Avondale"
+      "officeSuburb": "Avondale",
+      "categoryIds": [
+        "beauty_care"
+      ],
+      "idDocument": {
+        "type": "National ID",
+        "number": "63-2049182-Y-42",
+        "photoUrl": "https://images.unsplash.com/photo-1544717305-2782549b5136?auto=format&fit=crop&w=400&q=80",
+        "verified": true
+      },
+      "biometricVerified": true
     },
     {
       "id": "prov_farai",
@@ -368,7 +422,7 @@
       "warningsCount": 0,
       "activeWarnings": [],
       "acceptedConductRules": true,
-      "categoryId": "barber",
+      "categoryId": "beauty_care",
       "skillTier": "Platinum pro",
       "isPlatinum": true,
       "experienceYears": 5,
@@ -413,7 +467,18 @@
       "reviews": [],
       "hasOffice": true,
       "officeAddress": "Suite 12, Borrowdale Village Walk",
-      "officeSuburb": "Borrowdale"
+      "officeSuburb": "Borrowdale",
+      "categoryIds": [
+        "beauty_care",
+        "general_labour"
+      ],
+      "idDocument": {
+        "type": "National ID",
+        "number": "63-2049182-Y-42",
+        "photoUrl": "https://images.unsplash.com/photo-1544717305-2782549b5136?auto=format&fit=crop&w=400&q=80",
+        "verified": true
+      },
+      "biometricVerified": true
     },
     {
       "id": "prov_nyasha",
@@ -430,7 +495,7 @@
       "warningsCount": 0,
       "activeWarnings": [],
       "acceptedConductRules": true,
-      "categoryId": "nails",
+      "categoryId": "beauty_care",
       "skillTier": "Platinum pro",
       "isPlatinum": true,
       "experienceYears": 4,
@@ -472,7 +537,17 @@
           "imageUrl": "https://images.unsplash.com/photo-1604654894610-df63bc536371?auto=format&fit=crop&w=600&q=80"
         }
       ],
-      "reviews": []
+      "reviews": [],
+      "categoryIds": [
+        "beauty_care"
+      ],
+      "idDocument": {
+        "type": "National ID",
+        "number": "63-2049182-Y-42",
+        "photoUrl": "https://images.unsplash.com/photo-1544717305-2782549b5136?auto=format&fit=crop&w=400&q=80",
+        "verified": true
+      },
+      "biometricVerified": true
     },
     {
       "id": "prov_ruvimbo",
@@ -489,7 +564,7 @@
       "warningsCount": 0,
       "activeWarnings": [],
       "acceptedConductRules": true,
-      "categoryId": "makeup",
+      "categoryId": "beauty_care",
       "skillTier": "Platinum pro",
       "isPlatinum": true,
       "experienceYears": 5,
@@ -531,7 +606,17 @@
           "imageUrl": "https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?auto=format&fit=crop&w=600&q=80"
         }
       ],
-      "reviews": []
+      "reviews": [],
+      "categoryIds": [
+        "beauty_care"
+      ],
+      "idDocument": {
+        "type": "National ID",
+        "number": "63-2049182-Y-42",
+        "photoUrl": "https://images.unsplash.com/photo-1544717305-2782549b5136?auto=format&fit=crop&w=400&q=80",
+        "verified": true
+      },
+      "biometricVerified": true
     }
   ],
   "ecocashTopups": [],
@@ -638,5 +723,46 @@
   "approvalQueue": [],
   "leakageLogs": [],
   "revenueLedger": [],
-  "pendingVerifications": []
+  "pendingVerifications": [],
+  "hubServices": [
+    {
+      "id": "job_marketplace",
+      "title": "Job Marketplace",
+      "subtitle": "Hire verified local trades & pros",
+      "status": "ACTIVE",
+      "badge": "Active",
+      "imageUrl": "https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=800&q=80"
+    },
+    {
+      "id": "online_shopping",
+      "title": "Online Shopping",
+      "subtitle": "Harare shops & fast delivery",
+      "status": "COMING_SOON",
+      "badge": "Coming Soon",
+      "imageUrl": "https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=800&q=80"
+    },
+    {
+      "id": "transport_carriers",
+      "title": "Transport & Carriers",
+      "subtitle": "Bakkies, trucks & haulage",
+      "status": "COMING_SOON",
+      "badge": "Coming Soon",
+      "imageUrl": "https://images.unsplash.com/photo-1519003722824-194d4455a60c?auto=format&fit=crop&w=800&q=80"
+    }
+  ],
+  "changelogs": [
+    {
+      "id": "cl_1",
+      "version": "v2.0",
+      "title": "Airmass Multi-Hub & Verified Marketplace Update",
+      "date": "2026-10-23",
+      "highlights": [
+        "New Job Marketplace with 7 dedicated service categories",
+        "Instant iOS-style Biometric Face ID verification for clients and providers",
+        "Confidential Government ID verification & 3-category selection for providers",
+        "Coming Soon previews for Online Shopping and Transport & Carriers",
+        "Dynamic Admin-driven category controls without requiring app updates"
+      ]
+    }
+  ]
 }

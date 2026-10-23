@@ -616,6 +616,53 @@
       await loadAdminData();
     }
 
+    async function toggleHubServiceStatus(id, newStatus) {
+      await api('/api/admin/hub/update', 'POST', { id, status: newStatus });
+      await loadAdminData();
+    }
+
+    async function promptAddChangelog() {
+      const title = prompt('Announcement or Changelog Title:');
+      if (!title || !title.trim()) return;
+      const version = prompt('Version tag (e.g. v2.1):', 'v2.1') || 'v2.1';
+      const highlightsStr = prompt('Highlights (separated by comma):', 'New services launched, Instant Face ID active');
+      const highlights = (highlightsStr || '').split(',').map(s => s.trim()).filter(Boolean);
+      await api('/api/admin/changelogs/add', 'POST', { title: title.trim(), version: version.trim(), highlights });
+      await loadAdminData();
+    }
+
+    async function deleteChangelog(id) {
+      if (!confirm('Delete this announcement?')) return;
+      await api('/api/admin/changelogs/delete', 'POST', { id });
+      await loadAdminData();
+    }
+
+    function viewIdProof(idPhotoUrl, selfieUrl, name) {
+      const modal = document.createElement('div');
+      modal.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.85); z-index:99999; display:flex; align-items:center; justify-content:center; padding:20px;';
+      modal.onclick = () => modal.remove();
+      modal.innerHTML = `
+        <div style="background:#fff; border-radius:16px; padding:20px; max-width:600px; width:100%;" onclick="event.stopPropagation()">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+            <div style="font-weight:800; font-size:16px;">🔍 ID Document & Face Match: ${name}</div>
+            <button onclick="this.closest('div').parentElement.parentElement.remove()" style="border:none; background:none; font-size:20px; cursor:pointer;">&times;</button>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px;">
+            <div>
+              <div style="font-size:12px; font-weight:700; color:#475569; margin-bottom:6px;">Government ID Photo</div>
+              <img src="${idPhotoUrl}" style="width:100%; height:180px; object-fit:contain; border-radius:10px; border:1px solid #CBD5E1; background:#000;" />
+            </div>
+            <div>
+              <div style="font-size:12px; font-weight:700; color:#475569; margin-bottom:6px;">Live Biometric Selfie</div>
+              <img src="${selfieUrl || idPhotoUrl}" style="width:100%; height:180px; object-fit:contain; border-radius:10px; border:1px solid #CBD5E1; background:#000;" />
+            </div>
+          </div>
+          <button class="btn-blue" style="width:100%; height:40px;" onclick="this.closest('div').parentElement.remove()">Close Inspection</button>
+        </div>
+      `;
+      document.body.appendChild(modal);
+    }
+
     async function promptAddCategory() {
       const name = prompt('Enter new service category name (e.g. Electrical, Plumbing, Cleaning, Handyman):');
       if (!name || !name.trim()) return;
@@ -1102,7 +1149,14 @@
                         <div style="font-weight:800; color:#0066FF;">🤳 ${k.faceScore || '99.2%'} Match</div>
                         <div style="font-size:11px; color:var(--muted); font-weight:600;">3D Liveness Passed</div>
                       </td>
-                      <td style="font-family:monospace; font-weight:800;">🪪 ${k.nationalId || 'Verified'}</td>
+                      <td>
+                        <div style="font-family:monospace; font-weight:800;">🪪 ${k.nationalId || 'Verified'}</div>
+                        ${k.idPhotoUrl ? `
+                          <button class="btn-outline" style="padding:2px 7px; font-size:11px; margin-top:4px;" onclick="viewIdProof('${k.idPhotoUrl}', '${k.selfieUrl || ''}', '${(k.actorName || '').replace(/'/g, "\\'")}')">
+                            🔍 View ID &amp; Face
+                          </button>
+                        ` : ''}
+                      </td>
                       <td>
                         ${isPending ? `
                           <div style="display:flex; gap:6px;">
@@ -1492,6 +1546,73 @@
         `;
       } else if (adminTab === 'CATEGORIES') {
         sectionHtml = `
+          <!-- Hub Services Manager (Job Marketplace, Online Shopping, Transport & Carriers) -->
+          <div class="card" style="margin-bottom:16px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:10px;">
+              <div>
+                <h2 style="font-size:17px; font-weight:800; margin:0 0 4px;">🌐 Main Multi-Service Hub Control</h2>
+                <p style="font-size:12.5px; color:var(--muted); margin:0;">
+                  Manage the 3 main services shown on the App Welcome Hub. Toggle between <strong>Active</strong> and <strong>Coming Soon</strong> without updating the app.
+                </p>
+              </div>
+            </div>
+
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:12px;">
+              ${(db.hubServices || []).map((hs) => {
+                const isActive = hs.status === 'ACTIVE';
+                return `
+                  <div style="background:#F8FAFC; border:1.5px solid var(--border); border-radius:12px; padding:12px; display:flex; gap:12px; align-items:center;">
+                    <img src="${hs.imageUrl || 'https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=400&q=80'}" style="width:70px; height:60px; object-fit:cover; border-radius:8px;" />
+                    <div style="flex:1; min-width:0;">
+                      <div style="font-weight:800; font-size:14px; color:var(--text);">${hs.title}</div>
+                      <div style="font-size:11.5px; color:var(--muted);">${hs.subtitle}</div>
+                      <span style="display:inline-block; margin-top:4px; padding:2px 8px; border-radius:99px; font-size:10.5px; font-weight:800; background:${isActive ? '#ECFDF5' : '#FFFBEB'}; color:${isActive ? '#059669' : '#D97706'};">
+                        ${hs.status}
+                      </span>
+                    </div>
+                    <button class="btn-outline" style="padding:4px 10px; font-size:11px;" onclick="toggleHubServiceStatus('${hs.id}', '${isActive ? 'COMING_SOON' : 'ACTIVE'}')">
+                      ${isActive ? 'Set Coming Soon' : 'Activate'}
+                    </button>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+
+          <!-- Dynamic Announcements & Changelog Manager -->
+          <div class="card" style="margin-bottom:16px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:10px;">
+              <div>
+                <h2 style="font-size:17px; font-weight:800; margin:0 0 4px;">📢 Platform Announcements &amp; Changelogs</h2>
+                <p style="font-size:12.5px; color:var(--muted); margin:0;">
+                  Publish updates, new features, or maintenance banners to users directly inside the app.
+                </p>
+              </div>
+              <button class="btn-blue" style="font-size:12px;" onclick="promptAddChangelog()">➕ Post Announcement</button>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:8px;">
+              ${(db.changelogs || []).length === 0 ? `
+                <div style="color:var(--muted); font-size:12.5px; padding:12px; text-align:center;">No announcements posted yet.</div>
+              ` : (db.changelogs || []).map((cl) => `
+                <div style="background:#FFFFFF; border:1px solid var(--border); border-radius:10px; padding:10px 14px; display:flex; justify-content:space-between; align-items:center;">
+                  <div>
+                    <div style="font-weight:800; font-size:13.5px; color:var(--text);">
+                      <span style="color:#0066FF;">[${cl.version}]</span> ${cl.title}
+                      <span style="font-size:11px; color:var(--muted); font-weight:600; margin-left:8px;">${cl.date}</span>
+                    </div>
+                    <div style="font-size:12px; color:var(--muted); margin-top:2px;">
+                      ${(cl.highlights || []).join(' • ')}
+                    </div>
+                  </div>
+                  <button class="btn-outline" style="color:#DC2626; border-color:#FECACA; padding:3px 9px; font-size:11px;" onclick="deleteChangelog('${cl.id}')">
+                    Delete
+                  </button>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+
           <div class="card">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
               <div>

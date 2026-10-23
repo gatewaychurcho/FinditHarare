@@ -2821,3 +2821,481 @@ html, body {
   70% { box-shadow: 0 0 0 12px rgba(239, 68, 68, 0); }
   100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
 }
+
+/* ============================================================================
+ * AIRMASS-STYLE SPLASH, ONBOARDING & MULTI-HUB ARCHITECTURE
+ * ============================================================================ */
+
+/* 1. Initial Brand Splash */
+.airmass-splash-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: #FFFFFF;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  animation: splashFadeIn 0.35s ease-out;
+}
+
+@keyframes splashFadeIn {
+  from { opacity: 0; transform: scale(0.97); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.airmass-splash-logo-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.airmass-splash-brand-title {
+  font-size: 26px;
+  font-weight: 900;
+  color: #0F172A;
+  margin-top: 16px;
+  letter-spacing: -0.5px;
+}
+
+.airmass-splash-subtitle {
+  font-size: 13.5px;
+  color: #64748B;
+  font-weight: 600;
+  margin-top: 4px;
+}
+
+.airmass-splash-spinner {
+  margin-top: 32px;
+  width: 24px;
+  height: 24px;
+  border: 2.5px solid #E2E8F0;
+  border-top-color: #0066FF;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+/* 2. Onboarding Carousel Screens (Matches Screenshots 2 & 3) */
+.airmass-onboarding-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: #FFFFFF;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 20px 24px 32px;
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+.onboarding-top-nav {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  height: 40px;
+}
+
+.onboarding-skip-btn {
+  background: none;
+  border: none;
+  color: #64748B;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 8px 12px;
+}
+
+.onboarding-graphic-container {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 10px 0 20px;
+  min-height: 260px;
+  position: relative;
+}
+
+.onboarding-mock-phone {
+  width: 240px;
+  height: 340px;
+  background: #F8FAFC;
+  border: 4px solid #F1F5F9;
+  border-radius: 36px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.onboarding-mock-map-bg {
+  position: absolute;
+  inset: 0;
+  opacity: 0.85;
+  background-size: cover;
+  background-position: center;
+}
+
+.onboarding-pin-bubble {
+  position: absolute;
+  background: #FF4D4D;
+  color: #FFFFFF;
+  border-radius: 50%;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 10px rgba(255, 77, 77, 0.4);
+}
+
+.onboarding-bid-card {
+  position: absolute;
+  background: #FFFFFF;
+  border-radius: 12px;
+  padding: 6px 10px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 800;
+  color: #0F172A;
+  border: 1px solid #E2E8F0;
+  animation: floatBid 3s ease-in-out infinite alternate;
+}
+
+@keyframes floatBid {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(-6px); }
+}
+
+.onboarding-character-img {
+  position: relative;
+  z-index: 2;
+  height: 230px;
+  object-fit: contain;
+  filter: drop-shadow(0 12px 20px rgba(0, 0, 0, 0.15));
+}
+
+.onboarding-footer-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.onboarding-headline-text {
+  font-size: 19px;
+  line-height: 1.45;
+  font-weight: 800;
+  color: #0F172A;
+  margin-bottom: 24px;
+  max-width: 320px;
+}
+
+.onboarding-headline-text .highlight-accent {
+  color: #FF4D4D;
+}
+
+.onboarding-pagination-dots {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+.onboarding-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 99px;
+  background: #E2E8F0;
+  transition: all 0.25s ease;
+}
+
+.onboarding-dot.active {
+  width: 24px;
+  background: #FF4D4D;
+}
+
+.onboarding-cta-btn {
+  width: 100%;
+  max-width: 360px;
+  height: 52px;
+  background: #FF4D4D;
+  color: #FFFFFF;
+  border: none;
+  border-radius: 26px;
+  font-size: 16px;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(255, 77, 77, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.onboarding-cta-btn:active {
+  transform: scale(0.98);
+}
+
+/* 3. Main Multi-Service Hub ("What do you need today?") - Matches Screenshot 1 */
+.airmass-hub-wrapper {
+  padding: 16px 18px 84px;
+  max-width: 500px;
+  margin: 0 auto;
+}
+
+.airmass-hub-header {
+  padding: 12px 4px 18px;
+}
+
+.airmass-hub-title {
+  font-size: 24px;
+  font-weight: 900;
+  color: #0B1B3D;
+  letter-spacing: -0.4px;
+}
+
+.airmass-hub-subtitle {
+  font-size: 14px;
+  color: #64748B;
+  font-weight: 600;
+  margin-top: 4px;
+}
+
+.airmass-hub-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.airmass-hub-card {
+  background: #FFFFFF;
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.05);
+  border: 1.5px solid #F1F5F9;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.airmass-hub-card:active {
+  transform: scale(0.97);
+}
+
+.airmass-hub-card-img-wrap {
+  position: relative;
+  width: 100%;
+  height: 155px;
+  background: #E2E8F0;
+  overflow: hidden;
+}
+
+.airmass-hub-card-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.airmass-hub-card-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: rgba(15, 23, 42, 0.78);
+  color: #FFFFFF;
+  padding: 3px 8px;
+  border-radius: 99px;
+  font-size: 10px;
+  font-weight: 800;
+  backdrop-filter: blur(4px);
+}
+
+.airmass-hub-card-badge.active-pro {
+  background: #0066FF;
+}
+
+.airmass-hub-card-label {
+  padding: 12px 14px 14px;
+  background: #FFFFFF;
+}
+
+.airmass-hub-card-name {
+  font-size: 14.5px;
+  font-weight: 800;
+  color: #0F172A;
+}
+
+.airmass-hub-card-sub {
+  font-size: 11px;
+  color: #64748B;
+  font-weight: 600;
+  margin-top: 3px;
+  line-height: 1.3;
+}
+
+/* 4. The 7 Job Categories in Marketplace */
+.job-categories-container {
+  padding: 12px 16px 84px;
+}
+
+.job-category-row-card {
+  background: #FFFFFF;
+  border-radius: 18px;
+  border: 1.5px solid #E2E8F0;
+  padding: 14px;
+  margin-bottom: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.job-category-row-card:active {
+  border-color: #0066FF;
+  transform: scale(0.98);
+}
+
+.job-category-header-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.job-category-icon-box {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--blue-soft);
+  color: var(--blue-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.job-category-subtasks-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.job-subtask-chip {
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: 99px;
+  padding: 3px 9px;
+  font-size: 11px;
+  color: #475569;
+  font-weight: 700;
+}
+
+/* 5. iOS Face ID Biometrics Viewfinder Modal */
+.ios-face-id-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10500;
+  background: rgba(0, 0, 0, 0.88);
+  backdrop-filter: blur(12px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  color: #FFFFFF;
+}
+
+.ios-face-viewfinder {
+  width: 220px;
+  height: 220px;
+  border-radius: 50%;
+  position: relative;
+  overflow: hidden;
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000000;
+  box-shadow: 0 0 32px rgba(0, 102, 255, 0.25);
+}
+
+.ios-face-viewfinder video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
+}
+
+.ios-face-scanning-radar {
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  border: 3.5px dashed #0066FF;
+  animation: rotateRadar 3.5s linear infinite;
+}
+
+@keyframes rotateRadar {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.ios-face-id-success-tick {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: #10B981;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #FFFFFF;
+  box-shadow: 0 0 24px rgba(16, 185, 129, 0.6);
+  animation: tickPop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes tickPop {
+  0% { transform: scale(0); opacity: 0; }
+  80% { transform: scale(1.15); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* 6. Provider Multi-Category Selector (Max 3) */
+.provider-categories-selector-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  max-height: 280px;
+  overflow-y: auto;
+  margin: 10px 0;
+}
+
+.provider-category-select-pill {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1.5px solid #E2E8F0;
+  background: #F8FAFC;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-size: 13px;
+  font-weight: 700;
+  color: #0F172A;
+}
+
+.provider-category-select-pill.selected {
+  background: #EFF6FF;
+  border-color: #0066FF;
+  color: #0066FF;
+}

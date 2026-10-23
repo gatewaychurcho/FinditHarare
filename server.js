@@ -1397,6 +1397,7 @@ const server = http.createServer(async (req, res) => {
             finditId: generateFinditAppId('CUSTOMER'),
             name,
             phone,
+            password: body.password || '',
             suburbId: sub.id,
             suburbName: sub.name,
             rating: 5.0,
@@ -1404,8 +1405,10 @@ const server = http.createServer(async (req, res) => {
             completedBookings: 0,
             avatarInitials: initials,
             avatarUrl: body.avatarUrl,
+            selfieUrl: body.selfieUrl || body.avatarUrl,
             whatsappVerified: true,
             faceVerified: true,
+            biometricVerified: true,
             profileCompleted: true,
             faceBiometricHash,
             nationalIdNumber,
@@ -1421,11 +1424,14 @@ const server = http.createServer(async (req, res) => {
             return sendJson(res, 403, { error: `Account ${user.finditId} is banned: ${user.banReason}` });
           }
           user.name = name;
+          if (body.password) user.password = body.password;
           user.suburbId = sub.id;
           user.suburbName = sub.name;
           user.avatarUrl = body.avatarUrl;
+          user.selfieUrl = body.selfieUrl || body.avatarUrl;
           user.whatsappVerified = true;
           user.faceVerified = true;
+          user.biometricVerified = true;
           user.profileCompleted = true;
           user.faceBiometricHash = faceBiometricHash;
           user.nationalIdNumber = nationalIdNumber;
@@ -1457,8 +1463,19 @@ const server = http.createServer(async (req, res) => {
         broadcastUpdate('USER_REGISTERED', { userId: user.id, finditId: user.finditId });
         return sendJson(res, 200, { role: 'CUSTOMER', user });
       } else {
-        const cat = db.categories.find((c) => c.id === body.categoryId) || db.categories[0];
+        const rawCategoryIds = Array.isArray(body.categoryIds) && body.categoryIds.length > 0
+          ? body.categoryIds.slice(0, 3)
+          : [body.categoryId || 'repairs_construction'];
+        const cat = db.categories.find((c) => c.id === rawCategoryIds[0]) || db.categories[0];
         const provPhoneLast9 = phone.replace(/\D/g, '').slice(-9);
+
+        const idDocument = body.idDocument || {
+          type: body.idType || 'National ID',
+          number: body.idNumber || nationalIdNumber,
+          photoUrl: body.idPhotoUrl || null,
+          verified: true
+        };
+
         let provider = db.providers.find((p) => (p.phone || '').replace(/\D/g, '').slice(-9) === provPhoneLast9);
         if (!provider) {
           provider = {
@@ -1466,10 +1483,12 @@ const server = http.createServer(async (req, res) => {
             finditId: generateFinditAppId('PROVIDER'),
             name,
             shortName: name.split(' ')[0],
-            brandName: body.brandName || `${name.split(' ')[0]} Mobile Service`,
+            brandName: body.brandName || `${name.split(' ')[0]} Services`,
             phone,
+            password: body.password || '',
             avatarInitials: initials,
             avatarUrl: body.avatarUrl,
+            selfieUrl: body.selfieUrl || body.avatarUrl,
             isOnline: true,
             isBanned: false,
             banReason: '',
@@ -1477,7 +1496,8 @@ const server = http.createServer(async (req, res) => {
             warningsCount: 0,
             activeWarnings: [],
             acceptedConductRules: true,
-            categoryId: cat.id,
+            categoryId: rawCategoryIds[0],
+            categoryIds: rawCategoryIds,
             skillTier: body.skillTier || 'Verified pro',
             isPlatinum: (body.skillTier || '').toLowerCase().includes('platinum'),
             experienceYears: Number(body.experienceYears || 3),
@@ -1490,10 +1510,12 @@ const server = http.createServer(async (req, res) => {
             rating: 5.0,
             reviewCount: 1,
             completedBookings: 0,
-            bio: body.bio || `Verified mobile ${cat.fullName || cat.name} specialist visiting clients in ${sub.name} and across Harare.`,
+            bio: body.bio || `Verified mobile specialist in ${sub.name} and across Harare.`,
             badges: { phoneVerified: true, idVerified: true, businessVerified: false, faceVerified: true },
             faceBiometricHash,
-            nationalIdNumber,
+            nationalIdNumber: idDocument.number || nationalIdNumber,
+            idDocument,
+            biometricVerified: true,
             walletBalanceUsd: 0.00,
             walletTransactions: [],
             portfolio: [],
@@ -1529,10 +1551,16 @@ const server = http.createServer(async (req, res) => {
             return sendJson(res, 403, { error: `Provider account ${provider.finditId} is banned: ${provider.banReason}` });
           }
           provider.name = name;
+          if (body.password) provider.password = body.password;
           provider.avatarUrl = body.avatarUrl;
+          provider.selfieUrl = body.selfieUrl || body.avatarUrl;
+          provider.categoryIds = rawCategoryIds;
+          provider.categoryId = rawCategoryIds[0];
+          provider.idDocument = idDocument;
+          provider.biometricVerified = true;
           provider.profileCompleted = true;
           provider.faceBiometricHash = faceBiometricHash;
-          provider.nationalIdNumber = nationalIdNumber;
+          provider.nationalIdNumber = idDocument.number || nationalIdNumber;
           if (!provider.finditId) provider.finditId = generateFinditAppId('PROVIDER');
         }
 
@@ -1547,11 +1575,16 @@ const server = http.createServer(async (req, res) => {
           suburbName: provider.suburbName,
           whatsappVerified: true,
           faceVerified: true,
+          biometricVerified: true,
           faceScore: `${faceMatchScore}%`,
           faceMatchScore,
           faceBiometricHash,
-          nationalId: nationalIdNumber,
-          nationalIdNumber,
+          nationalId: idDocument.number || nationalIdNumber,
+          nationalIdNumber: idDocument.number || nationalIdNumber,
+          idType: idDocument.type || 'National ID',
+          idPhotoUrl: idDocument.photoUrl || null,
+          selfieUrl: provider.selfieUrl || provider.avatarUrl,
+          categoryIds: provider.categoryIds,
           termsAccepted: true,
           status: 'APPROVED',
           submittedAt: new Date().toISOString()
@@ -2982,6 +3015,63 @@ const server = http.createServer(async (req, res) => {
       saveDb(db);
       broadcastUpdate('CATEGORY_UPDATED', { categoryId: cat.id });
       return sendJson(res, 200, { success: true, category: cat });
+    } catch (e) {
+      return sendJson(res, 400, { error: e.message });
+    }
+  }
+
+  // Admin: Update Hub Services (Job Marketplace, Online Shopping, Transport & Carriers)
+  if (pathname === '/api/admin/hub/update' && req.method === 'POST') {
+    try {
+      db = loadDb();
+      const body = await parseBody(req);
+      if (!Array.isArray(db.hubServices)) db.hubServices = [];
+      const idx = db.hubServices.findIndex((s) => s.id === body.id);
+      if (idx >= 0) {
+        db.hubServices[idx] = { ...db.hubServices[idx], ...body };
+      } else {
+        db.hubServices.push(body);
+      }
+      saveDb(db);
+      broadcastUpdate('HUB_UPDATED', { hubServices: db.hubServices });
+      return sendJson(res, 200, { success: true, hubServices: db.hubServices });
+    } catch (e) {
+      return sendJson(res, 400, { error: e.message });
+    }
+  }
+
+  // Admin: Add or Delete Changelog / Announcements
+  if (pathname === '/api/admin/changelogs/add' && req.method === 'POST') {
+    try {
+      db = loadDb();
+      const body = await parseBody(req);
+      if (!Array.isArray(db.changelogs)) db.changelogs = [];
+      const newEntry = {
+        id: 'cl_' + Date.now().toString().slice(-5),
+        version: body.version || 'v2.1',
+        title: body.title || 'Platform Update',
+        date: new Date().toISOString().slice(0, 10),
+        highlights: Array.isArray(body.highlights) ? body.highlights : [body.highlights || 'New features added']
+      };
+      db.changelogs.unshift(newEntry);
+      saveDb(db);
+      broadcastUpdate('CHANGELOG_UPDATED', { changelog: newEntry });
+      return sendJson(res, 200, { success: true, changelogs: db.changelogs });
+    } catch (e) {
+      return sendJson(res, 400, { error: e.message });
+    }
+  }
+
+  if (pathname === '/api/admin/changelogs/delete' && req.method === 'POST') {
+    try {
+      db = loadDb();
+      const body = await parseBody(req);
+      if (Array.isArray(db.changelogs)) {
+        db.changelogs = db.changelogs.filter((c) => c.id !== body.id);
+        saveDb(db);
+      }
+      broadcastUpdate('CHANGELOG_UPDATED', { changelogs: db.changelogs });
+      return sendJson(res, 200, { success: true, changelogs: db.changelogs });
     } catch (e) {
       return sendJson(res, 400, { error: e.message });
     }

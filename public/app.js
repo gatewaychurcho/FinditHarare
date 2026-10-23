@@ -74,14 +74,25 @@ const state = {
   uploadedFileName: '',
   uploadSuspectedWatermark: false,
 
-  // Full inDrive-Style Sign-Up & Verification Wizard State
+  // Full inDrive & Airmass Style Multi-Hub & Biometrics State
+  hubView: 'HUB', // 'HUB' | 'MARKETPLACE'
+  onboardingSlide: 0, // 0 | 1
+  onboardingActive: false,
+  authPassword: '',
+  authIdType: 'National ID',
+  authIdNumber: '',
+  authIdPhotoUrl: null,
+  authCategoryIds: ['repairs_construction'],
+  faceScanning: false,
+  faceVerifiedSuccess: false,
+
   authStep: 'PHONE', // 'PHONE' | 'OTP' | 'PROFILE'
   authRole: 'CUSTOMER', // 'CUSTOMER' | 'PROVIDER'
   authPhone: '+263 77 ',
   authOtpDigits: ['', '', '', ''],
   authName: '',
   authSuburbId: 'avondale',
-  authCategoryId: 'braiding',
+  authCategoryId: 'repairs_construction',
   authSkillTier: 'Platinum pro',
   authBrandName: '',
   authStartingPrice: 25,
@@ -314,79 +325,67 @@ function getCategoryVectorSvg(catId, isSelected = false) {
   const strokeSub = isSelected ? '#BAE6FD' : '#0F172A';
 
   const icons = {
-    // Hairdresser: Comb + Braided Locks
-    braiding: `<svg width="24" height="22" viewBox="0 0 32 28" fill="none">
-      <path d="M8 5C8 10 12 12 12 17C12 21 9 23 9 25" stroke="${strokeMain}" stroke-width="2.4" stroke-linecap="round"/>
-      <path d="M13 5C13 10 9 12 9 17C9 21 12 23 12 25" stroke="${strokeSub}" stroke-width="2.2" stroke-linecap="round"/>
-      <rect x="18" y="5" width="9" height="18" rx="2" stroke="${strokeMain}" stroke-width="2.1"/>
-      <path d="M18 9H23M18 13H23M18 17H23M18 21H23" stroke="${strokeSub}" stroke-width="1.8" stroke-linecap="round"/>
+    // 1. Home Repairs & Construction
+    repairs_construction: `<svg width="24" height="22" viewBox="0 0 32 28" fill="none">
+      <path d="M7 21L19 9" stroke="${strokeMain}" stroke-width="2.5" stroke-linecap="round"/>
+      <path d="M15 5L23 13M9 8L13 12" stroke="${strokeSub}" stroke-width="2.3" stroke-linecap="round"/>
+      <rect x="18" y="4" width="7" height="4" rx="1.5" stroke="${strokeMain}" stroke-width="2"/>
     </svg>`,
 
-    // Barber: Open Barber Scissors + Clipper Blade
-    barber: `<svg width="24" height="22" viewBox="0 0 32 28" fill="none">
-      <circle cx="9" cy="21" r="3.5" stroke="${strokeMain}" stroke-width="2.2"/>
-      <circle cx="21" cy="21" r="3.5" stroke="${strokeMain}" stroke-width="2.2"/>
-      <path d="M11.5 18.5L22 5M18.5 18.5L8 5" stroke="${strokeSub}" stroke-width="2.3" stroke-linecap="round"/>
-      <circle cx="15" cy="13" r="1.5" fill="${strokeMain}"/>
+    // 2. Beauty & Personal Care
+    beauty_care: `<svg width="24" height="22" viewBox="0 0 32 28" fill="none">
+      <circle cx="9" cy="20" r="3.5" stroke="${strokeMain}" stroke-width="2.2"/>
+      <circle cx="21" cy="20" r="3.5" stroke="${strokeMain}" stroke-width="2.2"/>
+      <path d="M11.5 17.5L22 4M18.5 17.5L8 4" stroke="${strokeSub}" stroke-width="2.3" stroke-linecap="round"/>
+      <path d="M25 6L26 8L28 9L26 10L25 12L24 10L22 9L24 8Z" fill="${strokeMain}"/>
     </svg>`,
 
-    // Nail Tech: Nail Polish Bottle + Brush + Sparkling Nail
-    nails: `<svg width="24" height="22" viewBox="0 0 32 28" fill="none">
-      <rect x="8" y="12" width="12" height="12" rx="3" stroke="${strokeMain}" stroke-width="2.2"/>
-      <path d="M11 12V7H17V12" stroke="${strokeSub}" stroke-width="2.1" stroke-linejoin="round"/>
-      <path d="M14 4V7" stroke="${strokeMain}" stroke-width="2.4" stroke-linecap="round"/>
-      <path d="M24 6L25 9L28 10L25 11L24 14L23 11L20 10L23 9L24 6Z" fill="${strokeMain}"/>
+    // 3. Cleaning & Domestic Services
+    cleaning_domestic: `<svg width="24" height="22" viewBox="0 0 32 28" fill="none">
+      <path d="M21 4L14 14" stroke="${strokeSub}" stroke-width="2.3" stroke-linecap="round"/>
+      <path d="M9 14H19L21 22H7L9 14Z" stroke="${strokeMain}" stroke-width="2.1" stroke-linejoin="round"/>
+      <path d="M24 7L25 9L27 10L25 11L24 13L23 11L21 10L23 9Z" fill="${strokeMain}"/>
     </svg>`,
 
-    // Makeup (MUA): Lipstick Tube + Makeup Brush
-    makeup: `<svg width="24" height="22" viewBox="0 0 32 28" fill="none">
-      <rect x="7" y="14" width="8" height="10" rx="1.5" stroke="${strokeSub}" stroke-width="2.1"/>
-      <path d="M8.5 14V8.5C8.5 7 13.5 5.5 13.5 8.5V14" fill="${strokeMain}" stroke="${strokeMain}" stroke-width="1.5"/>
-      <path d="M21 15V24" stroke="${strokeSub}" stroke-width="2.4" stroke-linecap="round"/>
-      <path d="M17.5 9C17.5 6.5 24.5 6.5 24.5 9L23 15H19L17.5 9Z" stroke="${strokeMain}" stroke-width="2.1" stroke-linejoin="round"/>
+    // 4. Automotive Services
+    automotive: `<svg width="24" height="22" viewBox="0 0 32 28" fill="none">
+      <path d="M6 17L8 10C8.5 8.5 10 7.5 11.5 7.5H20.5C22 7.5 23.5 8.5 24 10L26 17" stroke="${strokeSub}" stroke-width="2.2" stroke-linecap="round"/>
+      <rect x="5" y="15" width="22" height="7" rx="3" stroke="${strokeMain}" stroke-width="2.2"/>
+      <circle cx="10" cy="22" r="2.5" fill="${strokeMain}"/>
+      <circle cx="22" cy="22" r="2.5" fill="${strokeMain}"/>
     </svg>`,
 
-    // Wig Stylist: Styled Wavy Wig on Stand + Crown
-    wigs: `<svg width="24" height="22" viewBox="0 0 32 28" fill="none">
-      <path d="M9 10L12 5L16 8.5L20 5L23 10H9Z" stroke="${strokeMain}" stroke-width="2.1" stroke-linejoin="round"/>
-      <path d="M8 23C8 16 10 12 16 12C22 12 24 16 24 23" stroke="${strokeSub}" stroke-width="2.2" stroke-linecap="round"/>
-      <circle cx="16" cy="17" r="3" stroke="${strokeMain}" stroke-width="2"/>
+    // 5. Solar, Electrical Power & Water
+    solar_power_water: `<svg width="24" height="22" viewBox="0 0 32 28" fill="none">
+      <path d="M17 4L9 15H16L14 24L23 13H16L17 4Z" stroke="${strokeMain}" stroke-width="2.2" stroke-linejoin="round"/>
+      <circle cx="23" cy="7" r="3" stroke="${strokeSub}" stroke-width="1.8"/>
     </svg>`,
 
-    // Lashes & Brows: Eye with Curved Long Lashes
-    lashes: `<svg width="24" height="22" viewBox="0 0 32 28" fill="none">
-      <path d="M5 16C9 10 23 10 27 16C23 21 9 21 5 16Z" stroke="${strokeSub}" stroke-width="2.1" stroke-linejoin="round"/>
-      <circle cx="16" cy="16" r="3" fill="${strokeMain}"/>
-      <path d="M9 11L7 7M13.5 9.5L13 5.5M18.5 9.5L19 5.5M23 11L25 7" stroke="${strokeMain}" stroke-width="2.1" stroke-linecap="round"/>
+    // 6. Gardening & Outdoor Work
+    gardening_outdoor: `<svg width="24" height="22" viewBox="0 0 32 28" fill="none">
+      <path d="M7 23C7 23 9 12 19 8C19 8 23 18 13 22C10 23.2 8 23 7 23Z" stroke="${strokeMain}" stroke-width="2.2" stroke-linejoin="round"/>
+      <path d="M8 22L16 14" stroke="${strokeSub}" stroke-width="2" stroke-linecap="round"/>
+      <circle cx="22" cy="18" r="2" fill="${strokeMain}"/>
     </svg>`,
 
-    // Home Cleaning: Broom + Sparkles
-    cleaning: `<svg width="24" height="22" viewBox="0 0 32 28" fill="none">
-      <path d="M21 5L14 15" stroke="${strokeSub}" stroke-width="2.3" stroke-linecap="round"/>
-      <path d="M9 15H19L21 23H7L9 15Z" stroke="${strokeMain}" stroke-width="2.1" stroke-linejoin="round"/>
-      <circle cx="24" cy="11" r="1.5" fill="${strokeMain}"/>
+    // 7. General Labour & Other Jobs
+    general_labour: `<svg width="24" height="22" viewBox="0 0 32 28" fill="none">
+      <path d="M7 10L16 5L25 10L16 15L7 10Z" stroke="${strokeMain}" stroke-width="2.2" stroke-linejoin="round"/>
+      <path d="M7 10V18L16 23V15" stroke="${strokeSub}" stroke-width="2.1" stroke-linejoin="round"/>
+      <path d="M25 10V18L16 23" stroke="${strokeMain}" stroke-width="2.1" stroke-linejoin="round"/>
     </svg>`,
 
-    // Handyman: Wrench + Hammer
-    handyman: `<svg width="24" height="22" viewBox="0 0 32 28" fill="none">
-      <path d="M9 22L21 10" stroke="${strokeMain}" stroke-width="2.4" stroke-linecap="round"/>
-      <path d="M18 7L24 13M10 9L14 13" stroke="${strokeSub}" stroke-width="2.3" stroke-linecap="round"/>
-    </svg>`,
-
-    // Plumbing & Solar: Solar Lightning + Pipe Wrench
-    plumbing: `<svg width="24" height="22" viewBox="0 0 32 28" fill="none">
-      <path d="M17 5L10 15H16L14 23L22 13H16L17 5Z" stroke="${strokeMain}" stroke-width="2.1" stroke-linejoin="round"/>
-    </svg>`,
-
-    // Errands: Delivery Bike / Fast Box
-    delivery: `<svg width="24" height="22" viewBox="0 0 32 28" fill="none">
-      <circle cx="9" cy="20" r="3" stroke="${strokeSub}" stroke-width="2.1"/>
-      <circle cx="23" cy="20" r="3" stroke="${strokeSub}" stroke-width="2.1"/>
-      <path d="M9 20H16L20 11H14M20 14L23 20" stroke="${strokeMain}" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
-    </svg>`
+    // Backwards-compatible aliases
+    braiding: `<svg width="24" height="22" viewBox="0 0 32 28" fill="none"><path d="M8 5C8 10 12 12 12 17C12 21 9 23 9 25" stroke="${strokeMain}" stroke-width="2.4" stroke-linecap="round"/><path d="M13 5C13 10 9 12 9 17C9 21 12 23 12 25" stroke="${strokeSub}" stroke-width="2.2" stroke-linecap="round"/><rect x="18" y="5" width="9" height="18" rx="2" stroke="${strokeMain}" stroke-width="2.1"/><path d="M18 9H23M18 13H23M18 17H23M18 21H23" stroke="${strokeSub}" stroke-width="1.8" stroke-linecap="round"/></svg>`,
+    barber: `<svg width="24" height="22" viewBox="0 0 32 28" fill="none"><circle cx="9" cy="21" r="3.5" stroke="${strokeMain}" stroke-width="2.2"/><circle cx="21" cy="21" r="3.5" stroke="${strokeMain}" stroke-width="2.2"/><path d="M11.5 18.5L22 5M18.5 18.5L8 5" stroke="${strokeSub}" stroke-width="2.3" stroke-linecap="round"/><circle cx="15" cy="13" r="1.5" fill="${strokeMain}"/></svg>`,
+    nails: `<svg width="24" height="22" viewBox="0 0 32 28" fill="none"><rect x="8" y="12" width="12" height="12" rx="3" stroke="${strokeMain}" stroke-width="2.2"/><path d="M11 12V7H17V12" stroke="${strokeSub}" stroke-width="2.1" stroke-linejoin="round"/><path d="M14 4V7" stroke="${strokeMain}" stroke-width="2.4" stroke-linecap="round"/><path d="M24 6L25 9L28 10L25 11L24 14L23 11L20 10L23 9L24 6Z" fill="${strokeMain}"/></svg>`,
+    makeup: `<svg width="24" height="22" viewBox="0 0 32 28" fill="none"><rect x="7" y="14" width="8" height="10" rx="1.5" stroke="${strokeSub}" stroke-width="2.1"/><path d="M8.5 14V8.5C8.5 7 13.5 5.5 13.5 8.5V14" fill="${strokeMain}" stroke="${strokeMain}" stroke-width="1.5"/><path d="M21 15V24" stroke="${strokeSub}" stroke-width="2.4" stroke-linecap="round"/><path d="M17.5 9C17.5 6.5 24.5 6.5 24.5 9L23 15H19L17.5 9Z" stroke="${strokeMain}" stroke-width="2.1" stroke-linejoin="round"/></svg>`,
+    cleaning: `<svg width="24" height="22" viewBox="0 0 32 28" fill="none"><path d="M21 5L14 15" stroke="${strokeSub}" stroke-width="2.3" stroke-linecap="round"/><path d="M9 15H19L21 23H7L9 15Z" stroke="${strokeMain}" stroke-width="2.1" stroke-linejoin="round"/><circle cx="24" cy="11" r="1.5" fill="${strokeMain}"/></svg>`,
+    handyman: `<svg width="24" height="22" viewBox="0 0 32 28" fill="none"><path d="M9 22L21 10" stroke="${strokeMain}" stroke-width="2.4" stroke-linecap="round"/><path d="M18 7L24 13M10 9L14 13" stroke="${strokeSub}" stroke-width="2.3" stroke-linecap="round"/></svg>`,
+    plumbing: `<svg width="24" height="22" viewBox="0 0 32 28" fill="none"><path d="M17 5L10 15H16L14 23L22 13H16L17 5Z" stroke="${strokeMain}" stroke-width="2.1" stroke-linejoin="round"/></svg>`
   };
 
-  return icons[catId] || icons.braiding;
+  return icons[catId] || icons.repairs_construction;
 }
 
 // Small crisp icon inside the blue badge on each provider's map marker
@@ -555,6 +554,11 @@ function initSplashScreen() {
   const fillEl = document.getElementById('splashLoaderFill');
   if (!splashEl) return;
 
+  const hasOnboarded = localStorage.getItem('findit_onboarded_v2');
+  if (!hasOnboarded) {
+    state.onboardingActive = true;
+  }
+
   setTimeout(() => {
     if (fillEl) fillEl.style.width = '100%';
   }, 50);
@@ -562,7 +566,129 @@ function initSplashScreen() {
   setTimeout(() => {
     splashEl.classList.add('hidden');
     state.splashDismissed = true;
-  }, 1050);
+    renderAll();
+  }, 1200);
+}
+
+function renderOnboardingLayer() {
+  let container = document.getElementById('onboardingRoot');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'onboardingRoot';
+    document.body.appendChild(container);
+  }
+
+  if (!state.onboardingActive) {
+    container.innerHTML = '';
+    return;
+  }
+
+  const slide = state.onboardingSlide || 0;
+
+  if (slide === 0) {
+    // Slide 1: Matches Screenshot 3 (Post task and receive competitive bids)
+    container.innerHTML = `
+      <div class="airmass-onboarding-screen">
+        <div class="onboarding-top-nav">
+          <button class="onboarding-skip-btn" onclick="finishOnboarding()">Skip</button>
+        </div>
+
+        <div class="onboarding-graphic-container">
+          <div class="onboarding-mock-phone">
+            <div class="onboarding-mock-map-bg" style="background-image: radial-gradient(#CBD5E1 1.5px, transparent 1.5px), radial-gradient(#CBD5E1 1.5px, #F8FAFC 1.5px); background-size: 20px 20px;"></div>
+            
+            <div class="onboarding-pin-bubble" style="top:25px; left:40px;">${uiIcon('pin', 12)}</div>
+            <div class="onboarding-pin-bubble" style="top:45px; right:35px;">${uiIcon('pin', 12)}</div>
+            <div class="onboarding-pin-bubble" style="bottom:60px; left:30px;">${uiIcon('pin', 12)}</div>
+
+            <div class="onboarding-bid-card" style="top:55px; left:18px;">
+              <span style="color:#FF4D4D;">★ 4.9</span>
+              <span>$25 USD</span>
+            </div>
+
+            <div class="onboarding-bid-card" style="top:110px; right:12px; animation-delay:1.5s;">
+              <span style="color:#FF4D4D;">★ 5.0</span>
+              <span>$30 USD</span>
+            </div>
+
+            <img class="onboarding-character-img" src="https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=600&q=80" alt="Client" />
+          </div>
+        </div>
+
+        <div class="onboarding-footer-area">
+          <div class="onboarding-headline-text">
+            Post your task and receive competitive <span class="highlight-accent">bids</span> from verified experts nearby.
+          </div>
+
+          <div class="onboarding-pagination-dots">
+            <span class="onboarding-dot active"></span>
+            <span class="onboarding-dot"></span>
+          </div>
+
+          <button class="onboarding-cta-btn" onclick="nextOnboardingSlide()">
+            <span>Next</span>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+          </button>
+        </div>
+      </div>
+    `;
+  } else {
+    // Slide 2: Matches Screenshot 2 (Receive instant alerts when clients nearby request your services)
+    container.innerHTML = `
+      <div class="airmass-onboarding-screen">
+        <div class="onboarding-top-nav">
+          <button class="onboarding-skip-btn" onclick="finishOnboarding()">Skip</button>
+        </div>
+
+        <div class="onboarding-graphic-container">
+          <div class="onboarding-mock-phone">
+            <div class="onboarding-mock-map-bg" style="background-image: radial-gradient(#CBD5E1 1.5px, transparent 1.5px), radial-gradient(#CBD5E1 1.5px, #F8FAFC 1.5px); background-size: 20px 20px;"></div>
+
+            <div class="onboarding-pin-bubble" style="top:30px; left:50px;">${uiIcon('pin', 12)}</div>
+            <div class="onboarding-pin-bubble" style="top:40px; right:40px;">${uiIcon('pin', 12)}</div>
+
+            <div class="onboarding-bid-card" style="top:70px; left:16px;">
+              <span style="color:#0066FF;">⚡ New Task</span>
+              <span>Borrowdale</span>
+            </div>
+
+            <div class="onboarding-bid-card" style="top:125px; right:14px; animation-delay:1.2s;">
+              <span style="color:#10B981;">💵 $45 Offer</span>
+            </div>
+
+            <img class="onboarding-character-img" src="https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=600&q=80" alt="Specialist" />
+          </div>
+        </div>
+
+        <div class="onboarding-footer-area">
+          <div class="onboarding-headline-text">
+            Receive <span class="highlight-accent">instant alerts</span> when clients nearby in Harare request your services.
+          </div>
+
+          <div class="onboarding-pagination-dots">
+            <span class="onboarding-dot"></span>
+            <span class="onboarding-dot active"></span>
+          </div>
+
+          <button class="onboarding-cta-btn" onclick="finishOnboarding()">
+            <span>Get Started</span>
+          </button>
+        </div>
+      </div>
+    `;
+  }
+}
+
+function nextOnboardingSlide() {
+  state.onboardingSlide = 1;
+  renderAll();
+}
+
+function finishOnboarding() {
+  localStorage.setItem('findit_onboarded_v2', 'true');
+  state.onboardingActive = false;
+  state.hubView = 'HUB';
+  renderAll();
 }
 
 let lastStateFingerprint = '';
@@ -1580,6 +1706,7 @@ function renderAll() {
   renderModalLayer();
   renderChatDrawer();
   renderCallModal();
+  renderOnboardingLayer();
 }
 
 function getCustomerActiveRequest() {
@@ -1776,9 +1903,9 @@ function renderUiOverlay(force = false) {
   const overlay = document.getElementById('uiOverlay');
   if (!overlay) return;
 
-  if (!state.isAuthenticated) {
+  if (state.role === 'PROVIDER' && !state.isAuthenticated) {
     overlay.innerHTML = renderNativeAuthScreen();
-    lastUiOverlaySignature = 'UNAUTH';
+    lastUiOverlaySignature = 'UNAUTH_PROV';
     return;
   }
 
@@ -1815,6 +1942,7 @@ function renderUiOverlay(force = false) {
   const overlaySig = [
     state.role,
     state.screenStep,
+    state.hubView,
     state.providerTab,
     state.isSheetMinimized,
     state.selectedCategoryId,
@@ -1865,8 +1993,10 @@ function renderUiOverlay(force = false) {
       contentHtml = renderSearchingRadarOverlay(activeReq);
     } else if (state.screenStep === 'CONFIGURE') {
       contentHtml = renderConfigureFareOverlay();
+    } else if (state.hubView === 'MARKETPLACE') {
+      contentHtml = renderJobMarketplaceOverlay();
     } else {
-      contentHtml = renderHomeDiscoveryOverlay();
+      contentHtml = renderMainHubOverlay();
     }
   }
 
@@ -1972,6 +2102,195 @@ function getPersonalizedAndTopServices() {
   });
 
   return items.slice(0, 4);
+}
+
+// ----------------------------------------------------------------------------
+// AIRMASS-STYLE MULTI-SERVICE HUB & JOB MARKETPLACE OVERLAYS
+// ----------------------------------------------------------------------------
+function openJobMarketplaceView() {
+  state.hubView = 'MARKETPLACE';
+  state.screenStep = 'HOME';
+  renderAll();
+}
+
+function returnToMainHub() {
+  state.hubView = 'HUB';
+  state.screenStep = 'HOME';
+  renderAll();
+}
+
+function openComingSoonServiceModal(title, desc) {
+  state.activeModal = 'COMING_SOON_SERVICE';
+  state.modalData = { title, desc };
+  renderModalLayer();
+}
+
+function openChangelogModal() {
+  state.activeModal = 'CHANGELOG_MODAL';
+  renderModalLayer();
+}
+
+function selectCategoryForJobPosting(catId) {
+  state.selectedCategoryId = catId;
+  state.selectedSubServiceIdx = 0;
+  state.screenStep = 'CONFIGURE';
+  syncRecommendedFare();
+  renderAll();
+}
+
+function renderMainHubOverlay() {
+  const changelog = (state.db?.changelogs && state.db.changelogs[0]) || null;
+  const hubServices = state.db?.hubServices || [
+    {
+      id: 'job_marketplace',
+      title: 'Job Marketplace',
+      subtitle: 'Hire verified local trades & pros',
+      status: 'ACTIVE',
+      badge: '7 Categories',
+      imageUrl: 'https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=800&q=80'
+    },
+    {
+      id: 'online_shopping',
+      title: 'Online Shopping',
+      subtitle: 'Harare shops & fast delivery',
+      status: 'COMING_SOON',
+      badge: 'Coming Soon',
+      imageUrl: 'https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=800&q=80'
+    },
+    {
+      id: 'transport_carriers',
+      title: 'Transport & Carriers',
+      subtitle: 'Bakkies, trucks & haulage',
+      status: 'COMING_SOON',
+      badge: 'Coming Soon',
+      imageUrl: 'https://images.unsplash.com/photo-1519003722824-194d4455a60c?auto=format&fit=crop&w=800&q=80'
+    }
+  ];
+
+  return `
+    <div class="airmass-hub-wrapper">
+      <!-- Top Navigation Row -->
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+        <button class="indrive-circle-btn" onclick="openSideDrawerModal()" title="Menu">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        </button>
+
+        <div style="display:flex; align-items:center; gap:6px;">
+          <img src="/assets/logo-icon.svg" width="24" height="24" style="border-radius:6px;" alt="Logo" />
+          <span style="font-size:16px; font-weight:900; color:#0B1B3D;"><span style="color:#0066FF;">Findit</span> Harare</span>
+        </div>
+
+        ${state.isAuthenticated ? `
+          <button class="indrive-circle-btn" onclick="openSideDrawerModal()" title="Profile" style="background:var(--blue-soft); color:var(--blue-primary); font-weight:800; font-size:12px;">
+            ${state.currentUser?.avatarInitials || (state.currentUser?.name ? state.currentUser.name.slice(0, 2).toUpperCase() : 'FH')}
+          </button>
+        ` : `
+          <button class="btn-primary-blue" style="height:34px; padding:0 12px; font-size:12px; border-radius:99px; width:auto;" onclick="openSignUpModal('CUSTOMER')">
+            <span>Sign In</span>
+          </button>
+        `}
+      </div>
+
+      <!-- Admin Dynamic Changelog / Announcement Banner -->
+      ${changelog ? `
+        <div style="background:#EFF6FF; border:1.5px solid #BFDBFE; border-radius:14px; padding:10px 14px; margin-bottom:14px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
+          <div style="display:flex; align-items:center; gap:8px; min-width:0;">
+            <span style="color:#0066FF; flex-shrink:0;">${uiIcon('sparkle', 16)}</span>
+            <div style="min-width:0;">
+              <div style="font-size:12px; font-weight:800; color:#1E40AF; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${changelog.title}</div>
+              <div style="font-size:11px; color:#3B82F6; font-weight:600;">${changelog.version} • Latest Updates</div>
+            </div>
+          </div>
+          <button class="small-pill-btn" onclick="openChangelogModal()" style="font-size:11px; padding:4px 8px; flex-shrink:0;">View</button>
+        </div>
+      ` : ''}
+
+      <!-- Main Welcome Header (Matches Screenshot 1) -->
+      <div class="airmass-hub-header">
+        <div class="airmass-hub-title">Welcome to Findit</div>
+        <div class="airmass-hub-subtitle">What do you need today?</div>
+      </div>
+
+      <!-- 3 Service Hub Grid (Matches Screenshot 1) -->
+      <div class="airmass-hub-grid">
+        ${hubServices.map((srv, idx) => {
+          const isMarketplace = srv.id === 'job_marketplace';
+          const isFullWidth = idx === 2;
+          return `
+            <div
+              class="airmass-hub-card"
+              style="${isFullWidth ? 'grid-column: span 2;' : ''}"
+              onclick="${isMarketplace ? 'openJobMarketplaceView()' : `openComingSoonServiceModal('${srv.title}', '${srv.subtitle}')`}"
+            >
+              <div class="airmass-hub-card-img-wrap" style="${isFullWidth ? 'height:130px;' : 'height:150px;'}">
+                <img class="airmass-hub-card-img" src="${srv.imageUrl || 'https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=600&q=80'}" alt="${srv.title}" />
+                <span class="airmass-hub-card-badge ${srv.status === 'ACTIVE' ? 'active-pro' : ''}">
+                  ${srv.badge || (srv.status === 'ACTIVE' ? 'Active' : 'Coming Soon')}
+                </span>
+              </div>
+              <div class="airmass-hub-card-label">
+                <div class="airmass-hub-card-name">${srv.title}</div>
+                <div class="airmass-hub-card-sub">${srv.subtitle}</div>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function renderJobMarketplaceOverlay() {
+  const categories = state.db?.categories || [];
+
+  return `
+    <div class="airmass-hub-wrapper">
+      <!-- Top Navigation: Back to Hub + Menu -->
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <button class="btn-dark-sec" style="height:36px; padding:0 12px; font-size:12.5px; border-radius:10px; width:auto; display:inline-flex; align-items:center; gap:4px;" onclick="returnToMainHub()">
+          ${uiIcon('chevronLeft', 16)}
+          <span>Hub</span>
+        </button>
+
+        <div style="font-size:15px; font-weight:900; color:#0B1B3D;">Job Marketplace</div>
+
+        <button class="indrive-circle-btn" onclick="openSideDrawerModal()" title="Menu">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        </button>
+      </div>
+
+      <div style="margin-bottom:14px;">
+        <div style="font-size:20px; font-weight:900; color:#0B1B3D;">Select a Job Category</div>
+        <div style="font-size:12.5px; color:#64748B; margin-top:2px;">Post your task, describe what you need, and receive bids</div>
+      </div>
+
+      <!-- The 7 Job Categories -->
+      <div class="job-categories-container" style="padding:0;">
+        ${categories.map((cat) => `
+          <div class="job-category-row-card" onclick="selectCategoryForJobPosting('${cat.id}')">
+            <div class="job-category-header-line">
+              <div class="job-category-icon-box">
+                ${getCategoryVectorSvg(cat.id, false)}
+              </div>
+              <div style="flex:1; min-width:0;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <span style="font-size:14.5px; font-weight:800; color:#0F172A;">${cat.fullName || cat.name}</span>
+                  <span style="font-size:12px; color:#0066FF; font-weight:800;">From $${cat.suggestedMinUsd || 15}</span>
+                </div>
+                <div style="font-size:11.5px; color:#64748B; margin-top:2px; line-height:1.35;">${cat.tagline || ''}</div>
+              </div>
+            </div>
+
+            <div class="job-category-subtasks-chips">
+              ${(cat.subServices || []).slice(0, 5).map(s => `
+                <span class="job-subtask-chip">${s.name}</span>
+              `).join('')}
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
 }
 
 // ----------------------------------------------------------------------------
@@ -2753,37 +3072,211 @@ function renderNativeAuthScreen() {
 }
 
 function renderSignUpWizardInnerHtml(isFullScreen = false) {
-  const suburbs = state.db?.suburbs || [];
-  const activeCategories = (state.db?.categories || []).filter((c) => c.status === 'ACTIVE');
+  const categories = state.db?.categories || [];
 
-  // STEP 1: PHONE NUMBER & ACCOUNT DETAILS
-  if (state.authStep === 'PHONE') {
-    return `
-      <div>
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:18px;">
-          <div style="display:flex; align-items:center; gap:10px;">
-            <img src="/assets/logo-icon.svg" width="38" height="38" style="border-radius:11px; display:block;" alt="Findit Logo" />
+  // ==========================================
+  // A. CUSTOMER SIGN-UP (2-STEP: DETAILS + FACE ID)
+  // ==========================================
+  if (state.authRole === 'CUSTOMER') {
+    if (state.authStep === 'PHONE') {
+      return `
+        <div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <img src="/assets/logo-icon.svg" width="36" height="36" style="border-radius:10px; display:block;" alt="Findit Logo" />
+              <div>
+                <div style="font-size:18px; font-weight:800; color:var(--text-main);">Findit Harare</div>
+                <div style="font-size:11.5px; color:var(--text-secondary); font-weight:600;">Client Account (Step 1 of 2)</div>
+              </div>
+            </div>
+            ${!isFullScreen ? `<button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>` : ''}
+          </div>
+
+          <!-- Account Role Switcher -->
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:14px;">
+            <button
+              type="button"
+              class="${state.authRole === 'CUSTOMER' ? 'btn-primary-blue' : 'btn-dark-sec'}"
+              style="height:42px; font-size:12.5px;"
+              onclick="state.authRole='CUSTOMER'; renderAll();"
+            >
+              ${uiIcon('user', 14)}
+              <span>Client Account</span>
+            </button>
+            <button
+              type="button"
+              class="${state.authRole === 'PROVIDER' ? 'btn-primary-blue' : 'btn-dark-sec'}"
+              style="height:42px; font-size:12.5px;"
+              onclick="state.authRole='PROVIDER'; state.authStep='PHONE'; renderAll();"
+            >
+              ${uiIcon('briefcase', 14)}
+              <span>Service Provider</span>
+            </button>
+          </div>
+
+          <div style="font-size:20px; font-weight:900; color:var(--text-main); margin-bottom:4px;">
+            Create Your Account
+          </div>
+          <div style="font-size:12.5px; color:var(--text-secondary); margin-bottom:16px;">
+            Existing accounts log in instantly; new accounts verify face ID in Step 2.
+          </div>
+
+          <div style="display:flex; flex-direction:column; gap:12px; margin-bottom:14px;">
             <div>
-              <div style="font-size:18px; font-weight:800; color:var(--text-main);">Findit Harare</div>
-              <div style="font-size:11.5px; color:var(--text-secondary); font-weight:600;">Sign Up / Sign In (Step 1 of 2)</div>
+              <label style="font-size:11px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px; display:block;">Full Name</label>
+              <input
+                class="dark-input"
+                placeholder="e.g. Tendai Chikore"
+                value="${escapeHtml(state.authName || '')}"
+                oninput="state.authName = this.value"
+              />
+            </div>
+
+            <div>
+              <label style="font-size:11px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px; display:block;">WhatsApp / Mobile Number</label>
+              <div style="display:flex; gap:8px;">
+                <div style="background:var(--blue-soft); border:1.5px solid var(--blue-border); border-radius:12px; padding:10px 12px; font-weight:800; color:var(--blue-primary); display:inline-flex; align-items:center; gap:6px; white-space:nowrap; font-size:13px;">
+                  ${uiIcon('zwFlag', 18)}
+                  <span>+263</span>
+                </div>
+                <input
+                  type="tel"
+                  class="dark-input"
+                  style="font-size:15px; font-weight:800; flex:1;"
+                  placeholder="77 200 1001"
+                  value="${(state.authPhone || '').replace(/^\+?263\s*/, '')}"
+                  oninput="state.authPhone = '+263 ' + this.value"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label style="font-size:11px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px; display:block;">Create Password</label>
+              <input
+                type="password"
+                class="dark-input"
+                placeholder="••••••••"
+                value="${escapeHtml(state.authPassword || '')}"
+                oninput="state.authPassword = this.value"
+              />
             </div>
           </div>
+
+          <label style="display:flex; align-items:flex-start; gap:8px; font-size:11.5px; color:var(--text-secondary); margin-bottom:16px; line-height:1.45;">
+            <input type="checkbox" ${state.authTermsAccepted ? 'checked' : ''} onchange="state.authTermsAccepted = this.checked" style="margin-top:2px; accent-color:#0066FF;" />
+            <span>
+              I agree to Findit Harare's
+              <a href="javascript:void(0)" onclick="state.activeModal='TERMS_MODAL'; renderModalLayer();" style="color:var(--blue-primary); font-weight:700;">Terms &amp; Conditions</a>
+              and
+              <a href="javascript:void(0)" onclick="state.activeModal='PRIVACY_MODAL'; renderModalLayer();" style="color:var(--blue-primary); font-weight:700;">Privacy Policy</a>
+            </span>
+          </label>
+
+          <button type="button" class="btn-primary-blue" style="height:50px; font-size:15px; font-weight:800;" onclick="submitPhoneForFaceStep()">
+            ${uiIcon('camera', 18)}
+            <span>Continue to Step 2: Biometric Face ID</span>
+          </button>
+        </div>
+      `;
+    }
+
+    // Step 2: Client Face ID Verification
+    return `
+      <div>
+        <div class="cancel-sheet-header">
+          <button type="button" class="btn-dark-sec" style="padding:6px 12px;" onclick="stopFaceCameraStream(); state.authStep='PHONE'; renderAll();">
+            ${uiIcon('arrowLeft', 14)}
+            <span>Back</span>
+          </button>
           ${!isFullScreen ? `<button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>` : ''}
         </div>
 
-        <div style="font-size:21px; font-weight:800; color:var(--text-main); margin-bottom:4px;">
-          Enter your details
+        <div style="font-size:20px; font-weight:900; color:var(--text-main); margin-bottom:4px;">
+          Biometric Face ID
         </div>
-        <div style="font-size:13px; color:var(--text-secondary); margin-bottom:16px;">
-          Existing accounts log in instantly; new accounts proceed to face scan.
+        <div style="font-size:12.5px; color:var(--text-secondary); margin-bottom:16px;">
+          Step 2 of 2: Hold your phone at eye level inside the circle to verify your identity.
+        </div>
+
+        <!-- Biometric Circular Scanner Viewfinder -->
+        <div style="display:flex; flex-direction:column; align-items:center; margin-bottom:18px;">
+          <div class="ios-face-viewfinder">
+            ${state.faceVerifiedSuccess ? `
+              <div class="ios-face-id-success-tick">
+                <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              </div>
+            ` : state.authCapturedSelfieUrl ? `
+              <img src="${state.authCapturedSelfieUrl}" alt="Selfie" style="width:100%; height:100%; object-fit:cover; display:block;" />
+            ` : `
+              <video id="authSelfieVideo" autoplay playsinline muted></video>
+              <div class="ios-face-scanning-radar"></div>
+            `}
+            <canvas id="authSelfieCanvas" style="display:none;"></canvas>
+            <input type="file" id="authFaceFileInput" accept="image/*" style="display:none;" onchange="handleAuthFaceFileUpload(this)" />
+          </div>
+
+          ${state.faceVerifiedSuccess ? `
+            <div style="background:#ECFDF5; border:1.5px solid #10B981; color:#065F46; padding:8px 16px; border-radius:99px; font-weight:800; font-size:13px; display:inline-flex; align-items:center; gap:6px; margin-top:14px;">
+              ${uiIcon('check', 16)}
+              <span>Face ID Verified ✓</span>
+            </div>
+          ` : state.authCapturedSelfieUrl ? `
+            <div style="background:#ECFDF5; border:1px solid #10B981; color:#065F46; padding:7px 14px; border-radius:99px; font-weight:800; font-size:12px; display:inline-flex; align-items:center; gap:6px; margin-top:12px;">
+              ${uiIcon('check', 14)}
+              <span>Face Captured</span>
+            </div>
+          ` : `
+            <div id="authCameraHint" style="font-size:12px; color:var(--text-secondary); margin-top:12px; font-weight:600; text-align:center;">
+              Hold phone steady &amp; tap Verify Face
+            </div>
+          `}
+        </div>
+
+        ${!state.faceVerifiedSuccess ? `
+          <button type="button" class="btn-primary-blue" style="height:50px; font-size:15px; font-weight:800; margin-bottom:8px;" onclick="captureAndVerifyFaceId()">
+            ${uiIcon('camera', 18)}
+            <span>Verify Face with Face ID</span>
+          </button>
+          <button type="button" class="btn-dark-sec" style="height:44px; font-size:12.5px; font-weight:700; width:100%; display:inline-flex; align-items:center; justify-content:center; gap:8px;" onclick="document.getElementById('authFaceFileInput').click()">
+            ${uiIcon('image', 16)}
+            <span>Choose Photo from Device</span>
+          </button>
+        ` : `
+          <button type="button" class="btn-primary-blue" style="height:50px; font-size:15px; font-weight:800; background:#10B981;" onclick="finishNativeRegistration()">
+            ${uiIcon('check', 18)}
+            <span>Complete &amp; Enter Findit</span>
+          </button>
+        `}
+      </div>
+    `;
+  }
+
+  // ==========================================
+  // B. PROVIDER SIGN-UP (4-STEP: DETAILS + ID + FACE MATCH + CATEGORIES)
+  // ==========================================
+  // Provider Step 1: Details
+  if (state.authStep === 'PHONE') {
+    return `
+      <div>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <img src="/assets/logo-icon.svg" width="36" height="36" style="border-radius:10px; display:block;" alt="Findit Logo" />
+            <div>
+              <div style="font-size:18px; font-weight:800; color:var(--text-main);">Findit Harare</div>
+              <div style="font-size:11.5px; color:var(--text-secondary); font-weight:600;">Provider Sign Up (Step 1 of 4)</div>
+            </div>
+          </div>
+          ${!isFullScreen ? `<button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>` : ''}
         </div>
 
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:14px;">
           <button
             type="button"
             class="${state.authRole === 'CUSTOMER' ? 'btn-primary-blue' : 'btn-dark-sec'}"
-            style="height:44px; font-size:13px;"
-            onclick="state.authRole='CUSTOMER'; renderAll();"
+            style="height:42px; font-size:12.5px;"
+            onclick="state.authRole='CUSTOMER'; state.authStep='PHONE'; renderAll();"
           >
             ${uiIcon('user', 14)}
             <span>Client Account</span>
@@ -2791,7 +3284,7 @@ function renderSignUpWizardInnerHtml(isFullScreen = false) {
           <button
             type="button"
             class="${state.authRole === 'PROVIDER' ? 'btn-primary-blue' : 'btn-dark-sec'}"
-            style="height:44px; font-size:13px;"
+            style="height:42px; font-size:12.5px;"
             onclick="state.authRole='PROVIDER'; renderAll();"
           >
             ${uiIcon('briefcase', 14)}
@@ -2799,29 +3292,36 @@ function renderSignUpWizardInnerHtml(isFullScreen = false) {
           </button>
         </div>
 
-        <div style="display:flex; flex-direction:column; gap:12px; margin-bottom:16px;">
+        <div style="font-size:20px; font-weight:900; color:var(--text-main); margin-bottom:4px;">
+          Provider Credentials
+        </div>
+        <div style="font-size:12.5px; color:var(--text-secondary); margin-bottom:16px;">
+          Earn on your terms in Harare with real-time job cards and direct client bidding.
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:12px; margin-bottom:14px;">
           <div>
-            <label style="font-size:11.5px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px; display:block;">Full Name</label>
+            <label style="font-size:11px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px; display:block;">Full Legal Name</label>
             <input
               class="dark-input"
-              placeholder="e.g. Nyasha Mutasa"
-              value="${state.authName || ''}"
+              placeholder="e.g. Farai Nyoni"
+              value="${escapeHtml(state.authName || '')}"
               oninput="state.authName = this.value"
             />
           </div>
 
           <div>
-            <label style="font-size:11.5px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px; display:block;">WhatsApp / Phone Number</label>
-            <div style="display:flex; gap:10px;">
-              <div style="background:var(--blue-soft); border:1.5px solid var(--blue-border); border-radius:13px; padding:11px 13px; font-weight:800; color:var(--blue-primary); display:inline-flex; align-items:center; gap:7px; white-space:nowrap;">
-                ${uiIcon('zwFlag', 20)}
+            <label style="font-size:11px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px; display:block;">WhatsApp / Phone Number</label>
+            <div style="display:flex; gap:8px;">
+              <div style="background:var(--blue-soft); border:1.5px solid var(--blue-border); border-radius:12px; padding:10px 12px; font-weight:800; color:var(--blue-primary); display:inline-flex; align-items:center; gap:6px; white-space:nowrap; font-size:13px;">
+                ${uiIcon('zwFlag', 18)}
                 <span>+263</span>
               </div>
               <input
                 type="tel"
                 class="dark-input"
-                style="font-size:16px; font-weight:800; flex:1;"
-                placeholder="77 200 1001"
+                style="font-size:15px; font-weight:800; flex:1;"
+                placeholder="77 300 4001"
                 value="${(state.authPhone || '').replace(/^\+?263\s*/, '')}"
                 oninput="state.authPhone = '+263 ' + this.value"
               />
@@ -2829,116 +3329,342 @@ function renderSignUpWizardInnerHtml(isFullScreen = false) {
           </div>
 
           <div>
-            <label style="font-size:11.5px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px; display:block;">Location (Live GPS Detection)</label>
-            <div style="background:var(--blue-soft); border:1.5px solid var(--blue-border); border-radius:13px; padding:10px 13px; display:flex; align-items:center; justify-content:space-between; gap:8px;">
-              <div style="display:flex; align-items:center; gap:8px; min-width:0;">
-                <span style="color:var(--blue-primary); display:inline-flex;">${uiIcon('crosshair', 16)}</span>
-                <span style="font-size:12.5px; font-weight:700; color:var(--text-main); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-                  ${state.customSuburbLabel ? state.customSuburbLabel.split(',')[0] + ', Harare' : 'Harare Central (Live GPS)'}
-                </span>
-              </div>
-              <button type="button" class="small-pill-btn" onclick="useBrowserGeolocation(false); renderModalLayer();" style="flex-shrink:0;">
-                Detect Live
-              </button>
-            </div>
-            <div style="font-size:11px; color:var(--text-secondary); margin-top:4px;">No physical address typing required — live GPS detects your exact spot each time you use Findit.</div>
+            <label style="font-size:11px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px; display:block;">Create Password</label>
+            <input
+              type="password"
+              class="dark-input"
+              placeholder="••••••••"
+              value="${escapeHtml(state.authPassword || '')}"
+              oninput="state.authPassword = this.value"
+            />
           </div>
 
-          ${state.authRole === 'PROVIDER' ? `
-            <div>
-              <label style="font-size:11.5px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px; display:block;">Profession / Trade</label>
-              <select class="dark-input" onchange="state.authCategoryId = this.value">
-                ${activeCategories.map((c) => `<option value="${c.id}" ${c.id === state.authCategoryId ? 'selected' : ''}>${c.fullName || c.name}</option>`).join('')}
-              </select>
-            </div>
-            <div>
-              <label style="font-size:11.5px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px; display:block;">Starting Rate in USD ($)</label>
-              <input type="number" class="dark-input" placeholder="25" value="${state.authStartingPrice || 25}" oninput="state.authStartingPrice = this.value" />
-            </div>
-          ` : ''}
+          <div>
+            <label style="font-size:11px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px; display:block;">Business / Trade Name</label>
+            <input
+              class="dark-input"
+              placeholder="e.g. Nyoni Solar &amp; Electrical"
+              value="${escapeHtml(state.authBrandName || '')}"
+              oninput="state.authBrandName = this.value"
+            />
+          </div>
         </div>
 
-        <label style="display:flex; align-items:flex-start; gap:9px; font-size:12px; color:var(--text-secondary); margin-bottom:18px; line-height:1.45;">
-          <input type="checkbox" ${state.authTermsAccepted ? 'checked' : ''} onchange="state.authTermsAccepted = this.checked" style="margin-top:3px; accent-color:#0066FF;" />
-          <span>
-            I agree to Findit Harare's
-            <a href="javascript:void(0)" onclick="state.activeModal='TERMS_MODAL'; renderModalLayer();" style="color:var(--blue-primary); font-weight:700;">Terms &amp; Conditions</a>
-            and
-            <a href="javascript:void(0)" onclick="state.activeModal='PRIVACY_MODAL'; renderModalLayer();" style="color:var(--blue-primary); font-weight:700;">Privacy Policy</a>
-          </span>
-        </label>
-
-        <button type="button" class="btn-primary-blue" style="height:52px; font-size:15px; font-weight:800;" onclick="submitPhoneForFaceStep()">
-          ${uiIcon('camera', 18)}
-          <span>Continue to Step 2: Scan Face for Logo</span>
+        <button type="button" class="btn-primary-blue" style="height:50px; font-size:15px; font-weight:800;" onclick="submitProviderPhoneStep()">
+          ${uiIcon('shield', 18)}
+          <span>Continue to Step 2: Identification</span>
         </button>
       </div>
     `;
   }
 
-  // STEP 2: SCAN FACE FOR VERIFICATION & OFFICIAL PROFILE LOGO
+  // Provider Step 2: Government ID Authenticity
+  if (state.authStep === 'ID') {
+    return `
+      <div>
+        <div class="cancel-sheet-header">
+          <button type="button" class="btn-dark-sec" style="padding:6px 12px;" onclick="state.authStep='PHONE'; renderAll();">
+            ${uiIcon('arrowLeft', 14)}
+            <span>Back</span>
+          </button>
+          ${!isFullScreen ? `<button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>` : ''}
+        </div>
+
+        <div style="font-size:20px; font-weight:900; color:var(--text-main); margin-bottom:4px;">
+          Government ID Authenticity
+        </div>
+        <div style="font-size:12.5px; color:var(--text-secondary); margin-bottom:12px;">
+          Step 2 of 4: Provide identification to verify your specialist account.
+        </div>
+
+        <!-- Privacy & Security Guarantee Banner -->
+        <div style="background:#F0FDF4; border:1.5px solid #BBF7D0; border-radius:12px; padding:10px 12px; margin-bottom:14px; display:flex; align-items:flex-start; gap:8px;">
+          <span style="color:#16A34A; margin-top:2px;">${uiIcon('shield', 16)}</span>
+          <div style="font-size:11.5px; color:#166534; line-height:1.45;">
+            <strong>Confidential &amp; Encrypted:</strong> Your ID document is private and exclusively stored in the Admin safety locker. It is <strong>never visible to clients or the public</strong>.
+          </div>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:12px; margin-bottom:16px;">
+          <div>
+            <label style="font-size:11px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px; display:block;">Select ID Document Type</label>
+            <select class="dark-input" onchange="state.authIdType=this.value">
+              <option value="National ID" ${state.authIdType === 'National ID' ? 'selected' : ''}>Zimbabwe National ID Card</option>
+              <option value="Passport" ${state.authIdType === 'Passport' ? 'selected' : ''}>Passport</option>
+              <option value="Driver Licence" ${state.authIdType === 'Driver Licence' ? 'selected' : ''}>Driver's Licence</option>
+            </select>
+          </div>
+
+          <div>
+            <label style="font-size:11px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px; display:block;">ID / Passport / Licence Number</label>
+            <input
+              class="dark-input"
+              placeholder="e.g. 63-2049182-Y-42"
+              value="${escapeHtml(state.authIdNumber || '')}"
+              oninput="state.authIdNumber = this.value"
+            />
+          </div>
+
+          <div>
+            <label style="font-size:11px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px; display:block;">Photo of ID (Front)</label>
+            ${state.authIdPhotoUrl ? `
+              <div style="position:relative; border-radius:12px; overflow:hidden; border:1.5px solid #10B981; max-height:150px; background:#000;">
+                <img src="${state.authIdPhotoUrl}" alt="ID Photo" style="width:100%; height:140px; object-fit:cover; display:block;" />
+                <button type="button" onclick="state.authIdPhotoUrl=null; renderAll();" style="position:absolute; top:8px; right:8px; background:rgba(0,0,0,0.7); color:#fff; border:none; border-radius:50%; width:28px; height:28px; cursor:pointer;">
+                  ${uiIcon('close', 14)}
+                </button>
+              </div>
+            ` : `
+              <div style="border:2px dashed #CBD5E1; border-radius:12px; padding:18px; text-align:center; background:#F8FAFC; cursor:pointer;" onclick="document.getElementById('authIdFileInput').click()">
+                <div style="color:var(--blue-primary); margin-bottom:6px;">${uiIcon('camera', 24)}</div>
+                <div style="font-size:13px; font-weight:800; color:#0F172A;">Snap or Upload ID Document Photo</div>
+                <div style="font-size:11px; color:#64748B; margin-top:2px;">Clear photo of ID card or passport details page</div>
+              </div>
+              <input type="file" id="authIdFileInput" accept="image/*" style="display:none;" onchange="handleAuthIdFileUpload(this)" />
+            `}
+          </div>
+        </div>
+
+        <button type="button" class="btn-primary-blue" style="height:50px; font-size:15px; font-weight:800;" onclick="submitProviderIdStep()">
+          ${uiIcon('camera', 18)}
+          <span>Continue to Step 3: Biometric Face Match</span>
+        </button>
+      </div>
+    `;
+  }
+
+  // Provider Step 3: Biometric Face Match
+  if (state.authStep === 'FACE') {
+    return `
+      <div>
+        <div class="cancel-sheet-header">
+          <button type="button" class="btn-dark-sec" style="padding:6px 12px;" onclick="stopFaceCameraStream(); state.authStep='ID'; renderAll();">
+            ${uiIcon('arrowLeft', 14)}
+            <span>Back</span>
+          </button>
+          ${!isFullScreen ? `<button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>` : ''}
+        </div>
+
+        <div style="font-size:20px; font-weight:900; color:var(--text-main); margin-bottom:4px;">
+          Live Biometric Face Match
+        </div>
+        <div style="font-size:12.5px; color:var(--text-secondary); margin-bottom:16px;">
+          Step 3 of 4: Match your live face against the submitted identification.
+        </div>
+
+        <div style="display:flex; flex-direction:column; align-items:center; margin-bottom:18px;">
+          <div class="ios-face-viewfinder">
+            ${state.faceVerifiedSuccess ? `
+              <div class="ios-face-id-success-tick">
+                <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              </div>
+            ` : state.authCapturedSelfieUrl ? `
+              <img src="${state.authCapturedSelfieUrl}" alt="Selfie" style="width:100%; height:100%; object-fit:cover; display:block;" />
+            ` : `
+              <video id="authSelfieVideo" autoplay playsinline muted></video>
+              <div class="ios-face-scanning-radar"></div>
+            `}
+            <canvas id="authSelfieCanvas" style="display:none;"></canvas>
+            <input type="file" id="authFaceFileInput" accept="image/*" style="display:none;" onchange="handleAuthFaceFileUpload(this)" />
+          </div>
+
+          ${state.faceVerifiedSuccess ? `
+            <div style="background:#ECFDF5; border:1.5px solid #10B981; color:#065F46; padding:8px 16px; border-radius:99px; font-weight:800; font-size:13px; display:inline-flex; align-items:center; gap:6px; margin-top:14px;">
+              ${uiIcon('check', 16)}
+              <span>Face Matches ID Document ✓</span>
+            </div>
+          ` : `
+            <div id="authCameraHint" style="font-size:12px; color:var(--text-secondary); margin-top:12px; font-weight:600; text-align:center;">
+              Hold phone steady &amp; tap Match Face
+            </div>
+          `}
+        </div>
+
+        ${!state.faceVerifiedSuccess ? `
+          <button type="button" class="btn-primary-blue" style="height:50px; font-size:15px; font-weight:800; margin-bottom:8px;" onclick="captureAndVerifyFaceId()">
+            ${uiIcon('camera', 18)}
+            <span>Scan &amp; Match Face</span>
+          </button>
+          <button type="button" class="btn-dark-sec" style="height:44px; font-size:12.5px; font-weight:700; width:100%; display:inline-flex; align-items:center; justify-content:center; gap:8px;" onclick="document.getElementById('authFaceFileInput').click()">
+            ${uiIcon('image', 16)}
+            <span>Choose Photo from Device</span>
+          </button>
+        ` : `
+          <button type="button" class="btn-primary-blue" style="height:50px; font-size:15px; font-weight:800;" onclick="state.authStep='CATEGORIES'; renderAll();">
+            <span>Continue to Step 4: Business Categories →</span>
+          </button>
+        `}
+      </div>
+    `;
+  }
+
+  // Provider Step 4: Select up to 3 Categories
+  const selectedCatCount = (state.authCategoryIds || []).length;
   return `
     <div>
       <div class="cancel-sheet-header">
-        <button type="button" class="btn-dark-sec" style="padding:6px 12px;" onclick="stopFaceCameraStream(); state.authStep='PHONE'; renderAll();">
+        <button type="button" class="btn-dark-sec" style="padding:6px 12px;" onclick="state.authStep='FACE'; renderAll();">
           ${uiIcon('arrowLeft', 14)}
           <span>Back</span>
         </button>
         ${!isFullScreen ? `<button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>` : ''}
       </div>
 
-      <div style="font-size:21px; font-weight:800; color:var(--text-main); margin-bottom:4px;">
-        Scan Face for Logo
-      </div>
-      <div style="font-size:13px; color:var(--text-secondary); margin-bottom:18px;">
-        Step 2 of 2: Snap your face photo to use as your official logo on Findit Harare.
-      </div>
-
-      <!-- Biometric Circular Face Logo Scanner Frame -->
-      <div style="display:flex; flex-direction:column; align-items:center; margin-bottom:20px;">
-        <div style="position:relative; width:220px; height:220px; border-radius:50%; border:3.5px solid var(--blue-primary); box-shadow:0 0 28px rgba(0,102,255,0.4); overflow:hidden; background:#0F172A; display:flex; align-items:center; justify-content:center;">
-          ${state.authCapturedSelfieUrl ? `
-            <img src="${state.authCapturedSelfieUrl}" alt="Face Logo" style="width:100%; height:100%; object-fit:cover; display:block;" />
-          ` : `
-            <video id="authSelfieVideo" autoplay playsinline muted style="width:100%; height:100%; object-fit:cover; display:block;"></video>
-          `}
-          <canvas id="authSelfieCanvas" style="display:none;"></canvas>
-          <input type="file" id="authFaceFileInput" accept="image/*" style="display:none;" onchange="handleAuthFaceFileUpload(this)" />
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+        <div style="font-size:20px; font-weight:900; color:var(--text-main);">
+          Select Business Categories
         </div>
-
-        ${state.authCapturedSelfieUrl ? `
-          <div style="background:#ECFDF5; border:1px solid #10B981; color:#065F46; padding:7px 14px; border-radius:99px; font-weight:800; font-size:12px; display:inline-flex; align-items:center; gap:6px; margin-top:14px;">
-            ${uiIcon('check', 14)}
-            <span>Face Logo Ready ✓</span>
-          </div>
-        ` : `
-          <div id="authCameraHint" style="font-size:12px; color:var(--text-secondary); margin-top:12px; font-weight:600; text-align:center;">
-            Position your face inside the circle &amp; tap Snap
-          </div>
-        `}
+        <span style="padding:3px 10px; border-radius:99px; background:var(--blue-soft); color:var(--blue-primary); font-size:12px; font-weight:800;">
+          Selected (${selectedCatCount}/3)
+        </span>
+      </div>
+      <div style="font-size:12.5px; color:var(--text-secondary); margin-bottom:14px;">
+        Step 4 of 4: Select up to <strong>3 categories</strong> you offer to receive matching job cards.
       </div>
 
-      ${!state.authCapturedSelfieUrl ? `
-        <button type="button" class="btn-primary-blue" style="height:52px; font-size:15px; font-weight:800; margin-bottom:10px;" onclick="captureAuthFaceSelfie()">
-          ${uiIcon('camera', 18)}
-          <span>Snap Face for Logo</span>
-        </button>
-        <button type="button" class="btn-dark-sec" style="height:46px; font-size:13px; font-weight:700; width:100%; display:inline-flex; align-items:center; justify-content:center; gap:8px;" onclick="document.getElementById('authFaceFileInput').click()">
-          ${uiIcon('image', 16)}
-          <span>Choose Photo from Device</span>
-        </button>
-      ` : `
-        <button type="button" class="btn-primary-blue" style="height:52px; font-size:15px; font-weight:800; margin-bottom:10px;" onclick="finishNativeRegistration()">
-          ${uiIcon('sparkle', 18)}
-          <span>Join Findit Harare</span>
-        </button>
-        <button type="button" class="btn-dark-sec" style="height:46px; font-size:13px; font-weight:700; width:100%; display:inline-flex; align-items:center; justify-content:center; gap:8px;" onclick="retakeAuthFaceSelfie()">
-          ${uiIcon('refresh', 15)}
-          <span>Retake Photo</span>
-        </button>
-      `}
+      <!-- Categories Selector Grid -->
+      <div class="provider-categories-selector-grid">
+        ${categories.map((c) => {
+          const isSelected = (state.authCategoryIds || []).includes(c.id);
+          return `
+            <div
+              class="provider-category-select-pill ${isSelected ? 'selected' : ''}"
+              onclick="toggleProviderAuthCategory('${c.id}')"
+            >
+              <div style="display:flex; align-items:center; gap:10px;">
+                <div style="width:32px; height:32px; display:flex; align-items:center; justify-content:center;">
+                  ${getCategoryVectorSvg(c.id, isSelected)}
+                </div>
+                <div>
+                  <div style="font-size:13.5px; font-weight:800;">${c.fullName || c.name}</div>
+                  <div style="font-size:11px; opacity:0.8; font-weight:600;">${(c.subServices || []).slice(0, 3).map(s => s.name).join(' • ')}</div>
+                </div>
+              </div>
+              <div style="width:20px; height:20px; border-radius:50%; border:2px solid ${isSelected ? '#0066FF' : '#CBD5E1'}; display:flex; align-items:center; justify-content:center; background:${isSelected ? '#0066FF' : 'transparent'}; color:#fff;">
+                ${isSelected ? uiIcon('check', 12) : ''}
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+
+      <button
+        type="button"
+        class="btn-primary-blue"
+        style="height:50px; font-size:15px; font-weight:800; margin-top:12px;"
+        onclick="finishNativeRegistration()"
+      >
+        ${uiIcon('check', 18)}
+        <span>Finish &amp; Start Receiving Jobs</span>
+      </button>
     </div>
   `;
+}
+
+function toggleProviderAuthCategory(catId) {
+  if (!Array.isArray(state.authCategoryIds)) state.authCategoryIds = [];
+  const idx = state.authCategoryIds.indexOf(catId);
+  if (idx >= 0) {
+    state.authCategoryIds.splice(idx, 1);
+  } else {
+    if (state.authCategoryIds.length >= 3) {
+      showToast('You can select up to 3 categories. Tap one to deselect first.', 'info');
+      return;
+    }
+    state.authCategoryIds.push(catId);
+  }
+  renderAll();
+}
+
+function handleAuthIdFileUpload(inputEl) {
+  const file = inputEl.files && inputEl.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    state.authIdPhotoUrl = e.target.result;
+    renderAll();
+  };
+  reader.readAsDataURL(file);
+}
+
+async function submitProviderPhoneStep() {
+  const name = (state.authName || '').trim();
+  const rawPhone = (state.authPhone || '').trim();
+  const digits = rawPhone.replace(/\D/g, '');
+
+  if (digits.length < 8) {
+    showToast('Please enter a valid Zimbabwe phone number (+263...)', 'error');
+    return;
+  }
+  if (!name) {
+    showToast('Please enter your full legal name', 'error');
+    return;
+  }
+
+  // 1-Click Instant Sign-In for Existing Accounts
+  const last9 = digits.slice(-9);
+  if (state.db) {
+    const list = state.db.providers || [];
+    const existing = list.find((item) => (item.phone || '').replace(/\D/g, '').slice(-9) === last9 && !item.isBanned);
+    if (existing) {
+      stopFaceCameraStream();
+      state.currentUser = existing;
+      state.isAuthenticated = true;
+      state.role = 'PROVIDER';
+      state.activeModal = null;
+      state.authStep = 'PHONE';
+      saveSession('PROVIDER', existing, false);
+      showToast(`Welcome back, ${existing.name}!`);
+      renderAll();
+      return;
+    }
+  }
+
+  state.authStep = 'ID';
+  renderAll();
+}
+
+function submitProviderIdStep() {
+  if (!state.authIdNumber && !state.authNationalId) {
+    showToast('Please enter your ID, Passport, or Licence number', 'error');
+    return;
+  }
+  state.authStep = 'FACE';
+  state.faceVerifiedSuccess = false;
+  renderAll();
+  setTimeout(startAuthFaceCamera, 120);
+}
+
+async function captureAndVerifyFaceId() {
+  const videoEl = document.getElementById('authSelfieVideo');
+  const canvas = document.getElementById('authSelfieCanvas') || document.createElement('canvas');
+  if (videoEl && videoEl.videoWidth) {
+    const size = Math.min(videoEl.videoWidth, videoEl.videoHeight) || 400;
+    canvas.width = 400;
+    canvas.height = 400;
+    const ctx = canvas.getContext('2d');
+    const sx = (videoEl.videoWidth - size) / 2;
+    const sy = (videoEl.videoHeight - size) / 2;
+    ctx.drawImage(videoEl, sx, sy, size, size, 0, 0, 400, 400);
+    state.authCapturedSelfieUrl = canvas.toDataURL('image/jpeg', 0.88);
+  }
+
+  // iOS Face ID Success Simulation: Vibration & Green Animated Checkmark
+  if ('vibrate' in navigator) {
+    try { navigator.vibrate([100, 50, 100]); } catch (e) {}
+  }
+  state.faceVerifiedSuccess = true;
+  stopFaceCameraStream();
+  renderAll();
+
+  // If customer, auto-finish in 800ms
+  if (state.authRole === 'CUSTOMER') {
+    setTimeout(() => {
+      finishNativeRegistration();
+    }, 850);
+  }
 }
 
 async function submitPhoneForFaceStep() {
@@ -3069,13 +3795,21 @@ async function finishNativeRegistration() {
       role: state.authRole,
       name: name,
       phone: state.authPhone.trim(),
+      password: state.authPassword || '',
       suburbId: state.authSuburbId,
       categoryId: state.authCategoryId,
+      categoryIds: state.authCategoryIds && state.authCategoryIds.length > 0 ? state.authCategoryIds.slice(0, 3) : [state.authCategoryId],
       skillTier: state.authSkillTier,
-      brandName: (state.authBrandName || `${name.split(' ')[0]} Mobile Services`).trim(),
+      brandName: (state.authBrandName || `${name.split(' ')[0]} Services`).trim(),
       startingPriceUsd: Number(state.authStartingPrice || 25),
-      nationalIdNumber: (state.authNationalId || '').trim() || '63-2948102-F-42',
+      nationalIdNumber: (state.authIdNumber || state.authNationalId || '').trim() || '63-2948102-F-42',
+      idDocument: {
+        type: state.authIdType || 'National ID',
+        number: (state.authIdNumber || state.authNationalId || '').trim() || '63-2948102-F-42',
+        photoUrl: state.authIdPhotoUrl || null
+      },
       avatarUrl: finalAvatar,
+      selfieUrl: finalAvatar,
       portfolioImageUrl: state.authPortfolioPhotoUrl || ''
     });
 
@@ -3098,8 +3832,14 @@ async function finishNativeRegistration() {
     }
 
     saveSession(res.role, res.user, false);
-    showToast(`Welcome to Findit Harare, ${res.user.name}!`);
-    renderAll();
+    showToast(`Welcome to Findit Harare, ${res.user.name}!`, 'success');
+
+    // If client had a pending task waiting in CONFIGURE step, submit it directly!
+    if (res.role === 'CUSTOMER' && state.screenStep === 'CONFIGURE' && state.draftNotes) {
+      submitServiceRequest();
+    } else {
+      renderAll();
+    }
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -3123,6 +3863,80 @@ function renderModalLayer() {
       <div class="modal-backdrop" onclick="closeModal()">
         <div class="indrive-modal-sheet" onclick="event.stopPropagation()">
           ${renderSignUpWizardInnerHtml(false)}
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // COMING SOON HUB SERVICE WAITLIST (ONLINE SHOPPING & TRANSPORT)
+  if (state.activeModal === 'COMING_SOON_SERVICE') {
+    const srvTitle = state.modalData?.title || 'Coming Soon';
+    const srvDesc = state.modalData?.desc || 'This service is currently expanding to Harare.';
+    const suburbs = state.db?.suburbs || [];
+    root.innerHTML = `
+      <div class="modal-backdrop" onclick="closeModal()">
+        <div class="indrive-modal-sheet" onclick="event.stopPropagation()">
+          <div class="cancel-sheet-header">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <span style="color:var(--blue-primary);">${uiIcon('sparkle', 22)}</span>
+              <div>
+                <div class="cancel-sheet-title">${srvTitle}</div>
+                <div style="font-size:11.5px; color:#D97706; font-weight:800;">Harare Early-Access Priority List</div>
+              </div>
+            </div>
+            <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
+          </div>
+
+          <div style="font-size:13px; color:var(--text-secondary); line-height:1.5; margin-bottom:14px;">
+            ${srvDesc} Join the priority waitlist to get notified via WhatsApp the moment we go live in your Harare area!
+          </div>
+
+          <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:14px;">
+            <input id="serviceWaitlistPhone" class="dark-input" value="${state.currentUser?.phone || '+263 77 200 1001'}" placeholder="Your WhatsApp (+263...)" />
+            <select id="serviceWaitlistSuburb" class="dark-input">
+              ${suburbs.map((s) => `<option value="${s.name}" ${s.id === state.selectedSuburbId ? 'selected' : ''}>Harare Area: ${s.name}</option>`).join('')}
+            </select>
+          </div>
+
+          <button class="btn-primary-blue" onclick="showToast('You have been added to the priority list! We will WhatsApp you upon launch.', 'success'); closeModal();">
+            ${uiIcon('check', 16)}
+            <span>Join Early Access List</span>
+          </button>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // PLATFORM CHANGELOG / ANNOUNCEMENTS MODAL
+  if (state.activeModal === 'CHANGELOG_MODAL') {
+    const logs = state.db?.changelogs || [];
+    root.innerHTML = `
+      <div class="modal-backdrop" onclick="closeModal()">
+        <div class="indrive-modal-sheet" onclick="event.stopPropagation()">
+          <div class="cancel-sheet-header">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span style="color:var(--blue-primary);">${uiIcon('sparkle', 20)}</span>
+              <div class="cancel-sheet-title">What's New in Findit Harare</div>
+            </div>
+            <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
+          </div>
+          <div style="max-height:360px; overflow-y:auto; display:flex; flex-direction:column; gap:14px;">
+            ${logs.map((cl) => `
+              <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px; padding:12px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                  <span style="font-size:13.5px; font-weight:800; color:#0F172A;">${cl.title}</span>
+                  <span style="font-size:11px; font-weight:800; background:#EFF6FF; color:#0066FF; padding:2px 8px; border-radius:99px;">${cl.version}</span>
+                </div>
+                <div style="font-size:11px; color:#64748B; margin-bottom:8px;">${cl.date}</div>
+                <ul style="margin:0; padding-left:18px; font-size:12px; color:#334155; line-height:1.5;">
+                  ${(cl.highlights || []).map((h) => `<li>${h}</li>`).join('')}
+                </ul>
+              </div>
+            `).join('')}
+          </div>
+          <button class="btn-primary-blue" style="margin-top:14px;" onclick="closeModal()">Got It</button>
         </div>
       </div>
     `;
@@ -6558,6 +7372,10 @@ function pushNavigationHistoryState(stateObj = {}) {
 }
 
 window.handleAndroidBack = function() {
+  if (state.incomingCall || state.activeCall) {
+    endInAppCall(true);
+    return true;
+  }
   if (state.activeModal) {
     closeModal();
     return true;
@@ -6571,8 +7389,13 @@ window.handleAndroidBack = function() {
     closeSideDrawerModal();
     return true;
   }
-  if (state.incomingCall || state.activeCall) {
-    endInAppCall(true);
+  if (state.onboardingActive) {
+    if (state.onboardingSlide > 0) {
+      state.onboardingSlide = 0;
+      renderAll();
+      return true;
+    }
+    finishOnboarding();
     return true;
   }
   if (state.role === 'PROVIDER' && state.providerTab && state.providerTab !== 'FEED' && state.providerTab !== 'ACTIVE_JOB') {
@@ -6580,7 +7403,13 @@ window.handleAndroidBack = function() {
     renderUiOverlay();
     return true;
   }
-  if (state.role === 'CUSTOMER' && state.screenStep === 'CONFIGURE') {
+  if (state.screenStep === 'CONFIGURE') {
+    state.screenStep = 'HOME';
+    renderAll();
+    return true;
+  }
+  if (state.hubView === 'MARKETPLACE' && state.role !== 'PROVIDER') {
+    state.hubView = 'HUB';
     state.screenStep = 'HOME';
     renderAll();
     return true;
