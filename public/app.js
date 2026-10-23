@@ -1888,7 +1888,7 @@ function renderAll() {
   syncMapVisibility();
   updateMapMarkers();
   renderFloatingOffersOverlay();
-  renderUiOverlay();
+  renderUiOverlay(false);
   renderModalLayer();
   renderChatDrawer();
   renderCallModal();
@@ -2085,9 +2085,17 @@ function renderFloatingOffersOverlay(force = false) {
 // ============================================================================
 let lastUiOverlaySignature = '';
 
-function renderUiOverlay(force = false) {
+function renderUiOverlay(force = true) {
   const overlay = document.getElementById('uiOverlay');
   if (!overlay) return;
+
+  // Never clobber an active input field inside uiOverlay during background polling
+  if (!force && document.activeElement && overlay.contains(document.activeElement)) {
+    const tag = document.activeElement.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
+      return;
+    }
+  }
 
   if (state.role === 'PROVIDER' && !state.isAuthenticated) {
     overlay.innerHTML = renderNativeAuthScreen();
@@ -2127,6 +2135,7 @@ function renderUiOverlay(force = false) {
 
   const overlaySig = [
     state.role,
+    state.isAuthenticated,
     state.screenStep,
     state.hubView,
     state.providerTab,
@@ -2135,6 +2144,20 @@ function renderUiOverlay(force = false) {
     state.selectedSubServiceIdx,
     state.selectedTierKey,
     state.draftFareUsd,
+    state.recommendedFareUsd,
+    state.draftPaymentMethod,
+    state.draftAutoAccept,
+    state.draftNotes,
+    state.draftPhotoUrl ? 1 : 0,
+    state.bookingFor,
+    state.timingType,
+    state.scheduledDate,
+    state.scheduledTime,
+    state.customAddress,
+    state.customSuburbLabel,
+    state.pendingSearchFareUsd,
+    state.walletTopupAmount,
+    state.walletTopupMethod,
     state.currentUser?.id,
     state.currentUser?.walletBalanceUsd,
     state.currentUser?.activeWarnings?.length || 0,
@@ -2774,11 +2797,11 @@ function renderConfigureFareOverlay() {
 
           <!-- inDrive Feature: Book for Myself vs Someone Else -->
           <div style="display:flex; background:rgba(0,0,0,0.04); border-radius:12px; padding:3px; margin-bottom:10px;">
-            <button type="button" style="flex:1; border:none; padding:7px 10px; border-radius:9px; font-size:12px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; ${state.bookingFor !== 'SOMEONE_ELSE' ? 'background:#FFFFFF; color:var(--blue-primary); box-shadow:0 1px 3px rgba(0,0,0,0.08);' : 'background:transparent; color:var(--text-secondary);'}" onclick="state.bookingFor='ME'; renderUiOverlay();">
+            <button type="button" style="flex:1; border:none; padding:7px 10px; border-radius:9px; font-size:12px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; ${state.bookingFor !== 'SOMEONE_ELSE' ? 'background:#FFFFFF; color:var(--blue-primary); box-shadow:0 1px 3px rgba(0,0,0,0.08);' : 'background:transparent; color:var(--text-secondary);'}" onclick="setBookingForMode('ME')">
               ${uiIcon('hailingPerson', 14)}
               <span>For Myself</span>
             </button>
-            <button type="button" style="flex:1; border:none; padding:7px 10px; border-radius:9px; font-size:12px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; ${state.bookingFor === 'SOMEONE_ELSE' ? 'background:#FFFFFF; color:var(--blue-primary); box-shadow:0 1px 3px rgba(0,0,0,0.08);' : 'background:transparent; color:var(--text-secondary);'}" onclick="state.bookingFor='SOMEONE_ELSE'; renderUiOverlay();">
+            <button type="button" style="flex:1; border:none; padding:7px 10px; border-radius:9px; font-size:12px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; ${state.bookingFor === 'SOMEONE_ELSE' ? 'background:#FFFFFF; color:var(--blue-primary); box-shadow:0 1px 3px rgba(0,0,0,0.08);' : 'background:transparent; color:var(--text-secondary);'}" onclick="setBookingForMode('SOMEONE_ELSE')">
               ${uiIcon('user', 14)}
               <span>For Someone Else</span>
             </button>
@@ -2791,18 +2814,18 @@ function renderConfigureFareOverlay() {
                 <span>Who are you ordering this service for?</span>
               </div>
               <div style="display:flex; gap:8px;">
-                <input type="text" placeholder="Recipient Name (e.g. Tendai)" value="${escapeHtml(state.recipientName || '')}" oninput="state.recipientName=this.value" style="flex:1; height:36px; border:1px solid #93C5FD; border-radius:8px; padding:0 10px; font-size:12.5px; background:#fff;" />
-                <input type="text" placeholder="Phone (e.g. 0772 123 456)" value="${escapeHtml(state.recipientPhone || '')}" oninput="state.recipientPhone=this.value" style="flex:1; height:36px; border:1px solid #93C5FD; border-radius:8px; padding:0 10px; font-size:12.5px; background:#fff;" />
+                <input id="recipientNameInput" type="text" placeholder="Recipient Name (e.g. Tendai)" value="${escapeHtml(state.recipientName || '')}" oninput="state.recipientName=this.value" style="flex:1; height:36px; border:1px solid #93C5FD; border-radius:8px; padding:0 10px; font-size:12.5px; background:#fff; color:#0F172A;" />
+                <input id="recipientPhoneInput" type="tel" placeholder="Phone (e.g. 0772 123 456)" value="${escapeHtml(state.recipientPhone || '')}" oninput="state.recipientPhone=this.value" style="flex:1; height:36px; border:1px solid #93C5FD; border-radius:8px; padding:0 10px; font-size:12.5px; background:#fff; color:#0F172A;" />
               </div>
             </div>
           ` : ''}
 
           <!-- Findit Dispatch: Need It Now vs Schedule for Later -->
           <div style="display:flex; background:rgba(0,0,0,0.04); border-radius:12px; padding:3px; margin-bottom:10px;">
-            <button type="button" style="flex:1; border:none; padding:7px 10px; border-radius:9px; font-size:12px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; ${state.timingType !== 'SCHEDULED' ? 'background:#FFFFFF; color:var(--blue-primary); box-shadow:0 1px 3px rgba(0,0,0,0.08);' : 'background:transparent; color:var(--text-secondary);'}" onclick="state.timingType='IMMEDIATE'; renderUiOverlay();">
+            <button type="button" style="flex:1; border:none; padding:7px 10px; border-radius:9px; font-size:12px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; ${state.timingType !== 'SCHEDULED' ? 'background:#FFFFFF; color:var(--blue-primary); box-shadow:0 1px 3px rgba(0,0,0,0.08);' : 'background:transparent; color:var(--text-secondary);'}" onclick="setDispatchTimingType('IMMEDIATE')">
               <span>⚡ Now (Immediate)</span>
             </button>
-            <button type="button" style="flex:1; border:none; padding:7px 10px; border-radius:9px; font-size:12px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; ${state.timingType === 'SCHEDULED' ? 'background:#FFFFFF; color:var(--blue-primary); box-shadow:0 1px 3px rgba(0,0,0,0.08);' : 'background:transparent; color:var(--text-secondary);'}" onclick="state.timingType='SCHEDULED'; if(!state.scheduledDate) state.scheduledDate=new Date().toISOString().split('T')[0]; if(!state.scheduledTime) state.scheduledTime='15:00'; renderUiOverlay();">
+            <button type="button" style="flex:1; border:none; padding:7px 10px; border-radius:9px; font-size:12px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; ${state.timingType === 'SCHEDULED' ? 'background:#FFFFFF; color:var(--blue-primary); box-shadow:0 1px 3px rgba(0,0,0,0.08);' : 'background:transparent; color:var(--text-secondary);'}" onclick="setDispatchTimingType('SCHEDULED')">
               ${uiIcon('clock', 13)}
               <span>Schedule for Later</span>
             </button>
@@ -2815,8 +2838,8 @@ function renderConfigureFareOverlay() {
                 <span>Findit Direct Schedule (Date &amp; Time)</span>
               </div>
               <div style="display:flex; gap:8px;">
-                <input type="date" value="${state.scheduledDate || ''}" onchange="state.scheduledDate=this.value" style="flex:1.2; height:36px; border:1px solid #CBD5E1; border-radius:8px; padding:0 8px; font-size:12.5px; background:#fff;" />
-                <input type="time" value="${state.scheduledTime || '15:00'}" onchange="state.scheduledTime=this.value" style="flex:0.8; height:36px; border:1px solid #CBD5E1; border-radius:8px; padding:0 8px; font-size:12.5px; background:#fff;" />
+                <input id="scheduledDateInput" type="date" value="${state.scheduledDate || ''}" oninput="state.scheduledDate=this.value" onchange="state.scheduledDate=this.value" style="flex:1.2; height:36px; border:1px solid #CBD5E1; border-radius:8px; padding:0 8px; font-size:12.5px; background:#fff; color:#0F172A;" />
+                <input id="scheduledTimeInput" type="time" value="${state.scheduledTime || '15:00'}" oninput="state.scheduledTime=this.value" onchange="state.scheduledTime=this.value" style="flex:0.8; height:36px; border:1px solid #CBD5E1; border-radius:8px; padding:0 8px; font-size:12.5px; background:#fff; color:#0F172A;" />
               </div>
             </div>
           ` : ''}
@@ -5767,6 +5790,60 @@ function handleLiveNotesInput(val) {
   }
 }
 
+function setBookingForMode(mode) {
+  state.bookingFor = mode === 'SOMEONE_ELSE' ? 'SOMEONE_ELSE' : 'ME';
+  renderUiOverlay(true);
+  if (state.bookingFor === 'SOMEONE_ELSE') {
+    setTimeout(() => {
+      const inp = document.getElementById('recipientNameInput');
+      if (inp) inp.focus();
+    }, 60);
+  }
+}
+
+function setDispatchTimingType(type) {
+  state.timingType = type === 'SCHEDULED' ? 'SCHEDULED' : 'IMMEDIATE';
+  if (state.timingType === 'SCHEDULED') {
+    if (!state.scheduledDate) {
+      const now = new Date();
+      const yyyy = now.getFullYear();
+      const mm = String(now.getMonth() + 1).padStart(2, '0');
+      const dd = String(now.getDate()).padStart(2, '0');
+      state.scheduledDate = `${yyyy}-${mm}-${dd}`;
+    }
+    if (!state.scheduledTime) {
+      state.scheduledTime = '15:00';
+    }
+  }
+  renderUiOverlay(true);
+}
+
+async function triggerSilentAiTaskAnalysis() {
+  try {
+    if (!state.draftNotes && !state.draftPhotoUrl) return;
+    const res = await apiPost('/api/ai/classify-task', {
+      description: state.draftNotes || '',
+      photoUrl: state.draftPhotoUrl || null,
+      currentCategoryId: state.selectedCategoryId,
+      suburbName: state.customSuburbLabel
+    });
+    if (res && res.matchedCategoryId) {
+      const matchedCat = (state.db?.categories || []).find((c) => c.id === res.matchedCategoryId && c.status === 'ACTIVE');
+      if (matchedCat && matchedCat.id !== state.selectedCategoryId) {
+        state.selectedCategoryId = matchedCat.id;
+        state.selectedSubServiceIdx = 0;
+      }
+      if (res.recommendedFareUsd && Number(res.recommendedFareUsd) >= 5) {
+        state.recommendedFareUsd = Number(res.recommendedFareUsd);
+        state.draftFareUsd = Number(res.recommendedFareUsd);
+      }
+      renderUiOverlay(true);
+    }
+  } catch (e) {
+    // Silent background intelligence — never interrupt user
+  }
+}
+
 function saveDraftNotes() {
   const el = document.getElementById('draftNotesInput');
   const val = el ? el.value.trim() : '';
@@ -5779,6 +5856,7 @@ function saveDraftNotes() {
   state.notesLeakageWarning = '';
   closeModal();
   renderAll();
+  triggerSilentAiTaskAnalysis();
 }
 
 async function submitServiceRequest() {
@@ -5788,6 +5866,16 @@ async function submitServiceRequest() {
     state.activeModal = 'SIGNUP_FLOW';
     renderAll();
     showToast('Please verify your WhatsApp first to find offers');
+    return;
+  }
+  if (state.bookingFor === 'SOMEONE_ELSE' && !(state.recipientName || '').trim()) {
+    showToast('Please enter the Recipient Name for "For Someone Else"', 'error');
+    const inp = document.getElementById('recipientNameInput');
+    if (inp) inp.focus();
+    return;
+  }
+  if (state.timingType === 'SCHEDULED' && (!state.scheduledDate || !state.scheduledTime)) {
+    showToast('Please select a Date and Time for your scheduled visit', 'error');
     return;
   }
   try {
@@ -5855,6 +5943,7 @@ function handleDraftStylePhotoUpload(inputEl) {
     state.draftPhotoUrl = e.target.result;
     renderAll();
     showToast('Desired style reference photo attached!');
+    triggerSilentAiTaskAnalysis();
   };
   reader.readAsDataURL(file);
 }
