@@ -36,6 +36,16 @@ const state = {
   draftPhotoUrl: null,
   notesLeakageWarning: '',
 
+  // inDrive Style: Booking for Myself or Someone Else
+  bookingFor: 'ME', // 'ME' | 'SOMEONE_ELSE'
+  recipientName: '',
+  recipientPhone: '',
+
+  // Airmass Express Dispatch: Immediate vs Scheduled Visit
+  timingType: 'IMMEDIATE', // 'IMMEDIATE' | 'SCHEDULED'
+  scheduledDate: '',
+  scheduledTime: '',
+
   // Active searching fare stepper (-0.50 / +0.50)
   pendingSearchFareUsd: null,
   searchTimerSeconds: 120,
@@ -138,6 +148,8 @@ function uiIcon(name, size = 16) {
     sparkle: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z"/></svg>`,
     notes: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`,
     edit: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`,
+    hailingPerson: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="8.5" cy="5" r="2.5"/><path d="M5 21v-6a3 3 0 0 1 3-3h2a3 3 0 0 1 3 3v6"/><path d="M12 11l5-4 2 1.5"/><path d="M6 12l-2 4"/></svg>`,
+    buildingOffice: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="10" y2="6"/><line x1="14" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="10" y2="10"/><line x1="14" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="10" y2="14"/><line x1="14" y1="14" x2="16" y2="14"/><path d="M10 22v-4h4v4"/></svg>`,
     trash: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>`,
     plus: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
     dotOnline: `<svg width="${s}" height="${s}" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;"><circle cx="8" cy="8" r="6" fill="#FFFFFF"/><circle cx="8" cy="8" r="3.5" fill="#10B981"/></svg>`,
@@ -303,7 +315,7 @@ function getCategoryVectorSvg(catId, isSelected = false) {
 
   const icons = {
     // Hairdresser: Comb + Braided Locks
-    braiding: `<svg width="32" height="28" viewBox="0 0 32 28" fill="none">
+    braiding: `<svg width="24" height="22" viewBox="0 0 32 28" fill="none">
       <path d="M8 5C8 10 12 12 12 17C12 21 9 23 9 25" stroke="${strokeMain}" stroke-width="2.4" stroke-linecap="round"/>
       <path d="M13 5C13 10 9 12 9 17C9 21 12 23 12 25" stroke="${strokeSub}" stroke-width="2.2" stroke-linecap="round"/>
       <rect x="18" y="5" width="9" height="18" rx="2" stroke="${strokeMain}" stroke-width="2.1"/>
@@ -311,7 +323,7 @@ function getCategoryVectorSvg(catId, isSelected = false) {
     </svg>`,
 
     // Barber: Open Barber Scissors + Clipper Blade
-    barber: `<svg width="32" height="28" viewBox="0 0 32 28" fill="none">
+    barber: `<svg width="24" height="22" viewBox="0 0 32 28" fill="none">
       <circle cx="9" cy="21" r="3.5" stroke="${strokeMain}" stroke-width="2.2"/>
       <circle cx="21" cy="21" r="3.5" stroke="${strokeMain}" stroke-width="2.2"/>
       <path d="M11.5 18.5L22 5M18.5 18.5L8 5" stroke="${strokeSub}" stroke-width="2.3" stroke-linecap="round"/>
@@ -319,7 +331,7 @@ function getCategoryVectorSvg(catId, isSelected = false) {
     </svg>`,
 
     // Nail Tech: Nail Polish Bottle + Brush + Sparkling Nail
-    nails: `<svg width="32" height="28" viewBox="0 0 32 28" fill="none">
+    nails: `<svg width="24" height="22" viewBox="0 0 32 28" fill="none">
       <rect x="8" y="12" width="12" height="12" rx="3" stroke="${strokeMain}" stroke-width="2.2"/>
       <path d="M11 12V7H17V12" stroke="${strokeSub}" stroke-width="2.1" stroke-linejoin="round"/>
       <path d="M14 4V7" stroke="${strokeMain}" stroke-width="2.4" stroke-linecap="round"/>
@@ -327,7 +339,7 @@ function getCategoryVectorSvg(catId, isSelected = false) {
     </svg>`,
 
     // Makeup (MUA): Lipstick Tube + Makeup Brush
-    makeup: `<svg width="32" height="28" viewBox="0 0 32 28" fill="none">
+    makeup: `<svg width="24" height="22" viewBox="0 0 32 28" fill="none">
       <rect x="7" y="14" width="8" height="10" rx="1.5" stroke="${strokeSub}" stroke-width="2.1"/>
       <path d="M8.5 14V8.5C8.5 7 13.5 5.5 13.5 8.5V14" fill="${strokeMain}" stroke="${strokeMain}" stroke-width="1.5"/>
       <path d="M21 15V24" stroke="${strokeSub}" stroke-width="2.4" stroke-linecap="round"/>
@@ -335,39 +347,39 @@ function getCategoryVectorSvg(catId, isSelected = false) {
     </svg>`,
 
     // Wig Stylist: Styled Wavy Wig on Stand + Crown
-    wigs: `<svg width="32" height="28" viewBox="0 0 32 28" fill="none">
+    wigs: `<svg width="24" height="22" viewBox="0 0 32 28" fill="none">
       <path d="M9 10L12 5L16 8.5L20 5L23 10H9Z" stroke="${strokeMain}" stroke-width="2.1" stroke-linejoin="round"/>
       <path d="M8 23C8 16 10 12 16 12C22 12 24 16 24 23" stroke="${strokeSub}" stroke-width="2.2" stroke-linecap="round"/>
       <circle cx="16" cy="17" r="3" stroke="${strokeMain}" stroke-width="2"/>
     </svg>`,
 
     // Lashes & Brows: Eye with Curved Long Lashes
-    lashes: `<svg width="32" height="28" viewBox="0 0 32 28" fill="none">
+    lashes: `<svg width="24" height="22" viewBox="0 0 32 28" fill="none">
       <path d="M5 16C9 10 23 10 27 16C23 21 9 21 5 16Z" stroke="${strokeSub}" stroke-width="2.1" stroke-linejoin="round"/>
       <circle cx="16" cy="16" r="3" fill="${strokeMain}"/>
       <path d="M9 11L7 7M13.5 9.5L13 5.5M18.5 9.5L19 5.5M23 11L25 7" stroke="${strokeMain}" stroke-width="2.1" stroke-linecap="round"/>
     </svg>`,
 
     // Home Cleaning: Broom + Sparkles
-    cleaning: `<svg width="32" height="28" viewBox="0 0 32 28" fill="none">
+    cleaning: `<svg width="24" height="22" viewBox="0 0 32 28" fill="none">
       <path d="M21 5L14 15" stroke="${strokeSub}" stroke-width="2.3" stroke-linecap="round"/>
       <path d="M9 15H19L21 23H7L9 15Z" stroke="${strokeMain}" stroke-width="2.1" stroke-linejoin="round"/>
       <circle cx="24" cy="11" r="1.5" fill="${strokeMain}"/>
     </svg>`,
 
     // Handyman: Wrench + Hammer
-    handyman: `<svg width="32" height="28" viewBox="0 0 32 28" fill="none">
+    handyman: `<svg width="24" height="22" viewBox="0 0 32 28" fill="none">
       <path d="M9 22L21 10" stroke="${strokeMain}" stroke-width="2.4" stroke-linecap="round"/>
       <path d="M18 7L24 13M10 9L14 13" stroke="${strokeSub}" stroke-width="2.3" stroke-linecap="round"/>
     </svg>`,
 
     // Plumbing & Solar: Solar Lightning + Pipe Wrench
-    plumbing: `<svg width="32" height="28" viewBox="0 0 32 28" fill="none">
+    plumbing: `<svg width="24" height="22" viewBox="0 0 32 28" fill="none">
       <path d="M17 5L10 15H16L14 23L22 13H16L17 5Z" stroke="${strokeMain}" stroke-width="2.1" stroke-linejoin="round"/>
     </svg>`,
 
     // Errands: Delivery Bike / Fast Box
-    delivery: `<svg width="32" height="28" viewBox="0 0 32 28" fill="none">
+    delivery: `<svg width="24" height="22" viewBox="0 0 32 28" fill="none">
       <circle cx="9" cy="20" r="3" stroke="${strokeSub}" stroke-width="2.1"/>
       <circle cx="23" cy="20" r="3" stroke="${strokeSub}" stroke-width="2.1"/>
       <path d="M9 20H16L20 11H14M20 14L23 20" stroke="${strokeMain}" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
@@ -837,6 +849,29 @@ function handleIncomingRealtimeEvent(data) {
     } else if ((action === 'DECLINE' || action === 'END') && (state.activeCall || state.incomingCall)) {
       endInAppCall(false);
     }
+    return;
+  }
+
+  // 10. REAL-TIME WEBRTC P2P SIGNALING (Point A to Point B direct voice stream)
+  if (data.eventType === 'CALL_WEBRTC_SIGNAL' && data.payload) {
+    handleWebRtcSignalMessage(data.payload);
+    return;
+  }
+
+  // 11. AIRMASS EXPRESS: PROVIDER TRANSIT DELAY NOTICE
+  if (data.eventType === 'BOOKING_DELAYED' && data.payload?.request) {
+    const { requestId, request, delayNotice } = data.payload;
+    if (state.db?.requests) {
+      const idx = state.db.requests.findIndex((r) => r.id === requestId);
+      if (idx >= 0) state.db.requests[idx] = request;
+    }
+    if (state.role === 'CUSTOMER' && state.activeRequestId === requestId) {
+      showToast(`Transit Notice: Provider running ~${delayNotice.minutes}m late (${delayNotice.reason})`);
+      if ('vibrate' in navigator) try { navigator.vibrate([200, 100, 200]); } catch (e) {}
+    }
+    updateChatFeedDomOnly(request);
+    lastUiOverlaySignature = '';
+    renderUiOverlay();
     return;
   }
 
@@ -2147,6 +2182,55 @@ function renderConfigureFareOverlay() {
             </button>
           </div>
 
+          <!-- inDrive Feature: Book for Myself vs Someone Else -->
+          <div style="display:flex; background:rgba(0,0,0,0.04); border-radius:12px; padding:3px; margin-bottom:10px;">
+            <button type="button" style="flex:1; border:none; padding:7px 10px; border-radius:9px; font-size:12px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; ${state.bookingFor !== 'SOMEONE_ELSE' ? 'background:#FFFFFF; color:var(--blue-primary); box-shadow:0 1px 3px rgba(0,0,0,0.08);' : 'background:transparent; color:var(--text-secondary);'}" onclick="state.bookingFor='ME'; renderUiOverlay();">
+              ${uiIcon('hailingPerson', 14)}
+              <span>For Myself</span>
+            </button>
+            <button type="button" style="flex:1; border:none; padding:7px 10px; border-radius:9px; font-size:12px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; ${state.bookingFor === 'SOMEONE_ELSE' ? 'background:#FFFFFF; color:var(--blue-primary); box-shadow:0 1px 3px rgba(0,0,0,0.08);' : 'background:transparent; color:var(--text-secondary);'}" onclick="state.bookingFor='SOMEONE_ELSE'; renderUiOverlay();">
+              ${uiIcon('user', 14)}
+              <span>For Someone Else</span>
+            </button>
+          </div>
+
+          ${state.bookingFor === 'SOMEONE_ELSE' ? `
+            <div style="background:#EFF6FF; border:1px solid #BFDBFE; border-radius:12px; padding:10px 12px; margin-bottom:10px;">
+              <div style="font-size:11.5px; font-weight:800; color:#1E40AF; margin-bottom:6px; display:flex; align-items:center; gap:4px;">
+                ${uiIcon('user', 12)}
+                <span>Who are you ordering this service for?</span>
+              </div>
+              <div style="display:flex; gap:8px;">
+                <input type="text" placeholder="Recipient Name (e.g. Tendai)" value="${escapeHtml(state.recipientName || '')}" oninput="state.recipientName=this.value" style="flex:1; height:36px; border:1px solid #93C5FD; border-radius:8px; padding:0 10px; font-size:12.5px; background:#fff;" />
+                <input type="text" placeholder="Phone (e.g. 0772 123 456)" value="${escapeHtml(state.recipientPhone || '')}" oninput="state.recipientPhone=this.value" style="flex:1; height:36px; border:1px solid #93C5FD; border-radius:8px; padding:0 10px; font-size:12.5px; background:#fff;" />
+              </div>
+            </div>
+          ` : ''}
+
+          <!-- Airmass Express Dispatch: Need It Now vs Schedule for Later -->
+          <div style="display:flex; background:rgba(0,0,0,0.04); border-radius:12px; padding:3px; margin-bottom:10px;">
+            <button type="button" style="flex:1; border:none; padding:7px 10px; border-radius:9px; font-size:12px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; ${state.timingType !== 'SCHEDULED' ? 'background:#FFFFFF; color:var(--blue-primary); box-shadow:0 1px 3px rgba(0,0,0,0.08);' : 'background:transparent; color:var(--text-secondary);'}" onclick="state.timingType='IMMEDIATE'; renderUiOverlay();">
+              <span>⚡ Now (Immediate)</span>
+            </button>
+            <button type="button" style="flex:1; border:none; padding:7px 10px; border-radius:9px; font-size:12px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; ${state.timingType === 'SCHEDULED' ? 'background:#FFFFFF; color:var(--blue-primary); box-shadow:0 1px 3px rgba(0,0,0,0.08);' : 'background:transparent; color:var(--text-secondary);'}" onclick="state.timingType='SCHEDULED'; if(!state.scheduledDate) state.scheduledDate=new Date().toISOString().split('T')[0]; if(!state.scheduledTime) state.scheduledTime='15:00'; renderUiOverlay();">
+              ${uiIcon('clock', 13)}
+              <span>Schedule for Later</span>
+            </button>
+          </div>
+
+          ${state.timingType === 'SCHEDULED' ? `
+            <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px; padding:10px 12px; margin-bottom:10px;">
+              <div style="font-size:11.5px; font-weight:800; color:#334155; margin-bottom:6px; display:flex; align-items:center; gap:4px;">
+                ${uiIcon('clock', 12)}
+                <span>Airmass Express Scheduling (Date &amp; Time)</span>
+              </div>
+              <div style="display:flex; gap:8px;">
+                <input type="date" value="${state.scheduledDate || ''}" onchange="state.scheduledDate=this.value" style="flex:1.2; height:36px; border:1px solid #CBD5E1; border-radius:8px; padding:0 8px; font-size:12.5px; background:#fff;" />
+                <input type="time" value="${state.scheduledTime || '15:00'}" onchange="state.scheduledTime=this.value" style="flex:0.8; height:36px; border:1px solid #CBD5E1; border-radius:8px; padding:0 8px; font-size:12.5px; background:#fff;" />
+              </div>
+            </div>
+          ` : ''}
+
           <div class="indrive-selected-tier-box">
             <div class="selected-tier-top" onclick="openServicePickerModal()" style="cursor:pointer;">
               <div>${getCategoryVectorSvg(activeCat.id, false)}</div>
@@ -2589,6 +2673,12 @@ function renderBookedTrackingOverlay(req) {
               </div>
               <div class="offer-pro-kit-line">${prov?.brandName || 'Mobile Service'} • ${req.status === 'ARRIVED' ? '<span style="color:#059669; font-weight:800;">Outside your gate</span>' : (acceptedOffer?.distanceKm ? `${acceptedOffer.distanceKm} km away` : 'En route')}</div>
               <div class="offer-pro-platinum-line">${prov?.skillTier || 'Platinum pro'}</div>
+              ${prov?.hasOffice ? `
+                <div style="font-size:11px; color:#475569; margin-top:3px; display:flex; align-items:center; gap:4px;">
+                  ${uiIcon('buildingOffice', 11)}
+                  <span>Workshop: <strong>${escapeHtml(prov.officeAddress || prov.officeSuburb)}</strong></span>
+                </div>
+              ` : ''}
             </div>
             <button class="offer-catalogue-pill" onclick="openProviderCatalogueModal('${prov?.id}')">
               <span>Catalogue</span>
@@ -2596,6 +2686,22 @@ function renderBookedTrackingOverlay(req) {
             </button>
           </div>
         </div>
+
+        ${req.delayNotice ? `
+          <div style="background:#FEF3C7; border:1px solid #F59E0B; border-radius:10px; padding:8px 10px; margin-bottom:8px; display:flex; align-items:center; gap:8px;">
+            <span style="font-size:16px;">⏱️</span>
+            <div>
+              <div style="font-size:12px; font-weight:800; color:#B45309;">Specialist Running ~${req.delayNotice.minutes}m Late</div>
+              <div style="font-size:11px; color:#92400E;">${escapeHtml(req.delayNotice.reason)}</div>
+            </div>
+          </div>
+        ` : ''}
+
+        ${req.bookingFor === 'SOMEONE_ELSE' ? `
+          <div style="font-size:11.5px; font-weight:700; color:#1E40AF; background:#DBEAFE; padding:6px 10px; border-radius:8px; margin-bottom:8px;">
+            👥 Ordered for: <strong>${escapeHtml(req.recipientName || 'Recipient')}</strong> ${req.recipientPhone ? `(${escapeHtml(req.recipientPhone)})` : ''}
+          </div>
+        ` : ''}
 
         <!-- Latest Message Snippet Pill (if messages exist) -->
         ${(req.messages && req.messages.length > 0) ? `
@@ -4011,6 +4117,89 @@ function renderModalLayer() {
     `;
     return;
   }
+
+  // PROVIDER PHYSICAL OFFICE / WORKSHOP SETTINGS MODAL
+  if (state.activeModal === 'PROVIDER_OFFICE_MODAL') {
+    const prov = state.currentUser || (state.db.providers || [])[0] || {};
+    const suburbs = state.db.suburbs || [];
+    root.innerHTML = `
+      <div class="modal-backdrop" onclick="closeModal()">
+        <div class="indrive-modal-sheet" onclick="event.stopPropagation()">
+          <div class="cancel-sheet-header">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span style="color:var(--blue-primary);">${uiIcon('buildingOffice', 20)}</span>
+              <div class="cancel-sheet-title">Physical Workshop / Office Base</div>
+            </div>
+            <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
+          </div>
+          <div style="font-size:12px; color:var(--text-secondary); margin-bottom:14px; line-height:1.45;">
+            Add your physical workshop or office location in Harare. Clients can see your base location, calculate travel distances, or choose to bring items/drop off at your shop.
+          </div>
+          <div style="display:flex; flex-direction:column; gap:12px;">
+            <label style="display:flex; align-items:center; gap:8px; font-size:13px; font-weight:700; color:var(--text-main); cursor:pointer;">
+              <input type="checkbox" id="providerHasOfficeInput" ${prov.hasOffice ? 'checked' : ''} style="width:18px; height:18px; accent-color:var(--blue-primary);" />
+              <span>I have a physical workshop or office</span>
+            </label>
+            <div>
+              <label style="font-size:12px; font-weight:700; color:var(--text-main);">Workshop / Office Suburb</label>
+              <select id="providerOfficeSuburbSelect" class="dark-input" style="width:100%; margin-top:4px;">
+                ${suburbs.map((s) => `<option value="${s.name}" ${(prov.officeSuburb || prov.primarySuburb || '') === s.name ? 'selected' : ''}>${s.name}, Harare</option>`).join('')}
+              </select>
+            </div>
+            <div>
+              <label style="font-size:12px; font-weight:700; color:var(--text-main);">Street Address / Shop Details</label>
+              <input id="providerOfficeAddressInput" class="dark-input" value="${prov.officeAddress || ''}" placeholder="e.g. Shop 14, Sam Levy's Village, Borrowdale" style="width:100%; margin-top:4px;" />
+            </div>
+            <button class="btn-primary-blue" onclick="saveProviderOfficeDetails()" style="margin-top:6px; height:42px;">
+              ${uiIcon('check', 16)}
+              <span>Save Office Location</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+    return;
+  }
+}
+
+function openProviderOfficeModal() {
+  state.activeModal = 'PROVIDER_OFFICE_MODAL';
+  renderModalLayer();
+}
+
+async function saveProviderOfficeDetails() {
+  const prov = state.currentUser || (state.db.providers || [])[0];
+  if (!prov) return;
+  const hasOffice = document.getElementById('providerHasOfficeInput')?.checked || false;
+  const officeSuburb = document.getElementById('providerOfficeSuburbSelect')?.value || '';
+  const officeAddress = document.getElementById('providerOfficeAddressInput')?.value?.trim() || '';
+
+  try {
+    const res = await fetch('/api/providers/office', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        providerId: prov.id,
+        hasOffice,
+        officeSuburb,
+        officeAddress
+      })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      prov.hasOffice = hasOffice;
+      prov.officeSuburb = officeSuburb;
+      prov.officeAddress = officeAddress;
+      showToast('Workshop / Office details updated', 'success');
+      closeModal();
+      renderAll();
+    } else {
+      showToast(data.error || 'Failed to update office', 'error');
+    }
+  } catch (err) {
+    console.error('Error saving provider office:', err);
+    showToast('Failed to save office location', 'error');
+  }
 }
 
 function getCancelReasonSvg(type) {
@@ -4162,6 +4351,12 @@ async function submitServiceRequest() {
       exactAddress: `${state.customAddress}, ${state.customSuburbLabel}`,
       lat: state.pinnedLat,
       lng: state.pinnedLng,
+      bookingFor: state.bookingFor || 'ME',
+      recipientName: state.bookingFor === 'SOMEONE_ELSE' ? (state.recipientName || 'Recipient') : null,
+      recipientPhone: state.bookingFor === 'SOMEONE_ELSE' ? (state.recipientPhone || null) : null,
+      timingType: state.timingType || 'IMMEDIATE',
+      scheduledDate: state.timingType === 'SCHEDULED' ? state.scheduledDate : null,
+      scheduledTime: state.timingType === 'SCHEDULED' ? state.scheduledTime : null,
       paymentMethod: state.draftPaymentMethod,
       budgetUsd: Number(state.draftFareUsd),
       autoAccept: state.draftAutoAccept,
@@ -4736,6 +4931,27 @@ function renderProviderActiveVisitTab(prov, activeJob) {
           <span>${activeJob.title} • <span style="font-weight:600; color:var(--text-secondary);">${activeJob.description}</span></span>
         </div>
 
+        ${activeJob.bookingFor === 'SOMEONE_ELSE' ? `
+          <div style="font-size:11.5px; font-weight:700; color:#1E40AF; background:#DBEAFE; padding:7px 11px; border-radius:9px; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
+            ${uiIcon('user', 12)}
+            <span>Ordered for: <strong>${escapeHtml(activeJob.recipientName || 'Recipient')}</strong> ${activeJob.recipientPhone ? `(${escapeHtml(activeJob.recipientPhone)})` : ''}</span>
+          </div>
+        ` : ''}
+
+        ${activeJob.timingType === 'SCHEDULED' ? `
+          <div style="font-size:11.5px; font-weight:700; color:#854D0E; background:#FEF9C3; padding:7px 11px; border-radius:9px; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
+            ${uiIcon('clock', 12)}
+            <span>📅 Scheduled Visit: <strong>${escapeHtml(activeJob.scheduledDate)} at ${escapeHtml(activeJob.scheduledTime)}</strong></span>
+          </div>
+        ` : ''}
+
+        ${activeJob.delayNotice ? `
+          <div style="font-size:11px; font-weight:700; color:#B45309; background:#FEF3C7; border:1px solid #FCD34D; padding:6px 10px; border-radius:8px; margin-bottom:8px; display:flex; align-items:center; gap:5px;">
+            <span>⏱️</span>
+            <span>Delay Alert: Running ~${activeJob.delayNotice.minutes}m late (${escapeHtml(activeJob.delayNotice.reason)})</span>
+          </div>
+        ` : ''}
+
         ${activeJob.photoUrl ? `
           <div style="display:flex; align-items:center; gap:9px; background:var(--blue-soft); border:1px solid var(--blue-border); border-radius:11px; padding:7px 11px; margin-bottom:10px;">
             <img src="${activeJob.photoUrl}" style="width:42px; height:42px; border-radius:8px; object-fit:cover; cursor:pointer;" onclick="openImagePreviewModal('${activeJob.photoUrl}', 'Client Reference Photo')" alt="Desired Style Reference" />
@@ -4813,13 +5029,17 @@ function renderProviderActiveVisitTab(prov, activeJob) {
         </div>
       ` : ''}
 
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-        <button class="btn-dark-sec" onclick="startInAppCall('${activeJob.customerName}', '${activeJob.title}')">
-          ${uiIcon('phone', 15)}
-          <span>Call Client</span>
+      <div style="display:grid; grid-template-columns:1.1fr 1fr 1fr; gap:6px;">
+        <button class="btn-dark-sec" style="font-size:11.5px; padding:0 8px; justify-content:center; gap:4px;" onclick="promptProviderDelayNotice('${activeJob.id}')" title="Send Transit Delay Notice to Client">
+          <span>⏱️</span>
+          <span>Delay (+15m)</span>
         </button>
-        <button class="btn-dark-sec" onclick="openChatDrawer('${activeJob.id}')">
-          ${uiIcon('chat', 15)}
+        <button class="btn-dark-sec" style="font-size:11.5px; padding:0 8px; justify-content:center; gap:4px;" onclick="startInAppCall('${activeJob.customerName}', '${activeJob.title}')">
+          ${uiIcon('phone', 13)}
+          <span>Call</span>
+        </button>
+        <button class="btn-dark-sec" style="font-size:11.5px; padding:0 8px; justify-content:center; gap:4px;" onclick="openChatDrawer('${activeJob.id}')">
+          ${uiIcon('chat', 13)}
           <span>Chat ${(activeJob.messages && activeJob.messages.length > 0) ? `(${activeJob.messages.length})` : ''}</span>
         </button>
       </div>
@@ -4831,6 +5051,25 @@ function renderProviderActiveVisitTab(prov, activeJob) {
       </div>
     </div>
   `;
+}
+
+async function promptProviderDelayNotice(requestId) {
+  try {
+    const mins = prompt('How many minutes are you delayed in transit? (e.g. 15 or 30)', '15');
+    if (!mins || isNaN(mins)) return;
+    const reason = prompt('Brief reason (e.g. Traffic along Samora Machel Ave)', 'Harare traffic congestion') || 'Transit traffic delay';
+
+    await apiPost('/api/bookings/delay-notice', {
+      requestId,
+      providerId: state.currentUser?.id,
+      delayMinutes: Number(mins),
+      reason
+    });
+    showToast(`Delay alert sent: ~${mins}m late`);
+    await fetchState();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -5092,6 +5331,24 @@ function renderProviderCatalogueTab(prov, myPendingApprovals) {
         <span style="color:#D97706; margin-top:1px;">${uiIcon('shield', 15)}</span>
         <div>
           <strong>Verified Services Catalogue:</strong> Manage your offerings, edit pricing, or add new services. All photos are checked for clean presentation without watermarks or flyers.
+        </div>
+      </div>
+
+      <!-- Physical Workshop / Office Base Card -->
+      <div style="background:var(--bg-card); border:1.5px solid var(--border-light); border-radius:14px; padding:12px; margin-bottom:12px; box-shadow:0 2px 8px rgba(0,0,0,0.03);">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="color:var(--blue-primary);">${uiIcon('buildingOffice', 18)}</span>
+            <div>
+              <div style="font-size:13px; font-weight:800; color:var(--text-main);">Physical Workshop / Office</div>
+              <div style="font-size:11.5px; color:var(--text-secondary); margin-top:2px;">
+                ${prov.hasOffice ? `${prov.officeAddress || 'Harare Workshop'}, ${prov.officeSuburb || 'Harare'}` : 'No workshop listed (Mobile / Home visits only)'}
+              </div>
+            </div>
+          </div>
+          <button class="btn-dark-sec" style="height:32px; padding:0 10px; font-size:11.5px; white-space:nowrap;" onclick="openProviderOfficeModal()">
+            ${prov.hasOffice ? 'Edit Office' : '+ Add Office'}
+          </button>
         </div>
       </div>
 
@@ -5542,45 +5799,33 @@ function renderChatDrawer() {
   root.innerHTML = `
     <div class="fullscreen-chat-backdrop" onclick="closeChatDrawer()">
       <div class="fullscreen-chat-modal" onclick="event.stopPropagation()">
-        <!-- Header -->
+        <!-- WhatsApp iOS Navigation Header -->
         <div class="fullscreen-chat-header">
-          <button class="fullscreen-chat-close-btn" onclick="closeChatDrawer()" title="Back to Map">
-            ${uiIcon('chevronLeft', 20)}
+          <button class="fullscreen-chat-back-ios" onclick="closeChatDrawer()" title="Back">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
           </button>
 
-          <div class="fullscreen-chat-peer">
+          <div class="fullscreen-chat-peer" onclick="closeChatDrawer()">
             <img src="${peerAvatar}" alt="${escapeHtml(peerName)}" class="fullscreen-chat-avatar" />
             <div class="fullscreen-chat-peer-info">
               <div class="fullscreen-chat-peer-name">${escapeHtml(peerName)}</div>
-              <div class="fullscreen-chat-peer-status">
-                <span style="width:7px; height:7px; border-radius:50%; background:#10B981; display:inline-block;"></span>
-                <span>${escapeHtml(peerSubtitle)}</span>
-              </div>
+              <div class="fullscreen-chat-peer-status online">online</div>
             </div>
           </div>
 
           <div class="fullscreen-chat-header-actions">
             <button class="fullscreen-chat-call-btn" onclick="startInAppCall('${peerName.replace(/'/g, "\\'")}', '${(req?.title || 'Home Visit').replace(/'/g, "\\'")}')" title="Call ${escapeHtml(peerName)}">
-              ${uiIcon('phone', 17)}
-            </button>
-            <button class="fullscreen-chat-close-btn" onclick="closeChatDrawer()" title="Close Chat">
-              ${uiIcon('close', 18)}
+              ${uiIcon('phone', 20)}
             </button>
           </div>
         </div>
 
-        <!-- Security Notice -->
-        <div class="fullscreen-chat-security-bar">
-          <span style="color:var(--blue-primary); display:inline-flex;">${uiIcon('lock', 12)}</span>
-          <span>In-app protected chat. Phone numbers &amp; WhatsApp links are blocked for safety.</span>
-        </div>
-
-        <!-- Scrollable Messages Feed -->
+        <!-- Scrollable WhatsApp Feed with iOS Wallpaper Tint -->
         <div class="fullscreen-chat-feed" id="fullScreenChatFeed">
           ${renderChatMessagesHtml(messages)}
         </div>
 
-        <!-- Footer: Preset quick replies & Input -->
+        <!-- WhatsApp iOS Footer: Preset quick replies & Input -->
         <div class="fullscreen-chat-footer">
           <div class="chat-quick-strip">
             ${quickList.map((q) => `
@@ -5591,20 +5836,20 @@ function renderChatDrawer() {
           </div>
 
           <div class="chat-inline-input-row">
+            <button class="whatsapp-ios-plus-btn" onclick="document.getElementById('chatPhotoInput').click()" title="Attach Photo">+</button>
+            <input type="file" id="chatPhotoInput" accept="image/*" style="display:none;" onchange="handleChatPhotoUpload(this, '${req?.id || ''}')" />
             <input
               id="chatTextInput"
-              class="dark-input"
-              style="font-size:13.5px; padding:11px 14px;"
-              placeholder="Type message (phone numbers blocked)..."
+              class="whatsapp-ios-input"
+              placeholder="Message"
               onkeydown="if(event.key==='Enter') sendCustomChat('${req?.id || ''}')"
             />
             <button
-              class="btn-primary-blue"
-              style="width:50px; height:44px; padding:0; flex-shrink:0; border-radius:14px; display:inline-flex; align-items:center; justify-content:center;"
+              class="whatsapp-ios-send-btn"
               onclick="sendCustomChat('${req?.id || ''}')"
-              title="Send"
+              title="Send Message"
             >
-              ${uiIcon('send', 17)}
+              ${uiIcon('send', 16)}
             </button>
           </div>
         </div>
@@ -5613,32 +5858,75 @@ function renderChatDrawer() {
   `;
 }
 
+function formatChatTime(ts) {
+  if (!ts) return '';
+  try {
+    const d = new Date(ts);
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+  } catch (e) {
+    return '';
+  }
+}
+
 function renderChatMessagesHtml(messages) {
+  const encryptionBanner = `
+    <div class="whatsapp-encryption-pill">
+      ${uiIcon('lock', 11)}
+      <span>Messages and calls are end-to-end encrypted. No one outside of this chat can read or listen to them.</span>
+    </div>
+    <div class="whatsapp-date-pill">TODAY</div>
+  `;
+
   if (!messages || messages.length === 0) {
     return `
-      <div style="text-align:center; padding:36px 20px; color:var(--text-secondary); margin:auto 0;">
-        <div style="width:48px; height:48px; border-radius:50%; background:var(--blue-soft); color:var(--blue-primary); display:inline-flex; align-items:center; justify-content:center; margin-bottom:12px;">
-          ${uiIcon('chat', 24)}
-        </div>
-        <div style="font-size:14px; font-weight:800; color:var(--text-main); margin-bottom:4px;">In-App Encrypted Chat</div>
-        <div style="font-size:12.5px; max-width:280px; margin:0 auto; line-height:1.4;">
-          Chat with each other to coordinate your home visit. Direct contacts are masked.
-        </div>
+      ${encryptionBanner}
+      <div style="text-align:center; padding:24px 20px; color:#8E8E93; margin:auto 0;">
+        <div style="font-size:13px; font-weight:600; color:#54656F; margin-bottom:4px;">No messages yet</div>
+        <div style="font-size:12px; line-height:1.4;">Send a quick reply below or type a message to coordinate your visit.</div>
       </div>
     `;
   }
 
-  return messages.map((m) => {
-    const isSystem = m.senderRole === 'SYSTEM';
+  const msgsHtml = messages.map((m) => {
+    const isSystem = m.senderRole === 'SYSTEM' || m.type === 'PIN_VERIFIED' || m.type === 'DELAY_NOTICE';
     const isMine = !isSystem && m.senderRole === state.role;
     const rowClass = isSystem ? 'system' : isMine ? 'mine' : 'theirs';
+    const timeStr = formatChatTime(m.timestamp);
+
+    if (isSystem) {
+      return `
+        <div class="chat-msg-row system">
+          <div class="chat-msg-bubble">
+            ${escapeHtml(m.text)}
+          </div>
+        </div>
+      `;
+    }
+
     return `
       <div class="chat-msg-row ${rowClass}">
-        ${!isSystem ? `<div class="chat-msg-sender">${isMine ? 'You' : escapeHtml(m.senderName)}</div>` : ''}
-        <div class="chat-msg-bubble">${escapeHtml(m.text)}</div>
+        <div class="chat-msg-bubble">
+          <span>${escapeHtml(m.text)}</span>
+          <span class="chat-msg-meta">
+            <span>${timeStr}</span>
+            ${isMine ? `<span class="chat-msg-ticks">✓✓</span>` : ''}
+          </span>
+        </div>
       </div>
     `;
   }).join('');
+
+  return encryptionBanner + msgsHtml;
+}
+
+async function handleChatPhotoUpload(input, requestId) {
+  if (!input.files || !input.files[0]) return;
+  const file = input.files[0];
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    sendChatMessage('📷 Photo sent for reference', requestId);
+  };
+  reader.readAsDataURL(file);
 }
 
 function updateChatFeedDomOnly(req) {
@@ -5724,10 +6012,17 @@ function sendCustomChat(requestId = null) {
   sendChatMessage(text, requestId);
 }
 
+// ============================================================================
+// DUAL-ENGINE AUDIO CALLING (AGORA RTC + WEBRTC P2P DIRECT AUDIO MESH)
+// Ensures audio streams seamlessly from Point A to Point B
+// ============================================================================
 let agoraClient = null;
 let localAudioTrack = null;
+let p2pPeerConnection = null;
+let localMicrophoneStream = null;
 let isAudioMuted = false;
 let callRingInterval = null;
+let queuedCandidates = [];
 
 function playOutgoingRingtone() {
   stopCallRingtones();
@@ -5820,7 +6115,7 @@ async function startInAppCall(peerName, contextTitle, channelId = null, recipien
     }).catch((e) => console.warn('Call initiate notice:', e));
   }
 
-  joinAgoraVoiceChannel(finalChannelId);
+  joinDualEngineCall(finalChannelId, true);
 }
 
 async function answerIncomingCall() {
@@ -5854,7 +6149,7 @@ async function answerIncomingCall() {
     action: 'ACCEPT'
   }).catch((e) => console.warn('Call respond notice:', e));
 
-  joinAgoraVoiceChannel(inc.channelId);
+  joinDualEngineCall(inc.channelId, false);
 }
 
 async function declineIncomingCall() {
@@ -5871,6 +6166,131 @@ async function declineIncomingCall() {
   renderCallModal();
 }
 
+async function joinDualEngineCall(channelId, isCaller) {
+  joinAgoraVoiceChannel(channelId);
+  setupWebRtcPeerAudio(channelId, isCaller);
+}
+
+async function setupWebRtcPeerAudio(channelId, isCaller) {
+  try {
+    queuedCandidates = [];
+    if (p2pPeerConnection) {
+      try { p2pPeerConnection.close(); } catch (e) {}
+      p2pPeerConnection = null;
+    }
+
+    const config = {
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' }
+      ]
+    };
+
+    p2pPeerConnection = new RTCPeerConnection(config);
+
+    if (!localMicrophoneStream) {
+      try {
+        localMicrophoneStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          }
+        });
+      } catch (micErr) {
+        console.warn('Microphone permission notice:', micErr.message);
+      }
+    }
+
+    if (localMicrophoneStream) {
+      localMicrophoneStream.getTracks().forEach((track) => {
+        p2pPeerConnection.addTrack(track, localMicrophoneStream);
+      });
+    }
+
+    p2pPeerConnection.ontrack = (event) => {
+      let audioEl = document.getElementById('p2pRemoteAudioElement');
+      if (!audioEl) {
+        audioEl = document.createElement('audio');
+        audioEl.id = 'p2pRemoteAudioElement';
+        audioEl.autoplay = true;
+        audioEl.playsInline = true;
+        document.body.appendChild(audioEl);
+      }
+      audioEl.srcObject = event.streams[0];
+      audioEl.play().catch(() => {});
+    };
+
+    p2pPeerConnection.onicecandidate = (event) => {
+      if (event.candidate) {
+        apiPost('/api/calls/signal', {
+          channelId,
+          senderId: state.currentUser?.id,
+          signalType: 'ICE_CANDIDATE',
+          data: event.candidate
+        }).catch(() => {});
+      }
+    };
+
+    if (isCaller) {
+      const offer = await p2pPeerConnection.createOffer({ offerToReceiveAudio: true });
+      await p2pPeerConnection.setLocalDescription(offer);
+      apiPost('/api/calls/signal', {
+        channelId,
+        senderId: state.currentUser?.id,
+        signalType: 'SDP_OFFER',
+        data: offer
+      }).catch(() => {});
+    }
+  } catch (err) {
+    console.warn('WebRTC P2P direct setup notice:', err.message);
+  }
+}
+
+async function handleWebRtcSignalMessage(payload) {
+  const { channelId, senderId, signalType, data } = payload;
+  const currentChan = state.activeCall?.channelId || state.incomingCall?.channelId;
+  if (!currentChan || currentChan !== channelId) return;
+  if (state.currentUser?.id && String(senderId) === String(state.currentUser.id)) return;
+
+  try {
+    if (signalType === 'SDP_OFFER') {
+      if (!p2pPeerConnection) {
+        await setupWebRtcPeerAudio(channelId, false);
+      }
+      await p2pPeerConnection.setRemoteDescription(new RTCSessionDescription(data));
+      while (queuedCandidates.length > 0) {
+        await p2pPeerConnection.addIceCandidate(queuedCandidates.shift());
+      }
+      const answer = await p2pPeerConnection.createAnswer();
+      await p2pPeerConnection.setLocalDescription(answer);
+      apiPost('/api/calls/signal', {
+        channelId,
+        senderId: state.currentUser?.id,
+        signalType: 'SDP_ANSWER',
+        data: answer
+      }).catch(() => {});
+    } else if (signalType === 'SDP_ANSWER') {
+      if (p2pPeerConnection) {
+        await p2pPeerConnection.setRemoteDescription(new RTCSessionDescription(data));
+        while (queuedCandidates.length > 0) {
+          await p2pPeerConnection.addIceCandidate(queuedCandidates.shift());
+        }
+      }
+    } else if (signalType === 'ICE_CANDIDATE' && data) {
+      const candidate = new RTCIceCandidate(data);
+      if (p2pPeerConnection && p2pPeerConnection.remoteDescription) {
+        await p2pPeerConnection.addIceCandidate(candidate);
+      } else {
+        queuedCandidates.push(candidate);
+      }
+    }
+  } catch (err) {
+    console.warn('WebRTC signaling notice:', err.message);
+  }
+}
+
 async function joinAgoraVoiceChannel(channelId) {
   try {
     if (window.AgoraRTC) {
@@ -5878,31 +6298,63 @@ async function joinAgoraVoiceChannel(channelId) {
         try { await agoraClient.leave(); } catch (e) {}
       }
       agoraClient = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
+
+      if (AgoraRTC.onAudioAutoplayFailed) {
+        AgoraRTC.onAudioAutoplayFailed = () => {
+          const resumeHandler = () => {
+            if (agoraClient) {
+              agoraClient.remoteUsers.forEach((u) => {
+                if (u.audioTrack) u.audioTrack.play();
+              });
+            }
+            window.removeEventListener('click', resumeHandler);
+            window.removeEventListener('touchstart', resumeHandler);
+          };
+          window.addEventListener('click', resumeHandler);
+          window.addEventListener('touchstart', resumeHandler);
+        };
+      }
+
       agoraClient.on('user-published', async (user, mediaType) => {
         await agoraClient.subscribe(user, mediaType);
         if (mediaType === 'audio') {
+          user.audioTrack.setVolume(100);
           user.audioTrack.play();
         }
       });
+
       const appId = state.db?.config?.agoraAppId || '645ba1db83884888b288953d1fd3c533';
       const cleanChannel = (channelId || 'harare_call').replace(/[^a-zA-Z0-9_-]/g, '_');
+      const userUid = Math.floor(100000 + Math.random() * 899999);
       let rtcToken = null;
       try {
-        const tokenRes = await apiGet(`/api/agora/token?channel=${encodeURIComponent(cleanChannel)}&uid=0`);
+        const tokenRes = await apiGet(`/api/agora/token?channel=${encodeURIComponent(cleanChannel)}&uid=${userUid}`);
         if (tokenRes && tokenRes.token) {
           rtcToken = tokenRes.token;
         }
       } catch (tokenErr) {
-        console.warn('Agora token generation note:', tokenErr.message);
+        console.warn('Agora token note:', tokenErr.message);
       }
-      await agoraClient.join(appId, cleanChannel, rtcToken, 0);
+
+      await agoraClient.join(appId, cleanChannel, rtcToken, userUid);
+
       localAudioTrack = await AgoraRTC.createMicrophoneAudioTrack({
-        AEC: true,               // WebRTC Acoustic Echo Cancellation
-        ANS: true,               // WebRTC Automatic Noise Suppression
-        AGC: true,               // WebRTC Automatic Gain Control
-        encoderConfig: 'speech_standard' // 32kbps mono crystal-clear voice without distortion
+        AEC: true,
+        ANS: true,
+        AGC: true,
+        encoderConfig: 'speech_standard'
       });
       await agoraClient.publish([localAudioTrack]);
+
+      for (const u of agoraClient.remoteUsers) {
+        if (u.hasAudio) {
+          try {
+            await agoraClient.subscribe(u, 'audio');
+            u.audioTrack.setVolume(100);
+            u.audioTrack.play();
+          } catch (e) {}
+        }
+      }
     }
   } catch (err) {
     console.warn('Agora RTC Voice notice:', err.message);
@@ -5910,11 +6362,27 @@ async function joinAgoraVoiceChannel(channelId) {
 }
 
 async function toggleCallMute() {
+  isAudioMuted = !isAudioMuted;
   if (localAudioTrack) {
-    isAudioMuted = !isAudioMuted;
     await localAudioTrack.setMuted(isAudioMuted);
-    if (state.activeCall) state.activeCall.isMuted = isAudioMuted;
-    renderCallModal();
+  }
+  if (localMicrophoneStream) {
+    localMicrophoneStream.getAudioTracks().forEach((t) => {
+      t.enabled = !isAudioMuted;
+    });
+  }
+  if (state.activeCall) state.activeCall.isMuted = isAudioMuted;
+  renderCallModal();
+}
+
+function showActiveCallPinNotice() {
+  const activeReq = state.role === 'PROVIDER'
+    ? getProviderActiveBooking(state.currentUser?.id)
+    : getCustomerActiveRequest();
+  if (activeReq?.startPinCode) {
+    showToast(`Arrival Start PIN: #${activeReq.startPinCode}`);
+  } else {
+    showToast('Arrival PIN is required when provider arrives outside.');
   }
 }
 
@@ -5923,6 +6391,7 @@ async function endInAppCall(notify = true) {
   if (callInterval) clearInterval(callInterval);
   const chanId = state.activeCall?.channelId || state.incomingCall?.channelId;
   const reqId = state.activeChatRequestId || state.activeRequestId;
+
   try {
     if (localAudioTrack) {
       localAudioTrack.close();
@@ -5932,7 +6401,18 @@ async function endInAppCall(notify = true) {
       await agoraClient.leave();
       agoraClient = null;
     }
+    if (localMicrophoneStream) {
+      localMicrophoneStream.getTracks().forEach((t) => t.stop());
+      localMicrophoneStream = null;
+    }
+    if (p2pPeerConnection) {
+      p2pPeerConnection.close();
+      p2pPeerConnection = null;
+    }
+    const audioEl = document.getElementById('p2pRemoteAudioElement');
+    if (audioEl) audioEl.remove();
   } catch (e) {}
+
   state.activeCall = null;
   state.incomingCall = null;
   renderCallModal();
@@ -5946,11 +6426,12 @@ async function endInAppCall(notify = true) {
   }
 }
 
+// Authentic iOS Call Screen (Incoming & Active)
 function renderCallModal() {
   const root = document.getElementById('callModalRoot');
   if (!root) return;
 
-  // 1. Render Incoming Call Ringing Screen
+  // 1. Render Incoming Call Ringing Screen (Authentic iOS Incoming UI)
   if (state.incomingCall) {
     const inc = state.incomingCall;
     const proMatch = state.db.providers?.find((p) => p.name === inc.callerName || p.shortName === inc.callerName);
@@ -5959,48 +6440,43 @@ function renderCallModal() {
 
     root.innerHTML = `
       <div class="indrive-call-overlay">
-        <div class="indrive-call-top-bar">
-          <div></div>
-          <div class="indrive-call-header-info">
-            <div class="indrive-call-title">
-              <span style="color:#10B981;">🛡️</span>
-              <span>Incoming inDrive VoIP Call</span>
-            </div>
-            <div class="indrive-call-encrypted-tag">Masked • Free Internet Call</div>
-          </div>
-          <div></div>
-        </div>
-
-        <div class="indrive-call-center">
-          <div class="indrive-call-avatar-wrap">
-            <div class="indrive-call-ring ring-1"></div>
-            <div class="indrive-call-ring ring-2"></div>
-            <img src="${avatarUrl}" class="indrive-call-avatar" alt="${inc.callerName}" />
-          </div>
-          <div class="indrive-call-peer-name">${inc.callerName}</div>
-          <div class="indrive-call-peer-context">${inc.contextTitle || 'Home Service Booking'}</div>
-          <div style="font-size:16px; font-weight:800; color:#10B981; margin-top:14px; letter-spacing:0.04em;">
-            Incoming Call...
+        <div class="ios-call-top-bar">
+          <div class="ios-call-encrypted-tag">
+            ${uiIcon('lock', 12)}
+            <span>End-to-End Encrypted</span>
           </div>
         </div>
 
-        <div style="display:flex; justify-content:center; align-items:center; gap:36px; margin-bottom:24px;">
-          <button type="button" style="background:#EF4444; color:#fff; width:64px; height:64px; border-radius:50%; border:none; display:flex; flex-direction:column; align-items:center; justify-content:center; font-weight:800; box-shadow:0 8px 24px rgba(239,68,68,0.5); cursor:pointer;" onclick="declineIncomingCall()">
-            ${uiIcon('phone', 24)}
-            <span style="font-size:10px; margin-top:2px;">Decline</span>
-          </button>
+        <div class="ios-call-center">
+          <div class="ios-call-avatar-wrap">
+            <img src="${avatarUrl}" class="ios-call-avatar" alt="${inc.callerName}" />
+          </div>
+          <div class="ios-call-peer-name">${escapeHtml(inc.callerName)}</div>
+          <div class="ios-call-peer-context">${escapeHtml(inc.contextTitle || 'Home Service Booking')}</div>
+          <div class="ios-call-subtitle">incoming call</div>
+        </div>
 
-          <button type="button" style="background:#10B981; color:#fff; width:68px; height:68px; border-radius:50%; border:none; display:flex; flex-direction:column; align-items:center; justify-content:center; font-weight:800; box-shadow:0 8px 24px rgba(16,185,129,0.5); cursor:pointer;" onclick="answerIncomingCall()">
-            ${uiIcon('phone', 26)}
-            <span style="font-size:10px; margin-top:2px;">Accept</span>
-          </button>
+        <div class="ios-call-bottom-row">
+          <div class="ios-call-action-btn-wrap">
+            <button type="button" class="ios-call-btn decline" onclick="declineIncomingCall()">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="transform: rotate(135deg);"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+            </button>
+            <span class="ios-btn-sublabel">Decline</span>
+          </div>
+
+          <div class="ios-call-action-btn-wrap">
+            <button type="button" class="ios-call-btn accept" onclick="answerIncomingCall()">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+            </button>
+            <span class="ios-btn-sublabel">Accept</span>
+          </div>
         </div>
       </div>
     `;
     return;
   }
 
-  // 2. Render Active Call Screen (Outgoing Ringing or Connected)
+  // 2. Render Active Call Screen (Authentic iOS Active Call UI)
   if (!state.activeCall) {
     root.innerHTML = '';
     return;
@@ -6015,53 +6491,56 @@ function renderCallModal() {
 
   root.innerHTML = `
     <div class="indrive-call-overlay">
-      <div class="indrive-call-top-bar">
-        <button type="button" class="indrive-call-icon-btn" onclick="endInAppCall()" title="Minimize / Hang Up">
-          ${uiIcon('chevronDown', 20)}
-        </button>
-        <div class="indrive-call-header-info">
-          <div class="indrive-call-title">
-            <span style="color:#0066FF;">${uiIcon('shield', 14)}</span>
-            <span>inDrive VoIP Call</span>
-          </div>
-          <div class="indrive-call-encrypted-tag">
-            <span style="width:6px; height:6px; border-radius:50%; background:#10B981; display:inline-block;"></span>
-            <span>Masked • End-to-End Encrypted</span>
-          </div>
-        </div>
-        <button type="button" class="indrive-call-icon-btn" onclick="toggleCallMute()" title="Mute Microphone">
-          ${uiIcon('volume', 18)}
-        </button>
-      </div>
-
-      <div class="indrive-call-center">
-        <div class="indrive-call-avatar-wrap">
-          <div class="indrive-call-ring ring-1"></div>
-          <div class="indrive-call-ring ring-2"></div>
-          <img src="${avatarUrl}" class="indrive-call-avatar" alt="${peerName}" />
-        </div>
-        <div class="indrive-call-peer-name">${peerName}</div>
-        <div class="indrive-call-peer-context">${contextTitle}</div>
-        <div id="callTimerText" class="indrive-call-timer">
-          ${isOutgoing ? 'Calling...' : '00:00'}
+      <div class="ios-call-top-bar">
+        <div class="ios-call-encrypted-tag">
+          ${uiIcon('lock', 12)}
+          <span>End-to-End Encrypted</span>
         </div>
       </div>
 
-      <div class="indrive-call-bottom-dock">
-        <button type="button" class="indrive-dock-btn ${state.activeCall.isMuted ? 'muted' : ''}" onclick="toggleCallMute()">
-          <span style="font-size:22px;">${state.activeCall.isMuted ? '🔇' : '🎙️'}</span>
-          <span>${state.activeCall.isMuted ? 'Unmute' : 'Mute'}</span>
-        </button>
+      <div class="ios-call-center">
+        <div class="ios-call-avatar-wrap">
+          <img src="${avatarUrl}" class="ios-call-avatar" alt="${peerName}" />
+        </div>
+        <div class="ios-call-peer-name">${escapeHtml(peerName)}</div>
+        <div class="ios-call-peer-context">${escapeHtml(contextTitle)}</div>
+        <div id="callTimerText" class="ios-call-timer">
+          ${isOutgoing ? 'calling...' : '00:00'}
+        </div>
+      </div>
 
-        <button type="button" class="indrive-dock-btn hangup" onclick="endInAppCall()" title="End Call">
-          ${uiIcon('phone', 24)}
-          <span>End</span>
-        </button>
+      <div>
+        <div class="ios-call-grid">
+          <div class="ios-grid-btn-wrap">
+            <button type="button" class="ios-frosted-circle-btn ${state.activeCall.isMuted ? 'active' : ''}" onclick="toggleCallMute()">
+              <span style="font-size:24px;">${state.activeCall.isMuted ? '🔇' : '🎙️'}</span>
+            </button>
+            <span class="ios-grid-label">mute</span>
+          </div>
 
-        <button type="button" class="indrive-dock-btn" onclick="openChatDrawer(state.activeRequestId || (state.db.requests?.[0]?.id))">
-          <span style="font-size:22px;">💬</span>
-          <span>Chat</span>
-        </button>
+          <div class="ios-grid-btn-wrap">
+            <button type="button" class="ios-frosted-circle-btn" onclick="showActiveCallPinNotice()">
+              ${uiIcon('key', 22)}
+            </button>
+            <span class="ios-grid-label">PIN</span>
+          </div>
+
+          <div class="ios-grid-btn-wrap">
+            <button type="button" class="ios-frosted-circle-btn" onclick="openChatDrawer(state.activeRequestId || (state.db.requests?.[0]?.id))">
+              ${uiIcon('chat', 22)}
+            </button>
+            <span class="ios-grid-label">message</span>
+          </div>
+        </div>
+
+        <div class="ios-call-bottom-row">
+          <div class="ios-call-action-btn-wrap">
+            <button type="button" class="ios-call-btn end" onclick="endInAppCall()" title="End Call">
+              <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" style="transform: rotate(135deg);"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+            </button>
+            <span class="ios-btn-sublabel">End</span>
+          </div>
+        </div>
       </div>
     </div>
   `;

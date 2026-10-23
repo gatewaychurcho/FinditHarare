@@ -2122,7 +2122,15 @@ const server = http.createServer(async (req, res) => {
         lat,
         lng,
         serviceMode: 'HOME_VISIT',
-        preferredTime: body.preferredTime || 'Today, Now (ASAP)',
+        bookingFor: body.bookingFor || 'ME', // 'ME' or 'SOMEONE_ELSE'
+        recipientName: body.recipientName || null,
+        recipientPhone: body.recipientPhone || null,
+        timingType: body.timingType || 'IMMEDIATE', // 'IMMEDIATE' or 'SCHEDULED'
+        scheduledDate: body.scheduledDate || null,
+        scheduledTime: body.scheduledTime || null,
+        preferredTime: body.timingType === 'SCHEDULED'
+          ? `Scheduled for ${body.scheduledDate || 'selected date'} at ${body.scheduledTime || 'agreed time'}`
+          : (body.preferredTime || 'Today, Now (ASAP)'),
         paymentMethod: body.paymentMethod || 'Cash USD',
         budgetUsd: Number(body.budgetUsd) || 25,
         startPinCode: String(crypto.randomInt(1000, 9999)),
@@ -2488,6 +2496,81 @@ const server = http.createServer(async (req, res) => {
         action
       });
       return sendJson(res, 200, { ok: true });
+    } catch (e) {
+      return sendJson(res, 400, { error: e.message });
+    }
+  }
+
+  // Real-Time WebRTC P2P Direct Audio Signaling (Offer / Answer / Candidate)
+  if (pathname === '/api/calls/signal' && req.method === 'POST') {
+    try {
+      const body = await parseBody(req);
+      const { channelId, senderId, recipientId, signalType, data } = body;
+      broadcastUpdate('CALL_WEBRTC_SIGNAL', {
+        channelId,
+        senderId,
+        recipientId,
+        signalType,
+        data
+      });
+      return sendJson(res, 200, { ok: true });
+    } catch (e) {
+      return sendJson(res, 400, { error: e.message });
+    }
+  }
+
+  // Airmass Express Feature: Provider Transit Delay Notice / ETA Adjustment
+  if (pathname === '/api/bookings/delay-notice' && req.method === 'POST') {
+    try {
+      const body = await parseBody(req);
+      const { requestId, providerId, delayMinutes, reason } = body;
+      const reqItem = db.requests.find((r) => r.id === requestId);
+      if (!reqItem) return sendJson(res, 404, { error: 'Booking not found' });
+      const prov = db.providers.find((p) => p.id === providerId);
+
+      const delay = Number(delayMinutes) || 15;
+      reqItem.delayNotice = {
+        minutes: delay,
+        reason: reason || 'Harare transit traffic congestion',
+        timestamp: new Date().toISOString()
+      };
+
+      if (!reqItem.messages) reqItem.messages = [];
+      const delayMsg = {
+        id: 'msg_' + Date.now(),
+        senderRole: 'SYSTEM',
+        senderName: 'Findit Dispatch',
+        type: 'DELAY_NOTICE',
+        text: `Transit Update: ${prov ? prov.name : 'Specialist'} is running approximately ${delay} minutes late (${reason || 'traffic'}). We appreciate your patience!`,
+        timestamp: new Date().toISOString()
+      };
+      reqItem.messages.push(delayMsg);
+      saveDb(db);
+      broadcastUpdate('BOOKING_DELAYED', { requestId: reqItem.id, delayNotice: reqItem.delayNotice, message: delayMsg, request: reqItem });
+      return sendJson(res, 200, { ok: true, request: reqItem });
+    } catch (e) {
+      return sendJson(res, 400, { error: e.message });
+    }
+  }
+
+  // Provider Updates Office / Workshop Physical Base Location
+  if (pathname === '/api/providers/office' && req.method === 'POST') {
+    try {
+      const body = await parseBody(req);
+      const prov = db.providers.find((p) => p.id === body.providerId);
+      if (!prov) return sendJson(res, 404, { error: 'Provider not found' });
+      if (prov.isBanned) return sendJson(res, 403, { error: 'Your account is suspended.' });
+
+      prov.hasOffice = Boolean(body.hasOffice);
+      prov.officeAddress = (body.officeAddress || '').trim();
+      prov.officeSuburb = (body.officeSuburb || '').trim();
+      if (body.officeLat && body.officeLng) {
+        prov.officeLat = Number(body.officeLat);
+        prov.officeLng = Number(body.officeLng);
+      }
+      saveDb(db);
+      broadcastUpdate('PROVIDER_OFFICE_UPDATED', { providerId: prov.id, provider: prov });
+      return sendJson(res, 200, { success: true, provider: prov });
     } catch (e) {
       return sendJson(res, 400, { error: e.message });
     }
