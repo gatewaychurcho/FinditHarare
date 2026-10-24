@@ -5781,140 +5781,98 @@ function renderModalLayer() {
   }
 
   // ==========================================================================
-  // IN-APP WHATSAPP BUSINESS CLONE SUPPORT CHAT (DARK THEME - MATCHES OFFICIAL WHATSAPP)
+  // IN-APP WHATSAPP BUSINESS CLONE SUPPORT CHAT (AUTHENTIC LIGHT THEME)
   // ==========================================================================
   if (state.activeModal === 'SUPPORT') {
     loadUserSupportHistory();
-    const showBizProfile = Boolean(state.supportShowBizInfo);
-    const formatWaBold = (str) => escapeHtml(str || '').replace(/\*([^*]+)\*/g, '<strong style="color:#FFFFFF;">$1</strong>').replace(/\n/g, '<br/>');
+    const formatWaBold = (str) => escapeHtml(str || '').replace(/\*([^*]+)\*/g, '<strong style="color:#111B21;">$1</strong>').replace(/\n/g, '<br/>');
 
     root.innerHTML = `
       <div class="fullscreen-chat-backdrop" style="z-index:99999;" onclick="closeModal()">
-        <div class="fullscreen-chat-modal" style="background:#0B141A; display:flex; flex-direction:column; height:100%; width:100%; max-width:480px; margin:0 auto; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color:#E9EDEF;" onclick="event.stopPropagation()">
-          <!-- Authentic Dark WhatsApp Business Top Bar -->
-          <div style="background:#1F2C34; border-bottom:1px solid #2A3942; padding:10px 12px; display:flex; align-items:center; justify-content:space-between; gap:8px; flex-shrink:0;">
-            <div style="display:flex; align-items:center; gap:8px; min-width:0; flex:1; cursor:pointer;" onclick="toggleSupportBizInfo()">
-              <button type="button" onclick="event.stopPropagation(); closeModal();" style="background:none; border:none; color:#A7B4BC; display:flex; align-items:center; padding:4px 4px 4px 0; cursor:pointer;">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#A7B4BC" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        <div class="fullscreen-chat-modal" style="background:#EFEAE2; display:flex; flex-direction:column; height:100%; width:100%; max-width:480px; margin:0 auto; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color:#111B21;" onclick="event.stopPropagation()">
+          <!-- Authentic Light WhatsApp Business Top Bar (No 3-Dots) -->
+          <div style="background:#F0F2F5; border-bottom:1px solid #D1D7DB; padding:10px 12px; display:flex; align-items:center; justify-content:space-between; gap:8px; flex-shrink:0;">
+            <div style="display:flex; align-items:center; gap:8px; min-width:0; flex:1;">
+              <button type="button" onclick="closeModal()" style="background:none; border:none; color:#54656F; display:flex; align-items:center; padding:4px 4px 4px 0; cursor:pointer;">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#54656F" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
               </button>
-              <div style="position:relative; width:40px; height:40px; border-radius:50%; overflow:hidden; background:#FFFFFF; flex-shrink:0; display:flex; align-items:center; justify-content:center; border:1px solid #2A3942;">
+              <div style="position:relative; width:40px; height:40px; border-radius:50%; overflow:hidden; background:#FFFFFF; flex-shrink:0; display:flex; align-items:center; justify-content:center; border:1px solid #D1D7DB;">
                 <img src="/assets/logo-icon.svg" alt="Findit Harare" style="width:100%; height:100%; object-fit:cover;" onerror="this.src='/favicon.png'" />
               </div>
               <div style="min-width:0; flex:1;">
                 <div style="display:flex; align-items:center; gap:5px;">
-                  <span style="font-size:15px; font-weight:700; color:#E9EDEF; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Findit Harare Official</span>
-                  <!-- Meta Verified Blue Badge -->
+                  <span style="font-size:15px; font-weight:700; color:#111B21; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Findit Harare Official</span>
+                  <!-- Meta Verified Blue/Green Badge -->
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="#00A884" style="flex-shrink:0;"><path d="M12 2l2.4 2.1 3.1-.4.9 3 2.8 1.5-.8 3 1.6 2.7-2.2 2.2.4 3.1-3 .9-1.5 2.8-3-.8-2.7 1.6-2.2-2.2-3.1.4-.9-3-2.8-1.5.8-3-1.6-2.7 2.2-2.2-.4-3.1 3-.9 1.5-2.8 3 .8 2.7-1.6z"/><path d="M9.5 12.5l2 2 4-4.5" stroke="#FFFFFF" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 </div>
-                <div style="font-size:11.5px; color:#8696A0; font-weight:400;">
-                  Business account • Tap here for business info
+                <div style="font-size:11.5px; color:#667781; font-weight:400;">
+                  Business account
                 </div>
               </div>
             </div>
 
-            <div style="display:flex; align-items:center; gap:14px; color:#A7B4BC;">
-              <button type="button" onclick="toggleSupportBizInfo()" title="Business Info" style="background:none; border:none; color:#A7B4BC; cursor:pointer; display:flex; align-items:center; padding:0;">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-              </button>
-              <button type="button" onclick="clearUserSupportHistory()" title="Clear Chat History" style="background:none; border:none; color:#A7B4BC; cursor:pointer; display:flex; align-items:center; padding:0;">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+            <div style="display:flex; align-items:center; gap:8px; color:#54656F;">
+              <button type="button" onclick="clearUserSupportHistory()" title="Clear Chat History" style="background:none; border:none; color:#54656F; cursor:pointer; display:flex; align-items:center; padding:4px;" title="Reset chat history">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
               </button>
             </div>
           </div>
 
-          <!-- Expandable WhatsApp Business Profile & Social Links Sheet -->
-          ${showBizProfile ? `
-            <div style="background:#111B21; border-bottom:1px solid #2A3942; padding:14px 16px; box-shadow:0 6px 18px rgba(0,0,0,0.4); flex-shrink:0;">
-              <div style="display:flex; align-items:center; gap:12px; margin-bottom:10px;">
-                <div style="width:52px; height:52px; border-radius:50%; background:#FFFFFF; display:flex; align-items:center; justify-content:center; border:2px solid #00A884; overflow:hidden;">
-                  <img src="/assets/logo-icon.svg" alt="DP" style="width:100%; height:100%; object-fit:cover;" />
-                </div>
-                <div style="flex:1;">
-                  <div style="font-size:16px; font-weight:800; color:#E9EDEF; display:flex; align-items:center; gap:5px;">
-                    <span>Findit Harare Official</span>
-                    <span style="font-size:10px; background:#005C4B; color:#25D366; padding:2px 6px; border-radius:99px; font-weight:800;">VERIFIED</span>
-                  </div>
-                  <div style="font-size:12px; color:#8696A0; margin-top:2px;">+263 71 347 5131 • Official Marketplace Desk</div>
-                  <div style="font-size:11.5px; color:#25D366; font-weight:600; margin-top:2px;">● Open 24 Hours • Harare, Zimbabwe</div>
-                </div>
-                <button type="button" onclick="toggleSupportBizInfo()" style="background:#202C33; border:none; border-radius:50%; width:28px; height:28px; cursor:pointer; color:#A7B4BC; font-weight:800;">✕</button>
-              </div>
-
-              <!-- Official Website WhatsApp Link Card Preview -->
-              <a href="https://finditharare.co.zw" target="_blank" rel="noopener" style="display:flex; align-items:center; gap:10px; background:#1F2C34; border:1px solid #2A3942; border-radius:12px; padding:10px 12px; text-decoration:none; margin-bottom:10px;">
-                <div style="width:36px; height:36px; border-radius:8px; background:#00A884; color:#FFFFFF; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-                </div>
-                <div style="min-width:0; flex:1;">
-                  <div style="font-size:13px; font-weight:700; color:#53BDEB;">finditharare.co.zw</div>
-                  <div style="font-size:11px; color:#8696A0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Findit Harare — On-Demand Services in Harare</div>
-                </div>
-              </a>
-
-              <div style="display:flex; gap:8px;">
-                <a href="https://www.instagram.com/findithahare/" target="_blank" rel="noopener" style="flex:1; display:flex; align-items:center; gap:7px; padding:8px 10px; background:#1F2C34; border:1px solid #2A3942; border-radius:10px; text-decoration:none; color:#E9EDEF; font-size:12px; font-weight:700;">
-                  <span style="color:#E1306C; display:inline-flex;">${uiIcon('instagram', 16)}</span>
-                  <div>
-                    <div>Instagram</div>
-                    <div style="font-size:10.5px; color:#8696A0;">@findithahare</div>
-                  </div>
-                </a>
-                <a href="https://www.facebook.com/profile.php?id=61595501858201" target="_blank" rel="noopener" style="flex:1; display:flex; align-items:center; gap:7px; padding:8px 10px; background:#1F2C34; border:1px solid #2A3942; border-radius:10px; text-decoration:none; color:#E9EDEF; font-size:12px; font-weight:700;">
-                  <span style="color:#1877F2; display:inline-flex;">${uiIcon('facebook', 16)}</span>
-                  <div>
-                    <div>Facebook</div>
-                    <div style="font-size:10.5px; color:#8696A0;">Findit Harare</div>
-                  </div>
-                </a>
-              </div>
-            </div>
-          ` : ''}
-
-          <!-- WhatsApp Chat Feed with Subtle Dark Doodle Wallpaper Background -->
-          <div id="waSupportChatFeed" style="flex:1; overflow-y:auto; padding:12px 14px; display:flex; flex-direction:column; gap:8px; background-color:#0B141A; background-image:radial-gradient(rgba(255,255,255,0.035) 1px, transparent 0); background-size:20px 20px;">
+          <!-- WhatsApp Chat Feed (Light Mode Wallpaper Pattern) -->
+          <div id="waSupportChatFeed" style="flex:1; overflow-y:auto; padding:12px 14px; display:flex; flex-direction:column; gap:8px; background-color:#EFEAE2; background-image:radial-gradient(rgba(0,0,0,0.035) 1px, transparent 0); background-size:20px 20px;">
             <!-- WhatsApp Centered Encryption Pill -->
-            <div style="background:#182229; color:#FFD279; font-size:11px; text-align:center; padding:8px 14px; border-radius:10px; margin:2px auto 4px auto; max-width:92%; line-height:1.4; box-shadow:0 1px 2px rgba(0,0,0,0.3); border:1px solid rgba(255,210,121,0.15);">
+            <div style="background:#FFF5C4; color:#54656F; font-size:11px; text-align:center; padding:7px 14px; border-radius:10px; margin:2px auto 4px auto; max-width:92%; line-height:1.4; box-shadow:0 1px 2px rgba(0,0,0,0.05); border:1px solid #FFE58F;">
               🔒 Messages and calls are end-to-end encrypted. Only people in this chat can read, listen to, or share them.
             </div>
 
             <!-- Meta Business Security Notice -->
-            <div style="background:#182229; color:#8696A0; font-size:11px; text-align:center; padding:6px 12px; border-radius:10px; margin:0 auto 8px auto; max-width:92%; line-height:1.35; border:1px solid #222E35;">
+            <div style="background:#F0F2F5; color:#54656F; font-size:11px; text-align:center; padding:6px 12px; border-radius:10px; margin:0 auto 8px auto; max-width:92%; line-height:1.35; border:1px solid #E2E8F0;">
               This business is now using a secure service from Meta to manage this chat. Tap to learn more.
             </div>
 
-            <!-- Authentic Centered WhatsApp Business Profile Card (Circled in User's Screenshot) -->
-            <div style="background:#111B21; border:1px solid #222E35; border-radius:16px; padding:18px 16px; margin:0 auto 10px auto; width:92%; text-align:center; box-shadow:0 2px 6px rgba(0,0,0,0.35);">
-              <div style="width:70px; height:70px; border-radius:50%; background:#FFFFFF; margin:0 auto 10px auto; display:flex; align-items:center; justify-content:center; overflow:hidden; border:2.5px solid #00A884; box-shadow:0 3px 10px rgba(0,0,0,0.4);">
+            <!-- Authentic WhatsApp Business Profile Card (With Real Followers & Clickable Social Icons) -->
+            <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:18px; padding:18px 16px; margin:0 auto 10px auto; width:92%; text-align:center; box-shadow:0 1px 4px rgba(0,0,0,0.06);">
+              <div style="width:72px; height:72px; border-radius:50%; background:#FFFFFF; margin:0 auto 10px auto; display:flex; align-items:center; justify-content:center; overflow:hidden; border:2px solid #00A884; box-shadow:0 2px 8px rgba(0,0,0,0.08);">
                 <img src="/assets/logo-icon.svg" alt="Findit Harare" style="width:100%; height:100%; object-fit:cover;" />
               </div>
-              <div style="font-size:16px; font-weight:800; color:#E9EDEF; display:flex; align-items:center; justify-content:center; gap:5px;">
+              <div style="font-size:16px; font-weight:800; color:#111B21; display:flex; align-items:center; justify-content:center; gap:5px;">
                 <span>Findit Harare Official</span>
                 <!-- WhatsApp Verified Badge -->
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="#00A884"><path d="M12 2l2.4 2.1 3.1-.4.9 3 2.8 1.5-.8 3 1.6 2.7-2.2 2.2.4 3.1-3 .9-1.5 2.8-3-.8-2.7 1.6-2.2-2.2-3.1.4-.9-3-2.8-1.5.8-3-1.6-2.7 2.2-2.2-.4-3.1 3-.9 1.5-2.8 3 .8 2.7-1.6z"/><path d="M9.5 12.5l2 2 4-4.5" stroke="#FFFFFF" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
               </div>
-              <div style="font-size:13px; font-weight:600; color:#A7B4BC; margin-top:3px;">
+              <div style="font-size:13px; font-weight:600; color:#54656F; margin-top:3px;">
                 +263 71 347 5131
               </div>
-              <div style="font-size:11px; color:#8696A0; margin-top:4px; line-height:1.4;">
-                Phone number from Zimbabwe • Business account • Joined in 2024
+
+              <!-- Official Social Followers Line Matching User Screenshot -->
+              <div style="font-size:11.5px; color:#54656F; margin-top:6px; line-height:1.5;">
+                Phone number from Zimbabwe • Business account •
+                <a href="https://www.facebook.com/profile.php?id=61595501858201" target="_blank" rel="noopener" title="Findit Harare Facebook (175 followers)" style="color:#111B21; text-decoration:none; display:inline-flex; align-items:center; gap:3px; font-weight:700;">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="#1877F2"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+                  <span>175</span>
+                </a> •
+                <a href="https://www.instagram.com/findithahare/" target="_blank" rel="noopener" title="Findit Harare Instagram (74 followers)" style="color:#111B21; text-decoration:none; display:inline-flex; align-items:center; gap:3px; font-weight:700;">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="#E1306C"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>
+                  <span>74</span>
+                </a> • Joined in February, 2025
               </div>
 
               <!-- Official Website WhatsApp Link Pill -->
-              <a href="https://finditharare.co.zw" target="_blank" rel="noopener" style="display:inline-flex; align-items:center; gap:6px; background:#1F2C34; border:1px solid #2A3942; border-radius:99px; padding:6px 14px; text-decoration:none; color:#53BDEB; font-size:12px; font-weight:700; margin-top:10px;">
+              <a href="https://finditharare.co.zw" target="_blank" rel="noopener" style="display:inline-flex; align-items:center; gap:6px; background:#F0F2F5; border:1px solid #D1D7DB; border-radius:99px; padding:6px 14px; text-decoration:none; color:#0066FF; font-size:12px; font-weight:700; margin-top:10px;">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
                 <span>finditharare.co.zw</span>
               </a>
             </div>
 
-            <!-- Message Bubbles (Dark WhatsApp Bubbles) -->
+            <!-- Message Bubbles (Light Mode WhatsApp Bubbles) -->
             ${state.supportChatMessages.map((m, idx, arr) => {
               const isUser = m.sender === 'USER';
               const isLastUserTyping = isUser && idx === arr.length - 1 && state.supportAiTyping;
               return `
                 <div style="display:flex; justify-content:${isUser ? 'flex-end' : 'flex-start'};">
-                  <div style="max-width:82%; background:${isUser ? '#005C4B' : '#202C33'}; color:#E9EDEF; padding:8px 12px 6px 12px; border-radius:${isUser ? '14px 14px 3px 14px' : '14px 14px 14px 3px'}; box-shadow:0 1px 2px rgba(0,0,0,0.3); font-size:13.5px; line-height:1.45; position:relative;">
+                  <div style="max-width:82%; background:${isUser ? '#D9FDD3' : '#FFFFFF'}; color:#111B21; padding:8px 12px 6px 12px; border-radius:${isUser ? '14px 14px 3px 14px' : '14px 14px 14px 3px'}; box-shadow:0 1px 1px rgba(0,0,0,0.06); font-size:13.5px; line-height:1.45; position:relative;">
                     <div>${formatWaBold(m.text)}</div>
-                    <div style="display:flex; align-items:center; justify-content:flex-end; gap:3px; font-size:10.5px; color:#8696A0; margin-top:3px;">
+                    <div style="display:flex; align-items:center; justify-content:flex-end; gap:3px; font-size:10.5px; color:#667781; margin-top:3px;">
                       <span>${m.time || ''}</span>
                       ${isUser ? renderWhatsAppDoubleTickSvg(!isLastUserTyping) : ''}
                     </div>
@@ -5925,33 +5883,33 @@ function renderModalLayer() {
 
             ${state.supportAiTyping ? `
               <div style="display:flex; justify-content:flex-start;">
-                <div style="background:#202C33; color:#8696A0; padding:8px 14px; border-radius:14px 14px 14px 3px; font-size:12.5px; font-style:italic; box-shadow:0 1px 2px rgba(0,0,0,0.3);">
+                <div style="background:#FFFFFF; color:#667781; padding:8px 14px; border-radius:14px 14px 14px 3px; font-size:12.5px; font-style:italic; box-shadow:0 1px 1px rgba(0,0,0,0.06);">
                   Findit Harare Official is typing…
                 </div>
               </div>
             ` : ''}
           </div>
 
-          <!-- Quick FAQ Chips (Dark WhatsApp Style) -->
-          <div style="background:#1F2C34; padding:6px 10px 2px 10px; display:flex; gap:6px; overflow-x:auto; border-top:1px solid #2A3942; flex-shrink:0;">
-            <button type="button" class="chat-preset-chip" style="background:#202C33; border:1px solid #2A3942; color:#53BDEB; font-size:11.5px; white-space:nowrap;" onclick="sendSupportAiMessage('How does the $5 welcome bonus and 11% commission work?')">
+          <!-- Quick FAQ Chips (Light WhatsApp Style) -->
+          <div style="background:#F0F2F5; padding:6px 10px 2px 10px; display:flex; gap:6px; overflow-x:auto; border-top:1px solid #D1D7DB; flex-shrink:0;">
+            <button type="button" class="chat-preset-chip" style="background:#FFFFFF; border:1px solid #D1D7DB; color:#008069; font-size:11.5px; white-space:nowrap;" onclick="sendSupportAiMessage('How does the $5 welcome bonus and 11% commission work?')">
               💳 $5 Bonus &amp; 11% Rule
             </button>
-            <button type="button" class="chat-preset-chip" style="background:#202C33; border:1px solid #2A3942; color:#53BDEB; font-size:11.5px; white-space:nowrap;" onclick="sendSupportAiMessage('How do I top up my provider wallet with EcoCash USD?')">
+            <button type="button" class="chat-preset-chip" style="background:#FFFFFF; border:1px solid #D1D7DB; color:#008069; font-size:11.5px; white-space:nowrap;" onclick="sendSupportAiMessage('How do I top up my provider wallet with EcoCash USD?')">
               💵 EcoCash Top-Up
             </button>
-            <button type="button" class="chat-preset-chip" style="background:#202C33; border:1px solid #2A3942; color:#53BDEB; font-size:11.5px; white-space:nowrap;" onclick="sendSupportAiMessage('How do I view or change my service categories in Settings?')">
+            <button type="button" class="chat-preset-chip" style="background:#FFFFFF; border:1px solid #D1D7DB; color:#008069; font-size:11.5px; white-space:nowrap;" onclick="sendSupportAiMessage('How do I view or change my service categories in Settings?')">
               🛠️ Job Categories
             </button>
-            <button type="button" class="chat-preset-chip" style="background:#202C33; border:1px solid #2A3942; color:#53BDEB; font-size:11.5px; white-space:nowrap;" onclick="sendSupportAiMessage('What is your official website and phone number?')">
+            <button type="button" class="chat-preset-chip" style="background:#FFFFFF; border:1px solid #D1D7DB; color:#008069; font-size:11.5px; white-space:nowrap;" onclick="sendSupportAiMessage('What is your official website and phone number?')">
               🌐 Website &amp; Line
             </button>
           </div>
 
-          <!-- Authentic Dark WhatsApp Bottom Input Bar -->
-          <form onsubmit="event.preventDefault(); sendSupportAiMessage(); return false;" style="background:#1F2C34; padding:8px 10px 14px 10px; display:flex; align-items:center; gap:8px; flex-shrink:0; margin:0;">
-            <div style="flex:1; display:flex; align-items:center; background:#2A3942; border-radius:24px; padding:0 12px; height:42px;">
-              <span style="color:#8696A0; cursor:pointer; font-size:18px; margin-right:8px; display:flex; align-items:center;">
+          <!-- Authentic Light WhatsApp Bottom Input Bar -->
+          <form onsubmit="event.preventDefault(); sendSupportAiMessage(); return false;" style="background:#F0F2F5; padding:8px 10px 14px 10px; display:flex; align-items:center; gap:8px; flex-shrink:0; margin:0;">
+            <div style="flex:1; display:flex; align-items:center; background:#FFFFFF; border-radius:24px; padding:0 12px; height:42px; border:1px solid #E2E8F0;">
+              <span style="color:#54656F; cursor:pointer; font-size:18px; margin-right:8px; display:flex; align-items:center;">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
               </span>
               <input
@@ -5959,15 +5917,20 @@ function renderModalLayer() {
                 type="text"
                 autocomplete="off"
                 placeholder="Message"
-                style="flex:1; border:none; background:transparent; font-size:14px; color:#E9EDEF; outline:none; height:100%;"
+                style="flex:1; border:none; background:transparent; font-size:14px; color:#111B21; outline:none; height:100%;"
               />
-              <span style="color:#8696A0; cursor:pointer; margin-left:8px; display:flex; align-items:center;">
+              <span style="color:#54656F; cursor:pointer; margin-left:8px; display:flex; align-items:center;">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
               </span>
             </div>
             <button
               type="submit"
-              style="width:42px; height:42px; border-radius:50%; border:none; background:#00A884; color:#FFFFFF; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; box-shadow:0 2px 6px rgba(0,168,132,0.4);"
+              style="width:42px; height:42px; border-radius:50%; border:none; background:#00A884; color:#FFFFFF; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; box-shadow:0 2px 6px rgba(0,168,132,0.3);"
+            >
+              ${uiIcon('send', 16)}
+            </button>
+          </form>
+        </div>
             >
               ${uiIcon('send', 16)}
             </button>
@@ -8647,6 +8610,13 @@ function renderChatDrawer() {
     state.activeChatRequestId = req.id;
   }
 
+  // Smooth DOM retention: if chat modal is already mounted for this request, ONLY update messages to avoid keyboard jump/flicker!
+  const existingFeed = document.getElementById('fullScreenChatFeed');
+  if (existingFeed && existingFeed.getAttribute('data-req-id') === String(req?.id || '')) {
+    updateChatFeedDomOnly(req);
+    return;
+  }
+
   let peerName = 'Service Provider';
   let peerAvatar = 'https://images.unsplash.com/photo-1531123897727-8f129e1688ce?auto=format&fit=crop&w=240&q=80';
   let peerSubtitle = 'Online • Verified Pro';
@@ -8709,7 +8679,7 @@ function renderChatDrawer() {
         </div>
 
         <!-- Scrollable WhatsApp Feed with iOS Wallpaper Tint -->
-        <div class="fullscreen-chat-feed" id="fullScreenChatFeed">
+        <div class="fullscreen-chat-feed" id="fullScreenChatFeed" data-req-id="${req?.id || ''}">
           ${renderChatMessagesHtml(messages)}
         </div>
 
