@@ -3522,66 +3522,259 @@ Return ONLY JSON with keys: "matchedCategoryId" (string), "taskSummary" (string)
   }
 
   // ==========================================================================
-  // IN-APP WHATSAPP BUSINESS SUPPORT AI (STRICTLY FINDIT HARARE SUPPORT ONLY)
+  // IN-APP WHATSAPP BUSINESS SUPPORT AI (PER-USER PERSISTENT CHAT HISTORY + STRICT FINDIT GUARD)
   // ==========================================================================
+  if (pathname === '/api/support/history' && req.method === 'GET') {
+    const userKey = (parsedUrl.searchParams.get('userId') || parsedUrl.searchParams.get('phone') || 'guest').replace(/[^a-zA-Z0-9_-]/g, '_');
+    if (!db.supportChats || typeof db.supportChats !== 'object') db.supportChats = {};
+    const messages = Array.isArray(db.supportChats[userKey]) ? db.supportChats[userKey] : [];
+    return sendJson(res, 200, { userKey, messages });
+  }
+
   if (pathname === '/api/support/chat' && req.method === 'POST') {
     try {
       const body = await parseBody(req);
       const userMessage = (body.message || '').trim();
       const userRole = body.role === 'PROVIDER' ? 'Service Provider' : 'Client';
       const userName = body.userName || 'Member';
+      const userKey = String(body.userId || body.phone || userName || 'guest').replace(/[^a-zA-Z0-9_-]/g, '_');
       if (!userMessage) return sendJson(res, 400, { error: 'Empty message' });
 
-      // Deterministic Knowledge Base Fallback for instant reliability
-      const lower = userMessage.toLowerCase();
-      let fallbackReply = `Hello ${userName}! 👋 Welcome to *Findit Harare Official Support*.\n\nI can help you with:\n• *Booking a Home-Visit Pro* (Move the blue YOU pin on the map, set your USD fare, or schedule for later)\n• *Provider $5 Welcome Bonus & 11% Commission Rules*\n• *EcoCash USD Wallet Top-Ups* (Merchant: *0713 475 131*)\n• *4-Digit Arrival Start PIN & Safety*\n\nPlease tell me what you need help with on Findit Harare!`;
+      if (!db.supportChats || typeof db.supportChats !== 'object') db.supportChats = {};
+      if (!Array.isArray(db.supportChats[userKey])) db.supportChats[userKey] = [];
 
-      if (/(top\s*up|ecocash|wallet|balance|low\s*account|5\s*dollar|\$5|\$2|commission|11%)/i.test(lower)) {
-        fallbackReply = `💳 *Findit Harare Wallet & Commission Guide:*\n\n1. *$5 Welcome Bonus:* Every verified Service Provider receives *$5.00* free starter credit upon joining.\n2. *11% Commission & $2 Floor:* A *11%* commission is deducted per job, and your wallet cannot drop below *$2.00*.\n3. *How Much to Top Up:* If your balance is too low to bid, check *11%* of the bid amount—if 11% is below $5, top up at least *$5.00*. If 11% is above $5, top up that *11% figure*.\n4. *EcoCash USD Top-Up:* Send USD via EcoCash to *0713 475 131* (*FINDIT HARARE OFFICIAL*), then paste your confirmation SMS in the *Wallet* tab!`;
-      } else if (/(pin|start\s*pin|4-digit|arrive|verify)/i.test(lower)) {
-        fallbackReply = `🔐 *4-Digit Arrival Start PIN:*\n\nWhen your accepted Service Provider arrives at your gate, share the *4-digit Start PIN* shown on your booking screen. The provider enters this PIN to mark the service *IN PROGRESS* and activate in-app safety tracking.`;
-      } else if (/(someone\s*else|schedule|later|book|order|map|pin)/i.test(lower)) {
-        fallbackReply = `📍 *How to Order on Findit Harare:*\n\n1. Drag the map to position the blue *YOU* pin at your desired Harare location and tap *Order service here*.\n2. Choose *For Myself* or *For Someone Else* (enter recipient name & phone).\n3. Choose *⚡ Now (Immediate)* or *Schedule for Later* (pick date & time).\n4. Set your offer fare in USD and tap *Find offers*!`;
-      } else if (/(ban|suspend|warning|rule|instagram|facebook|photo|flyer)/i.test(lower)) {
-        fallbackReply = `🛡️ *Findit Harare Safety & Conduct Rules:*\n\n• Sharing phone numbers, WhatsApp links, *instagram.com*, or *facebook.com* links in chat is strictly prohibited.\n• Service Providers cannot upload images, logos, or flyers in chat (upload work samples in your *Catalogue* tab for Admin approval).\n• If your account was warned or suspended, please provide your *Findit ID* here so Admin can review your case.`;
+      // Merge any client-side history so conversation context is never lost across serverless instances
+      if (Array.isArray(body.history) && body.history.length > 0 && db.supportChats[userKey].length === 0) {
+        db.supportChats[userKey] = body.history.slice(-24).map((m) => ({
+          id: m.id || ('sup_' + Date.now() + Math.random().toString(36).slice(2, 5)),
+          sender: m.sender === 'USER' ? 'USER' : 'BUSINESS',
+          text: String(m.text || ''),
+          time: m.time || new Date().toISOString()
+        }));
       }
 
+      const nowIso = new Date().toISOString();
+      const userMsgObj = {
+        id: 'sup_u_' + Date.now(),
+        sender: 'USER',
+        text: userMessage,
+        time: nowIso
+      };
+      db.supportChats[userKey].push(userMsgObj);
+
+      const recentHistory = db.supportChats[userKey].slice(-16);
+      const historyTranscript = recentHistory
+        .map((m) => `${m.sender === 'USER' ? `${userName} (${userRole})` : 'Findit Harare Official'}: ${m.text}`)
+        .join('\n');
+
+      // Comprehensive Findit Harare Fallback Knowledge Base (understands indirect/varied phrasing + off-topic guard)
+      const lower = userMessage.toLowerCase();
+      const isOffTopic =
+        /(capital\s+of|president\s+of|who\s+won\s+the\s+world\s+cup|write\s+a\s+poem|solve\s+this\s+math|python\s+code|javascript\s+code|recipe\s+for|bitcoin\s+price|football\s+score|homework|biology|chemistry|physics|weather\s+in\s+london)/i.test(lower) &&
+        !/(findit|harare|service|book|provider|client|ecocash|wallet|job|app|plumber|braid|barber|clean|solar|repair)/i.test(lower);
+
+      let fallbackReply = `Hello *${userName}*! 👋 Welcome to *Findit Harare Official* Support (*finditharare.co.zw*).\n\nI can help you with anything related to *Findit Harare*:\n• *Ordering a Home Service* (Move the blue *YOU* pin or search any Harare address, set your USD fare, or schedule for later)\n• *Service Provider Categories & Settings* (View or change up to 3 job categories in *Account Settings*)\n• *Wallet, $5 Welcome Bonus & 11% Commission Rules*\n• *EcoCash USD Top-Ups* (Merchant: *0713 475 131*)\n• *4-Digit Arrival Start PIN & Safety*\n\nWhat can I help you with today?`;
+
+      if (isOffTopic) {
+        fallbackReply = `I am the official *Findit Harare Support Assistant* (*finditharare.co.zw*). I can only assist with questions and support related to *Findit Harare*—such as booking home services, provider accounts & job categories, EcoCash USD top-ups (*0713 475 131*), pricing, or safety.\n\nHow can I help you with *Findit Harare* today?`;
+      } else if (/(website|site|url|web\s*page|link|domain|finditharare\.co\.zw|online)/i.test(lower)) {
+        fallbackReply = `🌐 *Findit Harare Official Website & Contacts:*\n\n• *Official Website:* *https://finditharare.co.zw* (*finditharare.co.zw*)\n• *Official EcoCash & Support Line:* *+263 71 347 5131* (*0713 475 131*)\n• *Instagram:* *@findithahare*\n• *Facebook:* *Findit Harare Official*\n\nLet me know if you need help with a booking or your account!`;
+      } else if (/(categor|change\s*job|edit\s*job|switch\s*service|add\s*service|my\s*services|what\s*jobs|choose\s*categor|settings|profile)/i.test(lower)) {
+        fallbackReply = `🛠️ *How to View or Change Your Job Categories & Account Settings:*\n\n1. Open the left side menu (☰) and tap *Account Settings* (or tap the *Categories / Settings* button in Provider Mode).\n2. Under *My Service Categories (Up to 3)*, you can see your active job categories and tap any category to add or switch your specialties (e.g., *Home Repairs & Construction*, *Beauty & Personal Care*, *Cleaning & Domestic*, *Automotive*, *Solar, Electrical Power & Water*, *Gardening & Outdoor*, *General Labour*).\n3. Tap *Save Account & Categories*—your job feed will immediately update to show only requests matching your chosen categories!`;
+      } else if (/(top\s*up|ecocash|wallet|balance|low\s*account|5\s*dollar|\$5|\$2|commission|11%|pay|fee|deduct)/i.test(lower)) {
+        fallbackReply = `💳 *Findit Harare Wallet & 11% Commission Guide:*\n\n1. *$5 Welcome Bonus:* Every verified Service Provider receives *$5.00* free starter credit upon joining.\n2. *11% Commission & $2 Minimum Floor:* A *11%* platform commission is deducted per confirmed job, and your wallet cannot drop below *$2.00*.\n3. *How Much to Top Up When Bidding:* Check *11%* of the bid amount—if 11% is below $5, top up at least *$5.00*. If 11% is above $5, top up that *11% amount*.\n4. *EcoCash USD Top-Up:* Send USD to *0713 475 131* (*FINDIT HARARE OFFICIAL*), then paste your EcoCash SMS in the *Wallet* tab for instant AI & Admin verification!`;
+      } else if (/(pin|start\s*pin|4-digit|arrive|verify|code|outside|gate)/i.test(lower)) {
+        fallbackReply = `🔐 *4-Digit Arrival Start PIN:*\n\nWhen your accepted Service Provider arrives at your location (within 20m), your phone alerts you with your *4-digit Start PIN*. Share this PIN with your provider at the gate so they can enter it to start the job. (If the provider waits within 20m for 3 minutes, the system also auto-verifies arrival to protect both parties.)`;
+      } else if (/(schedule|later|book|order|map|location|navigate|address|how\s*does\s*it\s*work|hire|find\s*a\s*pro)/i.test(lower)) {
+        fallbackReply = `📍 *How to Book a Service on Findit Harare:*\n\n1. On the map, drag the blue *YOU* pin to your location or tap *Your Home Visit Location* to search any real Harare street, landmark, or suburb.\n2. Pick your service category—the *Most Used Services* list automatically updates to match your chosen category.\n3. Choose *⚡ Now (Immediate)* or *Schedule for Later* (pick date & time).\n4. Set your USD offer fare and tap *Find offers* to see real-time bids from verified pros viewing your request!`;
+      } else if (/(ban|suspend|warning|rule|instagram|facebook|photo|flyer|number|contact|block)/i.test(lower)) {
+        fallbackReply = `🛡️ *Findit Harare Safety & Anti-Bypass Rules:*\n\n• Phone numbers, WhatsApp links, *instagram.com*, and *facebook.com* links are blocked in chat to keep all bookings safe and insured in-app.\n• Service Providers cannot upload images, logos, or flyers in chat (upload work photos in your *Catalogue* tab for Admin review).\n• If you need help with an account warning or verification, share your *Findit App ID* here and we will assist you right away.`;
+      }
+
+      const categoriesSummary = (db.categories || [])
+        .map((c) => `${c.fullName || c.name}: ${(c.subServices || []).map((s) => `${s.name} (~$${s.defaultUsd})`).join(', ')}`)
+        .join(' | ');
+
       const systemPrompt = `You are the official WhatsApp Business Support AI for "Findit Harare Official" (Harare, Zimbabwe's on-demand home-services marketplace).
-User Name: ${userName} (${userRole})
-Official Business Details:
+Current User: ${userName} (Role: ${userRole}, UserKey: ${userKey})
+
+Official Business Identity & Links:
+- Official Website: https://finditharare.co.zw (finditharare.co.zw)
 - Business Name: Findit Harare Official (Verified Business Account)
 - Official Support & EcoCash Merchant Number: +263 71 347 5131 (0713 475 131)
 - Official Instagram: @findithahare (https://www.instagram.com/findithahare/)
 - Official Facebook: Findit Harare Official (https://www.facebook.com/profile.php?id=61595501858201)
 - Headquarters: Samora Machel Ave / First St, Harare CBD (Open 24/7)
 
-Platform Rules & Features you know inside-out:
-1. Clients move the blue "YOU" pin on the Harare map to any location, pick a category, toggle "For Myself" or "For Someone Else", toggle "Now (Immediate)" or "Schedule for Later", set their USD offer fare, and receive bids from verified pros.
-2. Every new Service Provider gets $5.00 starter credit in their Wallet. Platform commission is 11% per job, and an account wallet cannot go below $2.00.
-3. Low-balance top-up rule when bidding: If a provider's wallet would drop below $2.00 after the 11% commission, they must top up via EcoCash USD (0713 475 131). If 11% of the bid is below $5, they must top up at least $5.00; if 11% of the bid is above $5, they must top up at least that 11% amount.
-4. Safety & Anti-Bypass: Phone numbers, instagram.com, facebook.com, and external links are blocked in chat. Providers cannot send images/flyers in chat (only in their verified Catalogue).
-5. Biometric Face ID & Government ID are required for security.
+Complete Findit Harare Platform Knowledge (Understand any user phrasing, indirect questions, or local Harare context):
+1. Booking & Real Location Navigation: Clients can drag the blue "YOU" pin anywhere on the Harare map OR tap "Your Home Visit Location" to search any real Harare street, landmark, or suburb and navigate the map there. When a client selects a category tile, the "Most Used Services" list updates to match that category's services. Clients can book for "Now (Immediate)" or "Schedule for Later", attach a style/task reference photo, set their USD offer fare, and see in real time the exact count of pros viewing their request.
+2. Service Categories & Catalogue: ${categoriesSummary}
+3. Provider Job Categories & Account Settings: Service Providers can view, edit, or change their chosen job categories (up to 3 categories) anytime in "Account Settings" (from the side menu ☰ or provider header). Providers only see open job request cards that match their chosen categories. They can also update their Brand Name, Starting Price (USD), Suburb, Physical Workshop/Office address, and Work Catalogue photos in the app.
+4. Provider Wallet, $5 Welcome Bonus & 11% Commission: Every new Service Provider gets $5.00 free starter credit. Platform commission is 11% per job, and a provider's wallet balance cannot drop below $2.00. If a provider's balance is too low to bid on a job, they check 11% of the bid amount: if 11% is under $5, they must top up at least $5.00; if 11% is $5 or more, they top up at least that 11% amount via EcoCash USD to 0713 475 131 and paste the confirmation SMS in the Wallet tab.
+5. Arrival Start PIN & Safety: When a provider arrives within 20m of the client, the client shares their 4-digit Start PIN so the provider can verify arrival and begin work. (If the provider is at the pin within 20m for 3 minutes, auto-pair verifies the start.) Phone numbers, instagram.com, facebook.com, and external links are blocked in chat, and providers cannot upload images/flyers in chat.
+6. Multi-Service Hub: Includes the active Job Marketplace plus upcoming Online Shopping and Transport & Carriers hubs.
 
-STRICT TOPIC RESTRICTION (CRITICAL):
-You must ONLY answer questions or assist with issues related to Findit Harare (bookings, provider accounts, EcoCash top-ups, commissions, safety, bugs, or Harare home services).
-If the user asks about ANYTHING unrelated to Findit Harare (e.g., general world trivia, math homework, coding, essays, politics, sports, recipes, etc.), you MUST politely refuse and say:
-"I am the official Findit Harare Support Assistant. I can only assist with questions and support related to the Findit Harare app (bookings, EcoCash top-ups, provider accounts, or safety). How can I help you with Findit Harare today?"
+CONVERSATION MEMORY (Maintain continuous, natural context with ${userName}):
+${historyTranscript}
 
-Keep your reply concise, warm, professional, and formatted like an iOS WhatsApp Business message (using *bold* for key terms).
-Return ONLY JSON with key: "reply" (string).`;
+STRICT TOPIC GUARDRAIL (CRITICAL):
+- You must answer ALL questions that relate in any way to Findit Harare, hiring/offering services in Harare, app features, account settings, job categories, EcoCash payments, pricing, troubleshooting, or our website (finditharare.co.zw), no matter how the user phrases the question (including casual phrasing, follow-up questions like "how do I do that?" or "what about...", or Shona/English mix).
+- ONLY if the user asks something completely unrelated to Findit Harare or home services (e.g. general trivia, math homework, coding, politics, sports, cooking recipes), politely decline and state that you only assist with Findit Harare support.
 
-      const aiRes = await callSilentAiJson(`${systemPrompt}\n\nUser Message: "${userMessage}"`);
-      const finalReply = (aiRes && aiRes.data && aiRes.data.reply) ? aiRes.data.reply : fallbackReply;
+Keep your reply helpful, warm, concise, and formatted for iOS WhatsApp Business (use *bold* for key terms).
+Return ONLY valid JSON with key: "reply" (string).`;
+
+      let finalReply = fallbackReply;
+      if (!isOffTopic) {
+        const aiRes = await callSilentAiJson(`${systemPrompt}\n\nLatest User Message from ${userName}: "${userMessage}"`);
+        if (aiRes && aiRes.data && typeof aiRes.data.reply === 'string' && aiRes.data.reply.trim()) {
+          finalReply = aiRes.data.reply.trim();
+        }
+      }
+
+      const botMsgObj = {
+        id: 'sup_b_' + (Date.now() + 1),
+        sender: 'BUSINESS',
+        text: finalReply,
+        time: new Date().toISOString()
+      };
+      db.supportChats[userKey].push(botMsgObj);
+      if (db.supportChats[userKey].length > 50) {
+        db.supportChats[userKey] = db.supportChats[userKey].slice(-50);
+      }
+      saveDb(db);
 
       return sendJson(res, 200, {
         reply: finalReply,
-        timestamp: new Date().toISOString()
+        timestamp: botMsgObj.time,
+        history: db.supportChats[userKey]
       });
     } catch (e) {
       return sendJson(res, 200, {
-        reply: 'Welcome to *Findit Harare Official Support*! How can we assist you with your booking, provider wallet, or account today?',
+        reply: 'Welcome to *Findit Harare Official Support* (*finditharare.co.zw*)! How can we assist you with your booking, provider job categories, EcoCash wallet (*0713 475 131*), or account today?',
         timestamp: new Date().toISOString()
       });
+    }
+  }
+
+  // ==========================================================================
+  // ACCOUNT & PROVIDER SETTINGS UPDATE (NAME, SUBURB, PROVIDER JOB CATEGORIES)
+  // ==========================================================================
+  if (pathname === '/api/account/update-settings' && req.method === 'POST') {
+    try {
+      const body = await parseBody(req);
+      const role = body.role === 'PROVIDER' ? 'PROVIDER' : 'CUSTOMER';
+      const userId = body.userId || body.id;
+      const phoneDigits = String(body.phone || '').replace(/\D/g, '');
+
+      if (role === 'PROVIDER') {
+        let prov = (db.providers || []).find(
+          (p) => p.id === userId || (phoneDigits && String(p.phone || '').replace(/\D/g, '') === phoneDigits)
+        );
+        if (!prov && userId) {
+          prov = {
+            id: userId,
+            finditId: body.finditId || ('FH-PRO-' + Math.floor(100000 + Math.random() * 900000)),
+            name: body.name || 'Verified Specialist',
+            shortName: (body.name || 'Specialist').split(' ')[0],
+            brandName: body.brandName || `${body.name || 'Specialist'} Services`,
+            phone: body.phone || '+263 77 000 0000',
+            categoryId: 'repairs_construction',
+            categoryIds: ['repairs_construction'],
+            suburbId: body.suburbId || 'avondale',
+            suburbName: body.suburbName || 'Avondale',
+            lat: -17.7955,
+            lng: 31.0365,
+            startingPriceUsd: Number(body.startingPriceUsd || 20),
+            walletBalanceUsd: Number(body.walletBalanceUsd ?? 5.0),
+            walletTransactions: [],
+            portfolio: [],
+            reviews: [],
+            isOnline: true,
+            isBanned: false,
+            badges: { phoneVerified: true, idVerified: true, businessVerified: true, faceVerified: true }
+          };
+          db.providers.push(prov);
+        }
+        if (!prov) return sendJson(res, 404, { error: 'Provider account not found' });
+
+        if (body.name && body.name.trim()) {
+          prov.name = body.name.trim();
+          prov.shortName = prov.name.split(' ')[0];
+        }
+        if (body.brandName !== undefined && String(body.brandName).trim()) {
+          prov.brandName = String(body.brandName).trim();
+        }
+        if (Array.isArray(body.categoryIds) && body.categoryIds.length > 0) {
+          const validCats = body.categoryIds.filter(Boolean).slice(0, 3);
+          if (validCats.length > 0) {
+            prov.categoryIds = validCats;
+            prov.categoryId = validCats[0];
+          }
+        } else if (body.categoryId) {
+          prov.categoryId = body.categoryId;
+          prov.categoryIds = [body.categoryId];
+        }
+        if (body.suburbId) {
+          const subObj = HARARE_SUBURBS.find((s) => s.id === body.suburbId || s.name === body.suburbId);
+          if (subObj) {
+            prov.suburbId = subObj.id;
+            prov.suburbName = subObj.name;
+            prov.lat = subObj.lat;
+            prov.lng = subObj.lng;
+          }
+        }
+        if (body.startingPriceUsd !== undefined && Number(body.startingPriceUsd) >= 5) {
+          prov.startingPriceUsd = Number(body.startingPriceUsd);
+        }
+        if (typeof body.isOnline === 'boolean') {
+          prov.isOnline = body.isOnline;
+        }
+        saveDb(db);
+        broadcastUpdate('ACCOUNT_UPDATED', { role: 'PROVIDER', user: prov });
+        return sendJson(res, 200, { ok: true, user: prov });
+      } else {
+        let cust = (db.customers || []).find(
+          (c) => c.id === userId || (phoneDigits && String(c.phone || '').replace(/\D/g, '') === phoneDigits)
+        );
+        if (!cust && userId) {
+          cust = {
+            id: userId,
+            finditId: body.finditId || ('FH-USR-' + Math.floor(100000 + Math.random() * 900000)),
+            name: body.name || 'Findit Client',
+            phone: body.phone || '+263 77 000 0000',
+            suburbId: body.suburbId || 'avondale',
+            suburbName: body.suburbName || 'Avondale',
+            rating: 5.0,
+            completedBookings: 0,
+            isBanned: false
+          };
+          db.customers.push(cust);
+        }
+        if (!cust) return sendJson(res, 404, { error: 'Client account not found' });
+
+        if (body.name && body.name.trim()) {
+          cust.name = body.name.trim();
+        }
+        if (body.suburbId) {
+          const subObj = HARARE_SUBURBS.find((s) => s.id === body.suburbId || s.name === body.suburbId);
+          if (subObj) {
+            cust.suburbId = subObj.id;
+            cust.suburbName = subObj.name;
+          }
+        }
+        if (body.entranceNote !== undefined) {
+          cust.entranceNote = String(body.entranceNote || 'Main Gate').trim();
+        }
+        if (body.preferredPaymentMethod) {
+          cust.preferredPaymentMethod = body.preferredPaymentMethod;
+        }
+        saveDb(db);
+        broadcastUpdate('ACCOUNT_UPDATED', { role: 'CUSTOMER', user: cust });
+        return sendJson(res, 200, { ok: true, user: cust });
+      }
+    } catch (e) {
+      return sendJson(res, 400, { error: e.message });
     }
   }
 

@@ -5,9 +5,9 @@
 const SESSION_KEY = 'findit_harare_session_v3';
 
 // Vercel handles all HTTP API routes natively via /api/index.js -> server.js.
-// Render is strictly used for optional WebSocket signaling only.
+// Optional external WebSocket relay (leave empty while Render workspace is suspended so zero WS timeout occurs)
 const API_BASE = '';
-const WS_RELAY_HOST = 'finditharare.onrender.com';
+const WS_RELAY_HOST = (typeof window !== 'undefined' && window.FINDIT_WS_HOST) ? window.FINDIT_WS_HOST : '';
 
 const state = {
   db: null,
@@ -706,22 +706,36 @@ function finishOnboarding() {
 }
 
 let lastStateFingerprint = '';
+let isFetchingState = false;
+let stateMutationEpoch = 0;
+
+function markLocalStateMutation() {
+  stateMutationEpoch++;
+}
 
 function computeStateFingerprint(db) {
   if (!db) return '';
-  const reqSig = (db.requests || []).map((r) => `${r.id}:${r.status}:${(r.offers || []).length}:${r.acceptedOfferId || ''}:${r.budgetUsd}`).join(';');
-  const userSig = state.currentUser ? `${state.currentUser.id}:${state.currentUser.walletBalanceUsd}:${state.currentUser.warningsCount || 0}:${state.currentUser.isBanned}` : '';
-  const provSig = (db.providers || []).map((p) => `${p.id}:${p.isOnline}`).join(';');
-  const modalSig = state.activeModal || '';
-  return `${reqSig}|${userSig}|${provSig}|${modalSig}|${state.screenStep}|${state.providerTab}|${state.role}`;
+  const reqSig = (db.requests || []).map((r) => `${r.id}:${r.status}:${(r.offers || []).length}:${r.acceptedOfferId || ''}:${r.budgetUsd}:${(r.activeViewerIds || []).length}`).join(';');
+  const userSig = state.currentUser ? `${state.currentUser.id}:${state.currentUser.walletBalanceUsd}:${state.currentUser.warningsCount || 0}:${state.currentUser.isBanned}:${(state.currentUser.categoryIds || []).join(',')}` : '';
+  const provSig = (db.providers || []).map((p) => `${p.id}:${p.isOnline}:${(p.categoryIds || []).join(',')}`).join(';');
+  const clSig = (db.changelogs || []).map((c) => c.id).join(',');
+  return `${reqSig}|${userSig}|${provSig}|${clSig}|${state.screenStep}|${state.providerTab}|${state.role}`;
 }
 
 async function fetchState(force = false) {
+  if (isFetchingState && !force) return;
+  isFetchingState = true;
+  const fetchStartEpoch = stateMutationEpoch;
   try {
     const newDb = await apiGet('/api/state', 2);
 
-    // Preserve optimistic local chat messages across state fetches so messages never disappear
-    if (state.db && state.db.requests && newDb.requests) {
+    // If a local user action happened while this background poll was in flight, ignore stale poll
+    if (!force && fetchStartEpoch !== stateMutationEpoch) {
+      return;
+    }
+
+    // Preserve optimistic local chat messages AND active local requests across serverless instances
+    if (state.db && Array.isArray(state.db.requests) && Array.isArray(newDb.requests)) {
       newDb.requests.forEach((newReq) => {
         const oldReq = state.db.requests.find((r) => r.id === newReq.id);
         if (oldReq && oldReq.messages && oldReq.messages.length > 0) {
@@ -733,16 +747,42 @@ async function fetchState(force = false) {
           });
         }
       });
+
+      // If the user has an active local request that a cold serverless container doesn't have yet, retain it!
+      if (state.activeRequestId) {
+        const localActive = state.db.requests.find((r) => r.id === state.activeRequestId && (r.status === 'OPEN' || isBookedStatus(r.status)));
+        if (localActive && !newDb.requests.some((r) => r.id === localActive.id)) {
+          newDb.requests.unshift(localActive);
+        }
+      }
     }
 
     state.db = newDb;
     const prevBanned = Boolean(state.currentUser?.isBanned);
-    // Rock-solid session retention: NEVER log out or nullify an active user!
+    // Rock-solid session & profile retention: NEVER log out or overwrite user's chosen categories/profile with stale defaults!
     if (state.isAuthenticated && state.currentUser) {
       const list = state.role === 'PROVIDER' ? (state.db.providers || []) : (state.db.customers || []);
       const found = list.find((item) => item.id === state.currentUser.id || (item.phone && state.currentUser.phone && item.phone.replace(/\D/g, '') === state.currentUser.phone.replace(/\D/g, '')));
       if (found) {
+        const localCategoryIds = state.currentUser.categoryIds;
+        const localCategoryId = state.currentUser.categoryId;
+        const localName = state.currentUser.name;
+        const localBrand = state.currentUser.brandName;
         state.currentUser = { ...state.currentUser, ...found };
+        if (Array.isArray(localCategoryIds) && localCategoryIds.length > 0 && state.userCustomizedProfile) {
+          state.currentUser.categoryIds = localCategoryIds;
+          state.currentUser.categoryId = localCategoryId || localCategoryIds[0];
+          found.categoryIds = localCategoryIds;
+          found.categoryId = state.currentUser.categoryId;
+        }
+        if (localName && state.userCustomizedProfile) {
+          state.currentUser.name = localName;
+          found.name = localName;
+        }
+        if (localBrand && state.userCustomizedProfile) {
+          state.currentUser.brandName = localBrand;
+          found.brandName = localBrand;
+        }
       } else {
         list.push(state.currentUser);
       }
@@ -775,11 +815,13 @@ async function fetchState(force = false) {
       const activeEl = document.activeElement;
       const isUserTyping = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT');
       if (!isUserTyping || force) {
-        renderAll();
+        renderAll(force);
       }
     }
   } catch (err) {
     console.error('Failed to load state:', err);
+  } finally {
+    isFetchingState = false;
   }
 }
 
@@ -813,16 +855,16 @@ function initRealtimeSync() {
   connectWebSocket();
   if (!realtimeSyncInterval) {
     realtimeSyncInterval = setInterval(() => {
-      // High performance: Only poll if WebSocket is disconnected!
-      // When WebSocket is active, all broadcasts arrive instantly with 0ms latency without hammering the server.
-      if (!isWsConnected) {
+      // Smooth non-overlapping delta sync when WebSocket is not active
+      if (!isWsConnected && !isFetchingState) {
         const activeEl = document.activeElement;
         const isUserTyping = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT');
-        if (!isUserTyping && state.activeModal !== 'SIGNUP_FLOW') {
+        // Never interrupt active modals (Support, Settings, Sign-up, Suburb Picker, Notes) with background polls
+        if (!isUserTyping && !state.activeModal) {
           fetchState(false);
         }
       }
-    }, 2000);
+    }, 3200);
   }
 }
 
@@ -1098,6 +1140,11 @@ function connectWebSocket() {
   }
 
   const isVercel = typeof window !== 'undefined' && window.location.hostname.includes('vercel.app');
+  // If running on Vercel and no external WS_RELAY_HOST is configured, skip WS handshake so there is 0ms connection lag
+  if (isVercel && !WS_RELAY_HOST) {
+    isWsConnected = false;
+    return;
+  }
 
   if (typeof WebSocket === 'undefined') {
     if (!isVercel) connectRealtimeStream();
@@ -1356,6 +1403,7 @@ async function apiGet(url, retries = 2) {
 }
 
 async function apiPost(url, body, retries = 2) {
+  markLocalStateMutation();
   const target = url.startsWith('http') ? url : (API_BASE + url);
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
@@ -1876,7 +1924,7 @@ function syncMapVisibility() {
 // ============================================================================
 // MAIN RENDER CONTROLLER
 // ============================================================================
-function renderAll() {
+function renderAll(force = true) {
   if (!state.db) return;
 
   if (state.isAuthenticated && state.role === 'CUSTOMER') {
@@ -1888,18 +1936,20 @@ function renderAll() {
       }
     } else if (activeReq && isBookedStatus(activeReq.status)) {
       state.screenStep = 'BOOKED';
-    } else if (state.activeRequestId && state.screenStep === 'SEARCHING') {
-      // Retain searching state while server completes broadcast
+    } else if (state.activeRequestId && (state.screenStep === 'SEARCHING' || state.screenStep === 'BOOKED')) {
+      // Retain searching/booked state while request is active locally
     } else if (state.screenStep === 'SEARCHING' || state.screenStep === 'BOOKED') {
       state.screenStep = 'HOME';
     }
   }
 
   syncMapVisibility();
-  updateMapMarkers();
-  renderFloatingOffersOverlay();
+  updateMapMarkers(false);
+  renderFloatingOffersOverlay(false);
   renderUiOverlay(false);
-  renderModalLayer();
+  if (force || state.activeModal) {
+    renderModalLayer();
+  }
   renderChatDrawer();
   renderCallModal();
   renderOnboardingLayer();
@@ -4299,7 +4349,9 @@ function renderModalLayer() {
       ? `SUPPORT_${(state.supportChatMessages || []).length}_${state.supportAiTyping ? 1 : 0}_${state.supportShowBizInfo ? 1 : 0}`
       : state.activeModal === 'SUBURB_PICKER'
         ? `SUBURB_PICKER_${(state.locationSearchResults || []).length}_${state.locationSearching ? 1 : 0}`
-        : `${state.activeModal}_${JSON.stringify(state.modalData || {})}`;
+        : state.activeModal === 'SETTINGS'
+          ? `SETTINGS_${state.role}_${(state.settingsDraft?.categoryIds || []).join(',')}_${state.settingsDraft?.isOnline !== false ? 1 : 0}`
+          : `${state.activeModal}_${JSON.stringify(state.modalData || {})}`;
 
   if (modalKey === lastRenderedModalKey && root.firstElementChild) {
     return;
@@ -4813,9 +4865,9 @@ function renderModalLayer() {
                 <span>Safety</span>
               </div>
 
-              <div class="drawer-menu-item" onclick="state.activeModal='SETTINGS'; renderModalLayer();">
+              <div class="drawer-menu-item" onclick="openAccountSettingsModal()">
                 ${uiIcon('gear', 18)}
-                <span>Settings</span>
+                <span>${isProvider ? 'Settings & Job Categories' : 'Account Settings'}</span>
               </div>
 
               <div class="drawer-menu-item" onclick="state.activeModal='HELP'; renderModalLayer();">
@@ -4823,7 +4875,7 @@ function renderModalLayer() {
                 <span>Help</span>
               </div>
 
-              <div class="drawer-menu-item" onclick="state.activeModal='SUPPORT'; renderModalLayer();">
+              <div class="drawer-menu-item" onclick="openSupportModal()">
                 ${uiIcon('support', 18)}
                 <span>Support</span>
               </div>
@@ -5070,42 +5122,239 @@ function renderModalLayer() {
     return;
   }
 
-  // SETTINGS MODAL
+  // FUNCTIONAL ACCOUNT & PROVIDER CATEGORIES SETTINGS MODAL
   if (state.activeModal === 'SETTINGS') {
+    const isProvider = state.role === 'PROVIDER';
+    const currentUser = state.currentUser || (isProvider ? state.db?.providers?.[0] : state.db?.customers?.[0]) || {};
+    if (!state.settingsDraft) {
+      initSettingsDraftFromUser();
+    }
+    const draft = state.settingsDraft || {};
+    const allCategories = (state.db?.categories || []).filter((c) => c.status === 'ACTIVE');
+    const suburbs = state.db?.suburbs || [];
+    const selectedCats = Array.isArray(draft.categoryIds) && draft.categoryIds.length > 0
+      ? draft.categoryIds
+      : getProviderCategoryIds(currentUser);
+
     root.innerHTML = `
       <div class="modal-backdrop" onclick="closeModal()">
-        <div class="indrive-modal-sheet" onclick="event.stopPropagation()">
+        <div class="indrive-modal-sheet" style="max-height:88vh; overflow-y:auto;" onclick="event.stopPropagation()">
           <div class="cancel-sheet-header">
-            <div class="cancel-sheet-title">Account Settings</div>
+            <div>
+              <div class="cancel-sheet-title">${isProvider ? 'Provider Account & Job Categories' : 'Account & App Settings'}</div>
+              <div style="font-size:11.5px; color:var(--text-secondary); font-weight:600; margin-top:2px;">
+                ${isProvider ? 'Edit your profile, pricing, and up to 3 job categories' : 'Manage your profile, default suburb, and preferences'}
+              </div>
+            </div>
             <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
           </div>
-          <div class="indrive-cancel-row">
-            <span>Verification status</span>
-            <span style="color:#059669; font-weight:800; display:inline-flex; align-items:center; gap:4px;">
-              ${uiIcon('check', 14)}
-              <span>WhatsApp &amp; Face Verified</span>
-            </span>
+
+          <!-- Account Identity & Verification Card -->
+          <div style="background:linear-gradient(135deg, #EFF6FF 0%, #F8FAFC 100%); border:1.5px solid #BFDBFE; border-radius:16px; padding:12px 14px; margin-bottom:14px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
+            <div style="display:flex; align-items:center; gap:10px; min-width:0;">
+              <div style="width:46px; height:46px; border-radius:50%; background:#0066FF; color:#FFFFFF; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:16px; overflow:hidden; border:2px solid #FFFFFF; box-shadow:0 2px 8px rgba(0,102,255,0.25); flex-shrink:0;">
+                ${currentUser.avatarUrl
+                  ? `<img src="${currentUser.avatarUrl}" alt="Profile" style="width:100%; height:100%; object-fit:cover;" />`
+                  : `<span>${escapeHtml((draft.name || currentUser.name || 'FH').slice(0, 2).toUpperCase())}</span>`
+                }
+              </div>
+              <div style="min-width:0;">
+                <div style="font-size:14.5px; font-weight:800; color:#0F172A; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                  ${escapeHtml(draft.name || currentUser.name || 'Verified Member')}
+                </div>
+                <div style="font-size:11.5px; color:#475569; font-weight:700; font-family:monospace;">
+                  ${currentUser.finditId || (isProvider ? 'FH-PRO-849201' : 'FH-USR-392810')} • ${escapeHtml(currentUser.phone || '+263 77 200 1001')}
+                </div>
+                <div style="display:flex; align-items:center; gap:6px; margin-top:4px; flex-wrap:wrap;">
+                  <span style="background:#DCFCE7; color:#15803D; font-size:10.5px; font-weight:800; padding:2px 7px; border-radius:99px; display:inline-flex; align-items:center; gap:3px;">
+                    ${uiIcon('check', 11)} WhatsApp &amp; Face ID Verified
+                  </span>
+                  <span style="background:#DBEAFE; color:#1D4ED8; font-size:10.5px; font-weight:800; padding:2px 7px; border-radius:99px;">
+                    ${isProvider ? 'Service Provider' : 'Client Account'}
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
-          <div class="indrive-cancel-row">
-            <span>Findit App ID</span>
-            <span style="font-family:monospace; font-weight:800; color:var(--blue-primary);">${state.currentUser?.finditId || (state.role === 'PROVIDER' ? 'FH-PRO-849201' : 'FH-USR-392810')}</span>
+
+          ${isProvider ? `
+            <!-- PROVIDER JOB CATEGORIES EDITOR (SELECT UP TO 3 CATEGORIES) -->
+            <div style="background:#FFFFFF; border:1.5px solid var(--border-light); border-radius:16px; padding:12px 14px; margin-bottom:14px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                <div style="font-size:13px; font-weight:800; color:#0F172A;">
+                  My Job Categories (${selectedCats.length}/3 Selected)
+                </div>
+                <span style="font-size:11px; font-weight:800; color:#0066FF;">Tap to add / switch</span>
+              </div>
+              <div style="font-size:11.5px; color:var(--text-secondary); margin-bottom:10px; line-height:1.4;">
+                Choose up to <strong>3 service categories</strong>. Your Provider Job Feed will only show client requests from your selected categories.
+              </div>
+              <div style="display:grid; grid-template-columns:1fr; gap:7px;">
+                ${allCategories.map((cat) => {
+                  const isSelected = selectedCats.includes(cat.id);
+                  return `
+                    <div
+                      onclick="toggleSettingsProviderCategory('${cat.id}')"
+                      style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 12px; border-radius:12px; cursor:pointer; transition:all 0.15s ease; border:1.5px solid ${isSelected ? '#0066FF' : '#E2E8F0'}; background:${isSelected ? '#EFF6FF' : '#F8FAFC'};"
+                    >
+                      <div style="display:flex; align-items:center; gap:10px; min-width:0;">
+                        <div style="width:34px; height:34px; border-radius:10px; background:${isSelected ? '#0066FF' : '#FFFFFF'}; display:flex; align-items:center; justify-content:center; flex-shrink:0; border:1px solid ${isSelected ? '#0066FF' : '#E2E8F0'};">
+                          ${getCategoryVectorSvg(cat.id, isSelected)}
+                        </div>
+                        <div style="min-width:0;">
+                          <div style="font-size:13px; font-weight:800; color:${isSelected ? '#0066FF' : '#0F172A'};">
+                            ${escapeHtml(cat.fullName || cat.name)}
+                          </div>
+                          <div style="font-size:11px; color:#64748B; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                            ${escapeHtml(cat.tagline || '')}
+                          </div>
+                        </div>
+                      </div>
+                      <div style="width:22px; height:22px; border-radius:50%; background:${isSelected ? '#0066FF' : '#FFFFFF'}; border:1.5px solid ${isSelected ? '#0066FF' : '#CBD5E1'}; color:#FFFFFF; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                        ${isSelected ? uiIcon('check', 13) : ''}
+                      </div>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+          ` : ''}
+
+          <!-- Editable Profile & Dispatch Settings Form -->
+          <div style="background:#FFFFFF; border:1.5px solid var(--border-light); border-radius:16px; padding:12px 14px; margin-bottom:14px; display:flex; flex-direction:column; gap:10px;">
+            <div style="font-size:13px; font-weight:800; color:#0F172A;">Profile &amp; Location Details</div>
+
+            <div>
+              <label style="display:block; font-size:11.5px; font-weight:700; color:var(--text-secondary); margin-bottom:4px;">Full Name</label>
+              <input
+                id="settingsNameInput"
+                type="text"
+                class="dark-input"
+                value="${escapeHtml(draft.name || currentUser.name || '')}"
+                placeholder="Your full name"
+                oninput="if(state.settingsDraft) state.settingsDraft.name = this.value"
+              />
+            </div>
+
+            ${isProvider ? `
+              <div style="display:grid; grid-template-columns:1.3fr 0.7fr; gap:8px;">
+                <div>
+                  <label style="display:block; font-size:11.5px; font-weight:700; color:var(--text-secondary); margin-bottom:4px;">Business / Brand Name</label>
+                  <input
+                    id="settingsBrandInput"
+                    type="text"
+                    class="dark-input"
+                    value="${escapeHtml(draft.brandName || currentUser.brandName || '')}"
+                    placeholder="e.g. Tatenda Home Repairs"
+                    oninput="if(state.settingsDraft) state.settingsDraft.brandName = this.value"
+                  />
+                </div>
+                <div>
+                  <label style="display:block; font-size:11.5px; font-weight:700; color:var(--text-secondary); margin-bottom:4px;">Base Rate ($)</label>
+                  <input
+                    id="settingsPriceInput"
+                    type="number"
+                    min="5"
+                    class="dark-input"
+                    value="${Number(draft.startingPriceUsd || currentUser.startingPriceUsd || 20)}"
+                    oninput="if(state.settingsDraft) state.settingsDraft.startingPriceUsd = Number(this.value)"
+                  />
+                </div>
+              </div>
+            ` : `
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                <div>
+                  <label style="display:block; font-size:11.5px; font-weight:700; color:var(--text-secondary); margin-bottom:4px;">Default Gate / Entrance</label>
+                  <input
+                    id="settingsEntranceInput"
+                    type="text"
+                    class="dark-input"
+                    value="${escapeHtml(draft.entranceNote || state.entranceNote || 'Main Gate')}"
+                    placeholder="e.g. Main Gate"
+                    oninput="if(state.settingsDraft) state.settingsDraft.entranceNote = this.value"
+                  />
+                </div>
+                <div>
+                  <label style="display:block; font-size:11.5px; font-weight:700; color:var(--text-secondary); margin-bottom:4px;">Default Payment</label>
+                  <select
+                    id="settingsPaymentSelect"
+                    class="dark-input"
+                    onchange="if(state.settingsDraft) state.settingsDraft.preferredPaymentMethod = this.value"
+                  >
+                    ${['Cash USD', 'EcoCash USD', 'InnBucks USD'].map((pm) => `
+                      <option value="${pm}" ${(draft.preferredPaymentMethod || state.draftPaymentMethod) === pm ? 'selected' : ''}>${pm}</option>
+                    `).join('')}
+                  </select>
+                </div>
+              </div>
+            `}
+
+            <div>
+              <label style="display:block; font-size:11.5px; font-weight:700; color:var(--text-secondary); margin-bottom:4px;">Primary Harare Suburb</label>
+              <select
+                id="settingsSuburbSelect"
+                class="dark-input"
+                onchange="if(state.settingsDraft) state.settingsDraft.suburbId = this.value"
+              >
+                ${suburbs.map((s) => `
+                  <option value="${s.id}" ${(draft.suburbId || currentUser.suburbId || state.selectedSuburbId) === s.id ? 'selected' : ''}>${s.name}, Harare (${s.zone})</option>
+                `).join('')}
+              </select>
+            </div>
+
+            <button type="button" class="btn-primary-blue" style="margin-top:4px; height:44px;" onclick="saveAccountSettingsChanges()">
+              ${uiIcon('check', 16)}
+              <span>${isProvider ? 'Save Account & Job Categories' : 'Save Account Settings'}</span>
+            </button>
           </div>
-          <div class="indrive-cancel-row">
-            <span>Phone number</span>
-            <span style="color:var(--text-secondary); font-weight:700;">${state.currentUser?.phone || '+263 77 200 1001'}</span>
-          </div>
-          <div class="indrive-cancel-row">
-            <span>Currency</span>
-            <span style="color:var(--blue-primary); font-weight:800;">USD ($)</span>
-          </div>
-          <div class="indrive-cancel-row" onclick="logoutCurrentAccount()">
-            <span style="color:var(--text-main); font-weight:700;">Log Out</span>
-          </div>
-          <div class="indrive-cancel-row" onclick="promptDeleteAccount()" style="border-top:1px solid #FEE2E2; margin-top:6px; cursor:pointer;">
-            <span style="color:#DC2626; font-weight:800; display:flex; align-items:center; gap:8px;">
-              ${uiIcon('trash', 16)}
-              <span>Delete Account Permanently</span>
-            </span>
+
+          <!-- Quick Actions & Platform Links -->
+          <div style="display:flex; flex-direction:column; gap:2px;">
+            ${isProvider ? `
+              <div class="indrive-cancel-row" onclick="openProviderOfficeModal()">
+                <div class="cancel-row-left">
+                  <span style="color:var(--blue-primary);">${uiIcon('buildingOffice', 17)}</span>
+                  <span>Physical Workshop / Office Location</span>
+                </div>
+                ${uiIcon('chevronRight', 16)}
+              </div>
+            ` : ''}
+
+            <div class="indrive-cancel-row" onclick="toggleClientAndProviderMode()">
+              <div class="cancel-row-left">
+                <span style="color:var(--blue-primary);">${isProvider ? uiIcon('user', 17) : uiIcon('briefcase', 17)}</span>
+                <span style="font-weight:700;">${isProvider ? 'Switch to Client Mode' : 'Switch to Service Provider Mode'}</span>
+              </div>
+              ${uiIcon('chevronRight', 16)}
+            </div>
+
+            <a href="https://finditharare.co.zw" target="_blank" rel="noopener" class="indrive-cancel-row" style="text-decoration:none; color:inherit;">
+              <div class="cancel-row-left">
+                <span style="color:var(--blue-primary);">${uiIcon('sparkle', 17)}</span>
+                <span>Official Website (<strong>finditharare.co.zw</strong>)</span>
+              </div>
+              ${uiIcon('chevronRight', 16)}
+            </a>
+
+            <div class="indrive-cancel-row" onclick="openSupportModal()">
+              <div class="cancel-row-left">
+                <span style="color:#25D366;">${uiIcon('support', 17)}</span>
+                <span>Findit Harare Official Support Chat</span>
+              </div>
+              ${uiIcon('chevronRight', 16)}
+            </div>
+
+            <div class="indrive-cancel-row" onclick="logoutCurrentAccount()">
+              <span style="color:var(--text-main); font-weight:700;">Log Out</span>
+              ${uiIcon('chevronRight', 16)}
+            </div>
+
+            <div class="indrive-cancel-row" onclick="promptDeleteAccount()" style="border-top:1px solid #FEE2E2; margin-top:4px; cursor:pointer;">
+              <span style="color:#DC2626; font-weight:800; display:flex; align-items:center; gap:8px;">
+                ${uiIcon('trash', 16)}
+                <span>Delete Account Permanently</span>
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -5220,19 +5469,10 @@ function renderModalLayer() {
   }
 
   // ==========================================================================
-  // IN-APP iOS WHATSAPP BUSINESS CLONE SUPPORT CHAT (AI-POWERED)
+  // IN-APP iOS WHATSAPP BUSINESS CLONE SUPPORT CHAT (AI-POWERED + PERSISTENT HISTORY)
   // ==========================================================================
   if (state.activeModal === 'SUPPORT') {
-    if (!Array.isArray(state.supportChatMessages) || state.supportChatMessages.length === 0) {
-      state.supportChatMessages = [
-        {
-          id: 'sup_welcome',
-          sender: 'BUSINESS',
-          text: `Hello ${state.currentUser?.name || 'there'}! 👋 Welcome to *Findit Harare Official* Support.\n\nHow can we help you with your Findit Harare booking, EcoCash USD top-up, $5 provider bonus, or account today?`,
-          time: formatChatTime(new Date().toISOString())
-        }
-      ];
-    }
+    loadUserSupportHistory();
     const showBizProfile = Boolean(state.supportShowBizInfo);
     const formatWaBold = (str) => escapeHtml(str || '').replace(/\*([^*]+)\*/g, '<strong>$1</strong>').replace(/\n/g, '<br/>');
 
@@ -5283,9 +5523,12 @@ function renderModalLayer() {
                 <button type="button" onclick="toggleSupportBizInfo()" style="background:#F2F2F7; border:none; border-radius:50%; width:28px; height:28px; cursor:pointer; font-weight:800;">✕</button>
               </div>
               <div style="font-size:12px; color:#3C3C43; background:#F2F2F7; padding:9px 11px; border-radius:10px; margin-bottom:10px; line-height:1.4;">
-                Your Price • Your Pro • At Your Door. Official Harare Marketplace Support &amp; EcoCash Verification Desk (Merchant: <strong>0713 475 131</strong>).
+                Your Price • Your Pro • At Your Door. Official Harare Marketplace Support &amp; EcoCash Verification Desk (Merchant: <strong>0713 475 131</strong> • Website: <a href="https://finditharare.co.zw" target="_blank" rel="noopener" style="color:#007AFF; font-weight:700;">finditharare.co.zw</a>).
               </div>
-              <div style="font-size:11px; font-weight:700; color:#8E8E93; text-transform:uppercase; margin-bottom:6px;">Linked Business Accounts (IG &amp; FB)</div>
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                <div style="font-size:11px; font-weight:700; color:#8E8E93; text-transform:uppercase;">Linked Business Accounts (IG &amp; FB)</div>
+                <button type="button" onclick="clearUserSupportHistory()" style="border:none; background:none; color:#DC2626; font-size:11px; font-weight:700; cursor:pointer;">Clear Chat History</button>
+              </div>
               <div style="display:flex; gap:8px;">
                 <a href="https://www.instagram.com/findithahare/" target="_blank" rel="noopener" style="flex:1; display:flex; align-items:center; gap:7px; padding:8px 10px; background:#FDF2F8; border:1px solid #FBCFE8; border-radius:10px; text-decoration:none; color:#9D174D; font-size:12px; font-weight:700;">
                   <span style="color:#E1306C; display:inline-flex;">${uiIcon('instagram', 16)}</span>
@@ -6990,12 +7233,22 @@ function renderProviderRequestsFeedTab(prov, openRequests, activeJob) {
         </div>
       ` : ''}
 
-      <div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-bottom:10px;">
-        <span style="font-size:11px; font-weight:700; color:var(--text-secondary);">Showing jobs in:</span>
-        ${getProviderCategoryIds(prov).map((cid) => {
-          const c = (state.db.categories || []).find((x) => x.id === cid);
-          return `<span style="font-size:11px; font-weight:800; background:var(--blue-soft); color:var(--blue-primary); padding:3px 9px; border-radius:99px;">${escapeHtml(c ? (c.name || c.fullName) : cid)}</span>`;
-        }).join('')}
+      <div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center; justify-content:space-between; margin-bottom:10px;">
+        <div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
+          <span style="font-size:11px; font-weight:700; color:var(--text-secondary);">Showing jobs in:</span>
+          ${getProviderCategoryIds(prov).map((cid) => {
+            const c = (state.db.categories || []).find((x) => x.id === cid);
+            return `<span style="font-size:11px; font-weight:800; background:var(--blue-soft); color:var(--blue-primary); padding:3px 9px; border-radius:99px;">${escapeHtml(c ? (c.name || c.fullName) : cid)}</span>`;
+          }).join('')}
+        </div>
+        <button
+          type="button"
+          onclick="openAccountSettingsModal()"
+          style="border:1px solid var(--blue-border); background:#FFFFFF; color:var(--blue-primary); font-size:11px; font-weight:800; padding:4px 9px; border-radius:99px; cursor:pointer; display:inline-flex; align-items:center; gap:4px;"
+        >
+          ${uiIcon('edit', 11)}
+          <span>Edit Categories</span>
+        </button>
       </div>
 
       ${openRequests.length === 0 ? `
@@ -7862,6 +8115,251 @@ function renderChatMessagesHtml(messages) {
   return encryptionBanner + msgsHtml;
 }
 
+function getSupportUserKey() {
+  const raw = state.currentUser?.id || state.currentUser?.phone || state.savedAccountId || 'guest';
+  return String(raw).replace(/[^a-zA-Z0-9_-]/g, '_');
+}
+
+function getSupportChatStorageKey() {
+  return `findit_support_chat_v2_${getSupportUserKey()}`;
+}
+
+function loadUserSupportHistory() {
+  const key = getSupportChatStorageKey();
+  if (state.loadedSupportKey === key && Array.isArray(state.supportChatMessages) && state.supportChatMessages.length > 0) {
+    return;
+  }
+  state.loadedSupportKey = key;
+  try {
+    const saved = localStorage.getItem(key);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        state.supportChatMessages = parsed;
+        return;
+      }
+    }
+  } catch (e) {}
+
+  state.supportChatMessages = [
+    {
+      id: 'sup_welcome',
+      sender: 'BUSINESS',
+      text: `Hello *${state.currentUser?.name || 'there'}*! 👋 Welcome to *Findit Harare Official* Support (*finditharare.co.zw*).\n\nHow can we help you with your Findit Harare booking, provider job categories, EcoCash USD top-up (*0713 475 131*), or account today?`,
+      time: formatChatTime(new Date().toISOString())
+    }
+  ];
+  saveUserSupportHistory();
+
+  // Also sync any server-stored history for this user in the background
+  fetch(`/api/support/history?userId=${encodeURIComponent(getSupportUserKey())}`)
+    .then((r) => r.json())
+    .then((data) => {
+      if (data && Array.isArray(data.messages) && data.messages.length > state.supportChatMessages.length) {
+        state.supportChatMessages = data.messages.map((m) => ({
+          id: m.id,
+          sender: m.sender,
+          text: m.text,
+          time: m.time && m.time.includes('T') ? formatChatTime(m.time) : (m.time || '')
+        }));
+        saveUserSupportHistory();
+        if (state.activeModal === 'SUPPORT') {
+          lastRenderedModalKey = '';
+          renderModalLayer();
+        }
+      }
+    })
+    .catch(() => {});
+}
+
+function saveUserSupportHistory() {
+  try {
+    const key = getSupportChatStorageKey();
+    if (Array.isArray(state.supportChatMessages)) {
+      localStorage.setItem(key, JSON.stringify(state.supportChatMessages.slice(-50)));
+    }
+  } catch (e) {}
+}
+
+function clearUserSupportHistory() {
+  try {
+    localStorage.removeItem(getSupportChatStorageKey());
+  } catch (e) {}
+  state.loadedSupportKey = '';
+  state.supportChatMessages = [];
+  loadUserSupportHistory();
+  lastRenderedModalKey = '';
+  renderModalLayer();
+  showToast('Support chat history cleared', 'info');
+}
+
+function openSupportModal() {
+  loadUserSupportHistory();
+  state.activeModal = 'SUPPORT';
+  lastRenderedModalKey = '';
+  renderModalLayer();
+}
+
+function initSettingsDraftFromUser() {
+  const isProvider = state.role === 'PROVIDER';
+  const u = state.currentUser || (isProvider ? state.db?.providers?.[0] : state.db?.customers?.[0]) || {};
+  state.settingsDraft = {
+    name: u.name || '',
+    brandName: u.brandName || `${u.name || 'Specialist'} Services`,
+    startingPriceUsd: Number(u.startingPriceUsd || 20),
+    suburbId: u.suburbId || state.selectedSuburbId || 'avondale',
+    categoryIds: isProvider ? [...getProviderCategoryIds(u)] : [],
+    entranceNote: u.entranceNote || state.entranceNote || 'Main Gate',
+    preferredPaymentMethod: u.preferredPaymentMethod || state.draftPaymentMethod || 'Cash USD',
+    isOnline: u.isOnline !== false
+  };
+}
+
+function openAccountSettingsModal() {
+  initSettingsDraftFromUser();
+  state.activeModal = 'SETTINGS';
+  lastRenderedModalKey = '';
+  renderModalLayer();
+}
+
+function toggleSettingsProviderCategory(catId) {
+  if (!state.settingsDraft) initSettingsDraftFromUser();
+  // Preserve current typed inputs before re-rendering category selection
+  const nameInp = document.getElementById('settingsNameInput');
+  const brandInp = document.getElementById('settingsBrandInput');
+  const priceInp = document.getElementById('settingsPriceInput');
+  const suburbSel = document.getElementById('settingsSuburbSelect');
+  if (nameInp) state.settingsDraft.name = nameInp.value;
+  if (brandInp) state.settingsDraft.brandName = brandInp.value;
+  if (priceInp) state.settingsDraft.startingPriceUsd = Number(priceInp.value);
+  if (suburbSel) state.settingsDraft.suburbId = suburbSel.value;
+
+  const list = Array.isArray(state.settingsDraft.categoryIds) ? [...state.settingsDraft.categoryIds] : [];
+  const idx = list.indexOf(catId);
+  if (idx >= 0) {
+    if (list.length <= 1) {
+      showToast('You must have at least 1 active job category selected', 'error');
+      return;
+    }
+    list.splice(idx, 1);
+  } else {
+    if (list.length >= 3) {
+      // Replace the oldest selected category if already at 3 so switching is effortless
+      list.shift();
+    }
+    list.push(catId);
+  }
+  state.settingsDraft.categoryIds = list;
+  lastRenderedModalKey = '';
+  renderModalLayer();
+}
+
+async function saveAccountSettingsChanges() {
+  if (!state.settingsDraft) initSettingsDraftFromUser();
+  const isProvider = state.role === 'PROVIDER';
+  const nameVal = (document.getElementById('settingsNameInput')?.value || state.settingsDraft.name || '').trim();
+  const suburbIdVal = document.getElementById('settingsSuburbSelect')?.value || state.settingsDraft.suburbId || 'avondale';
+  const subObj = (state.db?.suburbs || []).find((s) => s.id === suburbIdVal) || (state.db?.suburbs || [])[0];
+
+  if (!nameVal) {
+    showToast('Please enter your name', 'error');
+    return;
+  }
+
+  state.userCustomizedProfile = true;
+  markLocalStateMutation();
+
+  if (isProvider) {
+    const brandVal = (document.getElementById('settingsBrandInput')?.value || state.settingsDraft.brandName || `${nameVal} Services`).trim();
+    const priceVal = Math.max(5, Number(document.getElementById('settingsPriceInput')?.value || state.settingsDraft.startingPriceUsd || 20));
+    const catIds = (state.settingsDraft.categoryIds && state.settingsDraft.categoryIds.length > 0)
+      ? state.settingsDraft.categoryIds.slice(0, 3)
+      : ['repairs_construction'];
+
+    if (!state.currentUser) state.currentUser = state.db?.providers?.[0] || {};
+    state.currentUser.name = nameVal;
+    state.currentUser.shortName = nameVal.split(' ')[0];
+    state.currentUser.brandName = brandVal;
+    state.currentUser.startingPriceUsd = priceVal;
+    state.currentUser.categoryIds = catIds;
+    state.currentUser.categoryId = catIds[0];
+    if (subObj) {
+      state.currentUser.suburbId = subObj.id;
+      state.currentUser.suburbName = subObj.name;
+      state.currentUser.lat = subObj.lat;
+      state.currentUser.lng = subObj.lng;
+    }
+
+    const dbProv = (state.db?.providers || []).find((p) => p.id === state.currentUser.id);
+    if (dbProv) {
+      Object.assign(dbProv, {
+        name: state.currentUser.name,
+        shortName: state.currentUser.shortName,
+        brandName: state.currentUser.brandName,
+        startingPriceUsd: state.currentUser.startingPriceUsd,
+        categoryIds: state.currentUser.categoryIds,
+        categoryId: state.currentUser.categoryId,
+        suburbId: state.currentUser.suburbId,
+        suburbName: state.currentUser.suburbName
+      });
+    }
+
+    saveSession('PROVIDER', state.currentUser, false);
+    closeModal();
+    lastUiOverlaySignature = '';
+    renderAll(true);
+
+    try {
+      await apiPost('/api/account/update-settings', {
+        role: 'PROVIDER',
+        userId: state.currentUser.id,
+        phone: state.currentUser.phone,
+        name: state.currentUser.name,
+        brandName: state.currentUser.brandName,
+        startingPriceUsd: state.currentUser.startingPriceUsd,
+        categoryIds: state.currentUser.categoryIds,
+        suburbId: state.currentUser.suburbId
+      });
+    } catch (e) {}
+  } else {
+    const entranceVal = (document.getElementById('settingsEntranceInput')?.value || state.settingsDraft.entranceNote || 'Main Gate').trim();
+    const payVal = document.getElementById('settingsPaymentSelect')?.value || state.settingsDraft.preferredPaymentMethod || 'Cash USD';
+
+    if (!state.currentUser) state.currentUser = state.db?.customers?.[0] || {};
+    state.currentUser.name = nameVal;
+    state.currentUser.entranceNote = entranceVal;
+    state.currentUser.preferredPaymentMethod = payVal;
+    state.entranceNote = entranceVal;
+    state.draftPaymentMethod = payVal;
+    if (subObj) {
+      state.currentUser.suburbId = subObj.id;
+      state.currentUser.suburbName = subObj.name;
+      state.selectedSuburbId = subObj.id;
+      state.customAddress = subObj.name;
+      state.customSuburbLabel = `${subObj.name}, Harare`;
+      state.pinnedLat = subObj.lat;
+      state.pinnedLng = subObj.lng;
+    }
+
+    saveSession('CUSTOMER', state.currentUser, false);
+    closeModal();
+    lastUiOverlaySignature = '';
+    renderAll(true);
+
+    try {
+      await apiPost('/api/account/update-settings', {
+        role: 'CUSTOMER',
+        userId: state.currentUser.id,
+        phone: state.currentUser.phone,
+        name: state.currentUser.name,
+        suburbId: state.currentUser.suburbId,
+        entranceNote: state.currentUser.entranceNote,
+        preferredPaymentMethod: state.currentUser.preferredPaymentMethod
+      });
+    } catch (e) {}
+  }
+}
+
 function toggleSupportBizInfo() {
   state.supportShowBizInfo = !state.supportShowBizInfo;
   lastRenderedModalKey = '';
@@ -7874,13 +8372,14 @@ async function sendSupportAiMessage(presetText = null) {
   if (!text || state.supportAiTyping) return;
   if (inp) inp.value = '';
 
-  if (!Array.isArray(state.supportChatMessages)) state.supportChatMessages = [];
+  loadUserSupportHistory();
   state.supportChatMessages.push({
     id: 'sup_u_' + Date.now(),
     sender: 'USER',
     text,
     time: formatChatTime(new Date().toISOString())
   });
+  saveUserSupportHistory();
   state.supportAiTyping = true;
   lastRenderedModalKey = '';
   renderModalLayer();
@@ -7889,7 +8388,10 @@ async function sendSupportAiMessage(presetText = null) {
     const res = await apiPost('/api/support/chat', {
       message: text,
       role: state.role,
-      userName: state.currentUser?.name || 'Member'
+      userId: getSupportUserKey(),
+      phone: state.currentUser?.phone || '',
+      userName: state.currentUser?.name || 'Member',
+      history: state.supportChatMessages.slice(-16)
     });
     state.supportAiTyping = false;
     state.supportChatMessages.push({
@@ -7898,6 +8400,7 @@ async function sendSupportAiMessage(presetText = null) {
       text: res?.reply || 'How can we help you with Findit Harare today?',
       time: formatChatTime(res?.timestamp || new Date().toISOString())
     });
+    saveUserSupportHistory();
     lastRenderedModalKey = '';
     renderModalLayer();
     setTimeout(() => document.getElementById('waSupportInput')?.focus(), 40);
@@ -7906,9 +8409,10 @@ async function sendSupportAiMessage(presetText = null) {
     state.supportChatMessages.push({
       id: 'sup_b_' + Date.now(),
       sender: 'BUSINESS',
-      text: 'Welcome to *Findit Harare Official Support*! Please let us know if you need help with a booking, EcoCash top-up (0713 475 131), or your provider account.',
+      text: 'Welcome to *Findit Harare Official Support* (*finditharare.co.zw*)! Please let us know if you need help with a booking, provider job categories, EcoCash top-up (*0713 475 131*), or your account.',
       time: formatChatTime(new Date().toISOString())
     });
+    saveUserSupportHistory();
     lastRenderedModalKey = '';
     renderModalLayer();
     setTimeout(() => document.getElementById('waSupportInput')?.focus(), 40);
