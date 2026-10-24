@@ -4030,6 +4030,26 @@ Return ONLY JSON with keys:
     }
   }
 
+  // Provider Real-Time GPS Location Update (Moving towards client on map)
+  if (pathname === '/api/providers/location' && req.method === 'POST') {
+    try {
+      const body = await parseBody(req);
+      const prov = ensureProviderInDb(body.providerId, body.providerSnapshot);
+      if (prov && !prov.isBanned) {
+        if (typeof body.lat === 'number' && typeof body.lng === 'number') {
+          prov.lat = Number(body.lat.toFixed(5));
+          prov.lng = Number(body.lng.toFixed(5));
+          prov.lastLocationUpdate = new Date().toISOString();
+          saveDb(db);
+          broadcastUpdate('PROVIDER_MOVED', { providerId: prov.id, lat: prov.lat, lng: prov.lng });
+        }
+      }
+      return sendJson(res, 200, { ok: true, lat: prov?.lat, lng: prov?.lng });
+    } catch (e) {
+      return sendJson(res, 400, { error: e.message });
+    }
+  }
+
   // Mutual Completion & Two-Way Rating (Client rates Provider AND Provider rates Client!)
   if (pathname === '/api/bookings/status' && req.method === 'POST') {
     try {

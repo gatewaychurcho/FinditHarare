@@ -612,7 +612,7 @@ function renderOnboardingLayer() {
   lastRenderedOnboardingSig = sig;
 
   if (slide === 0) {
-    // Step 1: Clean & authentic (no sci-fi / AI hyper visuals)
+    // Step 1: Hand ordering on phone with animated isometric illustration
     container.innerHTML = `
       <div class="fh-onboarding-screen">
         <div class="onboarding-top-nav">
@@ -623,21 +623,69 @@ function renderOnboardingLayer() {
           <div class="onboarding-mock-phone">
             <div class="onboarding-mock-map-bg" style="background-image: radial-gradient(#CBD5E1 1.5px, transparent 1.5px), radial-gradient(#CBD5E1 1.5px, #F8FAFC 1.5px);"></div>
             
-            <div class="onboarding-pin-bubble" style="top:25px; left:40px;">${uiIcon('pin', 12)}</div>
-            <div class="onboarding-pin-bubble" style="top:45px; right:35px;">${uiIcon('pin', 12)}</div>
-            <div class="onboarding-pin-bubble" style="bottom:60px; left:30px;">${uiIcon('pin', 12)}</div>
+            <div class="onboarding-pin-bubble" style="top:20px; left:24px;">${uiIcon('pin', 12)}</div>
+            <div class="onboarding-pin-bubble" style="top:40px; right:20px;">${uiIcon('pin', 12)}</div>
 
-            <div class="onboarding-bid-card" style="top:55px; left:18px;">
+            <div class="onboarding-bid-card" style="top:42px; left:14px;">
               <span style="color:#0066FF; font-weight:800;">★ 4.9</span>
               <span style="font-weight:800;">$25 USD</span>
             </div>
 
-            <div class="onboarding-bid-card" style="top:110px; right:12px; animation-delay:1.5s;">
-              <span style="color:#10B981; font-weight:800;">★ 5.0</span>
-              <span style="font-weight:800;">$30 USD</span>
+            <div class="isometric-art-wrapper">
+              <svg viewBox="0 0 200 240" width="100%" height="100%" style="overflow:visible;">
+                <defs>
+                  <linearGradient id="phoneGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#1E293B"/>
+                    <stop offset="100%" stop-color="#0F172A"/>
+                  </linearGradient>
+                  <linearGradient id="screenGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#FFFFFF"/>
+                    <stop offset="100%" stop-color="#F1F5F9"/>
+                  </linearGradient>
+                  <linearGradient id="btnGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#0066FF"/>
+                    <stop offset="100%" stop-color="#0052CC"/>
+                  </linearGradient>
+                </defs>
+                
+                <!-- Isometric Phone Body -->
+                <g transform="translate(20, 20) skewY(-6) scale(0.92)">
+                  <rect x="10" y="10" width="145" height="210" rx="24" fill="url(#phoneGrad1)" stroke="#334155" stroke-width="3"/>
+                  <rect x="18" y="22" width="129" height="186" rx="16" fill="url(#screenGrad1)"/>
+                  <rect x="62" y="15" width="40" height="4" rx="2" fill="#475569"/>
+                  
+                  <rect x="26" y="34" width="55" height="8" rx="4" fill="#94A3B8"/>
+                  <rect x="26" y="46" width="80" height="12" rx="4" fill="#0F172A"/>
+                  
+                  <!-- Mini Map Surface -->
+                  <rect x="26" y="66" width="113" height="72" rx="8" fill="#E2E8F0"/>
+                  <path d="M26 95 Q60 85 90 100 T139 90" stroke="#CBD5E1" stroke-width="8" fill="none"/>
+                  <path d="M75 66 L75 138" stroke="#CBD5E1" stroke-width="6" fill="none"/>
+                  
+                  <!-- Blue Pin on Phone -->
+                  <circle cx="85" cy="94" r="7" fill="#0066FF"/>
+                  <circle cx="85" cy="94" r="3" fill="#FFFFFF"/>
+                  
+                  <!-- Tap Ripple -->
+                  <circle cx="82" cy="164" r="14" fill="none" stroke="#0066FF" stroke-width="2" opacity="0.8">
+                    <animate attributeName="r" values="8;24;36" dur="2s" repeatCount="indefinite"/>
+                    <animate attributeName="opacity" values="0.9;0.4;0" dur="2s" repeatCount="indefinite"/>
+                  </circle>
+                  
+                  <!-- Button -->
+                  <rect x="26" y="150" width="113" height="28" rx="8" fill="url(#btnGrad1)"/>
+                  <text x="82" y="168" fill="#FFFFFF" font-size="11" font-weight="bold" text-anchor="middle" font-family="-apple-system, sans-serif">Book Service</text>
+                </g>
+                
+                <!-- Animated Isometric Hand Tapping -->
+                <g class="iso-touch-hand">
+                  <path d="M125 180 L155 160 L175 190 L145 210 Z" fill="#0066FF" opacity="0.9"/>
+                  <path d="M115 165 L145 147 L160 170 L130 187 Z" fill="#FDBA74"/>
+                  <path d="M115 165 L95 151 C91 148 92 142 97 139 C101 136 107 137 111 141 L125 157 Z" fill="#FDBA74"/>
+                  <ellipse cx="96" cy="153" rx="6" ry="3" fill="#000000" opacity="0.25"/>
+                </g>
+              </svg>
             </div>
-
-            <img class="onboarding-character-img" src="https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=600&q=80" alt="Client" />
           </div>
         </div>
 
@@ -659,7 +707,7 @@ function renderOnboardingLayer() {
       </div>
     `;
   } else {
-    // Step 2: Clean & authentic specialist alert
+    // Step 2: Notification being received on phone with animated isometric card
     container.innerHTML = `
       <div class="fh-onboarding-screen">
         <div class="onboarding-top-nav">
@@ -670,19 +718,55 @@ function renderOnboardingLayer() {
           <div class="onboarding-mock-phone">
             <div class="onboarding-mock-map-bg" style="background-image: radial-gradient(#CBD5E1 1.5px, transparent 1.5px), radial-gradient(#CBD5E1 1.5px, #F8FAFC 1.5px);"></div>
 
-            <div class="onboarding-pin-bubble" style="top:30px; left:50px;">${uiIcon('pin', 12)}</div>
-            <div class="onboarding-pin-bubble" style="top:40px; right:40px;">${uiIcon('pin', 12)}</div>
-
-            <div class="onboarding-bid-card" style="top:70px; left:16px;">
-              <span style="color:#0066FF; font-weight:800;">⚡ New Task</span>
-              <span style="font-weight:800;">Borrowdale</span>
+            <div class="isometric-art-wrapper">
+              <svg viewBox="0 0 200 240" width="100%" height="100%" style="overflow:visible;">
+                <defs>
+                  <linearGradient id="phoneGrad2" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#1E293B"/>
+                    <stop offset="100%" stop-color="#0F172A"/>
+                  </linearGradient>
+                  <linearGradient id="screenGrad2" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#F8FAFC"/>
+                    <stop offset="100%" stop-color="#EFF6FF"/>
+                  </linearGradient>
+                </defs>
+                
+                <!-- Radar Alert Waves -->
+                <circle cx="100" cy="110" r="40" fill="none" stroke="#0066FF" stroke-width="1.5" opacity="0.7">
+                  <animate attributeName="r" values="30;65;95" dur="2.4s" repeatCount="indefinite"/>
+                  <animate attributeName="opacity" values="0.8;0.3;0" dur="2.4s" repeatCount="indefinite"/>
+                </circle>
+                
+                <!-- Isometric Phone Body -->
+                <g transform="translate(20, 20) skewY(6) scale(0.92)">
+                  <rect x="10" y="10" width="145" height="210" rx="24" fill="url(#phoneGrad2)" stroke="#334155" stroke-width="3"/>
+                  <rect x="18" y="22" width="129" height="186" rx="16" fill="url(#screenGrad2)"/>
+                  <rect x="62" y="15" width="40" height="4" rx="2" fill="#475569"/>
+                  
+                  <rect x="26" y="34" width="60" height="8" rx="4" fill="#94A3B8"/>
+                  <path d="M30 65 Q70 85 110 55 T135 105" stroke="#93C5FD" stroke-width="4" stroke-dasharray="4 4" fill="none"/>
+                </g>
+                
+                <!-- Floating Animated Incoming Notification Card -->
+                <g class="iso-notif-card-float" transform="translate(16, 72)">
+                  <rect x="0" y="0" width="168" height="66" rx="14" fill="#FFFFFF" stroke="#0066FF" stroke-width="2"/>
+                  
+                  <!-- Alert Bell Icon Circle -->
+                  <circle cx="24" cy="24" r="14" fill="#EFF6FF"/>
+                  <path d="M24 16 C21 16 19 18 19 21 L19 26 L17 28 L31 28 L29 26 L29 21 C29 18 27 16 24 16 Z M22 29 C22 30 23 31 24 31 C25 31 26 30 26 29 Z" fill="#0066FF"/>
+                  <circle cx="31" cy="16" r="4" fill="#EF4444"/>
+                  
+                  <text x="44" y="22" fill="#0F172A" font-size="12" font-weight="800" font-family="-apple-system, sans-serif">⚡ New Task Alert</text>
+                  <text x="44" y="36" fill="#64748B" font-size="10" font-weight="600" font-family="-apple-system, sans-serif">Borrowdale • Plumbing</text>
+                  
+                  <rect x="10" y="44" width="65" height="16" rx="8" fill="#ECFDF5"/>
+                  <text x="42" y="55" fill="#059669" font-size="10" font-weight="800" text-anchor="middle" font-family="-apple-system, sans-serif">$45 USD</text>
+                  
+                  <rect x="85" y="44" width="72" height="16" rx="8" fill="#0066FF"/>
+                  <text x="121" y="55" fill="#FFFFFF" font-size="9.5" font-weight="800" text-anchor="middle" font-family="-apple-system, sans-serif">View Offer</text>
+                </g>
+              </svg>
             </div>
-
-            <div class="onboarding-bid-card" style="top:125px; right:14px; animation-delay:1.2s;">
-              <span style="color:#10B981; font-weight:800;">💵 $45 Offer</span>
-            </div>
-
-            <img class="onboarding-character-img" src="https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=600&q=80" alt="Specialist" />
           </div>
         </div>
 
@@ -1314,20 +1398,25 @@ function handleIncomingRealtimeEvent(data) {
   // 8. REAL-TIME CALL INCOMING (Signaling to recipient)
   if (data.eventType === 'CALL_INCOMING' && data.payload) {
     const { callerId, callerName, recipientId, contextTitle, channelId, requestId } = data.payload;
-    const isTargetRecipient = (state.currentUser?.id && String(recipientId) === String(state.currentUser.id)) ||
-      (state.role === 'CUSTOMER' && state.activeRequestId === requestId) ||
-      (state.role === 'PROVIDER' && getProviderActiveBooking(state.currentUser?.id)?.id === requestId);
+    const myId = state.currentUser?.id;
+    const isCaller = Boolean(myId && String(callerId) === String(myId));
+    if (isCaller) return;
 
-    if (isTargetRecipient && (!state.currentUser?.id || String(callerId) !== String(state.currentUser.id))) {
+    const activeJob = state.role === 'PROVIDER' ? getProviderActiveBooking(myId) : getCustomerActiveRequest();
+    const isTargetRecipient = (myId && recipientId && String(recipientId) === String(myId)) ||
+      (requestId && ((state.activeRequestId === requestId) || (state.openChatRequestId === requestId) || (activeJob?.id === requestId)));
+
+    if (isTargetRecipient) {
       state.incomingCall = {
         callerId,
-        callerName,
-        contextTitle,
-        channelId,
+        callerName: callerName || 'User',
+        contextTitle: contextTitle || 'In-App Audio Call',
+        channelId: channelId || ('call_' + requestId),
         requestId
       };
       playIncomingRingtone();
       renderCallModal();
+      triggerSystemNotification('📞 Incoming Call from ' + (callerName || 'User'), contextTitle || 'Tap to answer', 'call_' + requestId);
     }
     return;
   }
@@ -1376,6 +1465,20 @@ function handleIncomingRealtimeEvent(data) {
     updateChatFeedDomOnly(request);
     lastUiOverlaySignature = '';
     renderUiOverlay();
+    return;
+  }
+
+  // 12. REAL-TIME PROVIDER LIVE LOCATION MOVED (Smooth map update)
+  if (data.eventType === 'PROVIDER_MOVED' && data.payload) {
+    const { providerId, lat, lng } = data.payload;
+    if (state.db?.providers) {
+      const p = state.db.providers.find((x) => x.id === providerId);
+      if (p) {
+        p.lat = lat;
+        p.lng = lng;
+      }
+    }
+    updateMapMarkers(true);
     return;
   }
 
@@ -1495,6 +1598,47 @@ function connectRealtimeStream() {
 // ============================================================================
 // 1-SECOND COUNTDOWN LOOP FOR SEARCH BAR, GEOFENCE 50M ALERTS & 20M AUTO-PAIR
 // ============================================================================
+function compressImageFileToDataUrl(file, maxDimension = 1200, quality = 0.82) {
+  return new Promise((resolve) => {
+    if (!file || !file.type || !file.type.startsWith('image/')) {
+      resolve(null);
+      return;
+    }
+    const reader = new FileReader();
+    reader.onerror = () => resolve(null);
+    reader.onload = (e) => {
+      const dataUrl = e.target.result;
+      const img = new Image();
+      img.onerror = () => resolve(dataUrl);
+      img.onload = () => {
+        try {
+          let w = img.width;
+          let h = img.height;
+          if (w > maxDimension || h > maxDimension) {
+            if (w > h) {
+              h = Math.round((h * maxDimension) / w);
+              w = maxDimension;
+            } else {
+              w = Math.round((w * maxDimension) / h);
+              h = maxDimension;
+            }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        } catch (err) {
+          resolve(dataUrl);
+        }
+      };
+      img.src = dataUrl;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 function calculateDistanceMeters(lat1, lng1, lat2, lng2) {
   if (!lat1 || !lng1 || !lat2 || !lng2) return 999999;
   const R = 6371000;
@@ -1875,7 +2019,86 @@ async function drawRoadRouteOnMap(lat1, lng1, lat2, lng2, color = '#0066FF', wei
   }
 }
 
+let providerLocationWatchId = null;
+let lastProviderReportedLat = null;
+let lastProviderReportedLng = null;
+let lastProviderBackendSyncMs = 0;
+
+function startProviderLiveLocationWatcher() {
+  if (!('geolocation' in navigator)) return;
+  if (providerLocationWatchId !== null) return;
+
+  providerLocationWatchId = navigator.geolocation.watchPosition(
+    (pos) => {
+      const { latitude, longitude } = pos.coords;
+      const rawLat = Number(latitude.toFixed(5));
+      const rawLng = Number(longitude.toFixed(5));
+
+      // Jitter filter: calculate distance in meters from previous reading
+      if (lastProviderReportedLat !== null && lastProviderReportedLng !== null) {
+        const moveDistMeters = calculateDistanceMeters(lastProviderReportedLat, lastProviderReportedLng, rawLat, rawLng);
+        // Ignore microscopic GPS noise / jitter under 3.5 meters to prevent pin shaking
+        if (moveDistMeters < 3.5) {
+          return;
+        }
+      }
+
+      lastProviderReportedLat = rawLat;
+      lastProviderReportedLng = rawLng;
+      state.userLiveGpsLat = rawLat;
+      state.userLiveGpsLng = rawLng;
+
+      if (state.role === 'PROVIDER') {
+        if (state.currentUser) {
+          state.currentUser.lat = rawLat;
+          state.currentUser.lng = rawLng;
+        }
+        const pMatch = (state.db?.providers || []).find((p) => p.id === state.currentUser?.id);
+        if (pMatch) {
+          pMatch.lat = rawLat;
+          pMatch.lng = rawLng;
+        }
+
+        // Throttle backend server sync to at most once every 3.5 seconds
+        const now = Date.now();
+        if (now - lastProviderBackendSyncMs > 3500) {
+          lastProviderBackendSyncMs = now;
+          if (state.currentUser?.id) {
+            apiPost('/api/providers/location', {
+              providerId: state.currentUser.id,
+              lat: rawLat,
+              lng: rawLng,
+              providerSnapshot: state.currentUser
+            }).catch(() => {});
+          }
+        }
+
+        // Smoothly update map without layer destruction
+        updateMapMarkers(true);
+      }
+    },
+    (err) => {
+      console.warn('Provider live GPS watch notice:', err.message);
+    },
+    {
+      enableHighAccuracy: true,
+      maximumAge: 2000,
+      timeout: 10000
+    }
+  );
+}
+
+function stopProviderLiveLocationWatcher() {
+  if (providerLocationWatchId !== null && 'geolocation' in navigator) {
+    navigator.geolocation.clearWatch(providerLocationWatchId);
+    providerLocationWatchId = null;
+  }
+}
+
 function useBrowserGeolocation(silent = false) {
+  if (state.role === 'PROVIDER') {
+    startProviderLiveLocationWatcher();
+  }
   if ('geolocation' in navigator) {
     navigator.geolocation.getCurrentPosition(
       (pos) => {
@@ -1886,10 +2109,23 @@ function useBrowserGeolocation(silent = false) {
         if (latitude > -18.3 && latitude < -17.5 && longitude > 30.8 && longitude < 31.4) {
           state.pinnedLat = state.userLiveGpsLat;
           state.pinnedLng = state.userLiveGpsLng;
-          reverseGeocodeHararePin(state.pinnedLat, state.pinnedLng);
+          if (state.role !== 'PROVIDER') {
+            reverseGeocodeHararePin(state.pinnedLat, state.pinnedLng);
+          }
+        }
+
+        if (state.role === 'PROVIDER' && state.currentUser) {
+          state.currentUser.lat = state.userLiveGpsLat;
+          state.currentUser.lng = state.userLiveGpsLng;
+          const pMatch = (state.db?.providers || []).find((p) => p.id === state.currentUser.id);
+          if (pMatch) {
+            pMatch.lat = state.userLiveGpsLat;
+            pMatch.lng = state.userLiveGpsLng;
+          }
         }
 
         updateLiveGpsMarker();
+        updateMapMarkers(true);
         if (leafletMap) {
           leafletMap.flyTo([state.userLiveGpsLat || state.pinnedLat, state.userLiveGpsLng || state.pinnedLng], 15, { duration: 0.7 });
         }
@@ -1915,6 +2151,17 @@ function useBrowserGeolocation(silent = false) {
 
 function updateLiveGpsMarker() {
   if (!leafletMap) return;
+
+  // In provider mode, provider's own position is rendered with their trade avatar icon
+  // Remove the redundant blue beacon to prevent dual-marker overlay and shaking!
+  if (state.role === 'PROVIDER') {
+    if (userLiveGpsMarker) {
+      leafletMap.removeLayer(userLiveGpsMarker);
+      userLiveGpsMarker = null;
+    }
+    return;
+  }
+
   const lat = state.userLiveGpsLat || state.pinnedLat;
   const lng = state.userLiveGpsLng || state.pinnedLng;
   if (!lat || !lng) return;
@@ -5789,11 +6036,11 @@ function renderModalLayer() {
 
     root.innerHTML = `
       <div class="fullscreen-chat-backdrop" style="z-index:99999;" onclick="closeModal()">
-        <div class="fullscreen-chat-modal" style="background:#EFEAE2; display:flex; flex-direction:column; height:100%; width:100%; max-width:480px; margin:0 auto; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color:#111B21;" onclick="event.stopPropagation()">
-          <!-- Authentic Light WhatsApp Business Top Bar (No 3-Dots) -->
+        <div class="fullscreen-chat-modal" style="background:#EFEAE2; display:flex; flex-direction:column; height:100%; width:100%; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color:#111B21;" onclick="event.stopPropagation()">
+          <!-- Authentic Light WhatsApp Business Top Bar (No 3-Dots, No Bin) -->
           <div style="background:#F0F2F5; border-bottom:1px solid #D1D7DB; padding:10px 12px; display:flex; align-items:center; justify-content:space-between; gap:8px; flex-shrink:0;">
             <div style="display:flex; align-items:center; gap:8px; min-width:0; flex:1;">
-              <button type="button" onclick="closeModal()" style="background:none; border:none; color:#54656F; display:flex; align-items:center; padding:4px 4px 4px 0; cursor:pointer;">
+              <button type="button" onclick="closeModal()" style="background:none; border:none; color:#54656F; display:flex; align-items:center; padding:4px 4px 4px 0; cursor:pointer;" title="Back">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#54656F" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
               </button>
               <div style="position:relative; width:40px; height:40px; border-radius:50%; overflow:hidden; background:#FFFFFF; flex-shrink:0; display:flex; align-items:center; justify-content:center; border:1px solid #D1D7DB;">
@@ -5809,12 +6056,6 @@ function renderModalLayer() {
                   Business account
                 </div>
               </div>
-            </div>
-
-            <div style="display:flex; align-items:center; gap:8px; color:#54656F;">
-              <button type="button" onclick="clearUserSupportHistory()" title="Clear Chat History" style="background:none; border:none; color:#54656F; cursor:pointer; display:flex; align-items:center; padding:4px;" title="Reset chat history">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-              </button>
             </div>
           </div>
 
@@ -6754,17 +6995,16 @@ async function submitServiceRequest() {
   }
 }
 
-function handleDraftStylePhotoUpload(inputEl) {
+async function handleDraftStylePhotoUpload(inputEl) {
   const file = inputEl.files && inputEl.files[0];
   if (!file) return;
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    state.draftPhotoUrl = e.target.result;
+  const compressed = await compressImageFileToDataUrl(file, 1200, 0.82);
+  if (compressed) {
+    state.draftPhotoUrl = compressed;
     renderAll();
     showToast('Desired style reference photo attached!');
     triggerSilentAiTaskAnalysis();
-  };
-  reader.readAsDataURL(file);
+  }
 }
 
 function removeDraftStylePhoto() {
@@ -7607,17 +7847,21 @@ function renderProviderActiveVisitTab(prov, activeJob) {
                   </div>
                 `}
 
-                <div style="flex:1; display:flex; gap:6px; min-width:0;">
+                <div style="flex:1; display:flex; align-items:center; gap:8px; min-width:0;">
                   <input
                     id="providerPinInput_${activeJob.id}"
                     class="dark-input"
-                    style="height:36px; font-size:14px; font-weight:800; letter-spacing:2px; text-align:center; padding:0 6px; flex:1; min-width:60px;"
-                    placeholder="Enter PIN"
+                    type="tel"
+                    inputmode="numeric"
+                    pattern="[0-9]*"
+                    style="height:36px; font-size:16px; font-weight:800; letter-spacing:4px; text-align:center; padding:0 8px; width:95px; flex-shrink:0; margin:0;"
+                    placeholder="••••"
                     maxlength="4"
+                    oninput="if(this.value.length === 4) handleProviderAutoPinVerification(this.value, '${activeJob.id}')"
                   />
-                  <button class="btn-primary-blue" style="height:36px; font-size:12px; font-weight:800; padding:0 12px; white-space:nowrap; border-radius:8px;" onclick="providerVerifyStartPin('${activeJob.id}')">
-                    <span>Verify</span>
-                  </button>
+                  <div id="providerPinStatus_${activeJob.id}" style="flex:1; min-width:0;">
+                    <span style="font-size:11px; font-weight:600; color:var(--text-secondary);">Enter 4-digit PIN</span>
+                  </div>
                 </div>
               </div>
 
@@ -8285,6 +8529,71 @@ async function providerMarkArrived(requestId) {
   }
 }
 
+async function handleProviderAutoPinVerification(pinCode, requestId) {
+  if (!pinCode || pinCode.length !== 4) return;
+  const input = document.getElementById(`providerPinInput_${requestId}`);
+  const statusEl = document.getElementById(`providerPinStatus_${requestId}`);
+
+  if (input) input.disabled = true;
+  if (statusEl) {
+    statusEl.innerHTML = `
+      <div style="display:inline-flex; align-items:center; gap:5px; font-size:11.5px; font-weight:700; color:#059669;">
+        <svg class="wa-spin-svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="3" stroke-linecap="round"><circle cx="12" cy="12" r="10" stroke-opacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10"/></svg>
+        <span>Verifying...</span>
+      </div>
+    `;
+  }
+
+  try {
+    markLocalStateMutation();
+    const reqSnap = (state.db?.requests || []).find((r) => r.id === requestId) || null;
+    const res = await apiPost('/api/bookings/verify-pin', {
+      requestId,
+      pinCode,
+      requestSnapshot: reqSnap
+    });
+
+    if (statusEl) {
+      statusEl.innerHTML = `
+        <div style="display:inline-flex; align-items:center; gap:4px; font-size:12px; font-weight:800; color:#10B981;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          <span>Verified!</span>
+        </div>
+      `;
+    }
+
+    if ('vibrate' in navigator) try { navigator.vibrate([100, 50, 100]); } catch (e) {}
+
+    // Complete job & transition directly to provider review & rating
+    setTimeout(async () => {
+      try {
+        await apiPost('/api/bookings/status', {
+          requestId,
+          status: 'COMPLETED',
+          requestSnapshot: res?.request || reqSnap
+        });
+      } catch (err) {}
+      await fetchState(true);
+      openRateBookingModal(requestId);
+    }, 600);
+  } catch (err) {
+    if (input) {
+      input.disabled = false;
+      input.value = '';
+      input.focus();
+      input.classList.add('input-shake-error');
+      setTimeout(() => input.classList.remove('input-shake-error'), 500);
+    }
+    if (statusEl) {
+      statusEl.innerHTML = `
+        <div style="font-size:11px; font-weight:800; color:#DC2626;">
+          ${escapeHtml(err.message || 'Incorrect PIN')}
+        </div>
+      `;
+    }
+  }
+}
+
 async function providerVerifyStartPin(requestId) {
   const input = document.getElementById(`providerPinInput_${requestId}`);
   const pinCode = input ? input.value.trim() : '';
@@ -8502,16 +8811,15 @@ function openUploadCatalogueModal() {
   renderModalLayer();
 }
 
-function handleRealPortfolioFileSelect(inputEl) {
+async function handleRealPortfolioFileSelect(inputEl) {
   const file = inputEl.files && inputEl.files[0];
   if (!file) return;
   state.uploadedFileName = file.name;
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    state.uploadedFileDataUrl = e.target.result;
+  const compressed = await compressImageFileToDataUrl(file, 1200, 0.82);
+  if (compressed) {
+    state.uploadedFileDataUrl = compressed;
     renderModalLayer();
-  };
-  reader.readAsDataURL(file);
+  }
 }
 
 async function submitProviderCatalogueUpload() {
@@ -8620,11 +8928,13 @@ function renderChatDrawer() {
   let peerName = 'Service Provider';
   let peerAvatar = 'https://images.unsplash.com/photo-1531123897727-8f129e1688ce?auto=format&fit=crop&w=240&q=80';
   let peerSubtitle = 'Online • Verified Pro';
+  let peerId = '';
 
   if (state.role === 'PROVIDER') {
     peerName = req?.customerName || 'Client';
     peerAvatar = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=240&q=80';
     peerSubtitle = 'Client • Home Visit';
+    peerId = req?.customerId || req?.customerPhone || '';
   } else {
     const provId = req?.acceptedProviderId || req?.offers?.[0]?.providerId || state.activeChatProviderId;
     const prov = resolveProviderByIdOrOffer(provId, req);
@@ -8632,6 +8942,9 @@ function renderChatDrawer() {
       peerName = prov.name;
       peerAvatar = prov.avatarUrl;
       peerSubtitle = `${prov.skillTier || 'Platinum Pro'} • ${prov.rating || '4.9'} ★`;
+      peerId = prov.id;
+    } else {
+      peerId = provId || '';
     }
   }
 
@@ -8672,7 +8985,7 @@ function renderChatDrawer() {
           </div>
 
           <div class="fullscreen-chat-header-actions">
-            <button class="fullscreen-chat-call-btn" onclick="startInAppCall('${peerName.replace(/'/g, "\\'")}', '${(req?.title || 'Home Visit').replace(/'/g, "\\'")}')" title="Call ${escapeHtml(peerName)}">
+            <button class="fullscreen-chat-call-btn" onclick="startInAppCall('${peerName.replace(/'/g, "\\'")}', '${(req?.title || 'Home Visit').replace(/'/g, "\\'")}', 'call_${req?.id || ''}', '${peerId || ''}')" title="Call ${escapeHtml(peerName)}">
               ${uiIcon('phone', 20)}
             </button>
           </div>
@@ -8803,10 +9116,20 @@ function renderChatMessagesHtml(messages) {
       `;
     }
 
+    const photoHtml = m.photoUrl ? `
+      <div style="cursor:pointer; margin-bottom:4px; border-radius:10px; overflow:hidden; max-width:240px;" onclick="openChatPhotoPreview('${escapeHtml(m.photoUrl)}')">
+        <img src="${escapeHtml(m.photoUrl)}" alt="Photo Attachment" style="display:block; width:100%; max-height:220px; object-fit:cover; border-radius:10px;" />
+      </div>
+    ` : '';
+
+    const hasCaption = m.text && m.text !== '📷 Photo attached';
+    const textHtml = hasCaption ? `<span>${escapeHtml(m.text)}</span>` : (!m.photoUrl ? `<span>${escapeHtml(m.text || '')}</span>` : '');
+
     return `
       <div class="chat-msg-row ${rowClass}">
         <div class="chat-msg-bubble">
-          <span>${escapeHtml(m.text)}</span>
+          ${photoHtml}
+          ${textHtml}
           <span class="chat-msg-meta">
             <span>${timeStr}</span>
             ${isMine ? renderWhatsAppDoubleTickSvg(isReadByPeer) : ''}
@@ -9138,13 +9461,11 @@ async function handleChatPhotoUpload(input, requestId) {
   }
   if (!input.files || !input.files[0]) return;
   const file = input.files[0];
-  const reader = new FileReader();
-  reader.onload = async () => {
-    const photoDataUrl = reader.result;
+  const photoDataUrl = await compressImageFileToDataUrl(file, 1200, 0.82);
+  input.value = '';
+  if (photoDataUrl) {
     sendChatMessage('', requestId, photoDataUrl);
-    input.value = '';
-  };
-  reader.readAsDataURL(file);
+  }
 }
 
 function openChatPhotoPreview(url) {
@@ -9341,16 +9662,18 @@ function stopCallRingtones() {
 
 async function startInAppCall(peerName, contextTitle, channelId = null, recipientId = null) {
   const activeReq = state.role === 'PROVIDER'
-    ? getProviderActiveBooking(state.currentUser?.id)
-    : getCustomerActiveRequest();
+    ? (getProviderActiveBooking(state.currentUser?.id) || (state.openChatRequestId ? state.db?.requests?.find((r) => r.id === state.openChatRequestId) : null))
+    : (getCustomerActiveRequest() || (state.openChatRequestId ? state.db?.requests?.find((r) => r.id === state.openChatRequestId) : null));
 
-  const finalChannelId = channelId || (activeReq ? ('call_' + activeReq.id) : 'harare_call');
-  const finalRecipientId = recipientId || (state.role === 'PROVIDER' ? activeReq?.customerId : activeReq?.acceptedProviderId);
+  const finalChannelId = channelId || (activeReq ? ('call_' + activeReq.id) : ('call_' + (state.openChatRequestId || 'harare')));
+  const finalRecipientId = recipientId || (state.role === 'PROVIDER'
+    ? (activeReq?.customerId || activeReq?.customerPhone)
+    : (activeReq?.acceptedProviderId || (activeReq?.offers || []).find((o) => o.id === activeReq?.acceptedOfferId)?.providerId || activeReq?.offers?.[0]?.providerId));
 
   state.activeCall = {
     callState: 'OUTGOING',
-    peerName,
-    contextTitle,
+    peerName: peerName || 'User',
+    contextTitle: contextTitle || 'Home Visit Call',
     channelId: finalChannelId,
     recipientId: finalRecipientId,
     isMuted: false
@@ -9360,16 +9683,14 @@ async function startInAppCall(peerName, contextTitle, channelId = null, recipien
   playOutgoingRingtone();
   renderCallModal();
 
-  if (finalRecipientId) {
-    apiPost('/api/calls/initiate', {
-      requestId: activeReq?.id,
-      callerId: state.currentUser?.id,
-      callerName: state.currentUser?.name || 'User',
-      recipientId: finalRecipientId,
-      contextTitle,
-      channelId: finalChannelId
-    }).catch((e) => console.warn('Call initiate notice:', e));
-  }
+  apiPost('/api/calls/initiate', {
+    requestId: activeReq?.id || state.openChatRequestId,
+    callerId: state.currentUser?.id || (state.role === 'PROVIDER' ? 'provider' : 'customer'),
+    callerName: state.currentUser?.name || (state.role === 'PROVIDER' ? 'Service Provider' : 'Client'),
+    recipientId: finalRecipientId || null,
+    contextTitle: contextTitle || 'Home Visit Call',
+    channelId: finalChannelId
+  }).catch((e) => console.warn('Call initiate notice:', e));
 
   joinDualEngineCall(finalChannelId, true);
 }

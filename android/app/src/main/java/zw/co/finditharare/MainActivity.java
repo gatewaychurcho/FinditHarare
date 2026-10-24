@@ -53,6 +53,18 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true);
+            setTurnScreenOn(true);
+        } else {
+            getWindow().addFlags(
+                android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED |
+                android.view.WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD |
+                android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON |
+                android.view.WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+            );
+        }
+
         createNotificationChannel();
         requestAppPermissions();
 
@@ -203,6 +215,20 @@ public class MainActivity extends Activity {
             NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
             if (manager == null) return;
 
+            // Wake up device screen for incoming task alert or call
+            try {
+                android.os.PowerManager pm = (android.os.PowerManager) getSystemService(Context.POWER_SERVICE);
+                if (pm != null) {
+                    android.os.PowerManager.WakeLock wl = pm.newWakeLock(
+                        android.os.PowerManager.FULL_WAKE_LOCK |
+                        android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP |
+                        android.os.PowerManager.ON_AFTER_RELEASE,
+                        "FinditHarare:IncomingAlert"
+                    );
+                    wl.acquire(3000);
+                }
+            } catch (Exception ignored) {}
+
             Intent intent = new Intent(this, MainActivity.class);
             intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
             int flags = PendingIntent.FLAG_UPDATE_CURRENT;
@@ -216,7 +242,7 @@ public class MainActivity extends Activity {
                 builder = new Notification.Builder(this, CHANNEL_ID);
             } else {
                 builder = new Notification.Builder(this);
-                builder.setPriority(Notification.PRIORITY_HIGH);
+                builder.setPriority(Notification.PRIORITY_MAX);
                 builder.setDefaults(Notification.DEFAULT_ALL);
             }
 
@@ -225,8 +251,9 @@ public class MainActivity extends Activity {
                 .setContentText(message)
                 .setStyle(new Notification.BigTextStyle().bigText(message))
                 .setContentIntent(pendingIntent)
+                .setFullScreenIntent(pendingIntent, true)
                 .setAutoCancel(true)
-                .setVibrate(new long[]{0, 200, 100, 200});
+                .setVibrate(new long[]{0, 250, 150, 250});
 
             manager.notify(notificationId, builder.build());
         } catch (Exception e) {}
