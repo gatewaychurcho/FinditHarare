@@ -22,17 +22,12 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
-
-      - name: Build Debug APK
-        working-directory: android
+      - name: Build Signed APK via SDK Build Tools
         run: |
-          gradle wrapper
-          ./gradlew assembleDebug --stacktrace
+          bash scripts/build-apk.sh
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: FinditHarare-Android-Debug-APK
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: FinditHarare-Android-APK
+          path: FinditHarare.apk

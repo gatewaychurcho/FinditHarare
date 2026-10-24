@@ -4,9 +4,10 @@
 
 const SESSION_KEY = 'findit_harare_session_v3';
 
-const API_BASE = (typeof window !== 'undefined' && window.location.hostname.includes('vercel.app'))
-  ? 'https://finditharare.onrender.com'
-  : '';
+// Vercel handles all HTTP API routes natively via /api/index.js -> server.js.
+// Render is strictly used for optional WebSocket signaling only.
+const API_BASE = '';
+const WS_RELAY_HOST = 'finditharare.onrender.com';
 
 const state = {
   db: null,
@@ -717,8 +718,7 @@ function computeStateFingerprint(db) {
 
 async function fetchState(force = false) {
   try {
-    const res = await fetch((typeof API_BASE !== 'undefined' ? API_BASE : '') + '/api/state');
-    const newDb = await res.json();
+    const newDb = await apiGet('/api/state', 2);
 
     // Preserve optimistic local chat messages across state fetches so messages never disappear
     if (state.db && state.db.requests && newDb.requests) {
@@ -1089,27 +1089,31 @@ function handleIncomingRealtimeEvent(data) {
   fetchState();
 }
 
+let wsConsecutiveFailures = 0;
+
 function connectWebSocket() {
   if (realtimeWebSocket) {
     try { realtimeWebSocket.close(); } catch (e) {}
     realtimeWebSocket = null;
   }
 
+  const isVercel = typeof window !== 'undefined' && window.location.hostname.includes('vercel.app');
+
   if (typeof WebSocket === 'undefined') {
-    connectRealtimeStream();
+    if (!isVercel) connectRealtimeStream();
     return;
   }
 
   try {
-    const isVercel = typeof window !== 'undefined' && window.location.hostname.includes('vercel.app');
     const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const targetHost = isVercel ? 'finditharare.onrender.com' : window.location.host;
+    const targetHost = isVercel ? WS_RELAY_HOST : window.location.host;
     const wsUrl = `${wsProto}//${targetHost}/ws`;
     const ws = new WebSocket(wsUrl);
     realtimeWebSocket = ws;
 
     ws.onopen = () => {
       isWsConnected = true;
+      wsConsecutiveFailures = 0;
       if (realtimeEventSource) {
         try { realtimeEventSource.close(); } catch (e) {}
         realtimeEventSource = null;
@@ -1127,8 +1131,8 @@ function connectWebSocket() {
 
     ws.onerror = () => {
       isWsConnected = false;
-      // Graceful fallback to Server-Sent Events
-      if (!realtimeEventSource) {
+      wsConsecutiveFailures++;
+      if (!isVercel && !realtimeEventSource) {
         connectRealtimeStream();
       }
     };
@@ -1136,14 +1140,16 @@ function connectWebSocket() {
     ws.onclose = () => {
       isWsConnected = false;
       if (!realtimeReconnectTimer) {
+        // Back off cleanly if WebSocket relay is suspended/unreachable so Vercel polling runs smoothly
+        const retryDelayMs = wsConsecutiveFailures >= 2 ? 60000 : 4000;
         realtimeReconnectTimer = setTimeout(() => {
           realtimeReconnectTimer = null;
           connectWebSocket();
-        }, 1500);
+        }, retryDelayMs);
       }
     };
   } catch (e) {
-    connectRealtimeStream();
+    if (!isVercel) connectRealtimeStream();
   }
 }
 

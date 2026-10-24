@@ -21,7 +21,7 @@ public class MainActivity extends Activity {
     private WebView webView;
     private ValueCallback<Uri[]> fileUploadCallback;
     private final static int FILE_CHOOSER_RESULT_CODE = 1001;
-    private static final String APP_URL = "https://finditharare.onrender.com";
+    private static final String APP_URL = "https://finditharare.vercel.app";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {

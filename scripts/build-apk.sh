@@ -3,12 +3,25 @@ set -e
 
 echo "=== Building Findit Harare Android APK ==="
 
-export JAVA_HOME="/opt/homebrew/opt/openjdk@17"
-export PATH="$JAVA_HOME/bin:$PATH"
+if [ -d "/opt/homebrew/opt/openjdk@17" ]; then
+  export JAVA_HOME="/opt/homebrew/opt/openjdk@17"
+  export PATH="$JAVA_HOME/bin:$PATH"
+fi
 
-JAVA_BIN="$JAVA_HOME/bin"
-ANDROID_TOOLS="/opt/homebrew/share/android-commandlinetools/build-tools/36.0.0"
-ANDROID_JAR="/opt/homebrew/share/android-commandlinetools/platforms/android-36/android.jar"
+if [ -n "$JAVA_HOME" ] && [ -d "$JAVA_HOME/bin" ]; then
+  JAVA_BIN="$JAVA_HOME/bin"
+else
+  JAVA_BIN="$(dirname "$(command -v javac)")"
+fi
+
+if [ -d "/opt/homebrew/share/android-commandlinetools/build-tools/36.0.0" ]; then
+  ANDROID_TOOLS="/opt/homebrew/share/android-commandlinetools/build-tools/36.0.0"
+  ANDROID_JAR="/opt/homebrew/share/android-commandlinetools/platforms/android-36/android.jar"
+else
+  SDK_ROOT="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+  ANDROID_TOOLS="$(ls -d "$SDK_ROOT"/build-tools/* | sort -V | tail -n 1)"
+  ANDROID_JAR="$(ls "$SDK_ROOT"/platforms/android-*/android.jar | sort -V | tail -n 1)"
+fi
 
 BUILD_DIR="build-android"
 OUTPUT_APK="FinditHarare.apk"
