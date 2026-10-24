@@ -715,7 +715,7 @@ function markLocalStateMutation() {
 
 function computeStateFingerprint(db) {
   if (!db) return '';
-  const reqSig = (db.requests || []).map((r) => `${r.id}:${r.status}:${(r.offers || []).length}:${r.acceptedOfferId || ''}:${r.budgetUsd}:${(r.activeViewerIds || []).length}`).join(';');
+  const reqSig = (db.requests || []).map((r) => `${r.id}:${r.status}:${(r.offers || []).map((o) => `${o.id}:${o.status}:${o.priceUsd}`).join(',')}:${r.acceptedOfferId || ''}:${r.budgetUsd}:${(r.activeViewerIds || []).length}:${(r.messages || []).map((m) => `${m.id}:${m.read ? 1 : 0}`).join(',')}`).join(';');
   const userSig = state.currentUser ? `${state.currentUser.id}:${state.currentUser.walletBalanceUsd}:${state.currentUser.warningsCount || 0}:${state.currentUser.isBanned}:${(state.currentUser.categoryIds || []).join(',')}` : '';
   const provSig = (db.providers || []).map((p) => `${p.id}:${p.isOnline}:${(p.categoryIds || []).join(',')}`).join(';');
   const clSig = (db.changelogs || []).map((c) => c.id).join(',');
@@ -741,20 +741,31 @@ async function fetchState(force = false) {
         if (oldReq && oldReq.messages && oldReq.messages.length > 0) {
           if (!newReq.messages) newReq.messages = [];
           oldReq.messages.forEach((oldM) => {
-            if (!newReq.messages.some((m) => m.id === oldM.id || (m.text === oldM.text && m.senderRole === oldM.senderRole))) {
+            const existsInNew = newReq.messages.find((m) =>
+              m.id === oldM.id ||
+              (oldM.clientMsgId && (m.clientMsgId === oldM.clientMsgId || m.id === oldM.clientMsgId)) ||
+              (m.text === oldM.text && m.senderRole === oldM.senderRole && Math.abs(new Date(m.timestamp || 0).getTime() - new Date(oldM.timestamp || oldM.createdAt || 0).getTime()) < 10000)
+            );
+            if (!existsInNew) {
               newReq.messages.push(oldM);
+            } else if (oldM.read || oldM.status === 'READ') {
+              existsInNew.read = true;
+              existsInNew.status = 'READ';
             }
           });
         }
       });
 
-      // If the user has an active local request that a cold serverless container doesn't have yet, retain it!
-      if (state.activeRequestId) {
-        const localActive = state.db.requests.find((r) => r.id === state.activeRequestId && (r.status === 'OPEN' || isBookedStatus(r.status)));
-        if (localActive && !newDb.requests.some((r) => r.id === localActive.id)) {
-          newDb.requests.unshift(localActive);
+      // Prevent any newly created OPEN or active request from flickering if a poll ever hits a cold container
+      const nowMs = Date.now();
+      state.db.requests.forEach((localReq) => {
+        if (!localReq || !localReq.id) return;
+        const isRecentActive = (localReq.status === 'OPEN' || isBookedStatus(localReq.status)) &&
+          (!localReq.createdAt || (nowMs - new Date(localReq.createdAt).getTime() < 30 * 60 * 1000));
+        if (isRecentActive && !newDb.requests.some((r) => r.id === localReq.id)) {
+          newDb.requests.unshift(localReq);
         }
-      }
+      });
     }
 
     state.db = newDb;
@@ -933,11 +944,70 @@ function handleIncomingRealtimeEvent(data) {
       if (!isParty) return;
 
       if (!targetReq.messages) targetReq.messages = [];
-      if (!targetReq.messages.some((m) => m.id === message.id)) {
+      const existingMsg = targetReq.messages.find((m) =>
+        m.id === message.id ||
+        (message.clientMsgId && (m.clientMsgId === message.clientMsgId || m.id === message.clientMsgId)) ||
+        (m.senderRole === message.senderRole &&
+          m.text === message.text &&
+          Math.abs(new Date(m.timestamp || m.createdAt || 0).getTime() - new Date(message.timestamp || 0).getTime()) < 8000)
+      );
+      if (existingMsg) {
+        Object.assign(existingMsg, message);
+      } else {
         targetReq.messages.push(message);
+      }
+      if (state.chatDrawerOpen && message.senderRole !== state.role) {
+        markRequestMessagesRead(targetReq.id);
       }
       updateChatFeedDomOnly(targetReq);
     }
+    return;
+  }
+
+  // 1B. CHAT MESSAGES READ (Turns Grey Ticks -> Blue Ticks in real time!)
+  if (data.eventType === 'MESSAGES_READ' && data.payload) {
+    const { requestId, readerRole, request } = data.payload;
+    const targetReq = (state.db?.requests || []).find((r) => r.id === requestId);
+    if (targetReq) {
+      if (request && Array.isArray(request.messages)) {
+        targetReq.messages = request.messages;
+      } else if (Array.isArray(targetReq.messages)) {
+        targetReq.messages.forEach((m) => {
+          if (m.senderRole && m.senderRole !== 'SYSTEM' && m.senderRole !== readerRole) {
+            m.read = true;
+            m.status = 'READ';
+          }
+        });
+      }
+      updateChatFeedDomOnly(targetReq);
+    }
+    return;
+  }
+
+  // 1C. OFFER DECLINED BY CLIENT (Notify provider on their card so they can edit price/re-bid!)
+  if (data.eventType === 'OFFER_DECLINED' && data.payload) {
+    const { requestId, offerId, providerId, declinedPriceUsd, request } = data.payload;
+    if (request && state.db?.requests) {
+      const idx = state.db.requests.findIndex((r) => r.id === requestId);
+      if (idx >= 0) state.db.requests[idx] = request;
+    } else if (state.db?.requests) {
+      const r = state.db.requests.find((x) => x.id === requestId);
+      const off = r && (r.offers || []).find((o) => o.id === offerId);
+      if (off) {
+        off.status = 'DECLINED';
+        off.declinedPriceUsd = off.priceUsd;
+      }
+    }
+    lastUiOverlaySignature = '';
+    lastOffersSignature = '';
+    if (state.role === 'PROVIDER' && state.currentUser && state.currentUser.id === providerId) {
+      showToast(`Client declined your $${declinedPriceUsd || ''} offer. You can edit your price and submit a revised bid!`, 'error');
+      if ('vibrate' in navigator) {
+        try { navigator.vibrate([100, 60, 100]); } catch (e) {}
+      }
+    }
+    renderAll(true);
+    return;
   }
 
   // 2. NEW REQUEST CREATED (Instant delivery to providers via WebSocket - Card pops up directly!)
@@ -2015,7 +2085,8 @@ function renderFloatingOffersOverlay(force = false) {
   }
 
   const nowMs = Date.now();
-  const activeOffers = req.offers.filter((o) => {
+  const activeOffers = (req.offers || []).filter((o) => {
+    if (o.status === 'DECLINED') return false;
     const exp = o.expiresAt || (new Date(o.createdAt).getTime() + 120 * 1000);
     return exp > nowMs;
   });
@@ -5569,15 +5640,16 @@ function renderModalLayer() {
               </button>
             </div>
 
-            ${state.supportChatMessages.map((m) => {
+            ${state.supportChatMessages.map((m, idx, arr) => {
               const isUser = m.sender === 'USER';
+              const isLastUserTyping = isUser && idx === arr.length - 1 && state.supportAiTyping;
               return `
                 <div style="display:flex; justify-content:${isUser ? 'flex-end' : 'flex-start'};">
                   <div style="max-width:82%; background:${isUser ? '#DCF8C6' : '#FFFFFF'}; color:#111B21; padding:8px 11px 6px 11px; border-radius:${isUser ? '14px 14px 3px 14px' : '14px 14px 14px 3px'}; box-shadow:0 1px 1.5px rgba(0,0,0,0.08); font-size:13.5px; line-height:1.42; position:relative;">
                     <div>${formatWaBold(m.text)}</div>
-                    <div style="display:flex; align-items:center; justify-content:flex-end; gap:4px; font-size:10.5px; color:#667781; margin-top:3px;">
+                    <div style="display:flex; align-items:center; justify-content:flex-end; gap:3px; font-size:10.5px; color:#667781; margin-top:3px;">
                       <span>${m.time || ''}</span>
-                      ${isUser ? `<span style="color:#34B7F1; font-weight:800;">✓✓</span>` : ''}
+                      ${isUser ? renderWhatsAppDoubleTickSvg(!isLastUserTyping) : ''}
                     </div>
                   </div>
                 </div>
@@ -6398,14 +6470,30 @@ async function toggleActiveRequestAutoAccept(requestId) {
 
 async function acceptOffer(requestId, offerId) {
   try {
-    const res = await apiPost('/api/offers/accept', { requestId, offerId });
+    markLocalStateMutation();
+    const reqSnap = (state.db?.requests || []).find((r) => r.id === requestId) || null;
+    const offSnap = reqSnap && (reqSnap.offers || []).find((o) => o.id === offerId);
+    const res = await apiPost('/api/offers/accept', {
+      requestId,
+      offerId,
+      requestSnapshot: reqSnap,
+      offerSnapshot: offSnap
+    });
+    if (res && res.request && state.db?.requests) {
+      const idx = state.db.requests.findIndex((r) => r.id === res.request.id);
+      if (idx >= 0) state.db.requests[idx] = res.request;
+      else state.db.requests.unshift(res.request);
+    }
     state.activeRequestId = res.request.id;
     state.isSheetMinimized = false;
     state.isOffersMinimized = false;
     state.screenStep = 'BOOKED';
     state.providerTab = 'ACTIVE_JOB';
+    lastUiOverlaySignature = '';
+    lastOffersSignature = '';
     showToast('Offer accepted! Live route & chat with your pro started.');
-    await fetchState();
+    renderAll(true);
+    await fetchState(true);
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -6413,8 +6501,29 @@ async function acceptOffer(requestId, offerId) {
 
 async function declineOffer(requestId, offerId) {
   try {
-    await apiPost('/api/offers/decline', { requestId, offerId, reason: 'DECLINED_BY_USER' });
-    await fetchState();
+    markLocalStateMutation();
+    const reqSnap = (state.db?.requests || []).find((r) => r.id === requestId) || null;
+    if (reqSnap && Array.isArray(reqSnap.offers)) {
+      const targetOff = reqSnap.offers.find((o) => o.id === offerId);
+      if (targetOff) {
+        targetOff.status = 'DECLINED';
+        targetOff.declinedPriceUsd = targetOff.priceUsd;
+      }
+      lastOffersSignature = '';
+      renderFloatingOffersOverlay(true);
+    }
+    const res = await apiPost('/api/offers/decline', {
+      requestId,
+      offerId,
+      reason: 'DECLINED_BY_USER',
+      requestSnapshot: reqSnap
+    });
+    if (res && res.request && state.db?.requests) {
+      const idx = state.db.requests.findIndex((r) => r.id === res.request.id);
+      if (idx >= 0) state.db.requests[idx] = res.request;
+    }
+    showToast('Offer declined — provider has been notified and can adjust their price.', 'info');
+    await fetchState(true);
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -6436,27 +6545,43 @@ function handleCancelReasonRowClick(reasonLabel) {
 }
 
 async function submitCancelTaskWithReason(reason) {
-  const requestId = state.modalData?.requestId || state.activeRequestId;
+  const requestId = state.modalData?.requestId || state.activeRequestId || getCustomerActiveRequest()?.id;
   if (!requestId) {
     closeModal();
     return;
   }
+  markLocalStateMutation();
+  const reqSnap = (state.db?.requests || []).find((r) => r.id === requestId) || null;
+
+  // Immediate local transition so cancellation never lags or fails
+  if (reqSnap) {
+    reqSnap.status = 'CANCELLED';
+    reqSnap.cancelReason = reason;
+    reqSnap.updatedAt = Date.now();
+  }
+  state.activeModal = null;
+  state.activeRequestId = null;
+  state.pendingSearchFareUsd = null;
+  state.isSheetMinimized = false;
+  state.screenStep = 'HOME';
+  state.providerTab = 'FEED';
+  lastUiOverlaySignature = '';
+  lastOffersSignature = '';
+  renderAll(true);
+
   try {
     await apiPost('/api/bookings/cancel', {
       requestId,
       role: state.role,
       actorName: state.currentUser?.name || 'User',
-      reason
+      reason,
+      requestSnapshot: reqSnap
     });
-    state.activeModal = null;
-    state.activeRequestId = null;
-    state.pendingSearchFareUsd = null;
-    state.isSheetMinimized = false;
-    state.screenStep = 'HOME';
-    state.providerTab = 'FEED';
-    await fetchState();
+    showToast('Request cancelled.');
+    await fetchState(true);
   } catch (err) {
-    showToast(err.message, 'error');
+    // Even if server already cleaned it up, keep local state cleanly cancelled
+    showToast('Request cancelled.');
   }
 }
 
@@ -7257,6 +7382,22 @@ function renderProviderRequestsFeedTab(prov, openRequests, activeJob) {
         </div>
       ` : openRequests.map((r) => {
         const myExistingOffer = (r.offers || []).find((o) => o.providerId === prov.id);
+        const isOfferDeclined = Boolean(myExistingOffer && myExistingOffer.status === 'DECLINED');
+        const commPercent = Number(state.db?.settings?.commissionPercent || 11);
+        const minReserve = Number(state.db?.settings?.minWalletBalanceUsd || 2.0);
+        const isPromo = Boolean(state.db?.settings?.launchPromoActive);
+        const jobBudgetUsd = Number(r.budgetUsd || 0);
+        const requiredCommUsd = Math.round(jobBudgetUsd * (commPercent / 100) * 100) / 100;
+        const walletBalUsd = Number(prov.walletBalanceUsd || 0);
+        const surpassesWallet = !isPromo && (walletBalUsd < requiredCommUsd || walletBalUsd < minReserve || (walletBalUsd - requiredCommUsd) < minReserve);
+        const suggestedTopUpUsd = Math.max(5, Math.ceil(requiredCommUsd));
+        const bid1Usd = Number((jobBudgetUsd + 2).toFixed(2));
+        const bid2Usd = Number((jobBudgetUsd + 3.5).toFixed(2));
+        const bid1CommUsd = Math.round(bid1Usd * (commPercent / 100) * 100) / 100;
+        const bid2CommUsd = Math.round(bid2Usd * (commPercent / 100) * 100) / 100;
+        const bid1Surpasses = !isPromo && (walletBalUsd < bid1CommUsd || (walletBalUsd - bid1CommUsd) < minReserve);
+        const bid2Surpasses = !isPromo && (walletBalUsd < bid2CommUsd || (walletBalUsd - bid2CommUsd) < minReserve);
+
         return `
           <div class="provider-order-card">
             <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px;">
@@ -7296,7 +7437,20 @@ function renderProviderRequestsFeedTab(prov, openRequests, activeJob) {
               </div>
             ` : ''}
 
-            ${myExistingOffer ? `
+            ${isOfferDeclined ? `
+              <div style="background:#FEF2F2; border:1.5px solid #FECACA; border-radius:12px; padding:10px 12px; margin-bottom:8px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:3px;">
+                  <span style="font-size:12.5px; font-weight:800; color:#DC2626; display:inline-flex; align-items:center; gap:5px;">
+                    ${uiIcon('close', 13)}
+                    <span>Offer Denied (${formatUsdPrice(myExistingOffer.declinedPriceUsd || myExistingOffer.priceUsd)})</span>
+                  </span>
+                  <span style="font-size:10.5px; font-weight:800; color:#B91C1C; background:#FEE2E2; padding:2px 8px; border-radius:99px;">Edit Price / Terms</span>
+                </div>
+                <div style="font-size:11.5px; color:#7F1D1D; line-height:1.4; font-weight:600;">
+                  The client declined your ${formatUsdPrice(myExistingOffer.declinedPriceUsd || myExistingOffer.priceUsd)} offer. You can accept their ${formatUsdPrice(r.budgetUsd)} fare or tap <strong>Edit Price $</strong> below to send a revised offer.
+                </div>
+              </div>
+            ` : myExistingOffer ? `
               <div style="background:var(--blue-soft); border:1.5px solid var(--blue-border); border-radius:12px; padding:9px 12px; display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:8px;">
                 <span style="font-size:12.5px; font-weight:800; color:var(--blue-primary); display:inline-flex; align-items:center; gap:6px;">
                   ${uiIcon('clock', 14)}
@@ -7306,18 +7460,50 @@ function renderProviderRequestsFeedTab(prov, openRequests, activeJob) {
               </div>
             ` : ''}
 
+            ${surpassesWallet ? `
+              <div style="background:#FFFBEB; border:1.5px solid #FDE68A; border-radius:12px; padding:10px 12px; margin-bottom:8px;">
+                <div style="font-size:12px; font-weight:800; color:#B45309; margin-bottom:3px; display:flex; align-items:center; gap:6px;">
+                  ${uiIcon('lock', 13)}
+                  <span>Higher-Funds Job — ${commPercent}% ($${requiredCommUsd.toFixed(2)} USD) Required</span>
+                </div>
+                <div style="font-size:11.5px; color:#92400E; line-height:1.45; font-weight:600; margin-bottom:8px;">
+                  To accept this job with higher funds (${formatUsdPrice(jobBudgetUsd)}), you have to have at least <strong>${commPercent}% of the amount ($${requiredCommUsd.toFixed(2)} USD)</strong> plus the $${minReserve.toFixed(2)} minimum reserve. Your account balance is <strong>$${walletBalUsd.toFixed(2)} USD</strong>.
+                </div>
+                <button
+                  type="button"
+                  onclick="state.walletTopupAmount=${suggestedTopUpUsd}; state.providerTab='WALLET'; renderUiOverlay();"
+                  style="width:100%; height:34px; border-radius:9px; border:none; background:#D97706; color:#FFFFFF; font-size:12px; font-weight:800; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px;"
+                >
+                  ${uiIcon('wallet', 13)}
+                  <span>Top Up Account Balance (+$${suggestedTopUpUsd.toFixed(2)} USD)</span>
+                </button>
+              </div>
+            ` : ''}
+
             <div class="provider-bid-grid">
-              <button class="btn-primary-blue" style="height:38px; font-size:12.5px;" onclick="providerSubmitBid('${r.id}', ${r.budgetUsd})">
-                Accept ${formatUsdPrice(r.budgetUsd)}
+              <button
+                class="btn-primary-blue"
+                ${surpassesWallet ? 'disabled style="height:38px; font-size:12px; opacity:0.42; cursor:not-allowed; pointer-events:none; filter:grayscale(0.5);"' : `style="height:38px; font-size:12.5px;" onclick="providerSubmitBid('${r.id}', ${r.budgetUsd})"`}
+              >
+                ${surpassesWallet ? `🔒 Need ${commPercent}% ($${requiredCommUsd.toFixed(2)})` : `Accept ${formatUsdPrice(r.budgetUsd)}`}
               </button>
-              <button class="btn-dark-sec" style="padding:7px 6px; font-size:12px;" onclick="providerSubmitBid('${r.id}', ${Number(r.budgetUsd) + 2})">
-                ${formatUsdPrice(Number(r.budgetUsd) + 2)}
+              <button
+                class="btn-dark-sec"
+                ${bid1Surpasses ? 'disabled style="padding:7px 6px; font-size:12px; opacity:0.42; cursor:not-allowed; pointer-events:none;"' : `style="padding:7px 6px; font-size:12px;" onclick="providerSubmitBid('${r.id}', ${bid1Usd})"`}
+              >
+                ${formatUsdPrice(bid1Usd)}
               </button>
-              <button class="btn-dark-sec" style="padding:7px 6px; font-size:12px;" onclick="providerSubmitBid('${r.id}', ${Number(r.budgetUsd) + 3.5})">
-                ${formatUsdPrice(Number(r.budgetUsd) + 3.5)}
+              <button
+                class="btn-dark-sec"
+                ${bid2Surpasses ? 'disabled style="padding:7px 6px; font-size:12px; opacity:0.42; cursor:not-allowed; pointer-events:none;"' : `style="padding:7px 6px; font-size:12px;" onclick="providerSubmitBid('${r.id}', ${bid2Usd})"`}
+              >
+                ${formatUsdPrice(bid2Usd)}
               </button>
-              <button class="btn-dark-sec" style="padding:7px 6px; font-size:12px;" onclick="promptProviderCustomBid('${r.id}', ${r.budgetUsd})">
-                Custom $
+              <button
+                class="btn-dark-sec"
+                ${surpassesWallet ? 'disabled style="padding:7px 6px; font-size:12px; opacity:0.42; cursor:not-allowed; pointer-events:none;"' : `style="padding:7px 6px; font-size:12px;" onclick="promptProviderCustomBid('${r.id}', ${r.budgetUsd})"`}
+              >
+                ${isOfferDeclined ? 'Edit Price $' : 'Custom $'}
               </button>
             </div>
           </div>
@@ -7724,12 +7910,15 @@ async function submitProviderBioUpdate() {
 
 async function providerMarkArrived(requestId) {
   try {
+    markLocalStateMutation();
+    const reqSnap = (state.db?.requests || []).find((r) => r.id === requestId) || null;
     await apiPost('/api/bookings/status', {
       requestId,
-      status: 'ARRIVED'
+      status: 'ARRIVED',
+      requestSnapshot: reqSnap
     });
     showToast('Client notified that you have arrived outside their gate!');
-    await fetchState();
+    await fetchState(true);
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -7739,19 +7928,22 @@ async function providerVerifyStartPin(requestId) {
   const input = document.getElementById(`providerPinInput_${requestId}`);
   const pinCode = input ? input.value.trim() : '';
   try {
+    markLocalStateMutation();
+    const reqSnap = (state.db?.requests || []).find((r) => r.id === requestId) || null;
     await apiPost('/api/bookings/verify-pin', {
       requestId,
-      pinCode
+      pinCode,
+      requestSnapshot: reqSnap
     });
     showToast('Start PIN verified! Service is now in progress.');
-    await fetchState();
+    await fetchState(true);
   } catch (err) {
     showToast(err.message, 'error');
   }
 }
 
 function promptProviderCustomBid(requestId, baseUsd) {
-  const val = prompt('Enter your counter-offer in USD ($):', String(Number(baseUsd) + 5));
+  const val = prompt('Enter your offer price in USD ($):', String(Number(baseUsd) + 2));
   if (val && !isNaN(Number(val))) {
     providerSubmitBid(requestId, Number(val));
   }
@@ -7766,7 +7958,7 @@ async function topUpProviderWallet(amountUsd, method) {
       method
     });
     showToast(`+$${Number(amountUsd).toFixed(2)} added to your Findit USD Wallet via ${method}`);
-    await fetchState();
+    await fetchState(true);
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -7780,7 +7972,7 @@ async function toggleProviderOnlineStatus() {
       isOnline: !(prov.isOnline !== false)
     });
     state.currentUser = res.provider;
-    await fetchState();
+    await fetchState(true);
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -7794,8 +7986,8 @@ async function providerSubmitBid(requestId, priceUsd) {
   const commFee = Math.round(Number(priceUsd) * (commPercent / 100) * 100) / 100;
   const reqTopUp = Math.max(5.00, commFee);
 
-  // Proactive wallet balance and reserve check
-  if (currentBalance < minReserve || (currentBalance - commFee) < minReserve) {
+  // Proactive wallet balance and 11% commission check
+  if (!state.db?.settings?.launchPromoActive && (currentBalance < commFee || currentBalance < minReserve || (currentBalance - commFee) < minReserve)) {
     openLowBalanceExplanatoryModal({
       currentBalanceUsd: currentBalance,
       minReserveUsd: minReserve,
@@ -7809,13 +8001,23 @@ async function providerSubmitBid(requestId, priceUsd) {
   }
 
   try {
-    await apiPost('/api/offers', {
+    markLocalStateMutation();
+    const reqSnap = (state.db?.requests || []).find((r) => r.id === requestId) || null;
+    const res = await apiPost('/api/offers', {
       requestId,
       providerId: prov.id,
-      priceUsd: Number(priceUsd)
+      priceUsd: Number(priceUsd),
+      requestSnapshot: reqSnap
     });
-    showToast(`Bid of $${Number(priceUsd)} USD submitted!`, 'info');
-    await fetchState();
+    if (res && res.request && state.db?.requests) {
+      const idx = state.db.requests.findIndex((r) => r.id === res.request.id);
+      if (idx >= 0) state.db.requests[idx] = res.request;
+      else state.db.requests.unshift(res.request);
+    }
+    lastUiOverlaySignature = '';
+    showToast(`Offer of $${Number(priceUsd)} USD submitted!`, 'info');
+    renderAll(true);
+    await fetchState(true);
   } catch (err) {
     if (err.data && (err.data.code === 'LOW_WALLET_BALANCE' || err.status === 402)) {
       openLowBalanceExplanatoryModal({
@@ -7989,6 +8191,9 @@ function renderChatDrawer() {
       ];
 
   const messages = req?.messages || [];
+  if (req && req.id) {
+    markRequestMessagesRead(req.id);
+  }
 
   root.innerHTML = `
     <div class="fullscreen-chat-backdrop" onclick="closeChatDrawer()">
@@ -8023,7 +8228,7 @@ function renderChatDrawer() {
         <div class="fullscreen-chat-footer">
           <div class="chat-quick-strip">
             ${quickList.map((q) => `
-              <button class="chat-preset-chip" onclick="sendChatMessage('${q.replace(/'/g, "\\'")}', '${req?.id || ''}')">
+              <button type="button" class="chat-preset-chip" onclick="sendChatMessage('${q.replace(/'/g, "\\'")}', '${req?.id || ''}')">
                 ${q}
               </button>
             `).join('')}
@@ -8031,16 +8236,17 @@ function renderChatDrawer() {
 
           <div class="chat-inline-input-row">
             ${state.role !== 'PROVIDER' ? `
-              <button class="whatsapp-ios-plus-btn" onclick="document.getElementById('chatPhotoInput').click()" title="Attach Reference Photo">+</button>
+              <button type="button" class="whatsapp-ios-plus-btn" onclick="document.getElementById('chatPhotoInput').click()" title="Attach Reference Photo">+</button>
               <input type="file" id="chatPhotoInput" accept="image/*" style="display:none;" onchange="handleChatPhotoUpload(this, '${req?.id || ''}')" />
             ` : ''}
             <input
               id="chatTextInput"
               class="whatsapp-ios-input"
               placeholder="${state.role === 'PROVIDER' ? 'Message client (No links/images allowed)' : 'Message'}"
-              onkeydown="if(event.key==='Enter') sendCustomChat('${req?.id || ''}')"
+              onkeydown="if(event.key==='Enter'){ event.preventDefault(); sendCustomChat('${req?.id || ''}'); }"
             />
             <button
+              type="button"
               class="whatsapp-ios-send-btn"
               onclick="sendCustomChat('${req?.id || ''}')"
               title="Send Message"
@@ -8064,6 +8270,41 @@ function formatChatTime(ts) {
   }
 }
 
+// Authentic overlapping iOS WhatsApp Double-Tick SVG (Grey #8696A0 when delivered, Blue #34B7F1 when read)
+function renderWhatsAppDoubleTickSvg(isRead = false) {
+  const color = isRead ? '#34B7F1' : '#8696A0';
+  return `<svg class="wa-double-tick-svg ${isRead ? 'read' : 'delivered'}" width="16" height="11" viewBox="0 0 16 11" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block; vertical-align:middle; margin-left:1px; flex-shrink:0;"><path d="M10.85 1.15L4.55 7.45L1.85 4.75" stroke="${color}" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M14.35 1.15L8.05 7.45L6.65 6.05" stroke="${color}" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+}
+
+let lastReadMarkKey = '';
+let lastReadMarkTime = 0;
+function markRequestMessagesRead(requestId) {
+  if (!requestId || !state.db?.requests) return;
+  const req = state.db.requests.find((r) => r.id === requestId);
+  if (!req || !Array.isArray(req.messages)) return;
+  const unreadPeerMsgs = req.messages.filter(
+    (m) => m.senderRole && m.senderRole !== 'SYSTEM' && m.senderRole !== state.role && (!m.read || m.status !== 'READ')
+  );
+  if (unreadPeerMsgs.length === 0) return;
+
+  unreadPeerMsgs.forEach((m) => {
+    m.read = true;
+    m.status = 'READ';
+  });
+
+  const key = `${requestId}:${state.role}:${unreadPeerMsgs.length}`;
+  const now = Date.now();
+  if (key === lastReadMarkKey && now - lastReadMarkTime < 2500) return;
+  lastReadMarkKey = key;
+  lastReadMarkTime = now;
+
+  apiPost('/api/messages/read', {
+    requestId,
+    readerRole: state.role,
+    requestSnapshot: req
+  }).catch(() => {});
+}
+
 function renderChatMessagesHtml(messages) {
   const encryptionBanner = `
     <div class="whatsapp-encryption-pill">
@@ -8083,11 +8324,15 @@ function renderChatMessagesHtml(messages) {
     `;
   }
 
-  const msgsHtml = messages.map((m) => {
+  const msgsHtml = messages.map((m, idx) => {
     const isSystem = m.senderRole === 'SYSTEM' || m.type === 'PIN_VERIFIED' || m.type === 'DELAY_NOTICE';
     const isMine = !isSystem && m.senderRole === state.role;
     const rowClass = isSystem ? 'system' : isMine ? 'mine' : 'theirs';
-    const timeStr = formatChatTime(m.timestamp);
+    const timeStr = formatChatTime(m.timestamp || m.createdAt);
+
+    // A sent message is READ if m.read === true, m.status === 'READ', or if the recipient has replied after this message!
+    const hasLaterPeerReply = isMine && messages.slice(idx + 1).some((later) => later.senderRole && later.senderRole !== 'SYSTEM' && later.senderRole !== state.role);
+    const isReadByPeer = Boolean(m.read || m.status === 'READ' || hasLaterPeerReply);
 
     if (isSystem) {
       return `
@@ -8105,7 +8350,7 @@ function renderChatMessagesHtml(messages) {
           <span>${escapeHtml(m.text)}</span>
           <span class="chat-msg-meta">
             <span>${timeStr}</span>
-            ${isMine ? `<span class="chat-msg-ticks">✓✓</span>` : ''}
+            ${isMine ? renderWhatsAppDoubleTickSvg(isReadByPeer) : ''}
           </span>
         </div>
       </div>
@@ -8447,9 +8692,21 @@ function updateChatFeedDomOnly(req) {
   }
 }
 
+let lastSentChatText = '';
+let lastSentChatAtMs = 0;
+
 function sendChatMessage(text, requestId = null) {
   if (!text || !text.trim()) return;
   const cleanText = text.trim();
+
+  // Prevent accidental double-submission (e.g. Enter + click or double-tap within 500ms)
+  const nowMs = Date.now();
+  if (cleanText === lastSentChatText && nowMs - lastSentChatAtMs < 500) {
+    return;
+  }
+  lastSentChatText = cleanText;
+  lastSentChatAtMs = nowMs;
+
   const leakWarning = checkAntiLeakageClient(cleanText);
   if (leakWarning) {
     showToast(leakWarning, 'error');
@@ -8463,43 +8720,51 @@ function sendChatMessage(text, requestId = null) {
   const targetReq = (state.db?.requests || []).find((r) => r.id === (targetReqId || fallbackReq?.id)) || fallbackReq || (state.db?.requests || [])[0];
   if (!targetReq) return;
 
-  const senderName = state.currentUser?.name || (state.role === 'PROVIDER' ? 'Service Provider' : 'Client');
-  const tempMsgId = 'msg_' + Date.now();
-  const tempMsg = {
-    id: tempMsgId,
-    senderRole: state.role,
-    senderName: senderName,
-    text: cleanText,
-    createdAt: new Date().toISOString()
-  };
-
-  // Immediate 0ms local append
-  if (!targetReq.messages) targetReq.messages = [];
-  targetReq.messages.push(tempMsg);
-
-  // Clear inputs immediately
+  // Clear inputs immediately before network call
   const input = document.getElementById('chatTextInput');
   if (input) input.value = '';
   const inlineInput = document.getElementById(`inlineChatInput_${targetReq.id}`);
   if (inlineInput) inlineInput.value = '';
 
+  const senderName = state.currentUser?.name || (state.role === 'PROVIDER' ? 'Service Provider' : 'Client');
+  const tempMsgId = 'msg_' + nowMs + '_' + Math.random().toString(36).slice(2, 6);
+  const nowIso = new Date(nowMs).toISOString();
+  const tempMsg = {
+    id: tempMsgId,
+    clientMsgId: tempMsgId,
+    senderRole: state.role,
+    senderName: senderName,
+    text: cleanText,
+    status: 'DELIVERED',
+    read: false,
+    timestamp: nowIso,
+    createdAt: nowIso
+  };
+
+  // Immediate 0ms local append (only once!)
+  if (!targetReq.messages) targetReq.messages = [];
+  targetReq.messages.push(tempMsg);
+
   // Update DOM immediately with no lag
   updateChatFeedDomOnly(targetReq);
 
-  // Send to backend asynchronously
+  // Send to backend asynchronously with clientMsgId & requestSnapshot so it never duplicates or 404s
   apiPost('/api/messages', {
     requestId: targetReq.id,
+    clientMsgId: tempMsgId,
     senderRole: state.role,
     senderName: senderName,
-    text: cleanText
+    text: cleanText,
+    requestSnapshot: targetReq
   }).then((res) => {
-    if (res && res.message && res.message.id) {
-      tempMsg.id = res.message.id;
+    if (res && res.message) {
+      Object.assign(tempMsg, res.message);
+      updateChatFeedDomOnly(targetReq);
     }
   }).catch((err) => {
     // Only drop if anti-leakage shield actively blocked it
-    if (err.message && err.message.includes('Shield')) {
-      targetReq.messages = targetReq.messages.filter((m) => m.id !== tempMsgId);
+    if (err.message && (err.message.includes('Shield') || err.message.includes('not allowed'))) {
+      targetReq.messages = targetReq.messages.filter((m) => m.id !== tempMsgId && m.clientMsgId !== tempMsgId);
       updateChatFeedDomOnly(targetReq);
     }
     showToast(err.message || 'Could not send message', 'error');
