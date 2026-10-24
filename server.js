@@ -3382,13 +3382,16 @@ Return ONLY JSON with keys:
   if (pathname === '/api/providers/online' && req.method === 'POST') {
     try {
       const body = await parseBody(req);
-      const prov = db.providers.find((p) => p.id === body.providerId);
+      const prov = ensureProviderInDb(body.providerId, body.providerSnapshot);
       if (!prov) return sendJson(res, 404, { error: 'Provider not found' });
       if (prov.isBanned) return sendJson(res, 403, { error: `Account suspended: ${prov.banReason}` });
       prov.isOnline = body.isOnline !== undefined ? Boolean(body.isOnline) : !prov.isOnline;
+      if (body.workingHours) {
+        prov.workingHours = body.workingHours;
+      }
       saveDb(db);
       broadcastUpdate('PROVIDER_STATUS_CHANGED', { providerId: prov.id, isOnline: prov.isOnline });
-      return sendJson(res, 200, { provider: prov });
+      return sendJson(res, 200, { ok: true, provider: prov });
     } catch (e) {
       return sendJson(res, 400, { error: e.message });
     }
@@ -4007,11 +4010,12 @@ Return ONLY JSON with keys:
   if (pathname === '/api/providers/office' && req.method === 'POST') {
     try {
       const body = await parseBody(req);
-      const prov = db.providers.find((p) => p.id === body.providerId);
+      const prov = ensureProviderInDb(body.providerId, body.providerSnapshot);
       if (!prov) return sendJson(res, 404, { error: 'Provider not found' });
       if (prov.isBanned) return sendJson(res, 403, { error: 'Your account is suspended.' });
 
       prov.hasOffice = Boolean(body.hasOffice);
+      prov.workplaceType = body.workplaceType || (prov.hasOffice ? 'OFFICE' : 'FREELANCER');
       prov.officeAddress = (body.officeAddress || '').trim();
       prov.officeSuburb = (body.officeSuburb || '').trim();
       if (body.officeLat && body.officeLng) {
@@ -4020,7 +4024,7 @@ Return ONLY JSON with keys:
       }
       saveDb(db);
       broadcastUpdate('PROVIDER_OFFICE_UPDATED', { providerId: prov.id, provider: prov });
-      return sendJson(res, 200, { success: true, provider: prov });
+      return sendJson(res, 200, { ok: true, success: true, provider: prov });
     } catch (e) {
       return sendJson(res, 400, { error: e.message });
     }
@@ -4171,11 +4175,13 @@ Return ONLY JSON with keys:
       if (!reqItem) return sendJson(res, 404, { error: 'Request not found' });
       if (!reqItem.messages) reqItem.messages = [];
 
-      const text = (body.text || '').trim();
-      if (!text) return sendJson(res, 400, { error: 'Empty message' });
+      let text = (body.text || '').trim();
+      const photoUrl = body.photoUrl ? offloadDataUriToR2Url(body.photoUrl) : null;
+      if (!text && !photoUrl) return sendJson(res, 400, { error: 'Empty message' });
+      if (!text && photoUrl) text = '📷 Photo attached';
 
       // Strictly block providers from uploading images, flyers, or logos in chat
-      if (body.senderRole === 'PROVIDER' && (body.photoUrl || body.imageUrl || text.includes('data:image/') || text.includes('📷 Photo'))) {
+      if (body.senderRole === 'PROVIDER' && (photoUrl || body.imageUrl || text.includes('data:image/') || text.includes('📷 Photo'))) {
         return sendJson(res, 422, {
           error: 'Providers are not allowed to upload images, logos, or flyers in chat. Please use your verified Catalogue instead.'
         });
@@ -4231,8 +4237,9 @@ Return ONLY JSON with keys:
         senderRole,
         senderName: body.senderName || reqItem.customerName,
         providerId: body.providerId || null,
-        type: body.type || 'QUICK_MESSAGE',
+        type: body.type || (photoUrl ? 'PHOTO_ATTACHMENT' : 'QUICK_MESSAGE'),
         text,
+        photoUrl: photoUrl || undefined,
         status: 'DELIVERED',
         read: false,
         timestamp: new Date(nowMs).toISOString()
@@ -4546,6 +4553,8 @@ Return ONLY valid JSON with key: "reply" (string).`;
         if (typeof body.isOnline === 'boolean') {
           prov.isOnline = body.isOnline;
         }
+        if (body.workStartTime) prov.workStartTime = String(body.workStartTime);
+        if (body.workEndTime) prov.workEndTime = String(body.workEndTime);
         saveDb(db);
         broadcastUpdate('ACCOUNT_UPDATED', { role: 'PROVIDER', user: prov });
         return sendJson(res, 200, { ok: true, user: prov });

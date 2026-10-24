@@ -392,15 +392,27 @@ function getCategoryVectorSvg(catId, isSelected = false) {
 // Small crisp icon inside the blue badge on each provider's map marker
 function getMapMarkerProfessionIconSvg(catId) {
   if (catId === 'barber') {
-    return `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/></svg>`;
+    return `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/></svg>`;
   }
-  if (catId === 'nails') {
-    return `<svg width="11" height="11" viewBox="0 0 24 24" fill="#FFFFFF"><path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z"/></svg>`;
+  if (catId === 'hair_styling' || catId === 'beauty_wellness' || catId === 'nails' || catId === 'makeup') {
+    return `<svg width="12" height="12" viewBox="0 0 24 24" fill="#FFFFFF"><path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z"/></svg>`;
   }
-  if (catId === 'makeup') {
-    return `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.5"><path d="M12 3v18M5 8h14"/></svg>`;
+  if (catId === 'repairs_construction') {
+    return `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>`;
   }
-  return `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round"><path d="M6 4v16M10 6h8M10 10h8M10 14h8M10 18h8"/></svg>`;
+  if (catId === 'solar_power_water') {
+    return `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`;
+  }
+  if (catId === 'cleaning_domestic') {
+    return `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>`;
+  }
+  if (catId === 'automotive') {
+    return `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round"><rect x="3" y="11" width="18" height="8" rx="2"/><circle cx="7.5" cy="19.5" r="2.5"/><circle cx="16.5" cy="19.5" r="2.5"/><path d="M5 11l2-5h10l2 5"/></svg>`;
+  }
+  if (catId === 'gardening_outdoor') {
+    return `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round"><path d="M12 22v-9"/><path d="M12 13c-4.42 0-8-3.58-8-8 4.42 0 8 3.58 8 8z"/><path d="M12 13c4.42 0 8-3.58 8-8-4.42 0-8 3.58-8 8z"/></svg>`;
+  }
+  return `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>`;
 }
 
 function formatUsdPrice(val) {
@@ -1545,7 +1557,8 @@ function checkProximityAutoPairTick() {
       stopArrivalVibrationAlert();
       apiPost('/api/bookings/verify-pin', {
         requestId: bookedJob.id,
-        autoVerified: true
+        autoVerified: true,
+        requestSnapshot: bookedJob
       }).then(() => {
         fetchState(true);
       }).catch((e) => console.warn('Auto-pair trigger error:', e));
@@ -2064,22 +2077,50 @@ function updateMapMarkers(force = false) {
     const m = L.marker([p.lat, p.lng], { icon }).addTo(leafletMarkersLayer);
     m.on('click', () => openProviderCatalogueModal(p.id));
   });
+
+  // Draw physical office / workshop location pins for verified pros who have an office
+  onlinePros.filter((p) => p.hasOffice && (p.officeAddress || p.officeSuburb)).forEach((p) => {
+    const oLat = p.officeLat || p.lat;
+    const oLng = p.officeLng || p.lng;
+    const officeHtml = `
+      <div style="display:flex; flex-direction:column; align-items:center; cursor:pointer;">
+        <div style="background:#0F172A; color:#FFFFFF; font-size:10px; font-weight:800; padding:2px 7px; border-radius:99px; margin-bottom:3px; white-space:nowrap; box-shadow:0 3px 8px rgba(0,0,0,0.3); display:inline-flex; align-items:center; gap:4px;">
+          <span style="color:#60A5FA;">${uiIcon('buildingOffice', 10)}</span>
+          <span>${escapeHtml(p.brandName || p.shortName)} Shop</span>
+        </div>
+        <div style="width:30px; height:30px; border-radius:9px; background:#1E293B; border:2px solid #60A5FA; display:flex; align-items:center; justify-content:center; color:#60A5FA; box-shadow:0 4px 10px rgba(0,0,0,0.25);">
+          ${uiIcon('buildingOffice', 16)}
+        </div>
+      </div>
+    `;
+    const oIcon = L.divIcon({
+      className: '',
+      html: officeHtml,
+      iconSize: [110, 50],
+      iconAnchor: [55, 45]
+    });
+    const om = L.marker([oLat, oLng], { icon: oIcon }).addTo(leafletMarkersLayer);
+    om.on('click', () => openProviderCatalogueModal(p.id));
+  });
 }
 
 function drawProviderAndClientRouteMarkers(prov, req) {
-  // 1. Provider Live Marker
+  // 1. Provider Live Marker with moving trade icon & avatar
+  const tradeSvg = getMapMarkerProfessionIconSvg(prov.categoryId);
+  const statusLabel = req.status === 'IN_PROGRESS' ? 'Working On Site' : req.status === 'ARRIVED' ? 'At Gate' : 'Approaching Client';
   const provHtml = `
     <div class="indrive-map-pro-wrap">
-      <div style="background:#0066FF; color:#FFFFFF; font-size:10.5px; font-weight:800; padding:3px 9px; border-radius:99px; margin-bottom:4px; white-space:nowrap; box-shadow:0 4px 12px rgba(0,102,255,0.35);">
-        ${prov.shortName || prov.name.split(' ')[0]} • ${req.status === 'IN_PROGRESS' ? 'At Home' : req.status === 'ARRIVED' ? 'At Gate' : 'En Route'}
+      <div style="background:#0066FF; color:#FFFFFF; font-size:10.5px; font-weight:800; padding:3px 9px; border-radius:99px; margin-bottom:4px; white-space:nowrap; box-shadow:0 4px 12px rgba(0,102,255,0.35); display:inline-flex; align-items:center; gap:5px;">
+        <span style="display:inline-flex; width:13px; height:13px; align-items:center; justify-content:center;">${tradeSvg}</span>
+        <span>${escapeHtml(prov.shortName || prov.name.split(' ')[0])} • ${statusLabel}</span>
       </div>
-      <div class="pro-map-marker-pill" style="border-color:#0066FF; border-width:3px;">
+      <div class="pro-map-marker-pill" style="border-color:#0066FF; border-width:3px; position:relative;">
         ${prov.avatarUrl
-          ? `<img src="${prov.avatarUrl}" alt="${prov.name}" />`
+          ? `<img src="${prov.avatarUrl}" alt="${escapeHtml(prov.name)}" />`
           : `<span style="font-size:11px; font-weight:800; color:#0066FF;">${prov.avatarInitials}</span>`
         }
-        <div class="pro-map-category-dot">
-          ${getMapMarkerProfessionIconSvg(prov.categoryId)}
+        <div class="pro-map-category-dot" title="${escapeHtml(prov.brandName || 'Specialist')}">
+          ${tradeSvg}
         </div>
       </div>
     </div>
@@ -2087,8 +2128,8 @@ function drawProviderAndClientRouteMarkers(prov, req) {
   const provIcon = L.divIcon({
     className: '',
     html: provHtml,
-    iconSize: [80, 64],
-    iconAnchor: [40, 54]
+    iconSize: [90, 64],
+    iconAnchor: [45, 54]
   });
   L.marker([prov.lat, prov.lng], { icon: provIcon }).addTo(leafletMarkersLayer);
 
@@ -5511,6 +5552,27 @@ function renderModalLayer() {
                   />
                 </div>
               </div>
+
+              <!-- Provider Daily Working Hours Setting -->
+              <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px; padding:10px 12px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                  <span style="font-size:12px; font-weight:800; color:#0F172A;">Daily Working Hours (AI Scheduled)</span>
+                  <span style="font-size:10.5px; color:#0066FF; font-weight:700;">Harare CAT (UTC+2)</span>
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                  <div>
+                    <label style="font-size:10.5px; font-weight:700; color:#64748B; display:block; margin-bottom:2px;">Shift Start</label>
+                    <input id="settingsWorkStart" type="time" class="dark-input" value="${draft.workStartTime || currentUser.workStartTime || '08:00'}" oninput="if(state.settingsDraft) state.settingsDraft.workStartTime=this.value" style="height:36px; font-size:12px;" />
+                  </div>
+                  <div>
+                    <label style="font-size:10.5px; font-weight:700; color:#64748B; display:block; margin-bottom:2px;">Shift End</label>
+                    <input id="settingsWorkEnd" type="time" class="dark-input" value="${draft.workEndTime || currentUser.workEndTime || '18:00'}" oninput="if(state.settingsDraft) state.settingsDraft.workEndTime=this.value" style="height:36px; font-size:12px;" />
+                  </div>
+                </div>
+                <div style="font-size:10.5px; color:#64748B; margin-top:5px; line-height:1.4;">
+                  AI automatically keeps you on the Harare radar during your shifts. Please stay online only when ready to take jobs.
+                </div>
+              </div>
             ` : `
               <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
                 <div>
@@ -5719,114 +5781,140 @@ function renderModalLayer() {
   }
 
   // ==========================================================================
-  // IN-APP iOS WHATSAPP BUSINESS CLONE SUPPORT CHAT (AI-POWERED + PERSISTENT HISTORY)
+  // IN-APP WHATSAPP BUSINESS CLONE SUPPORT CHAT (DARK THEME - MATCHES OFFICIAL WHATSAPP)
   // ==========================================================================
   if (state.activeModal === 'SUPPORT') {
     loadUserSupportHistory();
     const showBizProfile = Boolean(state.supportShowBizInfo);
-    const formatWaBold = (str) => escapeHtml(str || '').replace(/\*([^*]+)\*/g, '<strong>$1</strong>').replace(/\n/g, '<br/>');
+    const formatWaBold = (str) => escapeHtml(str || '').replace(/\*([^*]+)\*/g, '<strong style="color:#FFFFFF;">$1</strong>').replace(/\n/g, '<br/>');
 
     root.innerHTML = `
       <div class="fullscreen-chat-backdrop" style="z-index:99999;" onclick="closeModal()">
-        <div class="fullscreen-chat-modal" style="background:#EFEAE2; display:flex; flex-direction:column; height:100%; width:100%; max-width:480px; margin:0 auto;" onclick="event.stopPropagation()">
-          <!-- iOS WhatsApp Business Top Navigation Bar -->
-          <div style="background:#F6F6F6; border-bottom:1px solid #D1D1D6; padding:10px 12px; display:flex; align-items:center; justify-content:space-between; gap:8px; flex-shrink:0;">
+        <div class="fullscreen-chat-modal" style="background:#0B141A; display:flex; flex-direction:column; height:100%; width:100%; max-width:480px; margin:0 auto; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color:#E9EDEF;" onclick="event.stopPropagation()">
+          <!-- Authentic Dark WhatsApp Business Top Bar -->
+          <div style="background:#1F2C34; border-bottom:1px solid #2A3942; padding:10px 12px; display:flex; align-items:center; justify-content:space-between; gap:8px; flex-shrink:0;">
             <div style="display:flex; align-items:center; gap:8px; min-width:0; flex:1; cursor:pointer;" onclick="toggleSupportBizInfo()">
-              <button type="button" onclick="event.stopPropagation(); closeModal();" style="background:none; border:none; color:#007AFF; display:flex; align-items:center; gap:2px; font-size:16px; font-weight:600; padding:4px 4px 4px 0; cursor:pointer;">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#007AFF" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+              <button type="button" onclick="event.stopPropagation(); closeModal();" style="background:none; border:none; color:#A7B4BC; display:flex; align-items:center; padding:4px 4px 4px 0; cursor:pointer;">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#A7B4BC" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
               </button>
-              <div style="position:relative; width:40px; height:40px; border-radius:50%; overflow:hidden; border:1.5px solid #25D366; background:#0066FF; flex-shrink:0; display:flex; align-items:center; justify-content:center;">
-                <img src="/assets/logo-icon.svg" alt="Findit Harare DP" style="width:100%; height:100%; object-fit:cover;" onerror="this.src='/favicon.png'" />
+              <div style="position:relative; width:40px; height:40px; border-radius:50%; overflow:hidden; background:#FFFFFF; flex-shrink:0; display:flex; align-items:center; justify-content:center; border:1px solid #2A3942;">
+                <img src="/assets/logo-icon.svg" alt="Findit Harare" style="width:100%; height:100%; object-fit:cover;" onerror="this.src='/favicon.png'" />
               </div>
               <div style="min-width:0; flex:1;">
-                <div style="display:flex; align-items:center; gap:4px;">
-                  <span style="font-size:15px; font-weight:700; color:#000000; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Findit Harare Official</span>
-                  <!-- iOS WhatsApp Verified Business Green Badge -->
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="#25D366" style="flex-shrink:0;"><path d="M12 2l2.4 2.1 3.1-.4.9 3 2.8 1.5-.8 3 1.6 2.7-2.2 2.2.4 3.1-3 .9-1.5 2.8-3-.8-2.7 1.6-2.2-2.2-3.1.4-.9-3-2.8-1.5.8-3-1.6-2.7 2.2-2.2-.4-3.1 3-.9 1.5-2.8 3 .8 2.7-1.6z"/><path d="M9.5 12.5l2 2 4-4.5" stroke="#FFFFFF" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <div style="display:flex; align-items:center; gap:5px;">
+                  <span style="font-size:15px; font-weight:700; color:#E9EDEF; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Findit Harare Official</span>
+                  <!-- Meta Verified Blue Badge -->
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="#00A884" style="flex-shrink:0;"><path d="M12 2l2.4 2.1 3.1-.4.9 3 2.8 1.5-.8 3 1.6 2.7-2.2 2.2.4 3.1-3 .9-1.5 2.8-3-.8-2.7 1.6-2.2-2.2-3.1.4-.9-3-2.8-1.5.8-3-1.6-2.7 2.2-2.2-.4-3.1 3-.9 1.5-2.8 3 .8 2.7-1.6z"/><path d="M9.5 12.5l2 2 4-4.5" stroke="#FFFFFF" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 </div>
-                <div style="font-size:11.5px; color:#6E6E73; font-weight:500;">
-                  Business Account • Tap here for business info
+                <div style="font-size:11.5px; color:#8696A0; font-weight:400;">
+                  Business account • Tap here for business info
                 </div>
               </div>
             </div>
 
-            <div style="display:flex; align-items:center; gap:8px;">
-              <button type="button" onclick="toggleSupportBizInfo()" title="Business Profile & Linked IG/FB" style="width:34px; height:34px; border-radius:50%; border:none; background:rgba(0,122,255,0.1); color:#007AFF; display:flex; align-items:center; justify-content:center; cursor:pointer;">
-                ${uiIcon('info', 18)}
+            <div style="display:flex; align-items:center; gap:14px; color:#A7B4BC;">
+              <button type="button" onclick="toggleSupportBizInfo()" title="Business Info" style="background:none; border:none; color:#A7B4BC; cursor:pointer; display:flex; align-items:center; padding:0;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+              </button>
+              <button type="button" onclick="clearUserSupportHistory()" title="Clear Chat History" style="background:none; border:none; color:#A7B4BC; cursor:pointer; display:flex; align-items:center; padding:0;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
               </button>
             </div>
           </div>
 
-          <!-- Expandable iOS WhatsApp Business Profile & Linked IG/FB Sheet -->
+          <!-- Expandable WhatsApp Business Profile & Social Links Sheet -->
           ${showBizProfile ? `
-            <div style="background:#FFFFFF; border-bottom:1px solid #D1D1D6; padding:14px 16px; box-shadow:0 6px 18px rgba(0,0,0,0.08); flex-shrink:0;">
+            <div style="background:#111B21; border-bottom:1px solid #2A3942; padding:14px 16px; box-shadow:0 6px 18px rgba(0,0,0,0.4); flex-shrink:0;">
               <div style="display:flex; align-items:center; gap:12px; margin-bottom:10px;">
-                <img src="/assets/logo-icon.svg" alt="DP" style="width:54px; height:54px; border-radius:50%; border:2px solid #25D366;" />
-                <div style="flex:1;">
-                  <div style="font-size:16px; font-weight:800; color:#000; display:flex; align-items:center; gap:5px;">
-                    <span>Findit Harare Official</span>
-                    <span style="font-size:10px; background:#DCFCE7; color:#15803D; padding:2px 6px; border-radius:99px; font-weight:800;">VERIFIED BUSINESS</span>
-                  </div>
-                  <div style="font-size:12px; color:#54656F; margin-top:2px;">+263 71 347 5131 • On-Demand Home Services</div>
-                  <div style="font-size:11.5px; color:#16A34A; font-weight:600; margin-top:2px;">● Open 24 Hours • Harare, Zimbabwe</div>
+                <div style="width:52px; height:52px; border-radius:50%; background:#FFFFFF; display:flex; align-items:center; justify-content:center; border:2px solid #00A884; overflow:hidden;">
+                  <img src="/assets/logo-icon.svg" alt="DP" style="width:100%; height:100%; object-fit:cover;" />
                 </div>
-                <button type="button" onclick="toggleSupportBizInfo()" style="background:#F2F2F7; border:none; border-radius:50%; width:28px; height:28px; cursor:pointer; font-weight:800;">✕</button>
+                <div style="flex:1;">
+                  <div style="font-size:16px; font-weight:800; color:#E9EDEF; display:flex; align-items:center; gap:5px;">
+                    <span>Findit Harare Official</span>
+                    <span style="font-size:10px; background:#005C4B; color:#25D366; padding:2px 6px; border-radius:99px; font-weight:800;">VERIFIED</span>
+                  </div>
+                  <div style="font-size:12px; color:#8696A0; margin-top:2px;">+263 71 347 5131 • Official Marketplace Desk</div>
+                  <div style="font-size:11.5px; color:#25D366; font-weight:600; margin-top:2px;">● Open 24 Hours • Harare, Zimbabwe</div>
+                </div>
+                <button type="button" onclick="toggleSupportBizInfo()" style="background:#202C33; border:none; border-radius:50%; width:28px; height:28px; cursor:pointer; color:#A7B4BC; font-weight:800;">✕</button>
               </div>
-              <div style="font-size:12px; color:#3C3C43; background:#F2F2F7; padding:9px 11px; border-radius:10px; margin-bottom:10px; line-height:1.4;">
-                Your Price • Your Pro • At Your Door. Official Harare Marketplace Support &amp; EcoCash Verification Desk (Merchant: <strong>0713 475 131</strong> • Website: <a href="https://finditharare.co.zw" target="_blank" rel="noopener" style="color:#007AFF; font-weight:700;">finditharare.co.zw</a>).
-              </div>
-              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                <div style="font-size:11px; font-weight:700; color:#8E8E93; text-transform:uppercase;">Linked Business Accounts (IG &amp; FB)</div>
-                <button type="button" onclick="clearUserSupportHistory()" style="border:none; background:none; color:#DC2626; font-size:11px; font-weight:700; cursor:pointer;">Clear Chat History</button>
-              </div>
+
+              <!-- Official Website WhatsApp Link Card Preview -->
+              <a href="https://finditharare.co.zw" target="_blank" rel="noopener" style="display:flex; align-items:center; gap:10px; background:#1F2C34; border:1px solid #2A3942; border-radius:12px; padding:10px 12px; text-decoration:none; margin-bottom:10px;">
+                <div style="width:36px; height:36px; border-radius:8px; background:#00A884; color:#FFFFFF; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                </div>
+                <div style="min-width:0; flex:1;">
+                  <div style="font-size:13px; font-weight:700; color:#53BDEB;">finditharare.co.zw</div>
+                  <div style="font-size:11px; color:#8696A0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Findit Harare — On-Demand Services in Harare</div>
+                </div>
+              </a>
+
               <div style="display:flex; gap:8px;">
-                <a href="https://www.instagram.com/findithahare/" target="_blank" rel="noopener" style="flex:1; display:flex; align-items:center; gap:7px; padding:8px 10px; background:#FDF2F8; border:1px solid #FBCFE8; border-radius:10px; text-decoration:none; color:#9D174D; font-size:12px; font-weight:700;">
+                <a href="https://www.instagram.com/findithahare/" target="_blank" rel="noopener" style="flex:1; display:flex; align-items:center; gap:7px; padding:8px 10px; background:#1F2C34; border:1px solid #2A3942; border-radius:10px; text-decoration:none; color:#E9EDEF; font-size:12px; font-weight:700;">
                   <span style="color:#E1306C; display:inline-flex;">${uiIcon('instagram', 16)}</span>
                   <div>
                     <div>Instagram</div>
-                    <div style="font-size:10.5px; opacity:0.8;">@findithahare</div>
+                    <div style="font-size:10.5px; color:#8696A0;">@findithahare</div>
                   </div>
                 </a>
-                <a href="https://www.facebook.com/profile.php?id=61595501858201" target="_blank" rel="noopener" style="flex:1; display:flex; align-items:center; gap:7px; padding:8px 10px; background:#EFF6FF; border:1px solid #BFDBFE; border-radius:10px; text-decoration:none; color:#1E40AF; font-size:12px; font-weight:700;">
+                <a href="https://www.facebook.com/profile.php?id=61595501858201" target="_blank" rel="noopener" style="flex:1; display:flex; align-items:center; gap:7px; padding:8px 10px; background:#1F2C34; border:1px solid #2A3942; border-radius:10px; text-decoration:none; color:#E9EDEF; font-size:12px; font-weight:700;">
                   <span style="color:#1877F2; display:inline-flex;">${uiIcon('facebook', 16)}</span>
                   <div>
                     <div>Facebook</div>
-                    <div style="font-size:10.5px; opacity:0.8;">Findit Harare</div>
+                    <div style="font-size:10.5px; color:#8696A0;">Findit Harare</div>
                   </div>
                 </a>
               </div>
             </div>
           ` : ''}
 
-          <!-- iOS WhatsApp Business Chat Feed -->
-          <div id="waSupportChatFeed" style="flex:1; overflow-y:auto; padding:12px 14px; display:flex; flex-direction:column; gap:8px; background-color:#EFEAE2; background-image:radial-gradient(rgba(0,0,0,0.03) 1px, transparent 0); background-size:18px 18px;">
-            <!-- iOS WhatsApp Business Encryption & Business Notice -->
-            <div style="background:#FFF5C4; color:#54656F; font-size:11.5px; text-align:center; padding:8px 12px; border-radius:10px; margin:2px auto 6px auto; max-width:92%; line-height:1.35; box-shadow:0 1px 1px rgba(0,0,0,0.06);">
-              🔒 Messages in this chat are protected. This chat is with the official business account of <strong>Findit Harare Official</strong>.
+          <!-- WhatsApp Chat Feed with Subtle Dark Doodle Wallpaper Background -->
+          <div id="waSupportChatFeed" style="flex:1; overflow-y:auto; padding:12px 14px; display:flex; flex-direction:column; gap:8px; background-color:#0B141A; background-image:radial-gradient(rgba(255,255,255,0.035) 1px, transparent 0); background-size:20px 20px;">
+            <!-- WhatsApp Centered Encryption Pill -->
+            <div style="background:#182229; color:#FFD279; font-size:11px; text-align:center; padding:8px 14px; border-radius:10px; margin:2px auto 4px auto; max-width:92%; line-height:1.4; box-shadow:0 1px 2px rgba(0,0,0,0.3); border:1px solid rgba(255,210,121,0.15);">
+              🔒 Messages and calls are end-to-end encrypted. Only people in this chat can read, listen to, or share them.
             </div>
 
-            <!-- Compact Business Identity Card inside Chat -->
-            <div style="background:#FFFFFF; border-radius:12px; padding:10px 12px; margin:0 auto 6px auto; width:94%; box-shadow:0 1px 2px rgba(0,0,0,0.06); display:flex; align-items:center; justify-content:space-between; gap:8px;">
-              <div style="display:flex; align-items:center; gap:9px; min-width:0;">
-                <img src="/assets/logo-icon.svg" alt="DP" style="width:36px; height:36px; border-radius:50%; flex-shrink:0;" />
-                <div style="min-width:0;">
-                  <div style="font-size:12.5px; font-weight:800; color:#111B21;">Findit Harare Business Support</div>
-                  <div style="font-size:11px; color:#667781;">Official IG: @findithahare • FB: Findit Harare</div>
-                </div>
+            <!-- Meta Business Security Notice -->
+            <div style="background:#182229; color:#8696A0; font-size:11px; text-align:center; padding:6px 12px; border-radius:10px; margin:0 auto 8px auto; max-width:92%; line-height:1.35; border:1px solid #222E35;">
+              This business is now using a secure service from Meta to manage this chat. Tap to learn more.
+            </div>
+
+            <!-- Authentic Centered WhatsApp Business Profile Card (Circled in User's Screenshot) -->
+            <div style="background:#111B21; border:1px solid #222E35; border-radius:16px; padding:18px 16px; margin:0 auto 10px auto; width:92%; text-align:center; box-shadow:0 2px 6px rgba(0,0,0,0.35);">
+              <div style="width:70px; height:70px; border-radius:50%; background:#FFFFFF; margin:0 auto 10px auto; display:flex; align-items:center; justify-content:center; overflow:hidden; border:2.5px solid #00A884; box-shadow:0 3px 10px rgba(0,0,0,0.4);">
+                <img src="/assets/logo-icon.svg" alt="Findit Harare" style="width:100%; height:100%; object-fit:cover;" />
               </div>
-              <button type="button" onclick="toggleSupportBizInfo()" style="background:#F0F2F5; border:none; border-radius:8px; padding:5px 9px; font-size:11px; font-weight:700; color:#007AFF; cursor:pointer; flex-shrink:0;">
-                Profile
-              </button>
+              <div style="font-size:16px; font-weight:800; color:#E9EDEF; display:flex; align-items:center; justify-content:center; gap:5px;">
+                <span>Findit Harare Official</span>
+                <!-- WhatsApp Verified Badge -->
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="#00A884"><path d="M12 2l2.4 2.1 3.1-.4.9 3 2.8 1.5-.8 3 1.6 2.7-2.2 2.2.4 3.1-3 .9-1.5 2.8-3-.8-2.7 1.6-2.2-2.2-3.1.4-.9-3-2.8-1.5.8-3-1.6-2.7 2.2-2.2-.4-3.1 3-.9 1.5-2.8 3 .8 2.7-1.6z"/><path d="M9.5 12.5l2 2 4-4.5" stroke="#FFFFFF" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </div>
+              <div style="font-size:13px; font-weight:600; color:#A7B4BC; margin-top:3px;">
+                +263 71 347 5131
+              </div>
+              <div style="font-size:11px; color:#8696A0; margin-top:4px; line-height:1.4;">
+                Phone number from Zimbabwe • Business account • Joined in 2024
+              </div>
+
+              <!-- Official Website WhatsApp Link Pill -->
+              <a href="https://finditharare.co.zw" target="_blank" rel="noopener" style="display:inline-flex; align-items:center; gap:6px; background:#1F2C34; border:1px solid #2A3942; border-radius:99px; padding:6px 14px; text-decoration:none; color:#53BDEB; font-size:12px; font-weight:700; margin-top:10px;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                <span>finditharare.co.zw</span>
+              </a>
             </div>
 
+            <!-- Message Bubbles (Dark WhatsApp Bubbles) -->
             ${state.supportChatMessages.map((m, idx, arr) => {
               const isUser = m.sender === 'USER';
               const isLastUserTyping = isUser && idx === arr.length - 1 && state.supportAiTyping;
               return `
                 <div style="display:flex; justify-content:${isUser ? 'flex-end' : 'flex-start'};">
-                  <div style="max-width:82%; background:${isUser ? '#DCF8C6' : '#FFFFFF'}; color:#111B21; padding:8px 11px 6px 11px; border-radius:${isUser ? '14px 14px 3px 14px' : '14px 14px 14px 3px'}; box-shadow:0 1px 1.5px rgba(0,0,0,0.08); font-size:13.5px; line-height:1.42; position:relative;">
+                  <div style="max-width:82%; background:${isUser ? '#005C4B' : '#202C33'}; color:#E9EDEF; padding:8px 12px 6px 12px; border-radius:${isUser ? '14px 14px 3px 14px' : '14px 14px 14px 3px'}; box-shadow:0 1px 2px rgba(0,0,0,0.3); font-size:13.5px; line-height:1.45; position:relative;">
                     <div>${formatWaBold(m.text)}</div>
-                    <div style="display:flex; align-items:center; justify-content:flex-end; gap:3px; font-size:10.5px; color:#667781; margin-top:3px;">
+                    <div style="display:flex; align-items:center; justify-content:flex-end; gap:3px; font-size:10.5px; color:#8696A0; margin-top:3px;">
                       <span>${m.time || ''}</span>
                       ${isUser ? renderWhatsAppDoubleTickSvg(!isLastUserTyping) : ''}
                     </div>
@@ -5837,41 +5925,49 @@ function renderModalLayer() {
 
             ${state.supportAiTyping ? `
               <div style="display:flex; justify-content:flex-start;">
-                <div style="background:#FFFFFF; color:#667781; padding:8px 13px; border-radius:14px 14px 14px 3px; font-size:12.5px; font-style:italic; box-shadow:0 1px 1.5px rgba(0,0,0,0.08);">
+                <div style="background:#202C33; color:#8696A0; padding:8px 14px; border-radius:14px 14px 14px 3px; font-size:12.5px; font-style:italic; box-shadow:0 1px 2px rgba(0,0,0,0.3);">
                   Findit Harare Official is typing…
                 </div>
               </div>
             ` : ''}
           </div>
 
-          <!-- Quick FAQ Chips (Strictly Findit Harare Support Topics) -->
-          <div style="background:#F6F6F6; padding:6px 10px 2px 10px; display:flex; gap:6px; overflow-x:auto; border-top:1px solid #E5E5EA; flex-shrink:0;">
-            <button type="button" class="chat-preset-chip" style="background:#FFFFFF; border:1px solid #D1D1D6; color:#007AFF; font-size:11.5px; white-space:nowrap;" onclick="sendSupportAiMessage('How does the $5 welcome bonus and 11% commission work?')">
+          <!-- Quick FAQ Chips (Dark WhatsApp Style) -->
+          <div style="background:#1F2C34; padding:6px 10px 2px 10px; display:flex; gap:6px; overflow-x:auto; border-top:1px solid #2A3942; flex-shrink:0;">
+            <button type="button" class="chat-preset-chip" style="background:#202C33; border:1px solid #2A3942; color:#53BDEB; font-size:11.5px; white-space:nowrap;" onclick="sendSupportAiMessage('How does the $5 welcome bonus and 11% commission work?')">
               💳 $5 Bonus &amp; 11% Rule
             </button>
-            <button type="button" class="chat-preset-chip" style="background:#FFFFFF; border:1px solid #D1D1D6; color:#007AFF; font-size:11.5px; white-space:nowrap;" onclick="sendSupportAiMessage('How do I top up my provider wallet with EcoCash USD?')">
+            <button type="button" class="chat-preset-chip" style="background:#202C33; border:1px solid #2A3942; color:#53BDEB; font-size:11.5px; white-space:nowrap;" onclick="sendSupportAiMessage('How do I top up my provider wallet with EcoCash USD?')">
               💵 EcoCash Top-Up
             </button>
-            <button type="button" class="chat-preset-chip" style="background:#FFFFFF; border:1px solid #D1D1D6; color:#007AFF; font-size:11.5px; white-space:nowrap;" onclick="sendSupportAiMessage('How do I order a service or schedule for later?')">
-              📍 How to Book
+            <button type="button" class="chat-preset-chip" style="background:#202C33; border:1px solid #2A3942; color:#53BDEB; font-size:11.5px; white-space:nowrap;" onclick="sendSupportAiMessage('How do I view or change my service categories in Settings?')">
+              🛠️ Job Categories
             </button>
-            <button type="button" class="chat-preset-chip" style="background:#FFFFFF; border:1px solid #D1D1D6; color:#007AFF; font-size:11.5px; white-space:nowrap;" onclick="sendSupportAiMessage('How does the 4-digit Start PIN work?')">
-              🔐 4-Digit Start PIN
+            <button type="button" class="chat-preset-chip" style="background:#202C33; border:1px solid #2A3942; color:#53BDEB; font-size:11.5px; white-space:nowrap;" onclick="sendSupportAiMessage('What is your official website and phone number?')">
+              🌐 Website &amp; Line
             </button>
           </div>
 
-          <!-- iOS WhatsApp Bottom Input Bar -->
-          <form onsubmit="event.preventDefault(); sendSupportAiMessage(); return false;" style="background:#F6F6F6; padding:8px 10px 14px 10px; display:flex; align-items:center; gap:8px; flex-shrink:0; margin:0;">
-            <input
-              id="waSupportInput"
-              type="text"
-              autocomplete="off"
-              placeholder="Ask Findit Harare Support..."
-              style="flex:1; height:38px; border-radius:19px; border:1px solid #C7C7CC; background:#FFFFFF; padding:0 14px; font-size:14px; color:#000000; outline:none;"
-            />
+          <!-- Authentic Dark WhatsApp Bottom Input Bar -->
+          <form onsubmit="event.preventDefault(); sendSupportAiMessage(); return false;" style="background:#1F2C34; padding:8px 10px 14px 10px; display:flex; align-items:center; gap:8px; flex-shrink:0; margin:0;">
+            <div style="flex:1; display:flex; align-items:center; background:#2A3942; border-radius:24px; padding:0 12px; height:42px;">
+              <span style="color:#8696A0; cursor:pointer; font-size:18px; margin-right:8px; display:flex; align-items:center;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+              </span>
+              <input
+                id="waSupportInput"
+                type="text"
+                autocomplete="off"
+                placeholder="Message"
+                style="flex:1; border:none; background:transparent; font-size:14px; color:#E9EDEF; outline:none; height:100%;"
+              />
+              <span style="color:#8696A0; cursor:pointer; margin-left:8px; display:flex; align-items:center;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+              </span>
+            </div>
             <button
               type="submit"
-              style="width:38px; height:38px; border-radius:50%; border:none; background:#007AFF; color:#FFFFFF; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0;"
+              style="width:42px; height:42px; border-radius:50%; border:none; background:#00A884; color:#FFFFFF; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; box-shadow:0 2px 6px rgba(0,168,132,0.4);"
             >
               ${uiIcon('send', 16)}
             </button>
@@ -6262,39 +6358,81 @@ function renderModalLayer() {
   if (state.activeModal === 'PROVIDER_OFFICE_MODAL') {
     const prov = state.currentUser || (state.db.providers || [])[0] || {};
     const suburbs = state.db.suburbs || [];
+    const hasOffice = Boolean(state.officeDraftHasOffice !== undefined ? state.officeDraftHasOffice : prov.hasOffice);
     root.innerHTML = `
       <div class="modal-backdrop" onclick="closeModal()">
         <div class="indrive-modal-sheet" onclick="event.stopPropagation()">
           <div class="cancel-sheet-header">
             <div style="display:flex; align-items:center; gap:8px;">
               <span style="color:var(--blue-primary);">${uiIcon('buildingOffice', 20)}</span>
-              <div class="cancel-sheet-title">Physical Workshop / Office Base</div>
+              <div class="cancel-sheet-title">Workplace &amp; Office Setup</div>
             </div>
             <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
           </div>
           <div style="font-size:12px; color:var(--text-secondary); margin-bottom:14px; line-height:1.45;">
-            Add your physical workshop or office location in Harare. Clients can see your base location, calculate travel distances, or choose to bring items/drop off at your shop.
+            State whether you operate from a physical workshop/office/shop or operate as a mobile freelancer. Clients can see your base location and calculate travel times.
           </div>
-          <div style="display:flex; flex-direction:column; gap:12px;">
-            <label style="display:flex; align-items:center; gap:8px; font-size:13px; font-weight:700; color:var(--text-main); cursor:pointer;">
-              <input type="checkbox" id="providerHasOfficeInput" ${prov.hasOffice ? 'checked' : ''} style="width:18px; height:18px; accent-color:var(--blue-primary);" />
-              <span>I have a physical workshop or office</span>
-            </label>
-            <div>
-              <label style="font-size:12px; font-weight:700; color:var(--text-main);">Workshop / Office Suburb</label>
-              <select id="providerOfficeSuburbSelect" class="dark-input" style="width:100%; margin-top:4px;">
-                ${suburbs.map((s) => `<option value="${s.name}" ${(prov.officeSuburb || prov.primarySuburb || '') === s.name ? 'selected' : ''}>${s.name}, Harare</option>`).join('')}
-              </select>
-            </div>
-            <div>
-              <label style="font-size:12px; font-weight:700; color:var(--text-main);">Street Address / Shop Details</label>
-              <input id="providerOfficeAddressInput" class="dark-input" value="${prov.officeAddress || ''}" placeholder="e.g. Shop 14, Sam Levy's Village, Borrowdale" style="width:100%; margin-top:4px;" />
-            </div>
-            <button class="btn-primary-blue" onclick="saveProviderOfficeDetails()" style="margin-top:6px; height:42px;">
-              ${uiIcon('check', 16)}
-              <span>Save Office Location</span>
+
+          <!-- Workplace Choice Tabs -->
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:14px;">
+            <button
+              type="button"
+              class="${hasOffice ? 'btn-primary-blue' : 'btn-dark-sec'}"
+              style="height:44px; font-size:12px;"
+              onclick="state.officeDraftHasOffice = true; renderModalLayer();"
+            >
+              ${uiIcon('buildingOffice', 15)}
+              <span>🏢 Shop / Office</span>
+            </button>
+            <button
+              type="button"
+              class="${!hasOffice ? 'btn-primary-blue' : 'btn-dark-sec'}"
+              style="height:44px; font-size:12px;"
+              onclick="state.officeDraftHasOffice = false; renderModalLayer();"
+            >
+              ${uiIcon('briefcase', 15)}
+              <span>🧰 Mobile Freelancer</span>
             </button>
           </div>
+
+          <div style="display:flex; flex-direction:column; gap:12px;">
+            ${hasOffice ? `
+              <div>
+                <label style="font-size:12px; font-weight:700; color:var(--text-main);">Workshop / Office Suburb</label>
+                <select id="providerOfficeSuburbSelect" class="dark-input" style="width:100%; margin-top:4px;">
+                  ${suburbs.map((s) => `<option value="${s.name}" ${(prov.officeSuburb || prov.primarySuburb || '') === s.name ? 'selected' : ''}>${s.name}, Harare</option>`).join('')}
+                </select>
+              </div>
+              <div>
+                <label style="font-size:12px; font-weight:700; color:var(--text-main);">Street Address / Shop Details</label>
+                <input id="providerOfficeAddressInput" class="dark-input" value="${escapeHtml(prov.officeAddress || '')}" placeholder="e.g. Shop 14, Sam Levy's Village, Borrowdale" style="width:100%; margin-top:4px;" />
+              </div>
+            ` : `
+              <div style="background:#F1F5F9; border-radius:12px; padding:12px; font-size:12.5px; color:#475569; line-height:1.45;">
+                <strong>Mobile Freelancer Mode:</strong> You travel directly to client homes and job sites in Harare. When you are en route, your live moving location and trade icon will be displayed to the client.
+              </div>
+            `}
+            <button class="btn-primary-blue" onclick="saveProviderOfficeDetails()" style="margin-top:6px; height:44px;">
+              ${uiIcon('check', 16)}
+              <span>Save Workplace Setup</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // FULL-SCREEN CHAT PHOTO PREVIEW LIGHTBOX
+  if (state.activeModal === 'CHAT_PHOTO_PREVIEW') {
+    const pUrl = state.modalData?.previewPhotoUrl;
+    root.innerHTML = `
+      <div class="modal-backdrop" style="background:rgba(0,0,0,0.92); z-index:99999; display:flex; align-items:center; justify-content:center; padding:16px;" onclick="closeModal()">
+        <div style="position:relative; max-width:94vw; max-height:90vh; display:flex; flex-direction:column; align-items:center; justify-content:center;" onclick="event.stopPropagation()">
+          <button class="cancel-close-x" onclick="closeModal()" style="position:absolute; top:-42px; right:0; background:rgba(255,255,255,0.25); color:#fff; border-radius:50%; width:34px; height:34px; border:none; display:flex; align-items:center; justify-content:center; cursor:pointer;">
+            ${uiIcon('close', 18)}
+          </button>
+          <img src="${escapeHtml(pUrl)}" alt="Chat Reference" style="max-width:100%; max-height:84vh; object-fit:contain; border-radius:12px; box-shadow:0 8px 32px rgba(0,0,0,0.7);" />
         </div>
       </div>
     `;
@@ -6303,6 +6441,8 @@ function renderModalLayer() {
 }
 
 function openProviderOfficeModal() {
+  const prov = state.currentUser || (state.db.providers || [])[0] || {};
+  state.officeDraftHasOffice = Boolean(prov.hasOffice);
   state.activeModal = 'PROVIDER_OFFICE_MODAL';
   renderModalLayer();
 }
@@ -6310,35 +6450,54 @@ function openProviderOfficeModal() {
 async function saveProviderOfficeDetails() {
   const prov = state.currentUser || (state.db.providers || [])[0];
   if (!prov) return;
-  const hasOffice = document.getElementById('providerHasOfficeInput')?.checked || false;
-  const officeSuburb = document.getElementById('providerOfficeSuburbSelect')?.value || '';
-  const officeAddress = document.getElementById('providerOfficeAddressInput')?.value?.trim() || '';
+  const hasOffice = Boolean(state.officeDraftHasOffice !== undefined ? state.officeDraftHasOffice : prov.hasOffice);
+  const officeSuburb = document.getElementById('providerOfficeSuburbSelect')?.value || prov.officeSuburb || prov.primarySuburb || '';
+  const officeAddress = hasOffice ? (document.getElementById('providerOfficeAddressInput')?.value?.trim() || '') : '';
+  const subObj = (state.db?.suburbs || []).find((s) => s.name.toLowerCase() === officeSuburb.toLowerCase());
+  const officeLat = subObj ? subObj.lat : (prov.lat || -17.82485);
+  const officeLng = subObj ? subObj.lng : (prov.lng || 31.05303);
 
+  // Optimistic update
+  prov.hasOffice = hasOffice;
+  prov.workplaceType = hasOffice ? 'OFFICE' : 'FREELANCER';
+  prov.officeSuburb = officeSuburb;
+  prov.officeAddress = officeAddress;
+  prov.officeLat = officeLat;
+  prov.officeLng = officeLng;
+  if (state.currentUser && state.currentUser.id === prov.id) {
+    state.currentUser = { ...prov };
+    saveSession(state.role, state.currentUser, false);
+  }
+
+  showToast('Updating workplace...', 'info');
   try {
-    const res = await fetch('/api/providers/office', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        providerId: prov.id,
-        hasOffice,
-        officeSuburb,
-        officeAddress
-      })
+    const data = await apiPost('/api/providers/office', {
+      providerId: prov.id,
+      hasOffice,
+      workplaceType: prov.workplaceType,
+      officeSuburb,
+      officeAddress,
+      officeLat,
+      officeLng,
+      providerSnapshot: prov
     });
-    const data = await res.json();
-    if (data.ok) {
-      prov.hasOffice = hasOffice;
-      prov.officeSuburb = officeSuburb;
-      prov.officeAddress = officeAddress;
-      showToast('Workshop / Office details updated', 'success');
+    if (data.ok || data.success) {
+      showToast(hasOffice ? 'Office & Workshop details saved' : 'Freelancer mode set', 'success');
+      state.officeDraftHasOffice = undefined;
       closeModal();
       renderAll();
+      updateMapMarkers(true);
     } else {
       showToast(data.error || 'Failed to update office', 'error');
     }
   } catch (err) {
     console.error('Error saving provider office:', err);
-    showToast('Failed to save office location', 'error');
+    // Still succeeded optimistically
+    showToast(hasOffice ? 'Office & Workshop details saved locally' : 'Freelancer mode set', 'success');
+    state.officeDraftHasOffice = undefined;
+    closeModal();
+    renderAll();
+    updateMapMarkers(true);
   }
 }
 
@@ -8205,15 +8364,41 @@ async function topUpProviderWallet(amountUsd, method) {
 
 async function toggleProviderOnlineStatus() {
   const prov = state.currentUser || state.db.providers[0];
+  if (!prov) return;
+  const newOnline = !(prov.isOnline !== false);
+
+  // Optimistic 0ms update
+  prov.isOnline = newOnline;
+  if (state.currentUser) state.currentUser.isOnline = newOnline;
+  if (state.db && Array.isArray(state.db.providers)) {
+    const pInDb = state.db.providers.find((p) => p.id === prov.id);
+    if (pInDb) pInDb.isOnline = newOnline;
+  }
+  saveSession(state.role, state.currentUser, false);
+  renderAll(true);
+  updateMapMarkers(true);
+
+  if (newOnline) {
+    showToast('⚠️ Online & Ready: Inactive providers remaining idle without taking jobs may be removed from the platform.', 'info');
+  } else {
+    showToast('You are now Offline. You are hidden from the map and will not receive job alerts.', 'info');
+  }
+
   try {
     const res = await apiPost('/api/providers/online', {
       providerId: prov.id,
-      isOnline: !(prov.isOnline !== false)
+      isOnline: newOnline,
+      providerSnapshot: prov
     });
-    state.currentUser = res.provider;
-    await fetchState(true);
+    if (res.provider) {
+      prov.isOnline = res.provider.isOnline;
+      if (state.currentUser) state.currentUser.isOnline = res.provider.isOnline;
+      saveSession(state.role, state.currentUser, false);
+      renderAll(true);
+      updateMapMarkers(true);
+    }
   } catch (err) {
-    showToast(err.message, 'error');
+    console.warn('Background online sync:', err);
   }
 }
 
@@ -8826,12 +9011,16 @@ async function saveAccountSettingsChanges() {
       : ['repairs_construction'];
 
     if (!state.currentUser) state.currentUser = state.db?.providers?.[0] || {};
+    const workStartVal = document.getElementById('settingsWorkStart')?.value || state.settingsDraft.workStartTime || state.currentUser.workStartTime || '08:00';
+    const workEndVal = document.getElementById('settingsWorkEnd')?.value || state.settingsDraft.workEndTime || state.currentUser.workEndTime || '18:00';
     state.currentUser.name = nameVal;
     state.currentUser.shortName = nameVal.split(' ')[0];
     state.currentUser.brandName = brandVal;
     state.currentUser.startingPriceUsd = priceVal;
     state.currentUser.categoryIds = catIds;
     state.currentUser.categoryId = catIds[0];
+    state.currentUser.workStartTime = workStartVal;
+    state.currentUser.workEndTime = workEndVal;
     if (subObj) {
       state.currentUser.suburbId = subObj.id;
       state.currentUser.suburbName = subObj.name;
@@ -8849,7 +9038,9 @@ async function saveAccountSettingsChanges() {
         categoryIds: state.currentUser.categoryIds,
         categoryId: state.currentUser.categoryId,
         suburbId: state.currentUser.suburbId,
-        suburbName: state.currentUser.suburbName
+        suburbName: state.currentUser.suburbName,
+        workStartTime: workStartVal,
+        workEndTime: workEndVal
       });
     }
 
@@ -8867,7 +9058,9 @@ async function saveAccountSettingsChanges() {
         brandName: state.currentUser.brandName,
         startingPriceUsd: state.currentUser.startingPriceUsd,
         categoryIds: state.currentUser.categoryIds,
-        suburbId: state.currentUser.suburbId
+        suburbId: state.currentUser.suburbId,
+        workStartTime: workStartVal,
+        workEndTime: workEndVal
       });
     } catch (e) {}
   } else {
@@ -8977,9 +9170,18 @@ async function handleChatPhotoUpload(input, requestId) {
   const file = input.files[0];
   const reader = new FileReader();
   reader.onload = async () => {
-    sendChatMessage('📷 Client reference photo attached', requestId);
+    const photoDataUrl = reader.result;
+    sendChatMessage('', requestId, photoDataUrl);
+    input.value = '';
   };
   reader.readAsDataURL(file);
+}
+
+function openChatPhotoPreview(url) {
+  if (!url) return;
+  state.modalData = { previewPhotoUrl: url };
+  state.activeModal = 'CHAT_PHOTO_PREVIEW';
+  renderModalLayer();
 }
 
 function updateChatFeedDomOnly(req) {
@@ -8999,22 +9201,26 @@ function updateChatFeedDomOnly(req) {
 let lastSentChatText = '';
 let lastSentChatAtMs = 0;
 
-function sendChatMessage(text, requestId = null) {
-  if (!text || !text.trim()) return;
-  const cleanText = text.trim();
+function sendChatMessage(text, requestId = null, photoUrl = null) {
+  const cleanText = (text || '').trim();
+  if (!cleanText && !photoUrl) return;
 
   // Prevent accidental double-submission (e.g. Enter + click or double-tap within 500ms)
   const nowMs = Date.now();
-  if (cleanText === lastSentChatText && nowMs - lastSentChatAtMs < 500) {
+  if (!photoUrl && cleanText === lastSentChatText && nowMs - lastSentChatAtMs < 500) {
     return;
   }
-  lastSentChatText = cleanText;
-  lastSentChatAtMs = nowMs;
+  if (!photoUrl) {
+    lastSentChatText = cleanText;
+    lastSentChatAtMs = nowMs;
+  }
 
-  const leakWarning = checkAntiLeakageClient(cleanText);
-  if (leakWarning) {
-    showToast(leakWarning, 'error');
-    return;
+  if (cleanText) {
+    const leakWarning = checkAntiLeakageClient(cleanText);
+    if (leakWarning) {
+      showToast(leakWarning, 'error');
+      return;
+    }
   }
 
   const targetReqId = requestId || state.activeChatRequestId;
@@ -9038,7 +9244,8 @@ function sendChatMessage(text, requestId = null) {
     clientMsgId: tempMsgId,
     senderRole: state.role,
     senderName: senderName,
-    text: cleanText,
+    text: cleanText || (photoUrl ? '📷 Photo attached' : ''),
+    photoUrl: photoUrl || undefined,
     status: 'DELIVERED',
     read: false,
     timestamp: nowIso,
@@ -9058,7 +9265,8 @@ function sendChatMessage(text, requestId = null) {
     clientMsgId: tempMsgId,
     senderRole: state.role,
     senderName: senderName,
-    text: cleanText,
+    text: cleanText || (photoUrl ? '📷 Photo attached' : ''),
+    photoUrl: photoUrl || undefined,
     requestSnapshot: targetReq
   }).then((res) => {
     if (res && res.message) {
