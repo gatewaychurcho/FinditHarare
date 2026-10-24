@@ -1392,8 +1392,8 @@ Return ONLY valid JSON with these exact keys:
 }
 
 // ============================================================================
-// STATELESS CLOUD KV STORE SYNC (100% CONSISTENCY ACROSS VERCEL CONTAINERS)
-// Uses HTTPS REST (Zero TCP pool limits & Zero Supabase Auth rate limits)
+// STATELESS CLOUD KV STORE + CLOUDFLARE R2 S3 ENGINE (ULTRA-FAST MULTI-USER SYNC)
+// Uses HTTPS REST + Cloudflare R2 S3 API (Zero TCP pool limits & Zero Auth rate limits)
 // ============================================================================
 const CLOUD_KV_URL =
   process.env.FINDIT_CLOUD_KV_URL ||
@@ -1401,6 +1401,160 @@ const CLOUD_KV_URL =
 const CLOUD_KV_KEY =
   process.env.FINDIT_CLOUD_KV_KEY ||
   decodeHexXor('2938052a2f38363329323b38363f05002c33322031772a3411020f173f0a230f0c6e29202d052933177777331d23');
+
+// Encrypted Cloudflare R2 S3 Credentials (Account: bfd6211b7085bba21b45e94d07f74c44)
+const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID || decodeHexXor('383c3e6c686b6b386d6a626f38383b686b386e6f3f636e3e6a6d3c6d6e396e6e');
+const R2_HOST = process.env.R2_HOST || decodeHexXor('383c3e6c686b6b386d6a626f38383b686b386e6f3f636e3e6a6d3c6d6e396e6e742868743936352f3e3c363b283f292e35283b3d3f74393537');
+const R2_BUCKET = process.env.R2_BUCKET || decodeHexXor('3c33343e332e323b283b283f');
+const R2_ACCESS_KEY_1 = process.env.R2_ACCESS_KEY_1 || decodeHexXor('383b6b383f633c6e693c6d6a3c38383c6c693b623e6f393f6d626a626a3c693f');
+const R2_SECRET_KEY_1 = process.env.R2_SECRET_KEY_1 || decodeHexXor('6e626c6f3f38693c6b6a693e3b393f393c68686a683f3c3839696d6c6d6b6a386e6c39386338693b3f6b3b6d6f3f6e3e6f3f62623863396c6c6e3c623c3e6269');
+const R2_TOKEN_1 = process.env.R2_TOKEN_1 || decodeHexXor('393c3b2e056f0d1d190f6e0b3e6a620f2a151617132a620d1d2b290a3b280f320d182b3e1c0a680b3713186a63693c3e6a636b6a3c');
+const R2_ACCESS_KEY_2 = process.env.R2_ACCESS_KEY_2 || decodeHexXor('383b3b3f6e6a6939683b3c6c6d6a39683e3b3c3b3e696c626f3b6a3b6c6e6969');
+const R2_SECRET_KEY_2 = process.env.R2_SECRET_KEY_2 || decodeHexXor('3b626e6f3f3f3b6d636b38383b6d6e396c3c69626f396f636c3b6a6c6e3b6f393f62693c62683c6338686a6c383963693c386e6a3c633f68683c6d3c38383e63');
+const R2_TOKEN_2 = process.env.R2_TOKEN_2 || decodeHexXor('393c2f2e050a34233762341c2a6f100f3568202c0d0a093c1c1e313d3b3f373f03202d3e6f0d34186b3b183f1e3e626a6b3c626c6d');
+
+const r2MediaCache = new Map(); // key -> { buffer, contentType }
+const r2UploadedKeys = new Set();
+
+function r2Hmac(key, str, enc) {
+  return crypto.createHmac('sha256', key).update(str, 'utf8').digest(enc);
+}
+
+function r2Sha256(buf) {
+  return crypto.createHash('sha256').update(buf).digest('hex');
+}
+
+function r2S3RequestWithKey(accessKeyId, secretAccessKey, method, objectKey, bodyBuf = Buffer.alloc(0), contentType = 'application/octet-stream', timeoutMs = 2200) {
+  return new Promise((resolve) => {
+    if (!R2_HOST || !accessKeyId || !secretAccessKey) return resolve(null);
+    const s3Path = `/${R2_BUCKET}/${objectKey.replace(/^\/+/, '')}`;
+    const now = new Date();
+    const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, '');
+    const dateStamp = amzDate.slice(0, 8);
+    const region = 'auto';
+    const service = 's3';
+    const payloadHash = r2Sha256(bodyBuf);
+
+    const canonicalHeaders = `host:${R2_HOST}\nx-amz-content-sha256:${payloadHash}\nx-amz-date:${amzDate}\n`;
+    const signedHeaders = 'host;x-amz-content-sha256;x-amz-date';
+    const canonicalRequest = [method, s3Path, '', canonicalHeaders, signedHeaders, payloadHash].join('\n');
+
+    const credentialScope = `${dateStamp}/${region}/${service}/aws4_request`;
+    const stringToSign = ['AWS4-HMAC-SHA256', amzDate, credentialScope, r2Sha256(canonicalRequest)].join('\n');
+
+    const kDate = r2Hmac('AWS4' + secretAccessKey, dateStamp);
+    const kRegion = r2Hmac(kDate, region);
+    const kService = r2Hmac(kRegion, service);
+    const kSigning = r2Hmac(kService, 'aws4_request');
+    const signature = r2Hmac(kSigning, stringToSign, 'hex');
+    const authHeader = `AWS4-HMAC-SHA256 Credential=${accessKeyId}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
+    const req = https.request(
+      {
+        hostname: R2_HOST,
+        path: s3Path,
+        method,
+        rejectUnauthorized: false,
+        timeout: timeoutMs,
+        headers: {
+          Host: R2_HOST,
+          'x-amz-date': amzDate,
+          'x-amz-content-sha256': payloadHash,
+          Authorization: authHeader,
+          ...(bodyBuf.length > 0 ? { 'Content-Type': contentType, 'Content-Length': bodyBuf.length } : {})
+        }
+      },
+      (res) => {
+        const chunks = [];
+        res.on('data', (c) => chunks.push(c));
+        res.on('end', () => {
+          if (res.statusCode >= 200 && res.statusCode < 300) {
+            resolve({ status: res.statusCode, buffer: Buffer.concat(chunks), contentType: res.headers['content-type'] || contentType });
+          } else {
+            resolve(null);
+          }
+        });
+      }
+    );
+    req.on('timeout', () => {
+      req.destroy();
+      resolve(null);
+    });
+    req.on('error', () => resolve(null));
+    if (bodyBuf.length > 0) req.write(bodyBuf);
+    req.end();
+  });
+}
+
+async function r2PutObject(objectKey, bodyBuf, contentType = 'application/octet-stream', timeoutMs = 2200) {
+  const res1 = await r2S3RequestWithKey(R2_ACCESS_KEY_1, R2_SECRET_KEY_1, 'PUT', objectKey, bodyBuf, contentType, timeoutMs);
+  if (res1) return true;
+  const res2 = await r2S3RequestWithKey(R2_ACCESS_KEY_2, R2_SECRET_KEY_2, 'PUT', objectKey, bodyBuf, contentType, timeoutMs);
+  return Boolean(res2);
+}
+
+async function r2GetObject(objectKey, timeoutMs = 2000) {
+  const res1 = await r2S3RequestWithKey(R2_ACCESS_KEY_1, R2_SECRET_KEY_1, 'GET', objectKey, Buffer.alloc(0), 'application/octet-stream', timeoutMs);
+  if (res1 && res1.buffer) return res1;
+  return r2S3RequestWithKey(R2_ACCESS_KEY_2, R2_SECRET_KEY_2, 'GET', objectKey, Buffer.alloc(0), 'application/octet-stream', timeoutMs);
+}
+
+function offloadDataUriToR2Url(val) {
+  if (typeof val !== 'string' || !val.startsWith('data:image/') || val.length < 2500) {
+    return val;
+  }
+  const match = val.match(/^data:(image\/[a-zA-Z0-9+.-]+);base64,(.+)$/);
+  if (!match) return val;
+  const contentType = match[1];
+  const base64Data = match[2];
+  const hash = crypto.createHash('sha1').update(base64Data).digest('hex').slice(0, 20);
+  const mediaKey = `img_${hash}`;
+  if (!r2MediaCache.has(mediaKey)) {
+    try {
+      const buffer = Buffer.from(base64Data, 'base64');
+      r2MediaCache.set(mediaKey, { buffer, contentType });
+      if (!r2UploadedKeys.has(mediaKey)) {
+        r2UploadedKeys.add(mediaKey);
+        r2PutObject(`media/${mediaKey}`, buffer, contentType, 4000).catch(() => {});
+      }
+    } catch (e) {
+      return val;
+    }
+  }
+  return `/api/media/${mediaKey}`;
+}
+
+function compactDbMediaForFastSync(stateObj) {
+  if (!stateObj || typeof stateObj !== 'object') return;
+  (stateObj.providers || []).forEach((p) => {
+    if (!p) return;
+    if (p.avatarUrl) p.avatarUrl = offloadDataUriToR2Url(p.avatarUrl);
+    if (p.selfieUrl) p.selfieUrl = offloadDataUriToR2Url(p.selfieUrl);
+    if (p.idPhotoUrl) p.idPhotoUrl = offloadDataUriToR2Url(p.idPhotoUrl);
+    if (Array.isArray(p.portfolio)) {
+      p.portfolio.forEach((item) => {
+        if (item && item.imageUrl) item.imageUrl = offloadDataUriToR2Url(item.imageUrl);
+      });
+    }
+  });
+  (stateObj.customers || []).forEach((c) => {
+    if (!c) return;
+    if (c.avatarUrl) c.avatarUrl = offloadDataUriToR2Url(c.avatarUrl);
+    if (c.selfieUrl) c.selfieUrl = offloadDataUriToR2Url(c.selfieUrl);
+  });
+  (stateObj.requests || []).forEach((r) => {
+    if (!r) return;
+    if (r.photoUrl) r.photoUrl = offloadDataUriToR2Url(r.photoUrl);
+    (r.offers || []).forEach((o) => {
+      if (o && o.providerAvatarUrl) o.providerAvatarUrl = offloadDataUriToR2Url(o.providerAvatarUrl);
+    });
+  });
+  (stateObj.kycVerifications || []).forEach((k) => {
+    if (!k) return;
+    if (k.selfieUrl) k.selfieUrl = offloadDataUriToR2Url(k.selfieUrl);
+    if (k.idPhotoUrl) k.idPhotoUrl = offloadDataUriToR2Url(k.idPhotoUrl);
+  });
+}
 
 let lastCloudPullMs = 0;
 let pendingCloudSavePromise = null;
@@ -1433,11 +1587,11 @@ function mergeRequestLists(localReqs = [], cloudReqs = []) {
     if (rankB > rankA) primary.status = r.status;
     else if (rankA > rankB) primary.status = existing.status;
 
-    // Merge offers by id / providerId
+    // Merge offers by providerId (or offer id) so each provider has a distinct offer slot
     const offerMap = new Map();
     const addOffer = (o) => {
-      if (!o || !o.id) return;
-      const key = o.id;
+      if (!o || (!o.id && !o.providerId)) return;
+      const key = o.providerId ? `prov_${o.providerId}` : o.id;
       const prev = offerMap.get(key);
       if (!prev) {
         offerMap.set(key, o);
@@ -1548,7 +1702,7 @@ function mergeCloudIntoLocalDb(localDb, cloudDb) {
   return normalizeDatabase(merged);
 }
 
-function fetchCloudKvState(timeoutMs = 2200) {
+function fetchCloudKvState(timeoutMs = 1400) {
   return new Promise((resolve) => {
     if (!CLOUD_KV_URL || !CLOUD_KV_KEY) return resolve(null);
     const req = https.request(
@@ -1589,8 +1743,19 @@ function fetchCloudKvState(timeoutMs = 2200) {
   });
 }
 
-function pushCloudKvState(stateObj, timeoutMs = 2500) {
-  return new Promise((resolve) => {
+async function fetchR2CloudState(timeoutMs = 1400) {
+  try {
+    const res = await r2GetObject('state/main_state.json', timeoutMs);
+    if (res && res.buffer) {
+      const parsed = JSON.parse(res.buffer.toString('utf8'));
+      if (parsed && Array.isArray(parsed.requests)) return parsed;
+    }
+  } catch (e) {}
+  return null;
+}
+
+function pushCloudKvState(stateObj, timeoutMs = 1800) {
+  const kvPromise = new Promise((resolve) => {
     if (!CLOUD_KV_URL || !CLOUD_KV_KEY || !stateObj) return resolve(false);
     const bodyStr = JSON.stringify({
       key: 'main_state',
@@ -1624,21 +1789,47 @@ function pushCloudKvState(stateObj, timeoutMs = 2500) {
     req.write(bodyStr);
     req.end();
   });
+
+  // Also replicate state to Cloudflare R2 bucket (finditharare/state/main_state.json) for multi-cloud high availability
+  const r2Promise = (async () => {
+    try {
+      const buf = Buffer.from(JSON.stringify(stateObj), 'utf8');
+      return await r2PutObject('state/main_state.json', buf, 'application/json', timeoutMs);
+    } catch (e) {
+      return false;
+    }
+  })();
+
+  return Promise.allSettled([kvPromise, r2Promise]);
 }
 
 async function syncFromCloudKvStore(force = false) {
   const now = Date.now();
-  if (!force && now - lastCloudPullMs < 900) return db;
+  // Keep API responses ultra-fast: skip blocking pull if synced within the last 1.2s
+  if (now - lastCloudPullMs < (force ? 850 : 1400)) return db;
   if (cloudPullInFlight) return cloudPullInFlight;
   cloudPullInFlight = (async () => {
     try {
       if (pendingCloudSavePromise) {
-        await Promise.race([pendingCloudSavePromise, new Promise((r) => setTimeout(r, 1500))]);
+        await Promise.race([pendingCloudSavePromise, new Promise((r) => setTimeout(r, 350))]);
       }
-      const cloudData = await fetchCloudKvState(2000);
+      // Race Supabase KV and Cloudflare R2 state fetch — whichever responds first wins, or merge both!
+      const [kvData, r2Data] = await Promise.all([
+        fetchCloudKvState(1100),
+        fetchR2CloudState(1100)
+      ]);
       lastCloudPullMs = Date.now();
-      if (cloudData && Array.isArray(cloudData.requests)) {
-        db = mergeCloudIntoLocalDb(db, cloudData);
+      let changed = false;
+      if (kvData && Array.isArray(kvData.requests)) {
+        db = mergeCloudIntoLocalDb(db, kvData);
+        changed = true;
+      }
+      if (r2Data && Array.isArray(r2Data.requests)) {
+        db = mergeCloudIntoLocalDb(db, r2Data);
+        changed = true;
+      }
+      if (changed) {
+        compactDbMediaForFastSync(db);
         try {
           fs.writeFileSync(path.join('/tmp', 'findit_db.json'), JSON.stringify(db), 'utf8');
         } catch (e) {}
@@ -1662,6 +1853,73 @@ function ensureRequestInDb(requestId, requestSnapshot = null) {
     db.requests.unshift(reqItem);
   }
   return reqItem;
+}
+
+function ensureProviderInDb(providerId, providerSnapshot = null) {
+  if (!Array.isArray(db.providers)) db.providers = [];
+  let prov = db.providers.find(
+    (p) =>
+      (providerId && p.id === providerId) ||
+      (providerSnapshot && providerSnapshot.id && p.id === providerSnapshot.id) ||
+      (providerSnapshot && providerSnapshot.finditId && p.finditId === providerSnapshot.finditId)
+  );
+  if (!prov && providerSnapshot && typeof providerSnapshot === 'object') {
+    const cleanName = (providerSnapshot.name || 'Service Provider').trim();
+    const shortName = providerSnapshot.shortName || cleanName.split(' ')[0];
+    const avatarUrl = offloadDataUriToR2Url(providerSnapshot.avatarUrl || providerSnapshot.selfieUrl || '');
+    const catIds = Array.isArray(providerSnapshot.categoryIds) && providerSnapshot.categoryIds.length > 0
+      ? providerSnapshot.categoryIds
+      : [providerSnapshot.categoryId || 'repairs_construction'];
+    prov = {
+      id: providerId || providerSnapshot.id || ('prov_' + Date.now().toString().slice(-6)),
+      finditId: providerSnapshot.finditId || ('FH-PRO-' + Math.floor(100000 + Math.random() * 900000)),
+      name: cleanName,
+      shortName,
+      brandName: providerSnapshot.brandName || `${shortName} Services`,
+      phone: providerSnapshot.phone || '+263 77 000 0000',
+      categoryId: catIds[0],
+      categoryIds: catIds,
+      suburbId: providerSnapshot.suburbId || 'avondale',
+      suburbName: providerSnapshot.suburbName || 'Avondale',
+      lat: Number(providerSnapshot.lat || -17.8024),
+      lng: Number(providerSnapshot.lng || 31.0368),
+      avatarInitials: cleanName.slice(0, 2).toUpperCase(),
+      avatarUrl: avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=240&q=80',
+      selfieUrl: avatarUrl || '',
+      skillTier: providerSnapshot.skillTier || 'Verified pro',
+      rating: Number(providerSnapshot.rating || 5.0),
+      reviewCount: Number(providerSnapshot.reviewCount || 1),
+      completedBookings: Number(providerSnapshot.completedBookings || 1),
+      startingPriceUsd: Number(providerSnapshot.startingPriceUsd || 20),
+      walletBalanceUsd: Number(providerSnapshot.walletBalanceUsd ?? 5.0),
+      isOnline: providerSnapshot.isOnline !== false,
+      isBanned: Boolean(providerSnapshot.isBanned),
+      badges: Array.isArray(providerSnapshot.badges) ? providerSnapshot.badges : ['ID Verified', 'Home Visit Ready'],
+      portfolio: Array.isArray(providerSnapshot.portfolio) ? providerSnapshot.portfolio : [],
+      reviews: Array.isArray(providerSnapshot.reviews) ? providerSnapshot.reviews : [],
+      walletTransactions: Array.isArray(providerSnapshot.walletTransactions) ? providerSnapshot.walletTransactions : [],
+      updatedAt: Date.now()
+    };
+    db.providers.push(prov);
+  } else if (prov && providerSnapshot && typeof providerSnapshot === 'object') {
+    // Keep provider's real name, brand, avatar, and categories synced across containers
+    if (providerSnapshot.name && providerSnapshot.id === prov.id) {
+      prov.name = providerSnapshot.name;
+      prov.shortName = providerSnapshot.shortName || providerSnapshot.name.split(' ')[0];
+    }
+    if (providerSnapshot.brandName && providerSnapshot.id === prov.id) {
+      prov.brandName = providerSnapshot.brandName;
+    }
+    if ((providerSnapshot.avatarUrl || providerSnapshot.selfieUrl) && providerSnapshot.id === prov.id) {
+      prov.avatarUrl = offloadDataUriToR2Url(providerSnapshot.avatarUrl || providerSnapshot.selfieUrl);
+    }
+    if (Array.isArray(providerSnapshot.categoryIds) && providerSnapshot.categoryIds.length > 0 && providerSnapshot.id === prov.id) {
+      prov.categoryIds = providerSnapshot.categoryIds;
+      prov.categoryId = providerSnapshot.categoryIds[0];
+    }
+    prov.updatedAt = Date.now();
+  }
+  return prov;
 }
 
 function loadDb() {
@@ -1698,8 +1956,9 @@ function loadDb() {
 
 function saveDb(currentDb) {
   currentDb.updatedAt = Date.now();
+  compactDbMediaForFastSync(currentDb);
   db = currentDb;
-  const jsonStr = JSON.stringify(currentDb, null, 2);
+  const jsonStr = JSON.stringify(currentDb);
   try {
     fs.writeFileSync(DB_FILE, jsonStr, 'utf8');
   } catch (err) {
@@ -1855,7 +2114,7 @@ function scheduleStaggeredProviderBids(requestId) {
 async function sendJson(res, statusCode, data) {
   if (pendingCloudSavePromise) {
     try {
-      await Promise.race([pendingCloudSavePromise, new Promise((r) => setTimeout(r, 1800))]);
+      await Promise.race([pendingCloudSavePromise, new Promise((r) => setTimeout(r, 260))]);
     } catch (e) {}
   }
   res.writeHead(statusCode, {
@@ -1918,9 +2177,126 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // Serve Cloudflare R2 offloaded media images with 1-year immutable browser cache
+  if (pathname.startsWith('/api/media/') && req.method === 'GET') {
+    const mediaKey = pathname.replace('/api/media/', '').replace(/[^a-zA-Z0-9_-]/g, '');
+    if (!mediaKey) {
+      res.writeHead(404);
+      return res.end('Not found');
+    }
+    const cached = r2MediaCache.get(mediaKey);
+    if (cached && cached.buffer) {
+      res.writeHead(200, {
+        'Content-Type': cached.contentType || 'image/jpeg',
+        'Cache-Control': 'public, max-age=31536000, immutable',
+        'Access-Control-Allow-Origin': '*'
+      });
+      return res.end(cached.buffer);
+    }
+    const r2Obj = await r2GetObject(`media/${mediaKey}`, 2500);
+    if (r2Obj && r2Obj.buffer) {
+      r2MediaCache.set(mediaKey, { buffer: r2Obj.buffer, contentType: r2Obj.contentType || 'image/jpeg' });
+      res.writeHead(200, {
+        'Content-Type': r2Obj.contentType || 'image/jpeg',
+        'Cache-Control': 'public, max-age=31536000, immutable',
+        'Access-Control-Allow-Origin': '*'
+      });
+      return res.end(r2Obj.buffer);
+    }
+    res.writeHead(302, { Location: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=240&q=80' });
+    return res.end();
+  }
+
   // Synchronize shared cloud state across all Vercel serverless instances before handling API calls
   if (pathname.startsWith('/api/')) {
     await syncFromCloudKvStore(req.method !== 'GET');
+  }
+
+  // Lightweight Background Notification Polling Endpoint for Android Native APK (even when app is closed/backgrounded)
+  if (pathname === '/api/notifications/poll' && req.method === 'GET') {
+    const userId = parsedUrl.searchParams.get('userId') || '';
+    const role = (parsedUrl.searchParams.get('role') || 'CUSTOMER').toUpperCase();
+    const catsCsv = parsedUrl.searchParams.get('categories') || '';
+    const sinceMs = Number(parsedUrl.searchParams.get('since') || (Date.now() - 15000));
+    const nowMs = Date.now();
+    const catList = catsCsv ? catsCsv.split(',').map((s) => s.trim()).filter(Boolean) : [];
+    const notifications = [];
+
+    (db.requests || []).forEach((r) => {
+      if (!r || !r.id) return;
+      const reqCreatedMs = new Date(r.createdAt || 0).getTime() || 0;
+      const reqUpdatedMs = Number(r.updatedAt || reqCreatedMs || 0);
+
+      if (role === 'PROVIDER') {
+        const matchesCat = catList.length === 0 || !r.categoryId || catList.includes(r.categoryId);
+        if (r.status === 'OPEN' && matchesCat && reqCreatedMs > sinceMs) {
+          notifications.push({
+            id: Math.abs(r.id.split('').reduce((a, b) => ((a << 5) - a) + b.charCodeAt(0), 0)) % 90000 + 1000,
+            title: `New Job in ${r.suburbName || 'Harare'} ($${r.budgetUsd} USD)`,
+            body: `${r.title} requested by ${r.customerName} at ${r.exactAddress}. Tap to make an offer!`
+          });
+        }
+        if (userId && r.acceptedProviderId === userId && r.status === 'CONFIRMED' && reqUpdatedMs > sinceMs) {
+          notifications.push({
+            id: Math.abs((r.id + '_acc').split('').reduce((a, b) => ((a << 5) - a) + b.charCodeAt(0), 0)) % 90000 + 2000,
+            title: `Offer Accepted! ($${r.agreedTotalUsd || r.budgetUsd} USD)`,
+            body: `${r.customerName} accepted your offer for ${r.title} at ${r.exactAddress}.`
+          });
+        }
+        const myOff = userId ? (r.offers || []).find((o) => o.providerId === userId) : null;
+        if (myOff && myOff.status === 'DECLINED' && Number(myOff.updatedAt || 0) > sinceMs) {
+          notifications.push({
+            id: Math.abs((r.id + '_dec').split('').reduce((a, b) => ((a << 5) - a) + b.charCodeAt(0), 0)) % 90000 + 3000,
+            title: `Offer Declined — Edit Price`,
+            body: `Client declined $${myOff.declinedPriceUsd || myOff.priceUsd} for ${r.title}. Tap to submit a revised offer.`
+          });
+        }
+        if (userId && r.acceptedProviderId === userId && Array.isArray(r.messages) && r.messages.length > 0) {
+          const lastMsg = r.messages[r.messages.length - 1];
+          const msgMs = new Date(lastMsg.timestamp || 0).getTime() || 0;
+          if (lastMsg.senderRole === 'CUSTOMER' && msgMs > sinceMs) {
+            notifications.push({
+              id: Math.abs((lastMsg.id || r.id).split('').reduce((a, b) => ((a << 5) - a) + b.charCodeAt(0), 0)) % 90000 + 4000,
+              title: `New Message from ${lastMsg.senderName || 'Client'}`,
+              body: lastMsg.text
+            });
+          }
+        }
+      } else {
+        if (!userId || r.customerId === userId) {
+          (r.offers || []).forEach((o) => {
+            const oMs = Number(o.updatedAt || new Date(o.createdAt || 0).getTime() || 0);
+            if (o.status !== 'DECLINED' && oMs > sinceMs && r.status === 'OPEN') {
+              notifications.push({
+                id: Math.abs((o.id || r.id).split('').reduce((a, b) => ((a << 5) - a) + b.charCodeAt(0), 0)) % 90000 + 5000,
+                title: `New Offer: $${o.priceUsd} USD from ${o.providerName}`,
+                body: `${o.providerBrand || r.title} (~${o.etaMinutes || 5} mins away). Tap to review or accept!`
+              });
+            }
+          });
+          if (r.status === 'ARRIVED' && reqUpdatedMs > sinceMs) {
+            notifications.push({
+              id: Math.abs((r.id + '_arr').split('').reduce((a, b) => ((a << 5) - a) + b.charCodeAt(0), 0)) % 90000 + 6000,
+              title: `Specialist Waiting Outside Gate!`,
+              body: `Please share your Start PIN #${r.startPinCode || '4829'} with your specialist to begin.`
+            });
+          }
+          if (Array.isArray(r.messages) && r.messages.length > 0) {
+            const lastMsg = r.messages[r.messages.length - 1];
+            const msgMs = new Date(lastMsg.timestamp || 0).getTime() || 0;
+            if (lastMsg.senderRole === 'PROVIDER' && msgMs > sinceMs) {
+              notifications.push({
+                id: Math.abs((lastMsg.id || r.id).split('').reduce((a, b) => ((a << 5) - a) + b.charCodeAt(0), 0)) % 90000 + 7000,
+                title: `New Message from ${lastMsg.senderName || 'Specialist'}`,
+                body: lastMsg.text
+              });
+            }
+          }
+        }
+      }
+    });
+
+    return sendJson(res, 200, { serverTime: nowMs, notifications: notifications.slice(0, 4) });
   }
 
   if (pathname === '/api/state' && req.method === 'GET') {
@@ -3055,7 +3431,7 @@ Return ONLY JSON with keys:
       const lng = body.lng !== undefined ? Number(body.lng) : suburb.lng + (Math.random() - 0.5) * 0.004;
 
       const newReq = {
-        id: 'req_' + Date.now().toString().slice(-5),
+        id: body.id || ('req_' + Date.now().toString().slice(-5)),
         customerId: body.customerId || 'cust_1',
         customerFinditId: cust?.finditId || 'FH-USR-391044',
         customerName: body.customerName || cust?.name || 'Client',
@@ -3065,7 +3441,7 @@ Return ONLY JSON with keys:
         categoryName: category.fullName || category.name,
         title: body.title || `${category.name} Service`,
         description: body.description || 'Looking for a reliable verified mobile provider to come to my home.',
-        photoUrl: body.photoUrl || null,
+        photoUrl: body.photoUrl ? offloadDataUriToR2Url(body.photoUrl) : null,
         suburbId: suburb.id,
         suburbName: body.suburbName || suburb.name,
         exactAddress: body.exactAddress || `${suburb.sampleStreet}, Harare`,
@@ -3095,6 +3471,7 @@ Return ONLY JSON with keys:
         messages: []
       };
 
+      db.requests = (db.requests || []).filter((r) => r.id !== newReq.id);
       db.requests.unshift(newReq);
       saveDb(db);
       broadcastUpdate('REQUEST_CREATED', { requestId: newReq.id, request: newReq });
@@ -3260,7 +3637,10 @@ Return ONLY JSON with keys:
         return sendJson(res, 400, { error: 'This request is no longer open for new offers.' });
       }
 
-      const provider = db.providers.find((p) => p.id === body.providerId) || db.providers[0];
+      const provider = ensureProviderInDb(body.providerId, body.providerSnapshot);
+      if (!provider) {
+        return sendJson(res, 404, { error: 'Provider profile not found. Please refresh or sign in again.' });
+      }
       if (provider.isBanned) {
         return sendJson(res, 403, { error: `Your account (${provider.finditId}) is suspended: ${provider.banReason}` });
       }
@@ -3297,11 +3677,24 @@ Return ONLY JSON with keys:
       const travelFeeUsd = Number(body.travelFeeUsd || 0);
       const isExactAccept = priceUsd === Number(reqItem.budgetUsd);
       const nowMs = Date.now();
+      const realProviderAvatar = offloadDataUriToR2Url(provider.avatarUrl || provider.selfieUrl || '');
+      const realShortName = provider.shortName || provider.name.split(' ')[0];
+      const realBrand = provider.brandName || `${realShortName} Services`;
 
-      let existingOffer = reqItem.offers.find((o) => o.providerId === provider.id);
+      let existingOffer = reqItem.offers.find(
+        (o) => o.providerId === provider.id || (provider.finditId && o.providerFinditId === provider.finditId)
+      );
       if (existingOffer) {
         const wasDeclined = existingOffer.status === 'DECLINED';
         existingOffer.previousDeclinedPriceUsd = wasDeclined ? (existingOffer.declinedPriceUsd || existingOffer.priceUsd) : existingOffer.previousDeclinedPriceUsd;
+        existingOffer.providerId = provider.id;
+        existingOffer.providerFinditId = provider.finditId;
+        existingOffer.providerName = provider.name;
+        existingOffer.providerShortName = realShortName;
+        existingOffer.providerBrand = realBrand;
+        existingOffer.providerAvatarUrl = realProviderAvatar;
+        existingOffer.providerRating = provider.rating ?? 5.0;
+        existingOffer.providerCompletedJobs = provider.completedBookings ?? 1;
         existingOffer.priceUsd = priceUsd;
         existingOffer.travelFeeUsd = travelFeeUsd;
         existingOffer.bidType = isExactAccept ? 'ACCEPTED_PRICE' : 'COUNTER_BID';
@@ -3322,19 +3715,20 @@ Return ONLY JSON with keys:
         existingOffer.ttlSeconds = 120;
       } else {
         existingOffer = {
-          id: 'off_' + nowMs.toString().slice(-5),
+          id: `off_${provider.id}_${reqItem.id}`,
           providerId: provider.id,
           providerFinditId: provider.finditId,
           providerName: provider.name,
-          providerBrand: provider.brandName || provider.name,
-          providerAvatar: provider.avatarInitials || 'PR',
-          providerAvatarUrl: provider.avatarUrl || '',
+          providerShortName: realShortName,
+          providerBrand: realBrand,
+          providerAvatar: provider.avatarInitials || realShortName.slice(0, 2).toUpperCase(),
+          providerAvatarUrl: realProviderAvatar,
           providerSkillTier: provider.skillTier || 'Verified pro',
           providerExpYears: provider.experienceYears || 3,
-          providerRating: provider.rating,
+          providerRating: provider.rating ?? 5.0,
           providerReviewCount: provider.reviewCount || 15,
-          providerCompletedJobs: provider.completedBookings,
-          providerBadges: provider.badges,
+          providerCompletedJobs: provider.completedBookings ?? 1,
+          providerBadges: provider.badges || ['ID Verified', 'Home Visit Ready'],
           distanceKm: distKm,
           etaMinutes: Math.max(4, Math.round(distKm * 3.2)),
           priceUsd,
@@ -3423,11 +3817,16 @@ Return ONLY JSON with keys:
       }
 
       offer.status = 'ACCEPTED';
+      offer.updatedAt = Date.now();
       reqItem.status = 'CONFIRMED';
       reqItem.acceptedOfferId = offer.id;
       reqItem.acceptedProviderId = offer.providerId;
+      reqItem.acceptedProviderName = offer.providerName || provider?.name || 'Service Provider';
+      reqItem.acceptedProviderBrand = offer.providerBrand || provider?.brandName || reqItem.title;
+      reqItem.acceptedProviderAvatarUrl = offer.providerAvatarUrl || provider?.avatarUrl || '';
       reqItem.agreedTotalUsd = totalAgreedUsd;
       reqItem.commissionDeducted = false;
+      reqItem.updatedAt = Date.now();
 
       if (provider) {
         reqItem.routeCoordinates = generateHarareRoadWaypoints(

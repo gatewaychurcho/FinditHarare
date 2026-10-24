@@ -722,6 +722,115 @@ function computeStateFingerprint(db) {
   return `${reqSig}|${userSig}|${provSig}|${clSig}|${state.screenStep}|${state.providerTab}|${state.role}`;
 }
 
+const seenNotificationKeys = new Set();
+
+function syncNativeSessionBridge() {
+  try {
+    if (window.FinditNative && typeof window.FinditNative.syncUserSession === 'function') {
+      const uid = state.currentUser?.id || '';
+      const role = state.role || 'CUSTOMER';
+      const uName = state.currentUser?.name || '';
+      const cats = state.role === 'PROVIDER' ? getProviderCategoryIds(state.currentUser).join(',') : '';
+      window.FinditNative.syncUserSession(uid, role, uName, cats);
+    }
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => {});
+    }
+  } catch (e) {}
+}
+
+function triggerSystemNotification(title, body, notifKey = '') {
+  try {
+    const key = notifKey || `${title}:${body}`;
+    if (seenNotificationKeys.has(key)) return;
+    seenNotificationKeys.add(key);
+    if (seenNotificationKeys.size > 200) {
+      const first = seenNotificationKeys.values().next().value;
+      seenNotificationKeys.delete(first);
+    }
+
+    const numericId = Math.abs(
+      key.split('').reduce((acc, ch) => ((acc << 5) - acc) + ch.charCodeAt(0), 0)
+    ) % 90000 + 1000;
+
+    // 1. Native Android Status-Bar / Heads-Up Notification Bridge (works even when outside the app!)
+    if (window.FinditNative && typeof window.FinditNative.triggerNotification === 'function') {
+      window.FinditNative.triggerNotification(String(title || 'Findit Harare'), String(body || ''), numericId);
+      return;
+    }
+
+    // 2. Web Service Worker / Browser Notification fallback (when tab is backgrounded or on mobile browser)
+    if ('Notification' in window && Notification.permission === 'granted') {
+      if (navigator.serviceWorker && navigator.serviceWorker.ready) {
+        navigator.serviceWorker.ready
+          .then((reg) => {
+            if (reg && typeof reg.showNotification === 'function') {
+              reg.showNotification(String(title || 'Findit Harare'), {
+                body: String(body || ''),
+                icon: '/assets/logo-icon.svg',
+                badge: '/assets/logo-icon.svg',
+                tag: key,
+                vibrate: [180, 80, 180]
+              });
+            }
+          })
+          .catch(() => {});
+      } else {
+        new Notification(String(title || 'Findit Harare'), {
+          body: String(body || ''),
+          icon: '/assets/logo-icon.svg',
+          tag: key
+        });
+      }
+    }
+  } catch (e) {}
+}
+
+function resolveProviderByIdOrOffer(provId, req = null, offer = null) {
+  const matchedOffer =
+    offer ||
+    (req && Array.isArray(req.offers)
+      ? req.offers.find((o) => (req.acceptedOfferId && o.id === req.acceptedOfferId) || (provId && o.providerId === provId)) || req.offers[0]
+      : null);
+  const targetId = provId || req?.acceptedProviderId || matchedOffer?.providerId;
+  const targetFinditId = matchedOffer?.providerFinditId;
+
+  const found = (state.db?.providers || []).find(
+    (p) => (targetId && p.id === targetId) || (targetFinditId && p.finditId === targetFinditId)
+  );
+  if (found) {
+    return {
+      ...found,
+      name: matchedOffer?.providerName || found.name,
+      shortName: matchedOffer?.providerShortName || found.shortName || (matchedOffer?.providerName || found.name || 'Pro').split(' ')[0],
+      brandName: matchedOffer?.providerBrand || found.brandName || `${(matchedOffer?.providerName || found.name || 'Pro').split(' ')[0]} Services`,
+      avatarUrl: matchedOffer?.providerAvatarUrl || found.avatarUrl || found.selfieUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=240&q=80'
+    };
+  }
+
+  const fallbackName = matchedOffer?.providerName || req?.acceptedProviderName || 'Verified Specialist';
+  const fallbackShort = matchedOffer?.providerShortName || fallbackName.split(' ')[0];
+  return {
+    id: targetId || 'prov_custom',
+    finditId: targetFinditId || 'FH-PRO-VERIFIED',
+    name: fallbackName,
+    shortName: fallbackShort,
+    brandName: matchedOffer?.providerBrand || req?.acceptedProviderBrand || `${fallbackShort} Services`,
+    avatarUrl:
+      matchedOffer?.providerAvatarUrl ||
+      req?.acceptedProviderAvatarUrl ||
+      'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=240&q=80',
+    rating: matchedOffer?.providerRating ?? 5.0,
+    completedBookings: matchedOffer?.providerCompletedJobs ?? 1,
+    skillTier: matchedOffer?.providerSkillTier || 'Verified pro',
+    bio: `${fallbackName} is a verified Findit Harare specialist ready for home visits.`,
+    categoryId: req?.categoryId || 'repairs_construction',
+    lat: req?.lat ? Number(req.lat) + 0.006 : -17.8024,
+    lng: req?.lng ? Number(req.lng) + 0.006 : 31.0368,
+    portfolio: []
+  };
+}
+
 async function fetchState(force = false) {
   if (isFetchingState && !force) return;
   isFetchingState = true;
@@ -734,11 +843,38 @@ async function fetchState(force = false) {
       return;
     }
 
-    // Preserve optimistic local chat messages AND active local requests across serverless instances
+    // Preserve optimistic local chat messages, offers, AND active local requests across serverless instances
     if (state.db && Array.isArray(state.db.requests) && Array.isArray(newDb.requests)) {
+      const nowMs = Date.now();
       newDb.requests.forEach((newReq) => {
         const oldReq = state.db.requests.find((r) => r.id === newReq.id);
-        if (oldReq && oldReq.messages && oldReq.messages.length > 0) {
+        if (!oldReq) return;
+
+        // 1. Preserve recent/optimistic offers (especially the current provider's own offer!)
+        if (Array.isArray(oldReq.offers) && oldReq.offers.length > 0) {
+          if (!Array.isArray(newReq.offers)) newReq.offers = [];
+          oldReq.offers.forEach((oldOff) => {
+            if (!oldOff) return;
+            const offAgeMs = nowMs - Number(oldOff.updatedAt || new Date(oldOff.createdAt || 0).getTime() || 0);
+            if (offAgeMs > 120 * 1000) return;
+            const existingIdx = newReq.offers.findIndex(
+              (o) => o.id === oldOff.id || (oldOff.providerId && o.providerId === oldOff.providerId)
+            );
+            if (existingIdx < 0) {
+              newReq.offers.unshift(oldOff);
+            } else {
+              const serverOff = newReq.offers[existingIdx];
+              const localTime = Number(oldOff.updatedAt || 0);
+              const serverTime = Number(serverOff.updatedAt || 0);
+              if (localTime > serverTime && serverOff.status !== 'DECLINED' && serverOff.status !== 'ACCEPTED') {
+                newReq.offers[existingIdx] = { ...serverOff, ...oldOff };
+              }
+            }
+          });
+        }
+
+        // 2. Preserve local chat messages & read ticks
+        if (oldReq.messages && oldReq.messages.length > 0) {
           if (!newReq.messages) newReq.messages = [];
           oldReq.messages.forEach((oldM) => {
             const existsInNew = newReq.messages.find((m) =>
@@ -757,7 +893,6 @@ async function fetchState(force = false) {
       });
 
       // Prevent any newly created OPEN or active request from flickering if a poll ever hits a cold container
-      const nowMs = Date.now();
       state.db.requests.forEach((localReq) => {
         if (!localReq || !localReq.id) return;
         const isRecentActive = (localReq.status === 'OPEN' || isBookedStatus(localReq.status)) &&
@@ -779,6 +914,7 @@ async function fetchState(force = false) {
         const localCategoryId = state.currentUser.categoryId;
         const localName = state.currentUser.name;
         const localBrand = state.currentUser.brandName;
+        const localAvatar = state.currentUser.avatarUrl || state.currentUser.selfieUrl;
         state.currentUser = { ...state.currentUser, ...found };
         if (Array.isArray(localCategoryIds) && localCategoryIds.length > 0 && state.userCustomizedProfile) {
           state.currentUser.categoryIds = localCategoryIds;
@@ -794,6 +930,10 @@ async function fetchState(force = false) {
           state.currentUser.brandName = localBrand;
           found.brandName = localBrand;
         }
+        if (localAvatar && !found.avatarUrl) {
+          state.currentUser.avatarUrl = localAvatar;
+          found.avatarUrl = localAvatar;
+        }
       } else {
         list.push(state.currentUser);
       }
@@ -807,6 +947,7 @@ async function fetchState(force = false) {
       }
     }
 
+    syncNativeSessionBridge();
     syncRecommendedFare();
 
     // Admin ban / unban takes effect instantly — no refresh needed
@@ -958,6 +1099,12 @@ function handleIncomingRealtimeEvent(data) {
       }
       if (state.chatDrawerOpen && message.senderRole !== state.role) {
         markRequestMessagesRead(targetReq.id);
+      } else if (message.senderRole && message.senderRole !== 'SYSTEM' && message.senderRole !== state.role) {
+        triggerSystemNotification(
+          `New Message from ${message.senderName || 'Findit User'}`,
+          message.text,
+          `msg_${message.id || message.clientMsgId || Date.now()}`
+        );
       }
       updateChatFeedDomOnly(targetReq);
     }
@@ -1002,6 +1149,11 @@ function handleIncomingRealtimeEvent(data) {
     lastOffersSignature = '';
     if (state.role === 'PROVIDER' && state.currentUser && state.currentUser.id === providerId) {
       showToast(`Client declined your $${declinedPriceUsd || ''} offer. You can edit your price and submit a revised bid!`, 'error');
+      triggerSystemNotification(
+        'Offer Declined — Edit Price',
+        `Client declined your $${declinedPriceUsd || ''} offer. Tap to adjust your price or terms.`,
+        `dec_${offerId}_${declinedPriceUsd}`
+      );
       if ('vibrate' in navigator) {
         try { navigator.vibrate([100, 60, 100]); } catch (e) {}
       }
@@ -1021,8 +1173,15 @@ function handleIncomingRealtimeEvent(data) {
     lastUiOverlaySignature = ''; // Invalidate signature cache so card appears without delay!
     const myCats = state.role === 'PROVIDER' ? getProviderCategoryIds(state.currentUser) : [];
     const matchesMe = myCats.length === 0 || myCats.includes(req.categoryId);
-    if (state.role === 'PROVIDER' && matchesMe && 'vibrate' in navigator) {
-      try { navigator.vibrate([120, 60, 120]); } catch (e) {}
+    if (state.role === 'PROVIDER' && matchesMe) {
+      triggerSystemNotification(
+        `New Job in ${req.suburbName || 'Harare'} ($${req.budgetUsd} USD)`,
+        `${req.title} requested by ${req.customerName} at ${req.exactAddress}`,
+        `req_${req.id}`
+      );
+      if ('vibrate' in navigator) {
+        try { navigator.vibrate([120, 60, 120]); } catch (e) {}
+      }
     }
     renderAll();
     return;
@@ -1039,8 +1198,15 @@ function handleIncomingRealtimeEvent(data) {
     lastUiOverlaySignature = ''; // Invalidate signature cache!
     lastOffersSignature = ''; // Invalidate offers cache so card appears instantly!
     const currentActive = getCustomerActiveRequest();
-    if (state.role === 'CUSTOMER' && currentActive && currentActive.id === requestId && 'vibrate' in navigator) {
-      try { navigator.vibrate([150, 70, 150]); } catch (e) {}
+    if (state.role === 'CUSTOMER' && currentActive && currentActive.id === requestId) {
+      triggerSystemNotification(
+        `New Offer: $${offer.priceUsd} USD from ${offer.providerName}`,
+        `${offer.providerBrand || currentActive.title} (~${offer.etaMinutes || 5} mins away)`,
+        `off_${offer.id}_${offer.priceUsd}`
+      );
+      if ('vibrate' in navigator) {
+        try { navigator.vibrate([150, 70, 150]); } catch (e) {}
+      }
     }
     renderAll();
     return;
@@ -1058,6 +1224,11 @@ function handleIncomingRealtimeEvent(data) {
     if (state.role === 'PROVIDER') {
       if (state.currentUser?.id === acceptedProviderId) {
         state.providerTab = 'ACTIVE_JOB';
+        triggerSystemNotification(
+          `Offer Accepted! ($${request.agreedTotalUsd || request.budgetUsd} USD)`,
+          `${request.customerName} accepted your offer for ${request.title} at ${request.exactAddress}`,
+          `acc_${request.id}`
+        );
         if ('vibrate' in navigator) {
           try { navigator.vibrate([200, 100, 200]); } catch (e) {}
         }
@@ -1083,6 +1254,11 @@ function handleIncomingRealtimeEvent(data) {
     lastUiOverlaySignature = '';
     if (state.role === 'CUSTOMER') {
       startArrivalVibrationAlert(request);
+      triggerSystemNotification(
+        'Specialist Waiting Outside Gate!',
+        `Please share your Start PIN #${request.startPinCode || '4829'} to begin service.`,
+        `arr_${request.id}`
+      );
       showToast(`Specialist is waiting outside! Please share your Start PIN #${request.startPinCode}.`, 'info');
     }
     renderAll();
@@ -1841,7 +2017,7 @@ function updateMapMarkers(force = false) {
   if (isBooked && activeReq) {
     const acceptedOffer = (activeReq.offers || []).find((o) => o.id === activeReq.acceptedOfferId) || activeReq.offers?.[0];
     const provId = activeReq.acceptedProviderId || acceptedOffer?.providerId;
-    const prov = state.db.providers.find((p) => p.id === provId) || state.db.providers[0];
+    const prov = resolveProviderByIdOrOffer(provId, activeReq, acceptedOffer);
     if (prov) {
       drawProviderAndClientRouteMarkers(prov, activeReq);
       return;
@@ -2100,7 +2276,7 @@ function renderFloatingOffersOverlay(force = false) {
     return;
   }
 
-  const offersSig = `${req.id}|${state.isOffersMinimized}|${activeOffers.length}|${activeOffers.map((o) => `${o.id}:${o.priceUsd}`).join(',')}`;
+  const offersSig = `${req.id}|${state.isOffersMinimized}|${activeOffers.length}|${activeOffers.map((o) => `${o.id}:${o.providerId}:${o.providerName || ''}:${o.priceUsd}`).join(',')}`;
   if (!force && offersSig === lastOffersSignature) {
     return;
   }
@@ -2147,7 +2323,7 @@ function renderFloatingOffersOverlay(force = false) {
     <div class="choose-pro-heading">Choose a pro (${activeOffers.length})</div>
 
     ${activeOffers.map((offer) => {
-      const prov = state.db.providers.find((p) => p.id === offer.providerId);
+      const prov = resolveProviderByIdOrOffer(offer.providerId, req, offer);
       const expiresAt = offer.expiresAt || (new Date(offer.createdAt).getTime() + 120 * 1000);
       const totalMs = (offer.ttlSeconds || 120) * 1000;
       const remMs = Math.max(0, expiresAt - nowMs);
@@ -2155,10 +2331,11 @@ function renderFloatingOffersOverlay(force = false) {
 
       const isYourFare = Number(offer.priceUsd) <= Number(req.budgetUsd);
       const isPlatinum = Boolean(offer.isPlatinum || prov?.isPlatinum || (offer.providerSkillTier || '').toLowerCase().includes('platinum'));
-      const shortName = offer.providerShortName || (offer.providerName || 'Pro').split(' ')[0];
-      const avatarUrl = offer.providerAvatarUrl || prov?.avatarUrl || 'https://images.unsplash.com/photo-1531123897727-8f129e1688ce?auto=format&fit=crop&w=240&q=80';
-      const approvedPhotosCount = prov ? (prov.portfolio || []).filter((i) => i.approvalStatus === 'APPROVED').length : 2;
-      const jobsCount = offer.providerCompletedJobs || prov?.completedBookings || 312;
+      const fullName = offer.providerName || prov?.name || 'Verified Pro';
+      const shortName = offer.providerShortName || fullName.split(' ')[0];
+      const avatarUrl = offer.providerAvatarUrl || prov?.avatarUrl || prov?.selfieUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=240&q=80';
+      const brandLabel = offer.providerBrand || prov?.brandName || `${shortName} Services`;
+      const approvedPhotosCount = prov && Array.isArray(prov.portfolio) ? prov.portfolio.filter((i) => i.approvalStatus === 'APPROVED').length : 0;
 
       return `
         <div class="indrive-offer-card">
@@ -2183,15 +2360,15 @@ function renderFloatingOffersOverlay(force = false) {
 
           <div class="offer-pro-row" onclick="openProviderCatalogueModal('${offer.providerId}', '${req.id}', '${offer.id}')" style="cursor:pointer;">
             <div class="offer-avatar-wrap ${isPlatinum ? 'platinum' : ''}">
-              <img src="${avatarUrl}" alt="${shortName}" />
+              <img src="${avatarUrl}" alt="${escapeHtml(shortName)}" />
               ${isPlatinum ? `<div class="platinum-diamond-badge">${uiIcon('diamond', 9)}</div>` : ''}
             </div>
             <div class="offer-pro-details">
               <div class="offer-pro-name-line">
-                <span>${shortName}</span>
-                ${formatProRatingAndJobs(offer.providerRating || prov?.rating, offer.providerCompletedJobs || prov?.completedBookings)}
+                <span>${escapeHtml(shortName)}</span>
+                ${formatProRatingAndJobs(offer.providerRating ?? prov?.rating, offer.providerCompletedJobs ?? prov?.completedBookings)}
               </div>
-              <div class="offer-pro-kit-line">${offer.providerBrand || req.title}</div>
+              <div class="offer-pro-kit-line">${escapeHtml(brandLabel)}</div>
               ${isPlatinum ? `<div class="offer-pro-platinum-line">Platinum pro</div>` : ''}
             </div>
           </div>
@@ -3224,8 +3401,8 @@ function renderEmbeddedChatComponent(req, peerName) {
 function renderBookedTrackingOverlay(req) {
   const acceptedOffer = (req.offers || []).find((o) => o.id === req.acceptedOfferId) || req.offers?.[0];
   const provId = req.acceptedProviderId || acceptedOffer?.providerId;
-  const prov = state.db.providers.find((p) => p.id === provId) || state.db.providers[0];
-  const avatarUrl = prov?.avatarUrl || 'https://images.unsplash.com/photo-1531123897727-8f129e1688ce?auto=format&fit=crop&w=240&q=80';
+  const prov = resolveProviderByIdOrOffer(provId, req, acceptedOffer);
+  const avatarUrl = prov?.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=240&q=80';
   const agreedPrice = acceptedOffer?.priceUsd || req.agreedTotalUsd || req.budgetUsd;
 
   let statusIcon = uiIcon('routeCar', 18);
@@ -5037,7 +5214,9 @@ function renderModalLayer() {
   // PROVIDER WORK CATALOGUE MODAL
   if (state.activeModal === 'CATALOGUE_VIEW') {
     const { providerId, requestId, offerId } = state.modalData || {};
-    const prov = state.db.providers.find((p) => p.id === providerId) || state.db.providers[0];
+    const targetReq = requestId ? (state.db?.requests || []).find((r) => r.id === requestId) : null;
+    const targetOffer = targetReq && offerId ? (targetReq.offers || []).find((o) => o.id === offerId) : null;
+    const prov = resolveProviderByIdOrOffer(providerId, targetReq, targetOffer);
     const approvedPhotos = (prov.portfolio || []).filter((item) => item.approvalStatus === 'APPROVED');
 
     root.innerHTML = `
@@ -6351,26 +6530,32 @@ async function submitServiceRequest() {
     return;
   }
   try {
+    markLocalStateMutation();
     const cat = state.db.categories.find((c) => c.id === state.selectedCategoryId) || state.db.categories[0];
     const sub = (cat.subServices || [])[state.selectedSubServiceIdx] || { name: `${cat.name} Home Service` };
+    const reqId = 'req_' + Date.now().toString().slice(-5);
+    const attachedPhoto = state.draftPhotoUrl || null;
+    const nowIso = new Date().toISOString();
 
-    const btn = document.querySelector('.indrive-find-offers-btn');
-    if (btn) {
-      btn.style.opacity = '0.75';
-      btn.innerHTML = `<span>Broadcasting...</span>`;
-    }
-
-    const res = await apiPost('/api/requests', {
+    // 0ms Optimistic Broadcast: Transition immediately to SEARCHING without any delay!
+    const optimisticReq = {
+      id: reqId,
       customerId: state.currentUser.id,
+      customerFinditId: state.currentUser.finditId || 'FH-USR-391044',
       customerName: state.currentUser.name,
+      customerRating: state.currentUser.rating || 0,
+      customerCompletedVisits: state.currentUser.completedBookings || 0,
       categoryId: cat.id,
+      categoryName: cat.fullName || cat.name,
       title: sub.name,
       description: state.draftNotes || `Home visit at ${state.customAddress} (${state.entranceNote}).`,
+      photoUrl: attachedPhoto,
       suburbId: state.selectedSuburbId,
-      suburbName: state.customSuburbLabel.split(',')[0],
+      suburbName: (state.customSuburbLabel || 'Harare').split(',')[0],
       exactAddress: `${state.customAddress}, ${state.customSuburbLabel}`,
       lat: state.pinnedLat,
       lng: state.pinnedLng,
+      serviceMode: 'HOME_VISIT',
       bookingFor: state.bookingFor || 'ME',
       recipientName: state.bookingFor === 'SOMEONE_ELSE' ? (state.recipientName || 'Recipient') : null,
       recipientPhone: state.bookingFor === 'SOMEONE_ELSE' ? (state.recipientPhone || null) : null,
@@ -6380,30 +6565,70 @@ async function submitServiceRequest() {
       paymentMethod: state.draftPaymentMethod,
       budgetUsd: Number(state.draftFareUsd),
       autoAccept: state.draftAutoAccept,
-      photoUrl: state.draftPhotoUrl || null
-    });
+      startPinCode: String(Math.floor(1000 + Math.random() * 9000)),
+      pinVerifiedByProvider: false,
+      status: 'OPEN',
+      acceptedOfferId: null,
+      createdAt: nowIso,
+      updatedAt: Date.now(),
+      offers: [],
+      messages: []
+    };
 
     state.draftPhotoUrl = null;
+    if (!state.db) state.db = {};
+    if (!Array.isArray(state.db.requests)) state.db.requests = [];
+    state.db.requests.unshift(optimisticReq);
 
-    if (res.request) {
-      if (!state.db) state.db = {};
-      if (!Array.isArray(state.db.requests)) state.db.requests = [];
-      const idx = state.db.requests.findIndex((r) => r.id === res.request.id);
-      if (idx >= 0) state.db.requests[idx] = res.request;
-      else state.db.requests.unshift(res.request);
-    }
-
-    state.activeRequestId = res.request.id;
-    state.pendingSearchFareUsd = Number(res.request.budgetUsd);
+    state.activeRequestId = reqId;
+    state.pendingSearchFareUsd = Number(optimisticReq.budgetUsd);
     state.isSheetMinimized = false;
     state.isOffersMinimized = false;
     state.screenStep = 'SEARCHING';
-    renderAll();
-    showToast(`Broadcast live! Waiting for verified specialists to respond.`);
-    await fetchState(true);
+    lastUiOverlaySignature = '';
+    renderAll(true);
+
+    const res = await apiPost('/api/requests', {
+      id: reqId,
+      customerId: state.currentUser.id,
+      customerName: state.currentUser.name,
+      categoryId: cat.id,
+      title: sub.name,
+      description: optimisticReq.description,
+      suburbId: state.selectedSuburbId,
+      suburbName: optimisticReq.suburbName,
+      exactAddress: optimisticReq.exactAddress,
+      lat: state.pinnedLat,
+      lng: state.pinnedLng,
+      bookingFor: optimisticReq.bookingFor,
+      recipientName: optimisticReq.recipientName,
+      recipientPhone: optimisticReq.recipientPhone,
+      timingType: optimisticReq.timingType,
+      scheduledDate: optimisticReq.scheduledDate,
+      scheduledTime: optimisticReq.scheduledTime,
+      paymentMethod: state.draftPaymentMethod,
+      budgetUsd: Number(state.draftFareUsd),
+      autoAccept: state.draftAutoAccept,
+      photoUrl: attachedPhoto
+    });
+
+    if (res && res.request && state.db?.requests) {
+      const idx = state.db.requests.findIndex((r) => r.id === reqId || r.id === res.request.id);
+      if (idx >= 0) {
+        // Preserve any offers that arrived in the meantime
+        const currentOffers = state.db.requests[idx].offers || [];
+        state.db.requests[idx] = {
+          ...res.request,
+          offers: res.request.offers?.length ? res.request.offers : currentOffers
+        };
+      } else {
+        state.db.requests.unshift(res.request);
+      }
+      state.activeRequestId = res.request.id;
+    }
   } catch (err) {
     showToast(err.message, 'error');
-    renderAll();
+    renderAll(true);
   }
 }
 
@@ -6473,6 +6698,29 @@ async function acceptOffer(requestId, offerId) {
     markLocalStateMutation();
     const reqSnap = (state.db?.requests || []).find((r) => r.id === requestId) || null;
     const offSnap = reqSnap && (reqSnap.offers || []).find((o) => o.id === offerId);
+
+    // 0ms Optimistic Booking Transition: instantly start live route & chat
+    if (reqSnap && offSnap) {
+      reqSnap.status = 'CONFIRMED';
+      reqSnap.acceptedOfferId = offSnap.id;
+      reqSnap.acceptedProviderId = offSnap.providerId;
+      reqSnap.acceptedProviderName = offSnap.providerName;
+      reqSnap.acceptedProviderBrand = offSnap.providerBrand;
+      reqSnap.acceptedProviderAvatarUrl = offSnap.providerAvatarUrl;
+      reqSnap.agreedTotalUsd = Number(offSnap.priceUsd) + Number(offSnap.travelFeeUsd || 0);
+      reqSnap.updatedAt = Date.now();
+      offSnap.status = 'ACCEPTED';
+    }
+    state.activeRequestId = requestId;
+    state.isSheetMinimized = false;
+    state.isOffersMinimized = false;
+    state.screenStep = 'BOOKED';
+    state.providerTab = 'ACTIVE_JOB';
+    lastUiOverlaySignature = '';
+    lastOffersSignature = '';
+    renderAll(true);
+    showToast('Offer accepted! Live route & chat with your pro started.');
+
     const res = await apiPost('/api/offers/accept', {
       requestId,
       offerId,
@@ -6484,16 +6732,7 @@ async function acceptOffer(requestId, offerId) {
       if (idx >= 0) state.db.requests[idx] = res.request;
       else state.db.requests.unshift(res.request);
     }
-    state.activeRequestId = res.request.id;
-    state.isSheetMinimized = false;
-    state.isOffersMinimized = false;
-    state.screenStep = 'BOOKED';
-    state.providerTab = 'ACTIVE_JOB';
-    lastUiOverlaySignature = '';
-    lastOffersSignature = '';
-    showToast('Offer accepted! Live route & chat with your pro started.');
     renderAll(true);
-    await fetchState(true);
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -7381,7 +7620,7 @@ function renderProviderRequestsFeedTab(prov, openRequests, activeJob) {
           No open jobs in your categories right now. New matching requests will appear here instantly.
         </div>
       ` : openRequests.map((r) => {
-        const myExistingOffer = (r.offers || []).find((o) => o.providerId === prov.id);
+        const myExistingOffer = (r.offers || []).find((o) => o.providerId === prov.id || (prov.finditId && o.providerFinditId === prov.finditId));
         const isOfferDeclined = Boolean(myExistingOffer && myExistingOffer.status === 'DECLINED');
         const commPercent = Number(state.db?.settings?.commissionPercent || 11);
         const minReserve = Number(state.db?.settings?.minWalletBalanceUsd || 2.0);
@@ -8003,10 +8242,78 @@ async function providerSubmitBid(requestId, priceUsd) {
   try {
     markLocalStateMutation();
     const reqSnap = (state.db?.requests || []).find((r) => r.id === requestId) || null;
+    const cleanShortName = prov.shortName || (prov.name || 'Specialist').split(' ')[0];
+    const cleanBrand = prov.brandName || `${cleanShortName} Services`;
+    const cleanAvatar = prov.avatarUrl || prov.selfieUrl || '';
+
+    // 0ms Optimistic Offer: "You offered $XX • Waiting for client" appears immediately!
+    if (reqSnap) {
+      if (!Array.isArray(reqSnap.offers)) reqSnap.offers = [];
+      const offerId = `off_${prov.id}_${reqSnap.id}`;
+      let myOff = reqSnap.offers.find((o) => o.providerId === prov.id || o.id === offerId);
+      const isExactAccept = Number(priceUsd) === Number(reqSnap.budgetUsd);
+      const nowMs = Date.now();
+      if (myOff) {
+        myOff.priceUsd = Number(priceUsd);
+        myOff.status = 'PROPOSED';
+        myOff.declinedAt = null;
+        myOff.declineReason = null;
+        myOff.updatedAt = nowMs;
+        myOff.expiresAt = nowMs + 120000;
+      } else {
+        myOff = {
+          id: offerId,
+          providerId: prov.id,
+          providerFinditId: prov.finditId,
+          providerName: prov.name,
+          providerShortName: cleanShortName,
+          providerBrand: cleanBrand,
+          providerAvatarUrl: cleanAvatar,
+          providerSkillTier: prov.skillTier || 'Verified pro',
+          providerRating: prov.rating ?? 5.0,
+          providerCompletedJobs: prov.completedBookings ?? 1,
+          priceUsd: Number(priceUsd),
+          bidType: isExactAccept ? 'ACCEPTED_PRICE' : 'COUNTER_BID',
+          status: 'PROPOSED',
+          createdAt: new Date(nowMs).toISOString(),
+          updatedAt: nowMs,
+          expiresAt: nowMs + 120000,
+          ttlSeconds: 120
+        };
+        reqSnap.offers.unshift(myOff);
+      }
+      reqSnap.updatedAt = nowMs;
+    }
+
+    lastUiOverlaySignature = '';
+    renderAll(true);
+    showToast(`Offer of $${Number(priceUsd)} USD submitted!`, 'info');
+
+    const provSnapshot = {
+      id: prov.id,
+      finditId: prov.finditId,
+      name: prov.name,
+      shortName: cleanShortName,
+      brandName: cleanBrand,
+      avatarUrl: cleanAvatar,
+      selfieUrl: cleanAvatar,
+      rating: prov.rating ?? 5.0,
+      completedBookings: prov.completedBookings ?? 1,
+      skillTier: prov.skillTier || 'Verified pro',
+      walletBalanceUsd: prov.walletBalanceUsd ?? 5.0,
+      categoryIds: getProviderCategoryIds(prov),
+      categoryId: prov.categoryId,
+      suburbId: prov.suburbId,
+      suburbName: prov.suburbName,
+      lat: prov.lat,
+      lng: prov.lng
+    };
+
     const res = await apiPost('/api/offers', {
       requestId,
       providerId: prov.id,
       priceUsd: Number(priceUsd),
+      providerSnapshot: provSnapshot,
       requestSnapshot: reqSnap
     });
     if (res && res.request && state.db?.requests) {
@@ -8014,10 +8321,7 @@ async function providerSubmitBid(requestId, priceUsd) {
       if (idx >= 0) state.db.requests[idx] = res.request;
       else state.db.requests.unshift(res.request);
     }
-    lastUiOverlaySignature = '';
-    showToast(`Offer of $${Number(priceUsd)} USD submitted!`, 'info');
     renderAll(true);
-    await fetchState(true);
   } catch (err) {
     if (err.data && (err.data.code === 'LOW_WALLET_BALANCE' || err.status === 402)) {
       openLowBalanceExplanatoryModal({
@@ -8168,7 +8472,7 @@ function renderChatDrawer() {
     peerSubtitle = 'Client • Home Visit';
   } else {
     const provId = req?.acceptedProviderId || req?.offers?.[0]?.providerId || state.activeChatProviderId;
-    const prov = state.db.providers.find((p) => p.id === provId) || state.db.providers[0];
+    const prov = resolveProviderByIdOrOffer(provId, req);
     if (prov) {
       peerName = prov.name;
       peerAvatar = prov.avatarUrl;
