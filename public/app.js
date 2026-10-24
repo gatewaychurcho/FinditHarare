@@ -2165,7 +2165,8 @@ function renderUiOverlay(force = true) {
     state.currentUser?.id,
     state.currentUser?.walletBalanceUsd,
     state.currentUser?.activeWarnings?.length || 0,
-    activeReq ? `${activeReq.id}:${activeReq.status}:${activeReq.budgetUsd}:${activeReq.startPinVerified}` : 'NO_REQ',
+    (state.db?.changelogs || []).map((c) => `${c.id}:${c.title}:${c.version}`).join(','),
+    activeReq ? `${activeReq.id}:${activeReq.status}:${activeReq.budgetUsd}:${activeReq.startPinVerified}:${(activeReq.activeViewerIds || []).join(',')}:${(activeReq.offers || []).length}` : 'NO_REQ',
     provRequestsSig,
     provActiveJobSig
   ].join('|');
@@ -2250,71 +2251,48 @@ async function acknowledgeAdminWarning(warningId) {
 // ----------------------------------------------------------------------------
 function getPersonalizedAndTopServices() {
   const categories = (state.db.categories || []).filter((c) => c.status === 'ACTIVE');
-  const myPastBookings = (state.db.requests || []).filter(
-    (r) => state.currentUser && r.customerId === state.currentUser.id
+  const selectedCat = categories.find((c) => c.id === state.selectedCategoryId) || categories[0];
+  if (!selectedCat) return [];
+
+  const myPastBookingsInCat = (state.db.requests || []).filter(
+    (r) => state.currentUser && r.customerId === state.currentUser.id && r.categoryId === selectedCat.id
   );
 
   const items = [];
   const seenTitles = new Set();
 
-  myPastBookings.forEach((req) => {
-    const cat = categories.find((c) => c.id === req.categoryId) || categories[0];
-    if (!cat || seenTitles.has(req.title)) return;
-    const subIdx = Math.max(0, (cat.subServices || []).findIndex((s) => s.name === req.title));
+  myPastBookingsInCat.forEach((req) => {
+    if (seenTitles.has(req.title)) return;
+    const subIdx = Math.max(0, (selectedCat.subServices || []).findIndex((s) => s.name === req.title));
+    const subObj = (selectedCat.subServices || [])[subIdx];
     seenTitles.add(req.title);
     items.push({
-      categoryId: cat.id,
-      categoryName: cat.name,
+      categoryId: selectedCat.id,
+      categoryName: selectedCat.name,
       subIdx,
       title: req.title,
-      priceUsd: req.budgetUsd,
+      duration: subObj?.duration || '1.5 hrs',
+      priceUsd: req.budgetUsd || subObj?.defaultUsd || 20,
       badge: 'Your most used'
     });
   });
 
-  const topDefaults = [
-    { catId: 'repairs_construction', subIdx: 0, badge: 'Most requested in Harare' },
-    { catId: 'beauty_care', subIdx: 0, badge: 'Popular home visit' },
-    { catId: 'solar_power_water', subIdx: 0, badge: 'Top rated service' },
-    { catId: 'cleaning_domestic', subIdx: 0, badge: 'Trending in Harare' }
-  ];
-
-  const selectedCat = categories.find((c) => c.id === state.selectedCategoryId);
-  if (selectedCat && selectedCat.subServices) {
-    selectedCat.subServices.slice(0, 2).forEach((sub, idx) => {
-      if (!seenTitles.has(sub.name)) {
-        seenTitles.add(sub.name);
-        items.push({
-          categoryId: selectedCat.id,
-          categoryName: selectedCat.name,
-          subIdx: idx,
-          title: sub.name,
-          duration: sub.duration,
-          priceUsd: sub.defaultUsd,
-          badge: `Popular ${selectedCat.name}`
-        });
-      }
-    });
-  }
-
-  topDefaults.forEach((td) => {
-    const cat = categories.find((c) => c.id === td.catId);
-    const sub = cat?.subServices?.[td.subIdx];
-    if (cat && sub && !seenTitles.has(sub.name)) {
+  (selectedCat.subServices || []).forEach((sub, idx) => {
+    if (!seenTitles.has(sub.name)) {
       seenTitles.add(sub.name);
       items.push({
-        categoryId: cat.id,
-        categoryName: cat.name,
-        subIdx: td.subIdx,
+        categoryId: selectedCat.id,
+        categoryName: selectedCat.name,
+        subIdx: idx,
         title: sub.name,
         duration: sub.duration,
         priceUsd: sub.defaultUsd,
-        badge: td.badge
+        badge: idx === 0 ? `Most used in ${selectedCat.name}` : `Popular ${selectedCat.name}`
       });
     }
   });
 
-  return items.slice(0, 4);
+  return items.slice(0, 5);
 }
 
 // ----------------------------------------------------------------------------
@@ -2665,9 +2643,10 @@ function renderHomeDiscoveryOverlay() {
             <span>What service &amp; for how much?</span>
           </button>
 
-          <!-- Section Header: Most Used / Top Requested Services -->
-          <div style="font-size:11px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; margin:4px 4px 4px;">
-            Top Requested &amp; Most Used Services
+          <!-- Section Header: Most Used / Top Requested Services for Selected Category -->
+          <div style="font-size:11px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; margin:4px 4px 4px; display:flex; justify-content:space-between; align-items:center;">
+            <span>Most Used Services • ${(categories.find((c) => c.id === state.selectedCategoryId) || categories[0])?.name || 'Harare'}</span>
+            <span style="color:var(--blue-primary); font-size:10.5px;">Tap to book</span>
           </div>
 
           <div class="indrive-history-list">
@@ -2798,31 +2777,6 @@ function renderConfigureFareOverlay() {
               ${uiIcon('chevronDown', 13)}
             </button>
           </div>
-
-          <!-- inDrive Feature: Book for Myself vs Someone Else -->
-          <div style="display:flex; background:rgba(0,0,0,0.04); border-radius:12px; padding:3px; margin-bottom:10px;">
-            <button type="button" style="flex:1; border:none; padding:7px 10px; border-radius:9px; font-size:12px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; ${state.bookingFor !== 'SOMEONE_ELSE' ? 'background:#FFFFFF; color:var(--blue-primary); box-shadow:0 1px 3px rgba(0,0,0,0.08);' : 'background:transparent; color:var(--text-secondary);'}" onclick="setBookingForMode('ME')">
-              ${uiIcon('hailingPerson', 14)}
-              <span>For Myself</span>
-            </button>
-            <button type="button" style="flex:1; border:none; padding:7px 10px; border-radius:9px; font-size:12px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; ${state.bookingFor === 'SOMEONE_ELSE' ? 'background:#FFFFFF; color:var(--blue-primary); box-shadow:0 1px 3px rgba(0,0,0,0.08);' : 'background:transparent; color:var(--text-secondary);'}" onclick="setBookingForMode('SOMEONE_ELSE')">
-              ${uiIcon('user', 14)}
-              <span>For Someone Else</span>
-            </button>
-          </div>
-
-          ${state.bookingFor === 'SOMEONE_ELSE' ? `
-            <div style="background:#EFF6FF; border:1px solid #BFDBFE; border-radius:12px; padding:10px 12px; margin-bottom:10px;">
-              <div style="font-size:11.5px; font-weight:800; color:#1E40AF; margin-bottom:6px; display:flex; align-items:center; gap:4px;">
-                ${uiIcon('user', 12)}
-                <span>Who are you ordering this service for?</span>
-              </div>
-              <div style="display:flex; gap:8px;">
-                <input id="recipientNameInput" type="text" placeholder="Recipient Name (e.g. Tendai)" value="${escapeHtml(state.recipientName || '')}" oninput="state.recipientName=this.value" style="flex:1; height:36px; border:1px solid #93C5FD; border-radius:8px; padding:0 10px; font-size:12.5px; background:#fff; color:#0F172A;" />
-                <input id="recipientPhoneInput" type="tel" placeholder="Phone (e.g. 0772 123 456)" value="${escapeHtml(state.recipientPhone || '')}" oninput="state.recipientPhone=this.value" style="flex:1; height:36px; border:1px solid #93C5FD; border-radius:8px; padding:0 10px; font-size:12.5px; background:#fff; color:#0F172A;" />
-              </div>
-            </div>
-          ` : ''}
 
           <!-- Findit Dispatch: Need It Now vs Schedule for Later -->
           <div style="display:flex; background:rgba(0,0,0,0.04); border-radius:12px; padding:3px; margin-bottom:10px;">
@@ -2962,7 +2916,18 @@ function renderConfigureFareOverlay() {
 // SEARCHING / RADAR SHEET ("6 pros are viewing your request" + -0.50 / +0.50 + Raise fare)
 // ----------------------------------------------------------------------------
 function renderSearchingRadarOverlay(req) {
-  const viewingPros = state.db.providers.filter((p) => p.isOnline !== false).slice(0, 6);
+  const viewerIdSet = new Set([
+    ...(Array.isArray(req.activeViewerIds) ? req.activeViewerIds : []),
+    ...((req.offers || []).map((o) => o.providerId).filter(Boolean))
+  ]);
+  const viewingPros = (state.db.providers || []).filter(
+    (p) => viewerIdSet.has(p.id) && p.isOnline !== false && !p.isBanned
+  ).slice(0, 6);
+  const viewingLabel = viewingPros.length === 0
+    ? '0 pros viewing right now • Broadcasting live'
+    : viewingPros.length === 1
+      ? '1 pro is viewing your request'
+      : `${viewingPros.length} pros are viewing your request`;
   const currentFare = state.pendingSearchFareUsd !== null ? Number(state.pendingSearchFareUsd) : Number(req.budgetUsd);
   const isChanged = Math.abs(currentFare - Number(req.budgetUsd)) >= 0.01;
   const isGoodFare = currentFare >= state.recommendedFareUsd;
@@ -2985,7 +2950,7 @@ function renderSearchingRadarOverlay(req) {
       <div class="minimized-map-restore-bar" onclick="toggleSheetMinimize(false)">
         <div>
           <div style="font-size:13.5px; font-weight:800; color:var(--text-main);">Searching Pros • ${formatUsdPrice(currentFare)}</div>
-          <div style="font-size:11.5px; color:var(--text-secondary); font-weight:600;">${viewingPros.length} pros viewing on radar • Tap to adjust fare</div>
+          <div style="font-size:11.5px; color:var(--text-secondary); font-weight:600;">${viewingLabel} • Tap to adjust fare</div>
         </div>
         <button class="minimized-restore-btn">
           ${uiIcon('chevronUp', 14)}
@@ -2995,13 +2960,15 @@ function renderSearchingRadarOverlay(req) {
     ` : `
       <div class="indrive-dark-sheet">
         <div class="viewing-pros-banner">
-          <span class="viewing-pros-text">${viewingPros.length} pros are viewing your request</span>
+          <span class="viewing-pros-text">${viewingLabel}</span>
           <div style="display:flex; align-items:center; gap:8px;">
-            <div class="viewing-avatars-stack">
-              ${viewingPros.map((p) => `
-                <img src="${p.avatarUrl || 'https://images.unsplash.com/photo-1531123897727-8f129e1688ce?auto=format&fit=crop&w=120&q=80'}" alt="${p.shortName || p.name}" />
-              `).join('')}
-            </div>
+            ${viewingPros.length > 0 ? `
+              <div class="viewing-avatars-stack">
+                ${viewingPros.map((p) => `
+                  <img src="${p.avatarUrl || 'https://images.unsplash.com/photo-1531123897727-8f129e1688ce?auto=format&fit=crop&w=120&q=80'}" alt="${p.shortName || p.name}" />
+                `).join('')}
+              </div>
+            ` : ''}
             <button class="sheet-collapse-pill" onclick="toggleSheetMinimize(true)">
               ${uiIcon('map', 12)}
               <span>Map</span>
@@ -4322,7 +4289,11 @@ function renderModalLayer() {
   // Generate unique modal rendering key to prevent wiping inputs or camera streams on periodic polling
   const modalKey = state.activeModal === 'SIGNUP_FLOW'
     ? `SIGNUP_${state.authRole}_${state.authStep}_${state.faceVerifiedSuccess ? 'VERIFIED' : 'SCAN'}`
-    : `${state.activeModal}_${JSON.stringify(state.modalData || {})}`;
+    : state.activeModal === 'SUPPORT'
+      ? `SUPPORT_${(state.supportChatMessages || []).length}_${state.supportAiTyping ? 1 : 0}_${state.supportShowBizInfo ? 1 : 0}`
+      : state.activeModal === 'SUBURB_PICKER'
+        ? `SUBURB_PICKER_${(state.locationSearchResults || []).length}_${state.locationSearching ? 1 : 0}`
+        : `${state.activeModal}_${JSON.stringify(state.modalData || {})}`;
 
   if (modalKey === lastRenderedModalKey && root.firstElementChild) {
     return;
@@ -5390,22 +5361,21 @@ function renderModalLayer() {
           </div>
 
           <!-- iOS WhatsApp Bottom Input Bar -->
-          <div style="background:#F6F6F6; padding:8px 10px 14px 10px; display:flex; align-items:center; gap:8px; flex-shrink:0;">
+          <form onsubmit="event.preventDefault(); sendSupportAiMessage(); return false;" style="background:#F6F6F6; padding:8px 10px 14px 10px; display:flex; align-items:center; gap:8px; flex-shrink:0; margin:0;">
             <input
               id="waSupportInput"
               type="text"
+              autocomplete="off"
               placeholder="Ask Findit Harare Support..."
               style="flex:1; height:38px; border-radius:19px; border:1px solid #C7C7CC; background:#FFFFFF; padding:0 14px; font-size:14px; color:#000000; outline:none;"
-              onkeydown="if(event.key==='Enter') sendSupportAiMessage()"
             />
             <button
-              type="button"
-              onclick="sendSupportAiMessage()"
+              type="submit"
               style="width:38px; height:38px; border-radius:50%; border:none; background:#007AFF; color:#FFFFFF; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0;"
             >
               ${uiIcon('send', 16)}
             </button>
-          </div>
+          </form>
         </div>
       </div>
     `;
@@ -5416,9 +5386,15 @@ function renderModalLayer() {
     return;
   }
 
-  // SUBURB PICKER MODAL
+  // SUBURB & REAL LOCATION PICKER MODAL (inDrive-style Real Address Search + Pin Navigation)
   if (state.activeModal === 'SUBURB_PICKER') {
     const suburbs = state.db.suburbs || [];
+    const searchQuery = state.locationSearchQuery || '';
+    const filteredSuburbs = searchQuery.trim()
+      ? suburbs.filter((s) => `${s.name} ${s.zone}`.toLowerCase().includes(searchQuery.trim().toLowerCase()))
+      : suburbs;
+    const geoResults = Array.isArray(state.locationSearchResults) ? state.locationSearchResults : [];
+
     root.innerHTML = `
       <div class="modal-backdrop" onclick="closeModal()">
         <div class="indrive-modal-sheet" onclick="event.stopPropagation()">
@@ -5427,18 +5403,57 @@ function renderModalLayer() {
             <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
           </div>
 
-          <div style="margin-bottom:12px;">
+          <!-- Search any real street, landmark, or address in Harare / Zimbabwe -->
+          <form onsubmit="event.preventDefault(); searchRealLocationAddress(); return false;" style="display:flex; gap:8px; margin-bottom:10px;">
             <input
+              id="liveLocationSearchInput"
               type="text"
               class="dark-input"
-              value="${state.customAddress}"
-              placeholder="House number & street name"
-              oninput="state.customAddress = this.value"
+              style="flex:1; margin:0;"
+              value="${escapeHtml(state.locationSearchQuery !== undefined ? state.locationSearchQuery : state.customAddress)}"
+              placeholder="Type street, house #, landmark or suburb..."
+              oninput="handleLiveLocationQueryInput(this.value)"
             />
+            <button type="submit" class="btn-primary-blue" style="width:auto; padding:0 14px; height:44px; font-size:12.5px; flex-shrink:0;">
+              ${state.locationSearching ? '...' : 'Search'}
+            </button>
+          </form>
+
+          <!-- inDrive Quick Map Actions: Move Pin on Map OR Use Live GPS -->
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:12px;">
+            <button type="button" class="btn-dark-sec" style="height:38px; font-size:12px; font-weight:800; justify-content:center; gap:6px; border:1.5px solid var(--blue-border); background:var(--blue-soft); color:var(--blue-primary);" onclick="startMapPinPickMode()">
+              ${uiIcon('pin', 14)}
+              <span>Choose on Map</span>
+            </button>
+            <button type="button" class="btn-dark-sec" style="height:38px; font-size:12px; font-weight:800; justify-content:center; gap:6px;" onclick="closeModal(); useBrowserGeolocation(false);">
+              ${uiIcon('crosshair', 14)}
+              <span>Current GPS</span>
+            </button>
           </div>
 
           <div style="max-height:290px; overflow-y:auto;">
-            ${suburbs.map((s) => `
+            ${geoResults.length > 0 ? `
+              <div style="font-size:11px; font-weight:800; color:var(--blue-primary); text-transform:uppercase; padding:4px 4px 6px;">
+                Live Map Search Results (Tap to Navigate)
+              </div>
+              ${geoResults.map((g, gIdx) => `
+                <div class="indrive-cancel-row" onclick="selectGeocodedLocation(${gIdx})" style="background:#F0F7FF; border-radius:10px; margin-bottom:4px; padding:10px;">
+                  <div class="cancel-row-left">
+                    <span style="color:var(--blue-primary);">${uiIcon('navigation', 17)}</span>
+                    <div>
+                      <div style="font-weight:800; color:#0F172A;">${escapeHtml(g.shortTitle)}</div>
+                      <div style="font-size:11.5px; color:var(--text-secondary);">${escapeHtml(g.fullLabel)}</div>
+                    </div>
+                  </div>
+                  ${uiIcon('chevronRight', 16)}
+                </div>
+              `).join('')}
+            ` : ''}
+
+            <div style="font-size:11px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; padding:6px 4px 4px;">
+              Harare Suburbs &amp; Zones
+            </div>
+            ${filteredSuburbs.map((s) => `
               <div class="indrive-cancel-row" onclick="selectSuburbLocation('${s.id}')">
                 <div class="cancel-row-left">
                   <span style="color:var(--blue-primary);">${uiIcon('pin', 17)}</span>
@@ -6010,12 +6025,6 @@ async function submitServiceRequest() {
     showToast('Please verify your WhatsApp first to find offers');
     return;
   }
-  if (state.bookingFor === 'SOMEONE_ELSE' && !(state.recipientName || '').trim()) {
-    showToast('Please enter the Recipient Name for "For Someone Else"', 'error');
-    const inp = document.getElementById('recipientNameInput');
-    if (inp) inp.focus();
-    return;
-  }
   if (state.timingType === 'SCHEDULED' && (!state.scheduledDate || !state.scheduledTime)) {
     showToast('Please select a Date and Time for your scheduled visit', 'error');
     return;
@@ -6380,21 +6389,156 @@ function openProviderCatalogueModal(providerId, requestId = null, offerId = null
 }
 
 function openSuburbPickerModal() {
+  state.locationSearchQuery = state.customAddress || '';
+  state.locationSearchResults = [];
+  state.locationSearching = false;
   state.activeModal = 'SUBURB_PICKER';
+  lastRenderedModalKey = '';
   renderModalLayer();
+  setTimeout(() => {
+    const inp = document.getElementById('liveLocationSearchInput');
+    if (inp) {
+      inp.focus();
+      inp.select();
+    }
+  }, 50);
+}
+
+let locationSearchDebounceTimer = null;
+function handleLiveLocationQueryInput(val) {
+  state.locationSearchQuery = val;
+  state.customAddress = val.trim() || state.customAddress;
+  if (locationSearchDebounceTimer) clearTimeout(locationSearchDebounceTimer);
+  if (val.trim().length >= 3) {
+    locationSearchDebounceTimer = setTimeout(() => {
+      searchRealLocationAddress(true);
+    }, 450);
+  }
+}
+
+async function searchRealLocationAddress(silent = false) {
+  const inp = document.getElementById('liveLocationSearchInput');
+  const rawQuery = (inp ? inp.value : state.locationSearchQuery || '').trim();
+  if (!rawQuery) return;
+  state.locationSearchQuery = rawQuery;
+  state.customAddress = rawQuery;
+
+  // Check if it directly matches a known Harare suburb first
+  const suburbs = state.db?.suburbs || [];
+  const localMatches = suburbs
+    .filter((s) => `${s.name} ${s.zone}`.toLowerCase().includes(rawQuery.toLowerCase()))
+    .map((s) => ({
+      shortTitle: `${rawQuery}, ${s.name}`,
+      fullLabel: `${s.name} (${s.zone}), Harare, Zimbabwe`,
+      suburbName: s.name,
+      suburbId: s.id,
+      lat: s.lat,
+      lng: s.lng
+    }));
+
+  state.locationSearching = true;
+  if (!silent) {
+    lastRenderedModalKey = '';
+    renderModalLayer();
+  }
+
+  try {
+    const q = rawQuery.toLowerCase().includes('harare') || rawQuery.toLowerCase().includes('zimbabwe')
+      ? rawQuery
+      : `${rawQuery}, Harare, Zimbabwe`;
+    const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&countrycodes=zw&limit=5&q=${encodeURIComponent(q)}`;
+    const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+    const data = await res.json();
+    const osmItems = Array.isArray(data)
+      ? data.map((item) => {
+          const parts = (item.display_name || '').split(',').map((p) => p.trim());
+          const shortTitle = parts.slice(0, 2).join(', ') || rawQuery;
+          const suburbGuess = item.address?.suburb || item.address?.neighbourhood || item.address?.residential || parts[1] || 'Harare';
+          return {
+            shortTitle,
+            fullLabel: parts.slice(0, 4).join(', '),
+            suburbName: suburbGuess,
+            suburbId: null,
+            lat: Number(item.lat),
+            lng: Number(item.lon)
+          };
+        })
+      : [];
+
+    state.locationSearchResults = [...osmItems, ...localMatches].slice(0, 6);
+  } catch (e) {
+    state.locationSearchResults = localMatches;
+  } finally {
+    state.locationSearching = false;
+    if (state.activeModal === 'SUBURB_PICKER') {
+      const wasFocused = document.activeElement?.id === 'liveLocationSearchInput';
+      const cursorPos = document.getElementById('liveLocationSearchInput')?.selectionStart || rawQuery.length;
+      lastRenderedModalKey = '';
+      renderModalLayer();
+      if (wasFocused) {
+        const nextInp = document.getElementById('liveLocationSearchInput');
+        if (nextInp) {
+          nextInp.focus();
+          try { nextInp.setSelectionRange(cursorPos, cursorPos); } catch (err) {}
+        }
+      }
+    }
+  }
+}
+
+function selectGeocodedLocation(idx) {
+  const item = (state.locationSearchResults || [])[idx];
+  if (!item) return;
+  const suburbs = state.db?.suburbs || [];
+  let nearestSub = suburbs[0];
+  let minD = Infinity;
+  suburbs.forEach((s) => {
+    const d = Math.hypot((s.lat || 0) - item.lat, (s.lng || 0) - item.lng);
+    if (d < minD) {
+      minD = d;
+      nearestSub = s;
+    }
+  });
+  if (nearestSub) state.selectedSuburbId = nearestSub.id;
+  state.customAddress = item.shortTitle;
+  state.customSuburbLabel = `${item.suburbName || nearestSub?.name || 'Harare'}, Harare`;
+  state.pinnedLat = Number(item.lat.toFixed(5));
+  state.pinnedLng = Number(item.lng.toFixed(5));
+  closeModal();
+  renderAll();
+  if (leafletMap) {
+    leafletMap.flyTo([state.pinnedLat, state.pinnedLng], 16, { animate: true, duration: 0.85 });
+  }
+  showToast(`📍 Navigated to ${state.customAddress}`);
+}
+
+function startMapPinPickMode() {
+  closeModal();
+  state.isSheetMinimized = true;
+  renderAll();
+  if (leafletMap && state.pinnedLat && state.pinnedLng) {
+    leafletMap.flyTo([state.pinnedLat, state.pinnedLng], 16, { animate: true, duration: 0.6 });
+  }
+  showToast('📍 Drag the blue YOU pin or tap anywhere on the map to set your location!');
 }
 
 function selectSuburbLocation(suburbId) {
   const s = (state.db.suburbs || []).find((item) => item.id === suburbId);
   if (!s) return;
+  const typedStreet = (state.locationSearchQuery || '').trim();
   state.selectedSuburbId = s.id;
-  state.customAddress = s.name;
+  state.customAddress = (typedStreet && typedStreet.toLowerCase() !== s.name.toLowerCase())
+    ? typedStreet
+    : s.name;
   state.customSuburbLabel = `${s.name}, Harare`;
   state.pinnedLat = s.lat;
   state.pinnedLng = s.lng;
-  if (leafletMap) leafletMap.flyTo([s.lat, s.lng], 15, { duration: 0.6 });
   closeModal();
   renderAll();
+  if (leafletMap) {
+    leafletMap.flyTo([s.lat, s.lng], 15, { animate: true, duration: 0.75 });
+  }
+  showToast(`📍 Navigated to ${state.customAddress}, ${s.name}`);
 }
 
 function openServicePickerModal() {
@@ -6465,6 +6609,18 @@ function getProviderCategoryIds(prov) {
   return Array.from(new Set(raw.map(normalizeCategoryId))).slice(0, 3);
 }
 
+let lastReportedViewingKey = '';
+let lastReportedViewingAt = 0;
+function reportProviderViewingRequests(providerId, requestIds) {
+  if (!providerId) return;
+  const key = `${providerId}:${(requestIds || []).join(',')}`;
+  const now = Date.now();
+  if (key === lastReportedViewingKey && now - lastReportedViewingAt < 20000) return;
+  lastReportedViewingKey = key;
+  lastReportedViewingAt = now;
+  apiPost('/api/requests/viewing', { providerId, requestIds: requestIds || [] }).catch(() => {});
+}
+
 function renderProviderModeOverlay() {
   const prov = state.currentUser || state.db.providers[0];
   const activeJob = getProviderActiveBooking(prov.id);
@@ -6475,6 +6631,11 @@ function renderProviderModeOverlay() {
     const reqCat = normalizeCategoryId(r.categoryId);
     return myCategoryIds.includes(reqCat);
   });
+  if (prov && prov.isOnline !== false && !prov.isBanned) {
+    reportProviderViewingRequests(prov.id, openRequests.map((r) => r.id));
+  } else if (prov) {
+    reportProviderViewingRequests(prov.id, []);
+  }
   const myPendingApprovals = (state.db.approvalQueue || []).filter((a) => a.providerId === prov.id && a.status === 'PENDING');
 
   const currentTab = state.providerTab || (activeJob ? 'ACTIVE_JOB' : 'FEED');
@@ -7697,6 +7858,7 @@ function renderChatMessagesHtml(messages) {
 
 function toggleSupportBizInfo() {
   state.supportShowBizInfo = !state.supportShowBizInfo;
+  lastRenderedModalKey = '';
   renderModalLayer();
 }
 
@@ -7714,6 +7876,7 @@ async function sendSupportAiMessage(presetText = null) {
     time: formatChatTime(new Date().toISOString())
   });
   state.supportAiTyping = true;
+  lastRenderedModalKey = '';
   renderModalLayer();
 
   try {
@@ -7729,7 +7892,9 @@ async function sendSupportAiMessage(presetText = null) {
       text: res?.reply || 'How can we help you with Findit Harare today?',
       time: formatChatTime(res?.timestamp || new Date().toISOString())
     });
+    lastRenderedModalKey = '';
     renderModalLayer();
+    setTimeout(() => document.getElementById('waSupportInput')?.focus(), 40);
   } catch (e) {
     state.supportAiTyping = false;
     state.supportChatMessages.push({
@@ -7738,7 +7903,9 @@ async function sendSupportAiMessage(presetText = null) {
       text: 'Welcome to *Findit Harare Official Support*! Please let us know if you need help with a booking, EcoCash top-up (0713 475 131), or your provider account.',
       time: formatChatTime(new Date().toISOString())
     });
+    lastRenderedModalKey = '';
     renderModalLayer();
+    setTimeout(() => document.getElementById('waSupportInput')?.focus(), 40);
   }
 }
 

@@ -2836,6 +2836,44 @@ Return ONLY JSON with keys:
     }
   }
 
+  // Real-Time Provider Viewing Heartbeat (Tracks exact number of pros viewing each request)
+  if (pathname === '/api/requests/viewing' && req.method === 'POST') {
+    try {
+      const body = await parseBody(req);
+      const providerId = body.providerId;
+      const requestIds = Array.isArray(body.requestIds) ? body.requestIds : [];
+      const now = Date.now();
+      let changed = false;
+
+      (db.requests || []).forEach((r) => {
+        if (r.status !== 'OPEN') return;
+        if (!r.viewingProvidersMap || typeof r.viewingProvidersMap !== 'object') {
+          r.viewingProvidersMap = {};
+        }
+        if (providerId && requestIds.includes(r.id)) {
+          r.viewingProvidersMap[providerId] = now;
+        }
+        // Expire viewers older than 60 seconds
+        const activeIds = Object.keys(r.viewingProvidersMap).filter((pid) => {
+          const prov = (db.providers || []).find((p) => p.id === pid);
+          if (!prov || prov.isBanned || prov.isOnline === false) return false;
+          return now - r.viewingProvidersMap[pid] < 60000;
+        });
+        const prevSig = (r.activeViewerIds || []).join(',');
+        r.activeViewerIds = activeIds;
+        if (activeIds.join(',') !== prevSig) changed = true;
+      });
+
+      if (changed) {
+        saveDb(db);
+        broadcastUpdate('REQUEST_VIEWERS_UPDATED');
+      }
+      return sendJson(res, 200, { ok: true });
+    } catch (e) {
+      return sendJson(res, 200, { ok: false });
+    }
+  }
+
   if (pathname === '/api/bookings/cancel' && req.method === 'POST') {
     try {
       const body = await parseBody(req);
@@ -3795,10 +3833,9 @@ Return ONLY JSON with key: "reply" (string).`;
     }
   }
 
-  // Admin: Add or Delete Changelog / Announcements
+  // Admin: Add, Edit, or Delete Changelog / Announcements (Real-Time)
   if (pathname === '/api/admin/changelogs/add' && req.method === 'POST') {
     try {
-      db = loadDb();
       const body = await parseBody(req);
       if (!Array.isArray(db.changelogs)) db.changelogs = [];
       const newEntry = {
@@ -3810,7 +3847,26 @@ Return ONLY JSON with key: "reply" (string).`;
       };
       db.changelogs.unshift(newEntry);
       saveDb(db);
-      broadcastUpdate('CHANGELOG_UPDATED', { changelog: newEntry });
+      broadcastUpdate('CHANGELOG_UPDATED', { changelog: newEntry, changelogs: db.changelogs });
+      return sendJson(res, 200, { success: true, changelogs: db.changelogs });
+    } catch (e) {
+      return sendJson(res, 400, { error: e.message });
+    }
+  }
+
+  if (pathname === '/api/admin/changelogs/update' && req.method === 'POST') {
+    try {
+      const body = await parseBody(req);
+      if (!Array.isArray(db.changelogs)) db.changelogs = [];
+      const item = db.changelogs.find((c) => String(c.id) === String(body.id));
+      if (!item) return sendJson(res, 404, { error: 'Announcement not found' });
+      if (body.title) item.title = body.title.trim();
+      if (body.version) item.version = body.version.trim();
+      if (body.highlights) {
+        item.highlights = Array.isArray(body.highlights) ? body.highlights : String(body.highlights).split(',').map((s) => s.trim()).filter(Boolean);
+      }
+      saveDb(db);
+      broadcastUpdate('CHANGELOG_UPDATED', { changelogs: db.changelogs });
       return sendJson(res, 200, { success: true, changelogs: db.changelogs });
     } catch (e) {
       return sendJson(res, 400, { error: e.message });
@@ -3819,10 +3875,13 @@ Return ONLY JSON with key: "reply" (string).`;
 
   if (pathname === '/api/admin/changelogs/delete' && req.method === 'POST') {
     try {
-      db = loadDb();
       const body = await parseBody(req);
       if (Array.isArray(db.changelogs)) {
-        db.changelogs = db.changelogs.filter((c) => c.id !== body.id);
+        if (body.id) {
+          db.changelogs = db.changelogs.filter((c) => String(c.id) !== String(body.id));
+        } else if (body.index !== undefined) {
+          db.changelogs.splice(Number(body.index), 1);
+        }
         saveDb(db);
       }
       broadcastUpdate('CHANGELOG_UPDATED', { changelogs: db.changelogs });

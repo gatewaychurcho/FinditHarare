@@ -437,7 +437,10 @@
           aiM: (nextDb.aiEngine?.matchmakingLogs || []).length,
           aiC: (nextDb.aiEngine?.commissionProtections || []).length,
           aiA: (nextDb.aiEngine?.conversationAlerts || []).length,
-          aiS: nextDb.aiEngine?.latestStrategyReport?.generatedAt || ''
+          aiS: nextDb.aiEngine?.latestStrategyReport?.generatedAt || '',
+          cl: (nextDb.changelogs || []).map((x) => `${x.id}:${x.title}:${x.version}`).join('|'),
+          cats: (nextDb.categories || []).map((x) => `${x.id}:${x.status}:${(x.subServices || []).length}`).join('|'),
+          hub: (nextDb.hubServices || []).map((x) => `${x.id}:${x.status}`).join('|')
         });
         db = nextDb;
         if (forceRender || fp !== lastAdminFingerprint) {
@@ -795,20 +798,99 @@
       await loadAdminData();
     }
 
-    async function promptAddChangelog() {
-      const title = prompt('Announcement or Changelog Title:');
-      if (!title || !title.trim()) return;
-      const version = prompt('Version tag (e.g. v2.1):', 'v2.1') || 'v2.1';
-      const highlightsStr = prompt('Highlights (separated by comma):', 'New services launched, Instant Face ID active');
-      const highlights = (highlightsStr || '').split(',').map(s => s.trim()).filter(Boolean);
-      await api('/api/admin/changelogs/add', 'POST', { title: title.trim(), version: version.trim(), highlights });
-      await loadAdminData();
+    function promptAddChangelog(editId = null, editIdx = -1) {
+      const existing = editId
+        ? ((db.changelogs || []).find((c) => String(c.id) === String(editId)) || (editIdx >= 0 ? (db.changelogs || [])[editIdx] : null))
+        : null;
+      const modal = document.createElement('div');
+      modal.id = 'changelogModalOverlay';
+      modal.style.cssText = 'position:fixed; inset:0; background:rgba(15,23,42,0.72); z-index:99999; display:flex; align-items:center; justify-content:center; padding:16px;';
+      modal.onclick = () => modal.remove();
+      modal.innerHTML = `
+        <div style="background:#FFFFFF; border-radius:16px; padding:20px; max-width:460px; width:100%; box-shadow:0 20px 50px rgba(0,0,0,0.3);" onclick="event.stopPropagation()">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+            <div style="font-weight:800; font-size:16px; color:#0F172A;">
+              ${existing ? '✏️ Edit Platform Announcement' : '📢 Post Platform Announcement'}
+            </div>
+            <button onclick="document.getElementById('changelogModalOverlay')?.remove()" style="border:none; background:none; font-size:22px; cursor:pointer; color:#64748B;">&times;</button>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:12px;">
+            <div>
+              <label style="display:block; font-size:12px; font-weight:700; color:#475569; margin-bottom:4px;">Announcement / Update Title</label>
+              <input id="clTitleInput" type="text" value="${existing ? (existing.title || '').replace(/"/g, '&quot;') : ''}" placeholder="e.g. Instant EcoCash Verification & AI Support Live" style="width:100%; height:40px; border:1.5px solid #CBD5E1; border-radius:10px; padding:0 12px; font-size:13.5px; font-weight:600; box-sizing:border-box;" />
+            </div>
+            <div>
+              <label style="display:block; font-size:12px; font-weight:700; color:#475569; margin-bottom:4px;">Version Tag</label>
+              <input id="clVersionInput" type="text" value="${existing ? (existing.version || 'v2.4') : 'v2.4'}" placeholder="v2.4" style="width:100%; height:40px; border:1.5px solid #CBD5E1; border-radius:10px; padding:0 12px; font-size:13.5px; font-weight:600; box-sizing:border-box;" />
+            </div>
+            <div>
+              <label style="display:block; font-size:12px; font-weight:700; color:#475569; margin-bottom:4px;">Highlights (comma-separated)</label>
+              <textarea id="clHighlightsInput" rows="3" placeholder="Real-time radar updates, Instant WhatsApp Business AI support, Faster suburb navigation" style="width:100%; border:1.5px solid #CBD5E1; border-radius:10px; padding:10px 12px; font-size:13px; font-family:inherit; box-sizing:border-box;">${existing ? (existing.highlights || []).join(', ') : ''}</textarea>
+            </div>
+            <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:4px;">
+              <button class="btn-outline" onclick="document.getElementById('changelogModalOverlay')?.remove()">Cancel</button>
+              <button class="btn-blue" onclick="submitChangelogModal('${existing ? existing.id : ''}')">
+                ${existing ? 'Save Update' : 'Publish Live Now'}
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+      setTimeout(() => document.getElementById('clTitleInput')?.focus(), 40);
     }
 
-    async function deleteChangelog(id) {
-      if (!confirm('Delete this announcement?')) return;
-      await api('/api/admin/changelogs/delete', 'POST', { id });
-      await loadAdminData();
+    async function submitChangelogModal(editId) {
+      const titleEl = document.getElementById('clTitleInput');
+      const versionEl = document.getElementById('clVersionInput');
+      const highlightsEl = document.getElementById('clHighlightsInput');
+      const title = (titleEl?.value || '').trim();
+      const version = (versionEl?.value || 'v2.4').trim();
+      const highlights = (highlightsEl?.value || '').split(',').map((s) => s.trim()).filter(Boolean);
+      if (!title) {
+        showAdminToast('Please enter an announcement title', 'warn');
+        return;
+      }
+      document.getElementById('changelogModalOverlay')?.remove();
+      if (!db.changelogs) db.changelogs = [];
+      if (editId) {
+        const item = db.changelogs.find((c) => String(c.id) === String(editId));
+        if (item) {
+          item.title = title;
+          item.version = version;
+          item.highlights = highlights;
+        }
+        renderAdmin();
+        await api('/api/admin/changelogs/update', 'POST', { id: editId, title, version, highlights });
+        showAdminToast('Announcement updated in real time!', 'success');
+      } else {
+        const tempItem = {
+          id: `cl-${Date.now()}`,
+          version,
+          date: new Date().toISOString().slice(0, 10),
+          title,
+          highlights
+        };
+        db.changelogs.unshift(tempItem);
+        renderAdmin();
+        await api('/api/admin/changelogs/add', 'POST', { title, version, highlights });
+        showAdminToast('Announcement published in real time!', 'success');
+      }
+      await loadAdminData(true);
+    }
+
+    async function deleteChangelog(id, idx = -1) {
+      if (db && Array.isArray(db.changelogs)) {
+        const beforeLen = db.changelogs.length;
+        db.changelogs = db.changelogs.filter((c) => String(c.id) !== String(id));
+        if (db.changelogs.length === beforeLen && idx >= 0 && idx < db.changelogs.length) {
+          db.changelogs.splice(idx, 1);
+        }
+        renderAdmin();
+      }
+      showAdminToast('Announcement deleted in real time!', 'success');
+      await api('/api/admin/changelogs/delete', 'POST', { id, index: idx });
+      await loadAdminData(true);
     }
 
     function viewIdProof(idPhotoUrl, selfieUrl, name) {
@@ -2268,9 +2350,9 @@
             <div style="display:flex; flex-direction:column; gap:8px;">
               ${(db.changelogs || []).length === 0 ? `
                 <div style="color:var(--muted); font-size:12.5px; padding:12px; text-align:center;">No announcements posted yet.</div>
-              ` : (db.changelogs || []).map((cl) => `
-                <div style="background:#FFFFFF; border:1px solid var(--border); border-radius:10px; padding:10px 14px; display:flex; justify-content:space-between; align-items:center;">
-                  <div>
+              ` : (db.changelogs || []).map((cl, clIdx) => `
+                <div style="background:#FFFFFF; border:1px solid var(--border); border-radius:10px; padding:10px 14px; display:flex; justify-content:space-between; align-items:center; gap:10px;">
+                  <div style="flex:1; min-width:0;">
                     <div style="font-weight:800; font-size:13.5px; color:var(--text);">
                       <span style="color:#0066FF;">[${cl.version}]</span> ${cl.title}
                       <span style="font-size:11px; color:var(--muted); font-weight:600; margin-left:8px;">${cl.date}</span>
@@ -2279,9 +2361,14 @@
                       ${(cl.highlights || []).join(' • ')}
                     </div>
                   </div>
-                  <button class="btn-outline" style="color:#DC2626; border-color:#FECACA; padding:3px 9px; font-size:11px;" onclick="deleteChangelog('${cl.id}')">
-                    Delete
-                  </button>
+                  <div style="display:flex; gap:6px; flex-shrink:0;">
+                    <button class="btn-outline" style="padding:4px 10px; font-size:11.5px; font-weight:700;" onclick="promptAddChangelog('${cl.id}', ${clIdx})">
+                      ✏️ Edit
+                    </button>
+                    <button class="btn-outline" style="color:#DC2626; border-color:#FECACA; background:#FEF2F2; padding:4px 10px; font-size:11.5px; font-weight:800;" onclick="deleteChangelog('${cl.id}', ${clIdx})">
+                      🗑️ Delete
+                    </button>
+                  </div>
                 </div>
               `).join('')}
             </div>
