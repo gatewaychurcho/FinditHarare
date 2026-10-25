@@ -1589,6 +1589,34 @@ function handleIncomingRealtimeEvent(data) {
     return;
   }
 
+  // 13. REAL-TIME CLIENT LIVE LOCATION (Directs providers straight to client live GPS position)
+  if (data.eventType === 'CLIENT_LOCATION_UPDATED' && data.payload) {
+    const { requestId, lat, lng, exactAddress } = data.payload;
+    if (state.db?.requests) {
+      const r = state.db.requests.find((x) => x.id === requestId);
+      if (r) {
+        r.lat = Number(lat);
+        r.lng = Number(lng);
+        r.clientLiveLat = Number(lat);
+        r.clientLiveLng = Number(lng);
+        if (exactAddress) r.exactAddress = exactAddress;
+      }
+    }
+    if (state.role === 'PROVIDER') {
+      const prov = state.currentUser || state.db?.providers?.[0];
+      const activeJob = getProviderActiveBooking(prov?.id);
+      if (activeJob && activeJob.id === requestId) {
+        activeJob.lat = Number(lat);
+        activeJob.lng = Number(lng);
+        activeJob.clientLiveLat = Number(lat);
+        activeJob.clientLiveLng = Number(lng);
+        if (exactAddress) activeJob.exactAddress = exactAddress;
+        updateMapMarkers(true);
+      }
+    }
+    return;
+  }
+
   // If user is currently typing in an input, don't interrupt them
   const activeEl = document.activeElement;
   const isUserTyping = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT');
@@ -2017,7 +2045,7 @@ function initLeafletMap() {
 function syncPinDomLabels() {
   const pinLabel = document.getElementById('centerPinLabel');
   if (pinLabel) {
-    pinLabel.textContent = `${state.customAddress}, ${(state.customSuburbLabel || 'Harare').split(',')[0]}`;
+    pinLabel.textContent = `📍 Deliver to: ${state.customAddress} (Live Location)`;
   }
   const routeAddrEl = document.querySelector('.indrive-top-route-card .top-route-row .top-route-text');
   if (routeAddrEl) {
@@ -2299,11 +2327,11 @@ function advanceNavigationStep(curLat, curLng) {
     liveNavState.currentStepIdx++;
     const nextStep = liveNavState.steps[liveNavState.currentStepIdx];
     const speech = nextStep.type === 'arrive'
-      ? `In 50 meters, your client's location is ahead.`
+      ? `In 50 meters, your client's live location is ahead.`
       : `Turn ${nextStep.modifier || 'onto'} ${nextStep.name || 'next street'}`;
     speakNavigationDirection(speech);
   } else if (distToDest <= 25) {
-    speakNavigationDirection(`You have arrived outside your client's location. Please park safely and enter the 4-digit PIN.`);
+    speakNavigationDirection(`You have arrived at your client's live location. Waiting outside.`);
   } else if (distToManeuver <= 75 && distToManeuver > 35) {
     const speech = `In ${Math.round(distToManeuver)} meters, turn ${currentStep.modifier || 'onto'} ${currentStep.name || 'next street'}`;
     speakNavigationDirection(speech);
@@ -2432,7 +2460,7 @@ async function updateProviderLiveNavigation(prov, req) {
 
   liveNavState.destinationLat = reqLat;
   liveNavState.destinationLng = reqLng;
-  liveNavState.destinationName = `${req.customerName || 'Client'}'s Location (${req.exactAddress || req.suburbName || 'Harare'})`;
+  liveNavState.destinationName = `${req.customerName || 'Client'}'s Live Location (${req.exactAddress || req.suburbName || 'Harare'})`;
 
   await drawRoadRouteOnMap(provLat, provLng, reqLat, reqLng, '#0066FF', 5, true, req);
 }
@@ -2522,6 +2550,78 @@ function stopProviderLiveLocationWatcher() {
   }
 }
 
+let clientLocationWatchId = null;
+let lastClientReportedLat = null;
+let lastClientReportedLng = null;
+let lastClientBackendSyncMs = 0;
+
+function startClientLiveLocationWatcher() {
+  if (!('geolocation' in navigator)) return;
+  if (clientLocationWatchId !== null) return;
+
+  clientLocationWatchId = navigator.geolocation.watchPosition(
+    (pos) => {
+      const { latitude, longitude } = pos.coords;
+      const rawLat = Number(latitude.toFixed(5));
+      const rawLng = Number(longitude.toFixed(5));
+
+      // Jitter filter: ignore under 3m movements
+      if (lastClientReportedLat !== null && lastClientReportedLng !== null) {
+        const moveDist = calculateDistanceMeters(lastClientReportedLat, lastClientReportedLng, rawLat, rawLng);
+        if (moveDist < 3.0) return;
+      }
+
+      lastClientReportedLat = rawLat;
+      lastClientReportedLng = rawLng;
+      state.userLiveGpsLat = rawLat;
+      state.userLiveGpsLng = rawLng;
+
+      // Keep order pin pinned straight to live location unless client explicitly dragged it
+      if (state.role === 'CUSTOMER' && (state.screenStep === 'HOME' || state.screenStep === 'CONFIGURE') && !state.userHasManuallyDraggedPin) {
+        state.pinnedLat = rawLat;
+        state.pinnedLng = rawLng;
+        reverseGeocodeHararePin(rawLat, rawLng);
+      }
+
+      // If client has an active request, continuously broadcast live GPS updates so the provider is routed straight to them
+      const activeReq = getCustomerActiveRequest();
+      if (activeReq && activeReq.id) {
+        activeReq.lat = rawLat;
+        activeReq.lng = rawLng;
+        activeReq.clientLiveLat = rawLat;
+        activeReq.clientLiveLng = rawLng;
+        const now = Date.now();
+        if (now - lastClientBackendSyncMs > 3500) {
+          lastClientBackendSyncMs = now;
+          apiPost('/api/requests/client-location', {
+            requestId: activeReq.id,
+            lat: rawLat,
+            lng: rawLng,
+            address: state.customAddress ? `${state.customAddress} (Live Location)` : 'Current Live Location'
+          }).catch(() => {});
+        }
+      }
+
+      updateLiveGpsMarker();
+    },
+    (err) => {
+      console.warn('Client live GPS watch notice:', err.message);
+    },
+    {
+      enableHighAccuracy: true,
+      maximumAge: 2000,
+      timeout: 10000
+    }
+  );
+}
+
+function stopClientLiveLocationWatcher() {
+  if (clientLocationWatchId !== null && 'geolocation' in navigator) {
+    navigator.geolocation.clearWatch(clientLocationWatchId);
+    clientLocationWatchId = null;
+  }
+}
+
 function updateNetworkOfflineStatus() {
   const banner = document.getElementById('offlineModeBanner');
   const isOnline = navigator.onLine;
@@ -2542,8 +2642,11 @@ window.addEventListener('offline', () => {
 });
 
 function useBrowserGeolocation(silent = false) {
+  state.userHasManuallyDraggedPin = false;
   if (state.role === 'PROVIDER') {
     startProviderLiveLocationWatcher();
+  } else {
+    startClientLiveLocationWatcher();
   }
   if ('geolocation' in navigator) {
     navigator.geolocation.getCurrentPosition(
@@ -2574,7 +2677,7 @@ function useBrowserGeolocation(silent = false) {
           leafletMap.flyTo([state.userLiveGpsLat || state.pinnedLat, state.userLiveGpsLng || state.pinnedLng], 15, { duration: 0.7 });
         }
         if (!silent) {
-          showToast('Live GPS location verified');
+          showToast('📍 Live location locked: services will come straight to you!');
         }
       },
       () => {
@@ -2635,6 +2738,7 @@ function updateLiveGpsMarker() {
     );
     userLiveGpsMarker.on('dragend', (evt) => {
       if (state.role === 'PROVIDER') return;
+      state.userHasManuallyDraggedPin = true;
       const pos = evt.target.getLatLng();
       state.pinnedLat = Number(pos.lat.toFixed(5));
       state.pinnedLng = Number(pos.lng.toFixed(5));
@@ -2831,15 +2935,16 @@ function drawProviderAndClientRouteMarkers(prov, req) {
   });
   L.marker([prov.lat, prov.lng], { icon: provIcon }).addTo(leafletMarkersLayer);
 
-  // 2. Client Home Visit Destination Marker (Vector SVG Home Icon — Zero Emojis)
+  // 2. Client Live Location Destination Marker (Vector SVG Pin with Live GPS Radar Dot)
+  const clientFirstName = req.customerName ? req.customerName.split(' ')[0] : 'Client';
   const clientHtml = `
     <div style="display:flex; flex-direction:column; align-items:center;">
       <div style="background:#0F172A; color:#FFFFFF; font-size:10.5px; font-weight:800; padding:3px 9px; border-radius:99px; margin-bottom:4px; white-space:nowrap; box-shadow:0 4px 12px rgba(15,23,42,0.35); display:inline-flex; align-items:center; gap:5px;">
-        ${uiIcon('home', 11)}
-        <span>${req.customerName.split(' ')[0]}'s Home (${req.suburbName || 'Harare'})</span>
+        <span style="display:inline-block; width:7px; height:7px; border-radius:50%; background:#10B981; box-shadow:0 0 0 2px rgba(16,185,129,0.35);"></span>
+        <span>${escapeHtml(clientFirstName)}'s Live Location</span>
       </div>
-      <div style="width:36px; height:36px; border-radius:12px; background:#0066FF; border:2.5px solid #FFFFFF; display:flex; align-items:center; justify-content:center; color:#FFFFFF; box-shadow:0 6px 16px rgba(0,102,255,0.45);">
-        ${uiIcon('home', 18)}
+      <div style="position:relative; width:36px; height:36px; border-radius:12px; background:#0066FF; border:2.5px solid #FFFFFF; display:flex; align-items:center; justify-content:center; color:#FFFFFF; box-shadow:0 6px 16px rgba(0,102,255,0.45);">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
       </div>
     </div>
   `;
@@ -3761,8 +3866,15 @@ function renderConfigureFareOverlay() {
   return `
     <div class="indrive-top-route-card">
       <div class="top-route-row" onclick="openSuburbPickerModal()">
-        <span style="color:var(--blue-primary); display:inline-flex;">${uiIcon('pin', 18)}</span>
-        <div class="top-route-text">${state.customAddress}, ${state.customSuburbLabel.split(',')[0]}</div>
+        <span style="color:#10B981; display:inline-flex;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+        </span>
+        <div class="top-route-text" style="display:flex; align-items:center; gap:6px; min-width:0;">
+          <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${state.customAddress}, ${state.customSuburbLabel.split(',')[0]}</span>
+          <span style="background:#DCFCE7; color:#15803D; font-size:9.5px; font-weight:800; padding:2px 7px; border-radius:99px; display:inline-flex; align-items:center; gap:3px; flex-shrink:0;">
+            <span style="width:5px; height:5px; border-radius:50%; background:#16A34A;"></span> Live Location
+          </span>
+        </div>
         <button class="entrance-pill-btn" onclick="event.stopPropagation(); promptEntranceNote()">
           <span>${state.entranceNote || 'Main Gate'}</span>
         </button>
@@ -7378,6 +7490,11 @@ async function submitServiceRequest() {
     const attachedPhoto = state.draftPhotoUrl || null;
     const nowIso = new Date().toISOString();
 
+    // inDrive Live Location: Service destination is locked straight to client's live GPS position
+    const targetLat = state.userLiveGpsLat || state.pinnedLat;
+    const targetLng = state.userLiveGpsLng || state.pinnedLng;
+    const targetAddress = state.customAddress ? `${state.customAddress}, ${(state.customSuburbLabel || 'Harare').split(',')[0]}` : (state.customSuburbLabel || "Current Live Location");
+
     // 0ms Optimistic Broadcast: Transition immediately to SEARCHING without any delay!
     const optimisticReq = {
       id: reqId,
@@ -7389,14 +7506,18 @@ async function submitServiceRequest() {
       categoryId: cat.id,
       categoryName: cat.fullName || cat.name,
       title: sub.name,
-      description: state.draftNotes || `Home visit at ${state.customAddress} (${state.entranceNote}).`,
+      description: state.draftNotes || `Service delivery straight to my live location (${targetAddress}).`,
       photoUrl: attachedPhoto,
       suburbId: state.selectedSuburbId,
       suburbName: (state.customSuburbLabel || 'Harare').split(',')[0],
-      exactAddress: `${state.customAddress}, ${state.customSuburbLabel}`,
-      lat: state.pinnedLat,
-      lng: state.pinnedLng,
-      serviceMode: 'HOME_VISIT',
+      exactAddress: targetAddress,
+      lat: targetLat,
+      lng: targetLng,
+      serviceMode: 'LIVE_LOCATION',
+      isLiveLocationOrder: true,
+      clientLiveLat: targetLat,
+      clientLiveLng: targetLng,
+      clientLiveAddress: targetAddress,
       bookingFor: state.bookingFor || 'ME',
       recipientName: state.bookingFor === 'SOMEONE_ELSE' ? (state.recipientName || 'Recipient') : null,
       recipientPhone: state.bookingFor === 'SOMEONE_ELSE' ? (state.recipientPhone || null) : null,
@@ -7439,8 +7560,13 @@ async function submitServiceRequest() {
       suburbId: state.selectedSuburbId,
       suburbName: optimisticReq.suburbName,
       exactAddress: optimisticReq.exactAddress,
-      lat: state.pinnedLat,
-      lng: state.pinnedLng,
+      lat: targetLat,
+      lng: targetLng,
+      serviceMode: 'LIVE_LOCATION',
+      isLiveLocationOrder: true,
+      clientLiveLat: targetLat,
+      clientLiveLng: targetLng,
+      clientLiveAddress: targetAddress,
       bookingFor: optimisticReq.bookingFor,
       recipientName: optimisticReq.recipientName,
       recipientPhone: optimisticReq.recipientPhone,

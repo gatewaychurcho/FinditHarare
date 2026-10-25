@@ -3482,8 +3482,9 @@ Return ONLY JSON with keys:
       const suburb = HARARE_SUBURBS.find((s) => s.id === body.suburbId) || HARARE_SUBURBS[0];
       const category = db.categories.find((c) => c.id === body.categoryId) || db.categories[0];
 
-      const lat = body.lat !== undefined ? Number(body.lat) : suburb.lat + (Math.random() - 0.5) * 0.004;
-      const lng = body.lng !== undefined ? Number(body.lng) : suburb.lng + (Math.random() - 0.5) * 0.004;
+      const hasLiveGps = body.lat !== undefined && body.lng !== undefined && !isNaN(Number(body.lat)) && !isNaN(Number(body.lng));
+      const lat = hasLiveGps ? Number(body.lat) : suburb.lat + (Math.random() - 0.5) * 0.004;
+      const lng = hasLiveGps ? Number(body.lng) : suburb.lng + (Math.random() - 0.5) * 0.004;
 
       const newReq = {
         id: body.id || ('req_' + Date.now().toString().slice(-5)),
@@ -3495,14 +3496,18 @@ Return ONLY JSON with keys:
         categoryId: category.id,
         categoryName: category.fullName || category.name,
         title: body.title || `${category.name} Service`,
-        description: body.description || 'Looking for a reliable verified mobile provider to come to my home.',
+        description: body.description || (hasLiveGps ? `Deliver service to my current live location.` : `Service visit in ${suburb.name}.`),
         photoUrl: body.photoUrl ? offloadDataUriToR2Url(body.photoUrl) : null,
         suburbId: suburb.id,
         suburbName: body.suburbName || suburb.name,
-        exactAddress: body.exactAddress || `${suburb.sampleStreet}, Harare`,
+        exactAddress: body.exactAddress || (hasLiveGps ? `Current Live Location (${suburb.name})` : `${suburb.sampleStreet}, Harare`),
         lat,
         lng,
-        serviceMode: 'HOME_VISIT',
+        serviceMode: 'LIVE_LOCATION',
+        isLiveLocationOrder: true,
+        clientLiveLat: lat,
+        clientLiveLng: lng,
+        clientLiveAddress: body.exactAddress || (hasLiveGps ? `Current Live Location (${suburb.name})` : `${suburb.sampleStreet}, Harare`),
         bookingFor: body.bookingFor || 'ME', // 'ME' or 'SOMEONE_ELSE'
         recipientName: body.recipientName || null,
         recipientPhone: body.recipientPhone || null,
@@ -3558,6 +3563,36 @@ Return ONLY JSON with keys:
       broadcastUpdate('REQUEST_BUDGET_UPDATED', { requestId: reqItem.id, budgetUsd: reqItem.budgetUsd, request: reqItem });
       scheduleStaggeredProviderBids(reqItem.id);
       return sendJson(res, 200, { request: reqItem });
+    } catch (e) {
+      return sendJson(res, 400, { error: e.message });
+    }
+  }
+
+  // Real-Time Client Live Location Broadcast (inDrive-Style: Directs providers straight to client wherever they are)
+  if (pathname === '/api/requests/client-location' && req.method === 'POST') {
+    try {
+      const body = await parseBody(req);
+      const { requestId, lat, lng, address } = body;
+      const targetReq = (db.requests || []).find((r) => r.id === requestId);
+      if (targetReq && lat !== undefined && lng !== undefined) {
+        targetReq.lat = Number(lat);
+        targetReq.lng = Number(lng);
+        targetReq.clientLiveLat = Number(lat);
+        targetReq.clientLiveLng = Number(lng);
+        if (address) {
+          targetReq.exactAddress = String(address);
+          targetReq.clientLiveAddress = String(address);
+        }
+        targetReq.updatedAt = Date.now();
+        saveDb(db);
+        broadcastUpdate('CLIENT_LOCATION_UPDATED', {
+          requestId: targetReq.id,
+          lat: targetReq.lat,
+          lng: targetReq.lng,
+          exactAddress: targetReq.exactAddress
+        });
+      }
+      return sendJson(res, 200, { ok: true });
     } catch (e) {
       return sendJson(res, 400, { error: e.message });
     }
