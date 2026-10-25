@@ -10,8 +10,16 @@ const API_BASE = (typeof window !== 'undefined' && (window.location.protocol ===
   ? 'https://finditharare.vercel.app'
   : '';
 
-function resolveMediaUrl(url) {
-  if (!url || typeof url !== 'string') return '';
+const DEFAULT_AVATAR_FALLBACK = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='50' fill='%23E2E8F0'/%3E%3Ccircle cx='50' cy='38' r='18' fill='%2394A3B8'/%3E%3Cpath d='M20 86c0-16 13-30 30-30s30 14 30 30' fill='%2394A3B8'/%3E%3C/svg%3E";
+const DEFAULT_TASK_PHOTO_FALLBACK = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='12' fill='%23EBF3FF'/%3E%3Cpath d='M30 40h40M30 50h40M30 60h25' stroke='%230066FF' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E";
+
+function resolveMediaUrl(url, type = 'avatar') {
+  if (!url || typeof url !== 'string' || url === 'undefined' || url === 'null') {
+    return type === 'task' ? DEFAULT_TASK_PHOTO_FALLBACK : DEFAULT_AVATAR_FALLBACK;
+  }
+  if (url.startsWith('data:image/')) {
+    return url;
+  }
   if (url.startsWith('/api/')) {
     return (API_BASE || '') + url;
   }
@@ -33,8 +41,9 @@ const state = {
   selectedSubServiceIdx: 0,
   selectedTierKey: 'STANDARD', // 'STANDARD' | 'PLATINUM' | 'ONE_CLICK' | 'BUDGET'
 
-  customAddress: 'Avondale',
-  customSuburbLabel: 'Avondale, Harare',
+  customAddress: 'Current Live Location',
+  customSuburbLabel: 'Live Location, Harare',
+  isCustomAddressSelected: false,
   entranceNote: 'Main Gate',
   pinnedLat: -17.7955,
   pinnedLng: 31.0365,
@@ -289,12 +298,37 @@ function playArrivalUrgentAlarmSound() {
   }
 }
 
+function triggerHardwareVibration(pattern = [800, 250, 800, 250, 1000]) {
+  try {
+    if (typeof window !== 'undefined' && window.FinditNative && typeof window.FinditNative.vibratePattern === 'function') {
+      const csv = Array.isArray(pattern) ? [0, ...pattern].join(',') : '0,800,250,800,250,1000';
+      window.FinditNative.vibratePattern(csv);
+    }
+  } catch (e) {}
+  try {
+    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+      navigator.vibrate(pattern);
+    }
+  } catch (e) {}
+}
+
+function stopHardwareVibration() {
+  try {
+    if (typeof window !== 'undefined' && window.FinditNative && typeof window.FinditNative.vibrate === 'function') {
+      window.FinditNative.vibrate(0);
+    }
+  } catch (e) {}
+  try {
+    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+      navigator.vibrate(0);
+    }
+  } catch (e) {}
+}
+
 function startArrivalVibrationAlert(req) {
   if (arrivalVibrateInterval) return;
   playArrivalUrgentAlarmSound();
-  if ('vibrate' in navigator) {
-    try { navigator.vibrate([800, 250, 800, 250, 1000, 300]); } catch (e) {}
-  }
+  triggerHardwareVibration([800, 250, 800, 250, 1000]);
   arrivalVibrateInterval = setInterval(() => {
     const activeReq = getCustomerActiveRequest();
     if (!activeReq || activeReq.status !== 'ARRIVED' || activeReq.pinVerifiedByProvider) {
@@ -302,9 +336,7 @@ function startArrivalVibrationAlert(req) {
       return;
     }
     playArrivalUrgentAlarmSound();
-    if ('vibrate' in navigator) {
-      try { navigator.vibrate([800, 250, 800, 250, 1000, 300]); } catch (e) {}
-    }
+    triggerHardwareVibration([800, 250, 800, 250, 1000]);
   }, 1900);
 }
 
@@ -313,9 +345,7 @@ function stopArrivalVibrationAlert() {
     clearInterval(arrivalVibrateInterval);
     arrivalVibrateInterval = null;
   }
-  if ('vibrate' in navigator) {
-    try { navigator.vibrate(0); } catch (e) {}
-  }
+  stopHardwareVibration();
 }
 
 let leafletMap = null;
@@ -1156,9 +1186,7 @@ let audioCtxForChime = null;
 function playIncomingMessageSoundAndVibrate(message) {
   // 1. Phone vibration (Standard message haptic pattern: vibrate - pause - vibrate)
   try {
-    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-      navigator.vibrate([140, 70, 140]);
-    }
+    triggerHardwareVibration([140, 70, 140]);
   } catch (e) {}
 
   // 2. High-Fidelity Pleasant WhatsApp/iOS Message Chime using Web Audio API
@@ -1289,6 +1317,10 @@ function handleIncomingRealtimeEvent(data) {
       }
       if (message.senderRole && message.senderRole !== 'SYSTEM' && message.senderRole !== state.role) {
         playIncomingMessageSoundAndVibrate(message);
+        const txt = (message.text || '').toLowerCase();
+        if (state.role === 'CUSTOMER' && (message.type === 'ARRIVED' || txt.includes('outside') || txt.includes('arrived') || txt.includes('gate'))) {
+          startArrivalVibrationAlert(targetReq);
+        }
         if (state.chatDrawerOpen) {
           markRequestMessagesRead(targetReq.id);
         } else {
@@ -1724,7 +1756,7 @@ function connectRealtimeStream() {
 // ============================================================================
 // 1-SECOND COUNTDOWN LOOP FOR SEARCH BAR, GEOFENCE 50M ALERTS & 20M AUTO-PAIR
 // ============================================================================
-function compressImageFileToDataUrl(file, maxDimension = 1200, quality = 0.82) {
+function compressImageFileToDataUrl(file, maxDimension = 800, quality = 0.72) {
   return new Promise((resolve) => {
     if (!file || !file.type || !file.type.startsWith('image/')) {
       resolve(null);
@@ -3860,9 +3892,11 @@ function renderConfigureFareOverlay() {
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
         </span>
         <div class="top-route-text" style="display:flex; align-items:center; gap:6px; min-width:0;">
-          <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${state.customAddress}, ${state.customSuburbLabel.split(',')[0]}</span>
+          <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+            ${state.isCustomAddressSelected ? `${state.customAddress}, ${state.customSuburbLabel.split(',')[0]}` : `My Current Live Location`}
+          </span>
           <span style="background:#DCFCE7; color:#15803D; font-size:9.5px; font-weight:800; padding:2px 7px; border-radius:99px; display:inline-flex; align-items:center; gap:3px; flex-shrink:0;">
-            <span style="width:5px; height:5px; border-radius:50%; background:#16A34A;"></span> Live Location
+            <span style="width:5px; height:5px; border-radius:50%; background:#16A34A;"></span> ${state.isCustomAddressSelected ? 'Custom Address' : 'Live GPS'}
           </span>
         </div>
         <button class="entrance-pill-btn" onclick="event.stopPropagation(); promptEntranceNote()">
@@ -6805,9 +6839,9 @@ function renderModalLayer() {
               ${uiIcon('pin', 14)}
               <span>Choose on Map</span>
             </button>
-            <button type="button" class="btn-dark-sec" style="height:38px; font-size:12px; font-weight:800; justify-content:center; gap:6px;" onclick="closeModal(); useBrowserGeolocation(false);">
+            <button type="button" class="btn-dark-sec" style="height:38px; font-size:12px; font-weight:800; justify-content:center; gap:6px; background:#ECFDF5; color:#059669; border:1.5px solid #A7F3D0;" onclick="selectLiveLocationDefault()">
               ${uiIcon('crosshair', 14)}
-              <span>Current GPS</span>
+              <span>Live Location</span>
             </button>
           </div>
 
@@ -7480,10 +7514,13 @@ async function submitServiceRequest() {
     const attachedPhoto = state.draftPhotoUrl || null;
     const nowIso = new Date().toISOString();
 
-    // inDrive Live Location: Service destination is locked straight to client's live GPS position
-    const targetLat = state.userLiveGpsLat || state.pinnedLat;
-    const targetLng = state.userLiveGpsLng || state.pinnedLng;
-    const targetAddress = state.customAddress ? `${state.customAddress}, ${(state.customSuburbLabel || 'Harare').split(',')[0]}` : (state.customSuburbLabel || "Current Live Location");
+    // inDrive Live Location: Uses live GPS by default; only uses custom address if explicitly chosen
+    const isLive = !state.isCustomAddressSelected;
+    const targetLat = isLive ? (state.userLiveGpsLat || state.pinnedLat) : state.pinnedLat;
+    const targetLng = isLive ? (state.userLiveGpsLng || state.pinnedLng) : state.pinnedLng;
+    const targetAddress = isLive
+      ? (state.customAddress && state.customAddress !== 'Current Live Location' ? `My Current Live Location (${state.customAddress})` : 'My Current Live Location')
+      : `${state.customAddress}, ${(state.customSuburbLabel || 'Harare').split(',')[0]}`;
 
     // 0ms Optimistic Broadcast: Transition immediately to SEARCHING without any delay!
     const optimisticReq = {
@@ -7496,15 +7533,15 @@ async function submitServiceRequest() {
       categoryId: cat.id,
       categoryName: cat.fullName || cat.name,
       title: sub.name,
-      description: state.draftNotes || `Service delivery straight to my live location (${targetAddress}).`,
+      description: state.draftNotes || (isLive ? `Service delivery straight to my live location.` : `Service at ${targetAddress}.`),
       photoUrl: attachedPhoto,
       suburbId: state.selectedSuburbId,
       suburbName: (state.customSuburbLabel || 'Harare').split(',')[0],
       exactAddress: targetAddress,
       lat: targetLat,
       lng: targetLng,
-      serviceMode: 'LIVE_LOCATION',
-      isLiveLocationOrder: true,
+      serviceMode: isLive ? 'LIVE_LOCATION' : 'CUSTOM_ADDRESS',
+      isLiveLocationOrder: isLive,
       clientLiveLat: targetLat,
       clientLiveLng: targetLng,
       clientLiveAddress: targetAddress,
@@ -8055,9 +8092,20 @@ async function searchRealLocationAddress(silent = false) {
   }
 }
 
+function selectLiveLocationDefault() {
+  state.isCustomAddressSelected = false;
+  state.userHasManuallyDraggedPin = false;
+  state.customAddress = 'Current Live Location';
+  closeModal();
+  useBrowserGeolocation(false);
+  renderAll(true);
+  showToast('📍 Using your Live GPS Location');
+}
+
 function selectGeocodedLocation(idx) {
   const item = (state.locationSearchResults || [])[idx];
   if (!item) return;
+  state.isCustomAddressSelected = true;
   const suburbs = state.db?.suburbs || [];
   let nearestSub = suburbs[0];
   let minD = Infinity;
@@ -8078,22 +8126,24 @@ function selectGeocodedLocation(idx) {
   if (leafletMap) {
     leafletMap.flyTo([state.pinnedLat, state.pinnedLng], 16, { animate: true, duration: 0.85 });
   }
-  showToast(`📍 Navigated to ${state.customAddress}`);
+  showToast(`📍 Set to: ${state.customAddress}`);
 }
 
 function startMapPinPickMode() {
+  state.isCustomAddressSelected = true;
   closeModal();
   state.isSheetMinimized = true;
   renderAll();
   if (leafletMap && state.pinnedLat && state.pinnedLng) {
     leafletMap.flyTo([state.pinnedLat, state.pinnedLng], 16, { animate: true, duration: 0.6 });
   }
-  showToast('📍 Drag the blue YOU pin or tap anywhere on the map to set your location!');
+  showToast('📍 Drag the blue YOU pin to set your custom location');
 }
 
 function selectSuburbLocation(suburbId) {
   const s = (state.db.suburbs || []).find((item) => item.id === suburbId);
   if (!s) return;
+  state.isCustomAddressSelected = true;
   const typedStreet = (state.locationSearchQuery || '').trim();
   state.selectedSuburbId = s.id;
   state.customAddress = (typedStreet && typedStreet.toLowerCase() !== s.name.toLowerCase())
@@ -8541,17 +8591,22 @@ function renderProviderRequestsFeedTab(prov, openRequests, activeJob) {
       ${activeJob ? `
         <div
           onclick="state.providerTab='ACTIVE_JOB'; renderUiOverlay();"
-          style="background:linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%); border:1.5px solid #10B981; border-radius:14px; padding:11px 14px; margin-bottom:12px; display:flex; justify-content:space-between; align-items:center; cursor:pointer;"
+          style="background:#0F172A; border-radius:12px; padding:10px 13px; margin-bottom:12px; display:flex; align-items:center; justify-content:space-between; gap:10px; cursor:pointer; box-shadow:0 4px 12px rgba(15,23,42,0.12);"
         >
-          <div style="display:flex; align-items:center; gap:10px;">
-            <span style="color:#059669; display:inline-flex;">${uiIcon('routeCar', 20)}</span>
-            <div>
-              <div style="font-size:13px; font-weight:800; color:#065F46;">Active Job in Progress (${escapeHtml(activeJob.customerName)})</div>
-              <div style="font-size:11px; color:#047857; margin-top:2px;">You can only do 1 job at a time. Complete this visit before placing bids on new requests.</div>
+          <div style="display:flex; align-items:center; gap:8px; min-width:0; flex:1;">
+            <div style="width:8px; height:8px; border-radius:50%; background:#10B981; box-shadow:0 0 0 3px rgba(16,185,129,0.3); flex-shrink:0;"></div>
+            <div style="min-width:0; flex:1;">
+              <div style="font-size:13px; font-weight:800; color:#FFFFFF; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                Active: ${escapeHtml(activeJob.customerName)} • <span style="font-weight:600; color:#94A3B8;">${escapeHtml(activeJob.title || 'In service')}</span>
+              </div>
             </div>
           </div>
-          <button class="btn-primary-blue" style="height:32px; font-size:11px; font-weight:800; padding:0 12px; background:#059669; border-color:#059669; border-radius:99px; flex-shrink:0;">
-            Go to Job
+          <button
+            type="button"
+            style="border:none; background:#0066FF; color:#FFFFFF; font-size:11.5px; font-weight:800; padding:6px 14px; border-radius:99px; cursor:pointer; flex-shrink:0; white-space:nowrap; display:inline-flex; align-items:center; gap:4px;"
+          >
+            <span>Open Job</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M9 18l6-6-6-6"/></svg>
           </button>
         </div>
       ` : ''}
@@ -8636,58 +8691,37 @@ function renderProviderRequestsFeedTab(prov, openRequests, activeJob) {
             ` : ''}
 
             ${isOfferDeclined ? `
-              <div style="background:#FEF2F2; border:1.5px solid #FECACA; border-radius:12px; padding:10px 12px; margin-bottom:8px;">
-                <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:3px;">
-                  <span style="font-size:12.5px; font-weight:800; color:#DC2626; display:inline-flex; align-items:center; gap:5px;">
-                    ${uiIcon('close', 13)}
-                    <span>Offer Denied (${formatUsdPrice(myExistingOffer.declinedPriceUsd || myExistingOffer.priceUsd)})</span>
-                  </span>
-                  <span style="font-size:10.5px; font-weight:800; color:#B91C1C; background:#FEE2E2; padding:2px 8px; border-radius:99px;">Edit Price / Terms</span>
-                </div>
-                <div style="font-size:11.5px; color:#7F1D1D; line-height:1.4; font-weight:600;">
-                  The client declined your ${formatUsdPrice(myExistingOffer.declinedPriceUsd || myExistingOffer.priceUsd)} offer. You can accept their ${formatUsdPrice(r.budgetUsd)} fare or tap <strong>Edit Price $</strong> below to send a revised offer.
-                </div>
+              <div style="background:#FEF2F2; border:1px solid #FECACA; border-radius:10px; padding:7px 10px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
+                <span style="font-size:11.5px; font-weight:700; color:#DC2626;">Offer was declined</span>
+                <span style="font-size:10.5px; font-weight:800; color:#B91C1C; background:#FEE2E2; padding:2px 8px; border-radius:99px;">Send New Price</span>
               </div>
             ` : myExistingOffer ? `
-              <div style="background:var(--blue-soft); border:1.5px solid var(--blue-border); border-radius:12px; padding:9px 12px; display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:8px;">
-                <span style="font-size:12.5px; font-weight:800; color:var(--blue-primary); display:inline-flex; align-items:center; gap:6px;">
-                  ${uiIcon('clock', 14)}
-                  <span>You offered ${formatUsdPrice(myExistingOffer.priceUsd)} • Waiting for client</span>
-                </span>
-                <span style="font-size:11px; font-weight:700; color:var(--blue-primary); background:rgba(0,102,255,0.12); padding:3px 9px; border-radius:99px;">120s timer</span>
+              <div style="background:var(--blue-soft); border:1px solid var(--blue-border); border-radius:10px; padding:7px 10px; display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                <span style="font-size:12px; font-weight:800; color:var(--blue-primary);">Offered ${formatUsdPrice(myExistingOffer.priceUsd)} • Waiting for client</span>
+                <span style="font-size:10.5px; font-weight:700; color:var(--blue-primary); background:rgba(0,102,255,0.12); padding:2px 8px; border-radius:99px;">120s</span>
               </div>
             ` : ''}
 
             ${surpassesWallet ? `
-              <div style="background:#FFFBEB; border:1.5px solid #FDE68A; border-radius:12px; padding:10px 12px; margin-bottom:8px;">
-                <div style="font-size:12px; font-weight:800; color:#B45309; margin-bottom:3px; display:flex; align-items:center; gap:6px;">
-                  ${uiIcon('lock', 13)}
-                  <span>Higher-Funds Job — ${commPercent}% ($${requiredCommUsd.toFixed(2)} USD) Required</span>
-                </div>
-                <div style="font-size:11.5px; color:#92400E; line-height:1.45; font-weight:600; margin-bottom:8px;">
-                  To accept this job with higher funds (${formatUsdPrice(jobBudgetUsd)}), you have to have at least <strong>${commPercent}% of the amount ($${requiredCommUsd.toFixed(2)} USD)</strong> plus the $${minReserve.toFixed(2)} minimum reserve. Your account balance is <strong>$${walletBalUsd.toFixed(2)} USD</strong>.
-                </div>
+              <div style="background:#FFFBEB; border:1px solid #FDE68A; border-radius:10px; padding:7px 10px; margin-bottom:8px; display:flex; align-items:center; justify-content:space-between; gap:8px;">
+                <span style="font-size:11.5px; font-weight:700; color:#92400E;">🔒 Requires $${requiredCommUsd.toFixed(2)} USD wallet balance</span>
                 <button
                   type="button"
                   onclick="state.walletTopupAmount=${suggestedTopUpUsd}; state.providerTab='WALLET'; renderUiOverlay();"
-                  style="width:100%; height:34px; border-radius:9px; border:none; background:#D97706; color:#FFFFFF; font-size:12px; font-weight:800; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px;"
+                  style="height:28px; padding:0 10px; border-radius:7px; border:none; background:#D97706; color:#FFFFFF; font-size:11px; font-weight:800; cursor:pointer;"
                 >
-                  ${uiIcon('wallet', 13)}
-                  <span>Top Up Account Balance (+$${suggestedTopUpUsd.toFixed(2)} USD)</span>
+                  Top Up +$${suggestedTopUpUsd}
                 </button>
               </div>
             ` : ''}
 
             ${activeJob ? `
-              <div style="background:#FFFBEB; border:1px solid #FDE68A; border-radius:11px; padding:9px 12px; display:flex; align-items:center; justify-content:space-between; gap:8px;">
-                <div style="display:flex; align-items:center; gap:6px; font-size:11.5px; color:#92400E; font-weight:700;">
-                  ${uiIcon('lock', 13)}
-                  <span>Active job with ${escapeHtml(activeJob.customerName)} in progress. Complete current visit to bid.</span>
-                </div>
+              <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:8px 12px; display:flex; align-items:center; justify-content:space-between; gap:8px;">
+                <span style="font-size:12px; font-weight:700; color:#64748B;">Complete active visit to bid</span>
                 <button
                   type="button"
                   onclick="state.providerTab='ACTIVE_JOB'; renderUiOverlay();"
-                  style="border:none; background:#F59E0B; color:#FFFFFF; font-size:11px; font-weight:800; padding:5px 10px; border-radius:8px; cursor:pointer; flex-shrink:0;"
+                  style="border:none; background:#0F172A; color:#FFFFFF; font-size:11px; font-weight:800; padding:5px 12px; border-radius:99px; cursor:pointer; flex-shrink:0;"
                 >
                   View Job
                 </button>

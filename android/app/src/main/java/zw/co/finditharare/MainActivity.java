@@ -212,6 +212,39 @@ public class MainActivity extends Activity {
 
     public class FinditNativeBridge {
         @JavascriptInterface
+        public void vibrate(int durationMs) {
+            try {
+                Vibrator vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
+                if (vibrator != null) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        vibrator.vibrate(android.os.VibrationEffect.createOneShot(durationMs, android.os.VibrationEffect.DEFAULT_AMPLITUDE));
+                    } else {
+                        vibrator.vibrate(durationMs);
+                    }
+                }
+            } catch (Exception ignored) {}
+        }
+
+        @JavascriptInterface
+        public void vibratePattern(String patternCsv) {
+            try {
+                Vibrator vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
+                if (vibrator != null && patternCsv != null) {
+                    String[] parts = patternCsv.split(",");
+                    long[] pattern = new long[parts.length];
+                    for (int i = 0; i < parts.length; i++) {
+                        pattern[i] = Long.parseLong(parts[i].trim());
+                    }
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        vibrator.vibrate(android.os.VibrationEffect.createWaveform(pattern, -1));
+                    } else {
+                        vibrator.vibrate(pattern, -1);
+                    }
+                }
+            } catch (Exception ignored) {}
+        }
+
+        @JavascriptInterface
         public void triggerNotification(String title, String message, int notificationId) {
             showSystemNotification(title, message, notificationId);
         }

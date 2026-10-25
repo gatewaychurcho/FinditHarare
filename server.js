@@ -1532,8 +1532,8 @@ function offloadDataUriToR2Url(val) {
   if (typeof val !== 'string' || !val.startsWith('data:image/')) {
     return val;
   }
-  // Keep compressed data URIs (<= 140KB) directly intact so they render at 0ms offline/online without breaking
-  if (val.length < 140000) {
+  // Keep compressed data URIs (<= 500KB) directly intact so they render at 0ms offline/online without breaking
+  if (val.length < 500000) {
     return val;
   }
   const match = val.match(/^data:(image\/[a-zA-Z0-9+.-]+);base64,(.+)$/);
@@ -1545,6 +1545,17 @@ function offloadDataUriToR2Url(val) {
   try {
     const buffer = Buffer.from(base64Data, 'base64');
     r2MediaCache.set(mediaKey, { buffer, contentType });
+
+    // Also persist to local uploads directory so server restarts or local caching never lose images
+    const uploadsDir = path.join(__dirname, 'public', 'uploads');
+    if (!fs.existsSync(uploadsDir)) {
+      try { fs.mkdirSync(uploadsDir, { recursive: true }); } catch (e) {}
+    }
+    const ext = contentType.includes('png') ? 'png' : 'jpg';
+    try {
+      fs.writeFileSync(path.join(uploadsDir, `${mediaKey}.${ext}`), buffer);
+    } catch (e) {}
+
     if (!r2UploadedKeys.has(mediaKey)) {
       r2UploadedKeys.add(mediaKey);
       r2PutObject(`media/${mediaKey}`, buffer, contentType, 4000).catch(() => {});
@@ -2234,8 +2245,31 @@ const server = http.createServer(async (req, res) => {
       });
       return res.end(r2Obj.buffer);
     }
-    res.writeHead(302, { Location: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=240&q=80' });
-    return res.end();
+
+    // Check disk fallback in public/uploads/
+    const diskPathJpg = path.join(__dirname, 'public', 'uploads', `${mediaKey}.jpg`);
+    const diskPathPng = path.join(__dirname, 'public', 'uploads', `${mediaKey}.png`);
+    if (fs.existsSync(diskPathJpg)) {
+      const buf = fs.readFileSync(diskPathJpg);
+      res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=86400', 'Access-Control-Allow-Origin': '*' });
+      return res.end(buf);
+    }
+    if (fs.existsSync(diskPathPng)) {
+      const buf = fs.readFileSync(diskPathPng);
+      res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=86400', 'Access-Control-Allow-Origin': '*' });
+      return res.end(buf);
+    }
+
+    // Fallback: Clean SVG image placeholder (never broken icon or CORS redirect)
+    const fallbackSvg = Buffer.from(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200"><rect width="200" height="200" fill="#F1F5F9"/><circle cx="100" cy="80" r="36" fill="#94A3B8"/><path d="M40 170c0-33 27-60 60-60s60 27 60 60" fill="#94A3B8"/></svg>`
+    );
+    res.writeHead(200, {
+      'Content-Type': 'image/svg+xml',
+      'Cache-Control': 'public, max-age=86400',
+      'Access-Control-Allow-Origin': '*'
+    });
+    return res.end(fallbackSvg);
   }
 
   // Synchronize shared cloud state across all Vercel serverless instances before handling API calls
