@@ -247,6 +247,12 @@
         <div class="nav-item" onclick="setAdminTab('PROVIDERS')">✅ Providers & Wallets</div>
         <div class="nav-item" onclick="setAdminTab('SHIELD')">🛡️ Anti-Leakage Shield</div>
         <div class="nav-item" onclick="setAdminTab('CATEGORIES')">🚀 Service Categories</div>
+        <div class="nav-item" onclick="setAdminTab('SUPPORT_HELPDESK')" style="background:rgba(16,185,129,0.12); border:1px solid rgba(16,185,129,0.3);">
+          <span>💬 AI Support &amp; Helpdesk</span>
+        </div>
+        <div class="nav-item" onclick="setAdminTab('NOTIFICATIONS')">
+          <span>📢 Notification &amp; Warning Center</span>
+        </div>
       </div>
     </div>
 
@@ -470,7 +476,7 @@
     function setAdminTab(tab) {
       adminTab = tab;
       document.querySelectorAll('#adminNav .nav-item').forEach((el, idx) => {
-        const tabs = ['OVERVIEW', 'DISPATCH', 'AI_ENGINE', 'ECOCASH', 'DISCIPLINE', 'KYC', 'WHATSAPP_CODES', 'APPROVALS', 'CANCELLATIONS', 'COMMISSION', 'PROVIDERS', 'SHIELD', 'CATEGORIES'];
+        const tabs = ['OVERVIEW', 'DISPATCH', 'AI_ENGINE', 'ECOCASH', 'DISCIPLINE', 'KYC', 'WHATSAPP_CODES', 'APPROVALS', 'CANCELLATIONS', 'COMMISSION', 'PROVIDERS', 'SHIELD', 'CATEGORIES', 'SUPPORT_HELPDESK', 'NOTIFICATIONS'];
         el.classList.toggle('active', tabs[idx] === tab);
       });
       renderAdmin();
@@ -2858,11 +2864,272 @@
             </div>
           </div>
         `;
+      } else if (adminTab === 'SUPPORT_HELPDESK') {
+        const supportChats = adminData?.supportChats || {};
+        const chatKeys = Object.keys(supportChats);
+        if (!selectedSupportUserKey && chatKeys.length > 0) {
+          selectedSupportUserKey = chatKeys[0];
+        }
+        const activeThread = selectedSupportUserKey ? (supportChats[selectedSupportUserKey] || []) : [];
+
+        sectionHtml = `
+          <div class="panel-card">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
+              <div>
+                <h3 style="margin:0 0 4px 0; font-size:16px; font-weight:800;">💬 AI Support &amp; Human Helpdesk</h3>
+                <p style="margin:0; font-size:12px; color:var(--muted);">Live conversations between clients, service providers, and the AI Support Bot. Intervene directly with human admin replies.</p>
+              </div>
+              <span class="badge" style="background:#10B981; color:#fff;">${chatKeys.length} Active Conversations</span>
+            </div>
+
+            <div style="display:grid; grid-template-columns: 280px 1fr; gap:16px; min-height:480px; max-height:70vh;">
+              <!-- Left Thread List -->
+              <div style="border-right:1px solid rgba(255,255,255,0.08); overflow-y:auto; padding-right:10px; display:flex; flex-direction:column; gap:6px;">
+                ${chatKeys.length === 0 ? `
+                  <div style="padding:24px 12px; text-align:center; color:var(--muted); font-size:12px;">No support chats recorded yet</div>
+                ` : chatKeys.map((k) => {
+                  const msgs = supportChats[k] || [];
+                  const lastMsg = msgs[msgs.length - 1];
+                  const isSelected = k === selectedSupportUserKey;
+                  return `
+                    <div
+                      style="padding:10px 12px; border-radius:10px; cursor:pointer; background:${isSelected ? 'rgba(0,102,255,0.18)' : 'rgba(255,255,255,0.03)'}; border:1.5px solid ${isSelected ? '#0066FF' : 'rgba(255,255,255,0.06)'}; transition:all 0.15s ease;"
+                      onclick="selectAdminSupportThread('${k}')"
+                    >
+                      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                        <span style="font-weight:700; font-size:13px; color:#fff;">${k}</span>
+                        <span style="font-size:10px; color:var(--muted);">${msgs.length} msgs</span>
+                      </div>
+                      <div style="font-size:11.5px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                        ${lastMsg ? (lastMsg.text || '...') : 'No messages'}
+                      </div>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+
+              <!-- Right Chat Transcript & Reply Input -->
+              <div style="display:flex; flex-direction:column; height:100%;">
+                <div style="padding:8px 12px; background:rgba(255,255,255,0.04); border-radius:8px; margin-bottom:10px; font-weight:700; font-size:13px; display:flex; justify-content:space-between; align-items:center;">
+                  <span>Conversation: <span style="color:#60A5FA;">${selectedSupportUserKey || 'Select a user'}</span></span>
+                  <span style="font-size:11px; color:var(--muted);">${activeThread.length} messages</span>
+                </div>
+
+                <div id="adminSupportMessagesBox" style="flex:1; overflow-y:auto; padding:12px; background:rgba(0,0,0,0.25); border-radius:10px; display:flex; flex-direction:column; gap:8px; max-height:400px;">
+                  ${activeThread.length === 0 ? `
+                    <div style="text-align:center; padding:40px; color:var(--muted); font-size:12px;">Select a thread on the left to view transcript</div>
+                  ` : activeThread.map((m) => {
+                    const isUser = m.sender === 'USER';
+                    const isAdmin = m.sender === 'ADMIN';
+                    const align = isUser ? 'flex-start' : 'flex-end';
+                    const bg = isUser ? 'rgba(255,255,255,0.08)' : (isAdmin ? '#0066FF' : 'rgba(16,185,129,0.2)');
+                    const border = isUser ? '1px solid rgba(255,255,255,0.1)' : (isAdmin ? '1px solid #3B82F6' : '1px solid rgba(16,185,129,0.4)');
+                    const senderLabel = isUser ? 'User' : (isAdmin ? 'Admin (You)' : 'AI Support Bot');
+
+                    return `
+                      <div style="align-self:${align}; max-width:82%; padding:9px 13px; border-radius:12px; background:${bg}; border:${border};">
+                        <div style="font-size:10px; font-weight:800; color:${isUser ? '#94A3B8' : (isAdmin ? '#DBEAFE' : '#6EE7B7')}; margin-bottom:3px;">
+                          ${senderLabel} • ${m.time ? new Date(m.time).toLocaleTimeString(undefined, {hour:'2-digit', minute:'2-digit'}) : ''}
+                        </div>
+                        <div style="font-size:12.5px; line-height:1.45; color:#F8FAFC; white-space:pre-wrap;">${escapeHtml(m.text || '')}</div>
+                      </div>
+                    `;
+                  }).join('')}
+                </div>
+
+                <!-- Admin Reply Input -->
+                ${selectedSupportUserKey ? `
+                  <div style="margin-top:10px; display:flex; gap:8px;">
+                    <input
+                      type="text"
+                      id="adminSupportReplyInput"
+                      class="dark-input"
+                      placeholder="Type human admin reply to ${selectedSupportUserKey}..."
+                      style="flex:1; height:42px;"
+                      onkeydown="if(event.key==='Enter') submitAdminSupportReply()"
+                    />
+                    <button class="btn-blue" style="height:42px; padding:0 16px; flex-shrink:0;" onclick="submitAdminSupportReply()">
+                      <span>Send Human Reply</span>
+                    </button>
+                  </div>
+                ` : ''}
+              </div>
+            </div>
+          </div>
+        `;
+      } else if (adminTab === 'NOTIFICATIONS') {
+        const notifs = adminData?.adminNotifications || [];
+
+        sectionHtml = `
+          <div class="panel-card" style="margin-bottom:16px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+              <div>
+                <h3 style="margin:0 0 4px 0; font-size:16px; font-weight:800;">📢 Admin Notification &amp; Warning Dispatcher</h3>
+                <p style="margin:0; font-size:12px; color:var(--muted);">Send official notices, policy warnings, or platform announcements to all users, providers, clients, or a specific account.</p>
+              </div>
+            </div>
+
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:12px; margin-bottom:12px;">
+              <div>
+                <label style="display:block; font-size:11px; font-weight:700; color:var(--muted); margin-bottom:4px;">Target Audience</label>
+                <select id="notifTargetSelect" class="dark-input" onchange="toggleSpecificUserField(this.value)">
+                  <option value="ALL">🌍 Broadcast to All Users &amp; Providers</option>
+                  <option value="PROVIDERS">🛠️ All Service Providers Only</option>
+                  <option value="CUSTOMERS">👤 All Clients Only</option>
+                  <option value="SPECIFIC_USER">🎯 Specific User ID / Phone</option>
+                </select>
+              </div>
+
+              <div id="notifSpecificUserGroup" style="display:none;">
+                <label style="display:block; font-size:11px; font-weight:700; color:var(--muted); margin-bottom:4px;">User / Provider ID or Phone</label>
+                <input id="notifRecipientId" type="text" class="dark-input" placeholder="e.g. FH-PRO-849201 or cust_1" />
+              </div>
+
+              <div>
+                <label style="display:block; font-size:11px; font-weight:700; color:var(--muted); margin-bottom:4px;">Notification Severity / Type</label>
+                <select id="notifTypeSelect" class="dark-input">
+                  <option value="NOTICE">ℹ️ General Notice</option>
+                  <option value="WARNING">⚠️ Official Policy Warning (Triggers Disciplinary Count)</option>
+                  <option value="SECURITY">🛡️ Security &amp; Anti-Leakage Alert</option>
+                  <option value="UPDATE">🚀 Feature &amp; App Update</option>
+                </select>
+              </div>
+            </div>
+
+            <div style="margin-bottom:10px;">
+              <label style="display:block; font-size:11px; font-weight:700; color:var(--muted); margin-bottom:4px;">Notification Title</label>
+              <input id="notifTitleInput" type="text" class="dark-input" placeholder="e.g. Official Warning: Prohibited off-platform contact details detected" />
+            </div>
+
+            <div style="margin-bottom:14px;">
+              <label style="display:block; font-size:11px; font-weight:700; color:var(--muted); margin-bottom:4px;">Message Body</label>
+              <textarea id="notifMessageInput" class="dark-input" style="height:70px; resize:vertical;" placeholder="Enter official notice or warning message..."></textarea>
+            </div>
+
+            <button class="btn-blue" style="height:40px; padding:0 20px;" onclick="dispatchAdminNotification()">
+              <span>📢 Dispatch Notification</span>
+            </button>
+          </div>
+
+          <div class="panel-card">
+            <h3 style="margin:0 0 12px 0; font-size:15px; font-weight:800;">📋 Dispatched Notification History (${notifs.length})</h3>
+            ${notifs.length === 0 ? `
+              <div style="text-align:center; padding:30px; color:var(--muted); font-size:12px;">No notifications dispatched yet</div>
+            ` : `
+              <table style="width:100%; border-collapse:collapse; font-size:12.5px;">
+                <thead>
+                  <tr style="border-bottom:1px solid rgba(255,255,255,0.08); text-align:left; color:var(--muted);">
+                    <th style="padding:8px 10px;">Date</th>
+                    <th style="padding:8px 10px;">Target</th>
+                    <th style="padding:8px 10px;">Type</th>
+                    <th style="padding:8px 10px;">Title &amp; Message</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${notifs.map((n) => `
+                    <tr style="border-bottom:1px solid rgba(255,255,255,0.04);">
+                      <td style="padding:8px 10px; font-size:11px; color:var(--muted); white-space:nowrap;">
+                        ${new Date(n.createdAt).toLocaleDateString(undefined, {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})}
+                      </td>
+                      <td style="padding:8px 10px; font-weight:700;">
+                        ${n.recipientType} ${n.recipientId ? `(${n.recipientId})` : ''}
+                      </td>
+                      <td style="padding:8px 10px;">
+                        <span class="badge" style="background:${n.type === 'WARNING' ? '#EF4444' : '#0066FF'}; color:#fff;">
+                          ${n.type}
+                        </span>
+                      </td>
+                      <td style="padding:8px 10px;">
+                        <div style="font-weight:700; color:#fff;">${escapeHtml(n.title)}</div>
+                        <div style="font-size:11.5px; color:var(--muted);">${escapeHtml(n.message)}</div>
+                      </td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            `}
+          </div>
+        `;
       }
 
       const scrollY = window.scrollY;
       document.getElementById('adminRoot').innerHTML = kpiHtml + sectionHtml;
       window.scrollTo(0, scrollY);
+    }
+
+    let selectedSupportUserKey = '';
+
+    function selectAdminSupportThread(userKey) {
+      selectedSupportUserKey = userKey;
+      renderAdmin();
+      const el = document.getElementById('adminSupportMessagesBox');
+      if (el) el.scrollTop = el.scrollHeight;
+    }
+
+    async function submitAdminSupportReply() {
+      const input = document.getElementById('adminSupportReplyInput');
+      const text = input ? input.value.trim() : '';
+      if (!text || !selectedSupportUserKey) return;
+      input.value = '';
+      try {
+        const res = await api('/api/support/admin-reply', 'POST', { userKey: selectedSupportUserKey, text });
+        if (res && res.ok) {
+          showAdminToast('Human reply sent to ' + selectedSupportUserKey, 'success');
+          await loadAdminData(true);
+        } else {
+          showAdminToast(res?.error || 'Failed to send reply', 'error');
+        }
+      } catch (e) {
+        showAdminToast(e.message, 'error');
+      }
+    }
+
+    function toggleSpecificUserField(val) {
+      const el = document.getElementById('notifSpecificUserGroup');
+      if (el) el.style.display = val === 'SPECIFIC_USER' ? 'block' : 'none';
+    }
+
+    async function dispatchAdminNotification() {
+      const targetSelect = document.getElementById('notifTargetSelect');
+      const recipientInput = document.getElementById('notifRecipientId');
+      const typeSelect = document.getElementById('notifTypeSelect');
+      const titleInput = document.getElementById('notifTitleInput');
+      const msgInput = document.getElementById('notifMessageInput');
+
+      const recipientType = targetSelect ? targetSelect.value : 'ALL';
+      const recipientId = recipientInput ? recipientInput.value.trim() : '';
+      const type = typeSelect ? typeSelect.value : 'NOTICE';
+      const title = titleInput ? titleInput.value.trim() : '';
+      const message = msgInput ? msgInput.value.trim() : '';
+
+      if (!title || !message) {
+        alert('Please enter a notification title and message');
+        return;
+      }
+      if (recipientType === 'SPECIFIC_USER' && !recipientId) {
+        alert('Please enter the recipient user ID or phone');
+        return;
+      }
+
+      try {
+        const res = await api('/api/admin/notifications/send', 'POST', {
+          recipientType,
+          recipientId,
+          type,
+          title,
+          message
+        });
+        if (res && res.ok) {
+          showAdminToast('Notification dispatched successfully!', 'success');
+          if (titleInput) titleInput.value = '';
+          if (msgInput) msgInput.value = '';
+          await loadAdminData(true);
+        } else {
+          showAdminToast(res?.error || 'Dispatch failed', 'error');
+        }
+      } catch (e) {
+        showAdminToast(e.message, 'error');
+      }
     }
 
     document.addEventListener('DOMContentLoaded', () => {

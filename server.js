@@ -1028,6 +1028,8 @@ function normalizeDatabase(parsed) {
   if (!parsed.ecocashTopups) parsed.ecocashTopups = init.ecocashTopups;
   if (!parsed.disciplineLogs) parsed.disciplineLogs = [];
   if (!parsed.pendingVerifications) parsed.pendingVerifications = [];
+  if (!Array.isArray(parsed.adminNotifications)) parsed.adminNotifications = [];
+  if (!parsed.supportChats || typeof parsed.supportChats !== 'object') parsed.supportChats = {};
   if (!parsed.settings) parsed.settings = init.settings;
   parsed.settings.ecocashMerchantNumber = '0713 475 131';
   if (!parsed.settings.ecocashMerchantName) parsed.settings.ecocashMerchantName = 'FINDIT HARARE OFFICIAL';
@@ -2014,6 +2016,18 @@ function saveDb(currentDb) {
   });
 }
 
+async function saveDbAsync(currentDb, waitCloudMs = 650) {
+  saveDb(currentDb);
+  if (pendingCloudSavePromise) {
+    try {
+      await Promise.race([
+        pendingCloudSavePromise,
+        new Promise((r) => setTimeout(r, waitCloudMs))
+      ]);
+    } catch (e) {}
+  }
+}
+
 let db = loadDb();
 syncFromCloudKvStore(true).catch(() => {});
 
@@ -2368,6 +2382,9 @@ const server = http.createServer(async (req, res) => {
     if (!db || !Array.isArray(db.requests)) {
       db = loadDb();
     }
+    try {
+      await syncFromCloudKvStore(false);
+    } catch (e) {}
     const isAdminViewer = validateAdminToken(req);
     const stripPrivate = (u) => {
       const { password, passwordHash, idDocument, idPhotoUrl, nationalIdNumber, ...rest } = u;
@@ -2383,6 +2400,8 @@ const server = http.createServer(async (req, res) => {
       requests: db.requests,
       customers: (db.customers || []).map(stripPrivate),
       providers: (db.providers || []).map(stripPrivate),
+      adminNotifications: db.adminNotifications || [],
+      supportChats: isAdminViewer ? (db.supportChats || {}) : {},
       kycVerifications: isAdminViewer ? db.kycVerifications : [],
       ecocashTopups: isAdminViewer ? db.ecocashTopups : [],
       disciplineLogs: isAdminViewer ? db.disciplineLogs : [],
@@ -3483,6 +3502,29 @@ Return ONLY JSON with keys:
     }
   }
 
+  // Fast Lightweight Live Offers & Viewer Polling for 0ms Latency on Serverless
+  if ((pathname.startsWith('/api/requests/') && (pathname.endsWith('/live-offers') || pathname.endsWith('/offers'))) && req.method === 'GET') {
+    const parts = pathname.split('/');
+    const requestId = parts[3];
+    if (!requestId) return sendJson(res, 400, { error: 'Missing requestId' });
+    try {
+      await syncFromCloudKvStore(false);
+    } catch (e) {}
+    const reqItem = (db.requests || []).find((r) => r.id === requestId);
+    if (!reqItem) return sendJson(res, 404, { error: 'Request not found' });
+    return sendJson(res, 200, {
+      requestId: reqItem.id,
+      status: reqItem.status,
+      offers: reqItem.offers || [],
+      activeViewerIds: reqItem.activeViewerIds || [],
+      acceptedOfferId: reqItem.acceptedOfferId || null,
+      acceptedProviderId: reqItem.acceptedProviderId || null,
+      startPinCode: reqItem.startPinCode || null,
+      budgetUsd: reqItem.budgetUsd,
+      updatedAt: reqItem.updatedAt || Date.now()
+    });
+  }
+
   if (pathname === '/api/requests' && req.method === 'POST') {
     try {
       const body = await parseBody(req);
@@ -3567,7 +3609,7 @@ Return ONLY JSON with keys:
 
       db.requests = (db.requests || []).filter((r) => r.id !== newReq.id);
       db.requests.unshift(newReq);
-      saveDb(db);
+      await saveDbAsync(db);
       broadcastUpdate('REQUEST_CREATED', { requestId: newReq.id, request: newReq });
       scheduleStaggeredProviderBids(newReq.id);
       runSilentAiTaskMatchmaking(newReq);
@@ -3893,7 +3935,7 @@ Return ONLY JSON with keys:
       }
 
       reqItem.updatedAt = nowMs;
-      saveDb(db);
+      await saveDbAsync(db);
       broadcastUpdate('OFFER_SUBMITTED', { requestId: reqItem.id, offerId: existingOffer.id, providerName: provider.name, priceUsd, offer: existingOffer, request: reqItem });
       return sendJson(res, 200, { offer: existingOffer, request: reqItem });
     } catch (e) {
@@ -4014,7 +4056,7 @@ Return ONLY JSON with keys:
         timestamp: new Date().toISOString()
       });
 
-      saveDb(db);
+      await saveDbAsync(db);
       broadcastUpdate('BOOKING_CONFIRMED', { requestId: reqItem.id, offerId: offer.id, acceptedProviderId: offer.providerId, request: reqItem });
       return sendJson(res, 200, { request: reqItem });
     } catch (e) {
@@ -4379,7 +4421,7 @@ Return ONLY JSON with keys:
         });
       }
 
-      saveDb(db);
+      await saveDbAsync(db);
       broadcastUpdate('BOOKING_STATUS_UPDATED', { requestId: reqItem.id, status: reqItem.status });
       return sendJson(res, 200, { request: reqItem });
     } catch (e) {
@@ -5347,12 +5389,101 @@ Return ONLY valid JSON with key: "reply" (string).`;
           if (target && target.id) db.deletedChangelogIds.push(String(target.id));
           db.changelogs.splice(Number(body.index), 1);
         }
-        saveDb(db);
+        await saveDbAsync(db);
       }
       broadcastUpdate('CHANGELOG_UPDATED', { changelogs: db.changelogs });
       return sendJson(res, 200, { success: true, changelogs: db.changelogs });
     } catch (e) {
       return sendJson(res, 400, { error: e.message });
+    }
+  }
+
+  // ==========================================================================
+  // ADMIN NOTIFICATION CENTER & DIRECT WARNING DISPATCHER
+  // ==========================================================================
+  if (pathname === '/api/admin/notifications/send' && req.method === 'POST') {
+    if (!validateAdminToken(req)) {
+      return sendJson(res, 401, { error: 'Unauthorized: Admin authentication required' });
+    }
+    try {
+      const body = await parseBody(req);
+      const { recipientType = 'ALL', recipientId = '', type = 'NOTICE', title = '', message = '' } = body;
+      if (!title || !message) {
+        return sendJson(res, 400, { error: 'Title and message are required' });
+      }
+
+      if (!Array.isArray(db.adminNotifications)) db.adminNotifications = [];
+      const newNotif = {
+        id: 'notif_' + Date.now(),
+        recipientType, // 'ALL' | 'CUSTOMERS' | 'PROVIDERS' | 'SPECIFIC_USER'
+        recipientId: String(recipientId || '').trim(),
+        type, // 'NOTICE' | 'WARNING' | 'SECURITY' | 'UPDATE'
+        title: title.trim(),
+        message: message.trim(),
+        createdAt: new Date().toISOString()
+      };
+      db.adminNotifications.unshift(newNotif);
+
+      // If warning a specific user, also log to their activeWarnings & warningsCount
+      if (type === 'WARNING' && recipientId) {
+        const cleanRecId = String(recipientId).trim().replace(/\D/g, '');
+        const findUser = (list) => (list || []).find((u) => 
+          u.id === recipientId || 
+          u.finditId === recipientId || 
+          (cleanRecId && u.phone && u.phone.replace(/\D/g, '') === cleanRecId)
+        );
+        const target = findUser(db.customers) || findUser(db.providers);
+        if (target) {
+          target.warningsCount = (target.warningsCount || 0) + 1;
+          target.activeWarnings = target.activeWarnings || [];
+          target.activeWarnings.unshift({
+            id: 'warn_' + Date.now(),
+            date: new Date().toISOString(),
+            reason: `${title}: ${message}`
+          });
+        }
+      }
+
+      await saveDbAsync(db);
+      broadcastUpdate('ADMIN_NOTIFICATION', { notification: newNotif });
+      return sendJson(res, 200, { ok: true, notification: newNotif });
+    } catch (e) {
+      return sendJson(res, 500, { error: e.message });
+    }
+  }
+
+  // ==========================================================================
+  // ADMIN LIVE AI-SUPPORT HELPDESK DIRECT REPLY
+  // ==========================================================================
+  if (pathname === '/api/support/admin-reply' && req.method === 'POST') {
+    if (!validateAdminToken(req)) {
+      return sendJson(res, 401, { error: 'Unauthorized: Admin authentication required' });
+    }
+    try {
+      const body = await parseBody(req);
+      const userKey = (body.userKey || '').trim().replace(/[^a-zA-Z0-9_-]/g, '_');
+      const text = (body.text || '').trim();
+      if (!userKey || !text) {
+        return sendJson(res, 400, { error: 'User key and message text are required' });
+      }
+
+      if (!db.supportChats || typeof db.supportChats !== 'object') db.supportChats = {};
+      if (!Array.isArray(db.supportChats[userKey])) db.supportChats[userKey] = [];
+
+      const adminMsg = {
+        id: 'sup_admin_' + Date.now(),
+        sender: 'ADMIN',
+        senderName: 'Findit Human Support',
+        text,
+        time: new Date().toISOString()
+      };
+      db.supportChats[userKey].push(adminMsg);
+      await saveDbAsync(db);
+
+      broadcastUpdate('SUPPORT_MESSAGE_RECEIVED', { userKey, message: adminMsg });
+      return sendJson(res, 200, { ok: true, message: adminMsg, history: db.supportChats[userKey] });
+    } catch (e) {
+      return sendJson(res, 500, { error: e.message });
     }
   }
 

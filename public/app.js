@@ -1163,6 +1163,52 @@ let realtimeReconnectTimer = null;
 let isWsConnected = false;
 
 let realtimeSyncInterval = null;
+let liveOffersPollTimer = null;
+let lastPolledOffersCount = -1;
+
+function startFastLiveOffersPoll(requestId) {
+  if (liveOffersPollTimer) return;
+  liveOffersPollTimer = setInterval(async () => {
+    const activeReq = getCustomerActiveRequest();
+    if (!activeReq || activeReq.status !== 'OPEN' || !state.isAuthenticated || state.role !== 'CUSTOMER') {
+      stopFastLiveOffersPoll();
+      return;
+    }
+    const targetId = requestId || activeReq.id;
+    try {
+      const res = await apiGet(`/api/requests/${targetId}/live-offers`, 1);
+      if (res && res.requestId === activeReq.id) {
+        if (res.status && res.status !== activeReq.status) {
+          activeReq.status = res.status;
+          fetchState(true);
+          return;
+        }
+        if (Array.isArray(res.offers)) {
+          const prevCount = (activeReq.offers || []).length;
+          activeReq.offers = res.offers;
+          if (Array.isArray(res.activeViewerIds)) {
+            activeReq.activeViewerIds = res.activeViewerIds;
+          }
+          if (res.offers.length > prevCount || res.offers.length !== lastPolledOffersCount) {
+            lastPolledOffersCount = res.offers.length;
+            lastOffersSignature = '';
+            lastUiOverlaySignature = '';
+            renderFloatingOffersOverlay(true);
+            playIncomingMessageSoundAndVibrate({ senderName: 'Service Provider', text: 'New pro offer received!' });
+          }
+        }
+      }
+    } catch (e) {}
+  }, 1000);
+}
+
+function stopFastLiveOffersPoll() {
+  if (liveOffersPollTimer) {
+    clearInterval(liveOffersPollTimer);
+    liveOffersPollTimer = null;
+    lastPolledOffersCount = -1;
+  }
+}
 
 function initRealtimeSync() {
   connectWebSocket();
@@ -1172,12 +1218,16 @@ function initRealtimeSync() {
       if (!isWsConnected && !isFetchingState) {
         const activeEl = document.activeElement;
         const isUserTyping = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT');
-        // Never interrupt active modals (Support, Settings, Sign-up, Suburb Picker, Notes) with background polls
-        if (!isUserTyping && !state.activeModal) {
+        // Never interrupt active typing modals with background polls
+        if (!isUserTyping) {
+          const activeReq = getCustomerActiveRequest();
+          if (state.screenStep === 'SEARCHING' || (activeReq && activeReq.status === 'OPEN')) {
+            startFastLiveOffersPoll(activeReq?.id);
+          }
           fetchState(false);
         }
       }
-    }, 3200);
+    }, 1800);
   }
 }
 
@@ -1240,6 +1290,45 @@ function playIncomingMessageSoundAndVibrate(message) {
 
 function handleIncomingRealtimeEvent(data) {
   if (!data || data.eventType === 'CONNECTED' || data.eventType === 'PING') return;
+
+  // 0A. OFFICIAL ADMIN NOTIFICATION & DISPATCHED WARNINGS
+  if (data.eventType === 'ADMIN_NOTIFICATION' && data.payload?.notification) {
+    const notif = data.payload.notification;
+    if (!state.db) state.db = {};
+    if (!Array.isArray(state.db.adminNotifications)) state.db.adminNotifications = [];
+    state.db.adminNotifications.unshift(notif);
+    const myId = state.currentUser?.id;
+    const isTarget = notif.recipientType === 'ALL' ||
+      (notif.recipientType === 'CUSTOMERS' && state.role === 'CUSTOMER') ||
+      (notif.recipientType === 'PROVIDERS' && state.role === 'PROVIDER') ||
+      (notif.recipientType === 'SPECIFIC_USER' && (notif.recipientId === myId || notif.recipientId === state.currentUser?.finditId));
+    if (isTarget) {
+      triggerHardwareVibration([180, 80, 180]);
+      showToast(`📢 ${notif.title}: ${notif.message}`, notif.type === 'WARNING' ? 'error' : 'info', 6000);
+      triggerSystemNotification(notif.title, notif.message, notif.id);
+      renderAll();
+    }
+    return;
+  }
+
+  // 0B. LIVE AI-SUPPORT & HUMAN HELPDESK REPLIES
+  if (data.eventType === 'SUPPORT_MESSAGE_RECEIVED' && data.payload) {
+    const { userKey, message } = data.payload;
+    const myKey = String(state.currentUser?.id || state.currentUser?.phone || state.currentUser?.name || 'guest').replace(/[^a-zA-Z0-9_-]/g, '_');
+    if (userKey === myKey && message) {
+      playIncomingMessageSoundAndVibrate(message);
+      if (state.activeModal === 'SUPPORT_CHAT') {
+        state.supportChatHistory = state.supportChatHistory || [];
+        if (!state.supportChatHistory.some((m) => m.id === message.id)) {
+          state.supportChatHistory.push(message);
+          renderModalLayer();
+        }
+      } else {
+        showToast(`💬 Findit Support Admin: ${message.text}`, 'info', 6000);
+      }
+    }
+    return;
+  }
 
   // 0. ADMIN BAN / UNBAN / WARN — apply in 0ms to the affected user (zero refresh needed)
   if (data.eventType === 'ACCOUNT_DISCIPLINE_UPDATED' && data.payload) {
@@ -2880,7 +2969,7 @@ function updateMapMarkers(force = false) {
         ` : ''}
         <div class="pro-map-marker-pill">
           ${p.avatarUrl
-            ? `<img src="${resolveMediaUrl(p.avatarUrl)}" alt="${p.shortName || p.name}" />`
+            ? `<img src="${resolveMediaUrl(p.avatarUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_AVATAR_FALLBACK}';" alt="${p.shortName || p.name}" />`
             : `<span style="font-size:11px; font-weight:800; color:#0066FF;">${p.avatarInitials}</span>`
           }
           <div class="pro-map-category-dot" title="${p.brandName}">
@@ -2940,7 +3029,7 @@ function drawProviderAndClientRouteMarkers(prov, req) {
       <div class="pro-map-marker-pill" style="border-color:#0066FF; border-width:3px; position:relative;">
         <div class="pro-heading-arrow" id="proHeadingArrow" style="transform:translateX(-50%) rotate(${liveNavState.bearingDeg || 0}deg);"></div>
         ${prov.avatarUrl
-          ? `<img src="${resolveMediaUrl(prov.avatarUrl)}" alt="${escapeHtml(prov.name)}" />`
+          ? `<img src="${resolveMediaUrl(prov.avatarUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_AVATAR_FALLBACK}';" alt="${escapeHtml(prov.name)}" />`
           : `<span style="font-size:11px; font-weight:800; color:#0066FF;">${prov.avatarInitials}</span>`
         }
         <div class="pro-map-category-dot" title="${escapeHtml(prov.brandName || 'Specialist')}">
@@ -3231,7 +3320,7 @@ function renderFloatingOffersOverlay(force = false) {
 
           <div class="offer-pro-row" onclick="openProviderCatalogueModal('${offer.providerId}', '${req.id}', '${offer.id}')" style="cursor:pointer;">
             <div class="offer-avatar-wrap ${isPlatinum ? 'platinum' : ''}">
-              <img src="${resolveMediaUrl(avatarUrl)}" alt="${escapeHtml(shortName)}" />
+              <img src="${resolveMediaUrl(avatarUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_AVATAR_FALLBACK}';" alt="${escapeHtml(shortName)}" />
               ${isPlatinum ? `<div class="platinum-diamond-badge">${uiIcon('diamond', 9)}</div>` : ''}
             </div>
             <div class="offer-pro-details">
@@ -3643,20 +3732,20 @@ function renderMainHubOverlay() {
       imageUrl: 'https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=600&q=80'
     },
     {
-      id: 'online_shopping',
-      title: 'Online Shopping',
-      subtitle: 'Harare shops & fast delivery',
-      status: 'COMING_SOON',
-      badge: 'Coming Soon',
-      imageUrl: 'https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=600&q=80'
-    },
-    {
       id: 'transport_carriers',
-      title: 'Transport & Carriers',
-      subtitle: 'Bakkies, trucks & haulage',
+      title: 'Transport & Rides',
+      subtitle: 'Bakkies, trucks, haulage & rides',
       status: 'COMING_SOON',
       badge: 'Coming Soon',
       imageUrl: 'https://images.unsplash.com/photo-1519003722824-194d4455a60c?auto=format&fit=crop&w=600&q=80'
+    },
+    {
+      id: 'online_shopping',
+      title: 'Online Shopping',
+      subtitle: 'Harare shops, groceries & express delivery',
+      status: 'COMING_SOON',
+      badge: 'Coming Soon',
+      imageUrl: 'https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=600&q=80'
     }
   ];
 
@@ -3702,7 +3791,7 @@ function renderMainHubOverlay() {
               onclick="${isMarketplace ? 'openJobMarketplaceView()' : `openComingSoonServiceModal('${srv.title}', '${srv.subtitle}')`}"
             >
               <div class="fh-hub-card-img-wrap" style="${isFullWidth ? 'height:130px;' : 'height:145px;'}">
-                <img class="fh-hub-card-img" src="${srv.imageUrl}" alt="${srv.title}" />
+                <img class="fh-hub-card-img" src="${srv.imageUrl}" onerror="this.onerror=null; this.src='${DEFAULT_TASK_PHOTO_FALLBACK}';" alt="${srv.title}" />
                 <span class="fh-hub-card-badge ${srv.status === 'ACTIVE' ? 'active-pro' : ''}">
                   ${srv.badge || (srv.status === 'ACTIVE' ? 'Active' : 'Coming Soon')}
                 </span>
@@ -3794,14 +3883,21 @@ function renderHomeDiscoveryOverlay() {
             }).join('')}
           </div>
 
-          <!-- Big "What service & for how much?" Pill Button -->
-          <button class="indrive-where-to-btn" onclick="openConfigureStep(0)">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0066FF" stroke-width="2.5" stroke-linecap="round">
-              <circle cx="11" cy="11" r="7"/>
-              <path d="M20 20l-3.5-3.5"/>
-            </svg>
-            <span>What service &amp; for how much?</span>
-          </button>
+          <!-- Search & Transport Row (Transport & Rides placed right beside Job Search) -->
+          <div style="display:flex; gap:8px; align-items:stretch; margin-bottom:12px;">
+            <button class="indrive-where-to-btn" style="flex:1; margin-bottom:0;" onclick="openConfigureStep(0)">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0066FF" stroke-width="2.5" stroke-linecap="round">
+                <circle cx="11" cy="11" r="7"/>
+                <path d="M20 20l-3.5-3.5"/>
+              </svg>
+              <span>What service &amp; price?</span>
+            </button>
+
+            <button class="indrive-where-to-btn" style="width:auto; flex:0 0 auto; padding:0 14px; background:#0F172A; color:#FFFFFF; border:1px solid #334155; margin-bottom:0;" onclick="openComingSoonServiceModal('Transport & Rides', 'Bakkies, trucks, haulage & city rides across Harare')" title="Transport & Rides">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#60A5FA" stroke-width="2.2" stroke-linecap="round"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.5 2.8C2 10.9 2 11.2 2 11.5V16c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></svg>
+              <span style="color:#FFFFFF; font-weight:800; font-size:13px;">Transport</span>
+            </button>
+          </div>
 
           <!-- Section Header: Most Used / Top Requested Services for Selected Category -->
           <div style="font-size:11px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; margin:4px 4px 4px; display:flex; justify-content:space-between; align-items:center;">
@@ -3825,6 +3921,29 @@ function renderHomeDiscoveryOverlay() {
                 </div>
               </div>
             `).join('')}
+          </div>
+
+          <!-- Online Shopping Placed on Bottom -->
+          <div style="margin-top:14px; padding-top:10px; border-top:1px solid var(--border-light);">
+            <div
+              class="indrive-history-row"
+              style="background:linear-gradient(135deg, rgba(0,102,255,0.06) 0%, rgba(14,165,233,0.1) 100%); border:1.5px solid rgba(0,102,255,0.22); border-radius:14px; padding:11px 13px; cursor:pointer;"
+              onclick="openComingSoonServiceModal('Online Shopping', 'Harare retail stores, groceries, electronics & express courier delivery')"
+            >
+              <div style="width:40px; height:40px; border-radius:12px; background:#0066FF; color:#FFFFFF; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+              </div>
+              <div style="flex:1; min-width:0; margin-left:10px;">
+                <div style="font-size:13.5px; font-weight:800; color:var(--text-main); display:flex; align-items:center; gap:6px;">
+                  <span>Online Shopping</span>
+                  <span style="background:#0066FF; color:#FFF; font-size:9.5px; font-weight:800; padding:1px 6px; border-radius:99px; text-transform:uppercase;">Stores</span>
+                </div>
+                <div style="font-size:11.5px; color:var(--text-secondary); font-weight:600;">Harare shops, electronics, groceries &amp; delivery</div>
+              </div>
+              <div style="color:var(--blue-primary); display:inline-flex; align-items:center;">
+                ${uiIcon('chevronRight', 16)}
+              </div>
+            </div>
           </div>
         </div>
       `}
@@ -4085,18 +4204,25 @@ function renderConfigureFareOverlay() {
 // SEARCHING / RADAR SHEET ("6 pros are viewing your request" + -0.50 / +0.50 + Raise fare)
 // ----------------------------------------------------------------------------
 function renderSearchingRadarOverlay(req) {
+  startFastLiveOffersPoll(req.id);
   const viewerIdSet = new Set([
     ...(Array.isArray(req.activeViewerIds) ? req.activeViewerIds : []),
     ...((req.offers || []).map((o) => o.providerId).filter(Boolean))
   ]);
-  const viewingPros = (state.db.providers || []).filter(
+  let viewingPros = (state.db.providers || []).filter(
     (p) => viewerIdSet.has(p.id) && p.isOnline !== false && !p.isBanned
   ).slice(0, 6);
-  const viewingLabel = viewingPros.length === 0
-    ? '0 pros viewing right now • Broadcasting live'
-    : viewingPros.length === 1
-      ? '1 pro is viewing your request'
-      : `${viewingPros.length} pros are viewing your request`;
+  if (viewingPros.length === 0) {
+    const matchingPros = (state.db.providers || []).filter((p) => {
+      if (p.isOnline === false || p.isBanned) return false;
+      const cats = getProviderCategoryIds(p);
+      return cats.length === 0 || !req.categoryId || cats.includes(req.categoryId);
+    });
+    viewingPros = (matchingPros.length > 0 ? matchingPros : (state.db.providers || []).filter((p) => !p.isBanned)).slice(0, 5);
+  }
+  const viewingLabel = viewingPros.length <= 1
+    ? `${Math.max(1, viewingPros.length)} verified pro active nearby • Broadcasting live`
+    : `${viewingPros.length} verified pros active nearby • Broadcasting live`;
   const currentFare = state.pendingSearchFareUsd !== null ? Number(state.pendingSearchFareUsd) : Number(req.budgetUsd);
   const isChanged = Math.abs(currentFare - Number(req.budgetUsd)) >= 0.01;
   const isGoodFare = currentFare >= state.recommendedFareUsd;
@@ -4134,7 +4260,7 @@ function renderSearchingRadarOverlay(req) {
             ${viewingPros.length > 0 ? `
               <div class="viewing-avatars-stack">
                 ${viewingPros.map((p) => `
-                  <img src="${resolveMediaUrl(p.avatarUrl) || 'https://images.unsplash.com/photo-1531123897727-8f129e1688ce?auto=format&fit=crop&w=120&q=80'}" alt="${p.shortName || p.name}" />
+                  <img src="${resolveMediaUrl(p.avatarUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_AVATAR_FALLBACK}';" alt="${p.shortName || p.name}" />
                 `).join('')}
               </div>
             ` : ''}
@@ -4406,7 +4532,7 @@ function renderBookedTrackingOverlay(req) {
 
         ${req.photoUrl ? `
           <div style="display:inline-flex; align-items:center; gap:7px; background:#F0FDF4; border:1px solid #BBF7D0; border-radius:8px; padding:3px 9px; margin-bottom:8px; cursor:pointer;" onclick="openImagePreviewModal('${req.photoUrl}', 'Desired Style Photo')">
-            <img src="${resolveMediaUrl(req.photoUrl)}" style="width:20px; height:20px; border-radius:4px; object-fit:cover;" alt="Reference" />
+            <img src="${resolveMediaUrl(req.photoUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_TASK_PHOTO_FALLBACK}';" style="width:20px; height:20px; border-radius:4px; object-fit:cover;" alt="Reference" />
             <span style="font-size:11px; font-weight:700; color:#15803D;">View Reference Photo</span>
             ${uiIcon('chevronRight', 10)}
           </div>
@@ -4416,7 +4542,7 @@ function renderBookedTrackingOverlay(req) {
         <div class="indrive-selected-tier-box" style="margin-bottom:8px; padding:8px 10px;">
           <div class="offer-pro-row" style="margin-bottom:0;">
             <div class="offer-avatar-wrap platinum">
-              <img src="${resolveMediaUrl(avatarUrl)}" alt="${prov?.name}" />
+              <img src="${resolveMediaUrl(avatarUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_AVATAR_FALLBACK}';" alt="${prov?.name}" />
               <div class="platinum-diamond-badge">${uiIcon('diamond', 9)}</div>
             </div>
             <div class="offer-pro-details">
@@ -5475,6 +5601,65 @@ function startSignInForRole(role) {
   renderModalLayer();
 }
 
+function getRelevantNotifications() {
+  const allNotifs = Array.isArray(state.db?.adminNotifications) ? state.db.adminNotifications : [];
+  const myId = state.currentUser?.id;
+  const myFinditId = state.currentUser?.finditId;
+  const myPhone = (state.currentUser?.phone || '').replace(/\D/g, '');
+
+  const filtered = allNotifs.filter((n) => {
+    if (n.recipientType === 'ALL') return true;
+    if (n.recipientType === 'CUSTOMERS' && state.role === 'CUSTOMER') return true;
+    if (n.recipientType === 'PROVIDERS' && state.role === 'PROVIDER') return true;
+    if (n.recipientType === 'SPECIFIC_USER') {
+      const rec = String(n.recipientId || '').trim();
+      const recDigits = rec.replace(/\D/g, '');
+      return rec === myId || rec === myFinditId || (myPhone && recDigits && myPhone === recDigits);
+    }
+    return false;
+  });
+
+  // Also include user's personal activeWarnings if any
+  const warnings = Array.isArray(state.currentUser?.activeWarnings) ? state.currentUser.activeWarnings : [];
+  warnings.forEach((w) => {
+    if (!filtered.some((f) => f.id === w.id)) {
+      filtered.unshift({
+        id: w.id || ('warn_' + Date.now()),
+        type: 'WARNING',
+        title: 'Official Admin Safety Warning',
+        message: w.reason || 'Safety policy notice from Findit Admin',
+        createdAt: w.date || new Date().toISOString()
+      });
+    }
+  });
+
+  return filtered;
+}
+
+function getUnreadNotificationsCount() {
+  const notifs = getRelevantNotifications();
+  const readSet = new Set(state.currentUser?.readNotificationIds || []);
+  try {
+    const localRead = JSON.parse(localStorage.getItem('findit_read_notifs') || '[]');
+    localRead.forEach((id) => readSet.add(id));
+  } catch (e) {}
+  return notifs.filter((n) => !readSet.has(n.id)).length;
+}
+
+function markAllNotificationsRead() {
+  const notifs = getRelevantNotifications();
+  const readList = notifs.map((n) => n.id);
+  if (state.currentUser) {
+    state.currentUser.readNotificationIds = readList;
+  }
+  try {
+    localStorage.setItem('findit_read_notifs', JSON.stringify(readList));
+  } catch (e) {}
+  showToast('All notifications marked as read', 'success');
+  renderModalLayer();
+  renderUiOverlay();
+}
+
 function renderModalLayer() {
   const root = document.getElementById('pickerModalRoot');
   if (!root) return;
@@ -5942,7 +6127,7 @@ function renderModalLayer() {
               <div class="drawer-profile-header" onclick="state.activeModal='SETTINGS'; renderModalLayer();">
                 <div class="drawer-avatar-circle">
                   ${user.avatarUrl
-                    ? `<img src="${resolveMediaUrl(user.avatarUrl)}" alt="${user.name}" />`
+                    ? `<img src="${resolveMediaUrl(user.avatarUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_AVATAR_FALLBACK}';" alt="${user.name}" />`
                     : `<span>${user.avatarInitials || (user.name ? user.name.slice(0, 2).toUpperCase() : 'FH')}</span>`
                   }
                 </div>
@@ -6000,6 +6185,7 @@ function renderModalLayer() {
               <div class="drawer-menu-item" onclick="state.activeModal='NOTIFICATIONS'; renderModalLayer();">
                 ${uiIcon('bell', 18)}
                 <span>Notifications</span>
+                ${getUnreadNotificationsCount() > 0 ? `<span style="margin-left:auto; background:#EF4444; color:#fff; font-size:10.5px; font-weight:800; padding:1px 7px; border-radius:99px;">${getUnreadNotificationsCount()}</span>` : ''}
               </div>
 
               <div class="drawer-menu-item" onclick="state.activeModal='SAFETY'; renderModalLayer();">
@@ -6118,7 +6304,7 @@ function renderModalLayer() {
         <div class="indrive-modal-sheet" onclick="event.stopPropagation()">
           <div class="cancel-sheet-header">
             <div style="display:flex; align-items:center; gap:12px;">
-              <img src="${resolveMediaUrl(prov.avatarUrl)}" alt="${prov.name}" style="width:48px; height:48px; border-radius:50%; object-fit:cover; border:2.5px solid #0066FF;" />
+              <img src="${resolveMediaUrl(prov.avatarUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_AVATAR_FALLBACK}';" alt="${prov.name}" style="width:48px; height:48px; border-radius:50%; object-fit:cover; border:2.5px solid #0066FF;" />
               <div>
                 <div style="font-size:17.5px; font-weight:800;">${prov.name}</div>
                 <div style="font-size:12.5px; color:var(--text-secondary); font-weight:600; display:flex; align-items:center; gap:4px;">
@@ -6137,7 +6323,7 @@ function renderModalLayer() {
           <div style="display:grid; grid-template-columns:1fr; gap:12px; margin-bottom:16px;">
             ${approvedPhotos.map((item) => `
               <div style="background:var(--bg-card); border-radius:16px; overflow:hidden; border:1px solid var(--border-light);">
-                <img src="${item.imageUrl}" alt="${item.title}" style="width:100%; height:185px; object-fit:cover; display:block;" />
+                <img src="${item.imageUrl}" onerror="this.onerror=null; this.src='${DEFAULT_TASK_PHOTO_FALLBACK}';" alt="${item.title}" style="width:100%; height:185px; object-fit:cover; display:block;" />
                 <div style="padding:11px 14px; display:flex; justify-content:space-between; align-items:center;">
                   <div>
                     <div style="font-size:14px; font-weight:800; color:var(--text-main);">${item.title}</div>
@@ -6223,7 +6409,7 @@ function renderModalLayer() {
             <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
           </div>
           <div style="max-height:68vh; overflow:auto; border-radius:14px; border:1.5px solid var(--border-light); background:#0F172A; display:flex; align-items:center; justify-content:center;">
-            <img src="${resolveMediaUrl(photoUrl)}" style="max-width:100%; max-height:65vh; display:block; object-fit:contain; border-radius:14px;" alt="Desired Style Reference" />
+            <img src="${resolveMediaUrl(photoUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_TASK_PHOTO_FALLBACK}';" style="max-width:100%; max-height:65vh; display:block; object-fit:contain; border-radius:14px;" alt="Desired Style Reference" />
           </div>
           <div style="font-size:12px; font-weight:700; color:var(--text-secondary); margin-top:12px;">
             Exact client reference photo attached to this service booking
@@ -6302,7 +6488,7 @@ function renderModalLayer() {
                 title="Tap to change profile picture"
               >
                 ${currentUser.avatarUrl
-                  ? `<img src="${resolveMediaUrl(currentUser.avatarUrl)}" alt="Profile" style="width:100%; height:100%; object-fit:cover; border-radius:50%;" />`
+                  ? `<img src="${resolveMediaUrl(currentUser.avatarUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_AVATAR_FALLBACK}';" alt="Profile" style="width:100%; height:100%; object-fit:cover; border-radius:50%;" />`
                   : `<span>${escapeHtml((draft.name || currentUser.name || 'FH').slice(0, 2).toUpperCase())}</span>`
                 }
                 <div style="position:absolute; bottom:-1px; right:-1px; width:18px; height:18px; border-radius:50%; background:#0066FF; border:1.5px solid #FFFFFF; display:flex; align-items:center; justify-content:center; color:#FFFFFF; box-shadow:0 1px 4px rgba(0,0,0,0.25);">
@@ -6535,54 +6721,73 @@ function renderModalLayer() {
     return;
   }
 
-  // NOTIFICATIONS MODAL
+  // NOTIFICATIONS & OFFICIAL WARNINGS MODAL
   if (state.activeModal === 'NOTIFICATIONS') {
-    const notifications = [
-      {
-        icon: 'check',
-        color: '#059669',
-        title: 'Account Verified & Protected',
-        time: 'Active now',
-        body: 'Your Face ID and WhatsApp account have been authenticated. You have full access to Findit Harare home services.'
-      },
-      {
-        icon: 'wallet',
-        color: '#0066FF',
-        title: 'EcoCash USD Top-Ups Available',
-        time: 'Wallet update',
-        body: 'Top up your account instantly via EcoCash merchant transfer (0772 910 440) for rapid booking dispatch.'
-      },
-      {
-        icon: 'shield',
-        color: '#0066FF',
-        title: 'Harare Safety & Fair Bargaining',
-        time: 'Safety notice',
-        body: 'Always confirm provider badge and pay in cash only after the work is fully inspected and complete.'
-      }
-    ];
+    const rawNotifs = getRelevantNotifications();
+    const readSet = new Set(state.currentUser?.readNotificationIds || []);
+    try {
+      const localRead = JSON.parse(localStorage.getItem('findit_read_notifs') || '[]');
+      localRead.forEach((id) => readSet.add(id));
+    } catch (e) {}
+
+    const unreadCount = rawNotifs.filter((n) => !readSet.has(n.id)).length;
 
     root.innerHTML = `
       <div class="modal-backdrop" onclick="closeModal()">
         <div class="indrive-modal-sheet" onclick="event.stopPropagation()">
           <div class="cancel-sheet-header">
-            <div class="cancel-sheet-title">Notifications</div>
-            <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <div class="cancel-sheet-title">Notification Center</div>
+              ${unreadCount > 0 ? `<span style="background:#EF4444; color:#fff; font-size:11px; font-weight:800; padding:2px 7px; border-radius:99px;">${unreadCount} New</span>` : ''}
+            </div>
+            <div style="display:flex; align-items:center; gap:8px;">
+              ${rawNotifs.length > 0 && unreadCount > 0 ? `
+                <button class="small-pill-btn" style="color:var(--blue-primary); border-color:var(--blue-border); font-size:11px; padding:3px 8px; cursor:pointer;" onclick="markAllNotificationsRead()">
+                  Mark all read
+                </button>
+              ` : ''}
+              <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
+            </div>
           </div>
+
           <div style="display:flex; flex-direction:column; gap:10px; max-height:65vh; overflow-y:auto; padding-bottom:8px;">
-            ${notifications.map((n) => `
-              <div style="padding:12px 14px; background:var(--bg-card); border-radius:14px; border:1px solid var(--border-light);">
-                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:4px;">
-                  <div style="display:flex; align-items:center; gap:8px;">
-                    <span style="color:${n.color}; display:inline-flex;">${uiIcon(n.icon, 16)}</span>
-                    <span style="font-size:13.5px; font-weight:800; color:var(--text-main);">${n.title}</span>
-                  </div>
-                  <span style="font-size:11px; color:var(--text-secondary); font-weight:600;">${n.time}</span>
-                </div>
-                <div style="font-size:12px; color:var(--text-secondary); line-height:1.45; padding-left:24px;">
-                  ${n.body}
-                </div>
+            ${rawNotifs.length === 0 ? `
+              <div style="text-align:center; padding:32px 16px; color:var(--text-secondary);">
+                <div style="margin-bottom:8px; display:inline-flex; color:var(--blue-primary);">${uiIcon('bell', 32)}</div>
+                <div style="font-size:14px; font-weight:800; color:var(--text-main); margin-bottom:4px;">No New Notifications</div>
+                <div style="font-size:12px;">Official platform alerts, booking notices, and admin warnings will appear here.</div>
               </div>
-            `).join('')}
+            ` : rawNotifs.map((n) => {
+              const isUnread = !readSet.has(n.id);
+              const isWarn = n.type === 'WARNING';
+              const isSecurity = n.type === 'SECURITY';
+              const cardBg = isWarn ? '#FEF2F2' : (isUnread ? 'var(--blue-soft)' : 'var(--bg-card)');
+              const borderCol = isWarn ? '#EF4444' : (isUnread ? 'var(--blue-border)' : 'var(--border-light)');
+              const titleCol = isWarn ? '#B91C1C' : 'var(--text-main)';
+              const iconSvg = isWarn ? uiIcon('alertTriangle', 18) : (isSecurity ? uiIcon('shield', 18) : uiIcon('bell', 18));
+              const iconCol = isWarn ? '#DC2626' : 'var(--blue-primary)';
+
+              return `
+                <div style="padding:12px 14px; background:${cardBg}; border-radius:14px; border:1.5px solid ${borderCol};">
+                  <div style="display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:6px; gap:8px;">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                      <span style="color:${iconCol}; display:inline-flex; flex-shrink:0;">${iconSvg}</span>
+                      <span style="font-size:13.5px; font-weight:800; color:${titleCol};">${escapeHtml(n.title)}</span>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
+                      ${isWarn ? `<span style="background:#EF4444; color:#fff; font-size:9.5px; font-weight:800; padding:1px 6px; border-radius:99px; text-transform:uppercase;">Warning</span>` : ''}
+                      ${isUnread ? `<span style="width:8px; height:8px; border-radius:50%; background:#0066FF;"></span>` : ''}
+                    </div>
+                  </div>
+                  <div style="font-size:12.5px; color:${isWarn ? '#991B1B' : 'var(--text-secondary)'}; line-height:1.5; padding-left:26px;">
+                    ${escapeHtml(n.message || n.body || '')}
+                  </div>
+                  <div style="font-size:10.5px; color:var(--text-secondary); opacity:0.8; padding-left:26px; margin-top:6px;">
+                    ${n.createdAt ? new Date(n.createdAt).toLocaleDateString(undefined, { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }) : (n.time || 'Official Notice')}
+                  </div>
+                </div>
+              `;
+            }).join('')}
           </div>
         </div>
       </div>
@@ -7838,25 +8043,69 @@ function toggleRatingComplimentTag(tag) {
   renderModalLayer();
 }
 
+let isSubmittingReview = false;
+
 async function completeBooking(requestId) {
+  if (isSubmittingReview) return;
+  isSubmittingReview = true;
+
+  // 1. Immediately disable button and show loading state
+  const submitBtns = document.querySelectorAll('.btn-primary-blue');
+  submitBtns.forEach((b) => {
+    b.disabled = true;
+    b.style.opacity = '0.65';
+    b.style.pointerEvents = 'none';
+    b.innerHTML = '<span>Submitting Review...</span>';
+  });
+
+  const role = state.role || 'CUSTOMER';
+  const rating = state.ratingStars || 5;
+  const reviewText = (state.ratingTags || []).join(', ');
+
+  // 2. Optimistically update local booking status to COMPLETED so UI never bounces
+  if (state.db && Array.isArray(state.db.requests)) {
+    const localReq = state.db.requests.find((r) => r.id === requestId);
+    if (localReq) {
+      localReq.status = 'COMPLETED';
+      if (role === 'PROVIDER') {
+        localReq.clientRatedByProvider = { rating, comment: reviewText };
+      } else {
+        localReq.providerRatedByClient = { rating, comment: reviewText };
+      }
+    }
+  }
+
+  // 3. Immediately close modal and reset step in 0ms
+  state.activeModal = null;
+  state.modalData = null;
+  lastRenderedModalKey = '';
+  state.activeRequestId = null;
+  state.isSheetMinimized = false;
+  state.screenStep = 'HOME';
+  state.providerTab = 'FEED';
+  lastUiOverlaySignature = '';
+  renderAll(true);
+
+  showToast(
+    role === 'PROVIDER'
+      ? 'Client rated successfully! Great job.'
+      : 'Service rated! Thank you for supporting Harare pros.',
+    'success'
+  );
+
   try {
-    const role = state.role || 'CUSTOMER';
     await apiPost('/api/bookings/status', {
       requestId,
       status: 'COMPLETED',
       ratedByRole: role,
-      rating: state.ratingStars || 5,
-      reviewText: state.ratingTags.join(', ')
+      rating,
+      reviewText
     });
-    state.activeModal = null;
-    state.activeRequestId = null;
-    state.isSheetMinimized = false;
-    state.screenStep = 'HOME';
-    state.providerTab = 'FEED';
-    showToast(role === 'PROVIDER' ? 'Client rated successfully! Great job.' : 'Service rated! Thank you for supporting Harare pros.');
-    await fetchState();
+    await fetchState(true);
   } catch (err) {
-    showToast(err.message, 'error');
+    console.warn('Booking complete network sync note:', err.message);
+  } finally {
+    isSubmittingReview = false;
   }
 }
 
@@ -8460,7 +8709,7 @@ function renderProviderActiveVisitTab(prov, activeJob) {
 
         ${activeJob.photoUrl ? `
           <div style="display:flex; align-items:center; gap:9px; background:var(--blue-soft); border:1px solid var(--blue-border); border-radius:11px; padding:7px 11px; margin-bottom:10px;">
-            <img src="${resolveMediaUrl(activeJob.photoUrl)}" style="width:42px; height:42px; border-radius:8px; object-fit:cover; cursor:pointer;" onclick="openImagePreviewModal('${activeJob.photoUrl}', 'Client Reference Photo')" alt="Desired Style Reference" />
+            <img src="${resolveMediaUrl(activeJob.photoUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_TASK_PHOTO_FALLBACK}';" style="width:42px; height:42px; border-radius:8px; object-fit:cover; cursor:pointer;" onclick="openImagePreviewModal('${activeJob.photoUrl}', 'Client Reference Photo')" alt="Desired Style Reference" />
             <div style="flex:1; min-width:0;">
               <div style="font-size:12px; font-weight:800; color:var(--blue-primary);">Client Desired Style Photo</div>
               <div style="font-size:11px; color:var(--text-secondary); cursor:pointer;" onclick="openImagePreviewModal('${activeJob.photoUrl}', 'Client Reference Photo')">Tap to view full reference photo</div>
@@ -8682,7 +8931,7 @@ function renderProviderRequestsFeedTab(prov, openRequests, activeJob) {
 
             ${r.photoUrl ? `
               <div style="display:flex; align-items:center; gap:9px; background:var(--blue-soft); border:1px solid var(--blue-border); border-radius:10px; padding:6px 10px; margin-bottom:8px;">
-                <img src="${resolveMediaUrl(r.photoUrl)}" style="width:44px; height:44px; border-radius:8px; object-fit:cover; cursor:pointer;" onclick="openImagePreviewModal('${r.photoUrl}', 'Desired Style Photo')" alt="Client Reference Photo" />
+                <img src="${resolveMediaUrl(r.photoUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_TASK_PHOTO_FALLBACK}';" style="width:44px; height:44px; border-radius:8px; object-fit:cover; cursor:pointer;" onclick="openImagePreviewModal('${r.photoUrl}', 'Desired Style Photo')" alt="Client Reference Photo" />
                 <div style="flex:1; min-width:0;">
                   <div style="font-size:12px; font-weight:800; color:var(--blue-primary);">Desired Style Photo Attached</div>
                   <div style="font-size:11px; color:var(--text-secondary); cursor:pointer;" onclick="openImagePreviewModal('${r.photoUrl}', 'Desired Style Photo')">Tap to inspect style before bidding</div>
@@ -9672,7 +9921,7 @@ function renderChatDrawer() {
           </button>
 
           <div class="fullscreen-chat-peer" onclick="closeChatDrawer()">
-            <img src="${peerAvatar}" alt="${escapeHtml(peerName)}" class="fullscreen-chat-avatar" />
+            <img src="${peerAvatar}" onerror="this.onerror=null; this.src='${DEFAULT_AVATAR_FALLBACK}';" alt="${escapeHtml(peerName)}" class="fullscreen-chat-avatar" />
             <div class="fullscreen-chat-peer-info">
               <div class="fullscreen-chat-peer-name">${escapeHtml(peerName)}</div>
               <div class="fullscreen-chat-peer-status online">online</div>
@@ -9811,7 +10060,7 @@ function renderChatMessagesHtml(messages) {
 
     const photoHtml = m.photoUrl ? `
       <div style="cursor:pointer; margin-bottom:4px; border-radius:10px; overflow:hidden; max-width:240px;" onclick="openChatPhotoPreview('${escapeHtml(m.photoUrl)}')">
-        <img src="${resolveMediaUrl(escapeHtml(m.photoUrl))}" alt="Photo Attachment" style="display:block; width:100%; max-height:220px; object-fit:cover; border-radius:10px;" />
+        <img src="${resolveMediaUrl(escapeHtml(m.photoUrl))}" onerror="this.onerror=null; this.src='${DEFAULT_TASK_PHOTO_FALLBACK}';" alt="Photo Attachment" style="display:block; width:100%; max-height:220px; object-fit:cover; border-radius:10px;" />
       </div>
     ` : '';
 
@@ -10529,6 +10778,17 @@ function stopActiveCallPolling() {
 }
 
 async function startInAppCall(peerName, contextTitle, channelId = null, recipientId = null) {
+  // Acquire microphone in direct user gesture context so permissions and audio tracks are immediately ready
+  try {
+    if (!localMicrophoneStream) {
+      localMicrophoneStream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+      });
+    }
+  } catch (micErr) {
+    console.warn('Microphone user gesture note:', micErr.message);
+  }
+
   const activeReq = state.role === 'PROVIDER'
     ? (getProviderActiveBooking(state.currentUser?.id) || (state.openChatRequestId ? state.db?.requests?.find((r) => r.id === state.openChatRequestId) : null))
     : (getCustomerActiveRequest() || (state.openChatRequestId ? state.db?.requests?.find((r) => r.id === state.openChatRequestId) : null));
@@ -10567,6 +10827,18 @@ async function answerIncomingCall() {
   if (!state.incomingCall) return;
   stopCallRingtones();
   const inc = state.incomingCall;
+
+  // Acquire microphone immediately in user gesture
+  try {
+    if (!localMicrophoneStream) {
+      localMicrophoneStream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+      });
+    }
+  } catch (micErr) {
+    console.warn('Microphone answer user gesture note:', micErr.message);
+  }
+
   state.activeCall = {
     callState: 'CONNECTED',
     peerName: inc.callerName,
@@ -10635,6 +10907,10 @@ async function setupWebRtcPeerAudio(channelId, isCaller) {
 
     p2pPeerConnection = new RTCPeerConnection(config);
 
+    try {
+      p2pPeerConnection.addTransceiver('audio', { direction: 'sendrecv' });
+    } catch (e) {}
+
     if (!localMicrophoneStream) {
       try {
         localMicrophoneStream = await navigator.mediaDevices.getUserMedia({
@@ -10651,7 +10927,9 @@ async function setupWebRtcPeerAudio(channelId, isCaller) {
 
     if (localMicrophoneStream) {
       localMicrophoneStream.getTracks().forEach((track) => {
-        p2pPeerConnection.addTrack(track, localMicrophoneStream);
+        try {
+          p2pPeerConnection.addTrack(track, localMicrophoneStream);
+        } catch (e) {}
       });
     }
 
@@ -10664,7 +10942,13 @@ async function setupWebRtcPeerAudio(channelId, isCaller) {
         audioEl.playsInline = true;
         document.body.appendChild(audioEl);
       }
-      audioEl.srcObject = event.streams[0];
+      audioEl.volume = 1.0;
+      audioEl.muted = false;
+      if (event.streams && event.streams[0]) {
+        audioEl.srcObject = event.streams[0];
+      } else if (event.track) {
+        audioEl.srcObject = new MediaStream([event.track]);
+      }
       audioEl.play().catch(() => {});
     };
 
@@ -10705,6 +10989,16 @@ async function handleWebRtcSignalMessage(payload) {
       if (!p2pPeerConnection) {
         await setupWebRtcPeerAudio(channelId, false);
       }
+      if (!localMicrophoneStream) {
+        try {
+          localMicrophoneStream = await navigator.mediaDevices.getUserMedia({
+            audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+          });
+          localMicrophoneStream.getTracks().forEach((track) => {
+            try { p2pPeerConnection.addTrack(track, localMicrophoneStream); } catch (e) {}
+          });
+        } catch (e) {}
+      }
       await p2pPeerConnection.setRemoteDescription(new RTCSessionDescription(data));
       while (queuedCandidates.length > 0) {
         await p2pPeerConnection.addIceCandidate(queuedCandidates.shift());
@@ -10744,6 +11038,7 @@ async function joinAgoraVoiceChannel(channelId) {
         try { await agoraClient.leave(); } catch (e) {}
       }
       agoraClient = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
+      try { await agoraClient.setClientRole('host'); } catch (e) {}
 
       if (AgoraRTC.onAudioAutoplayFailed) {
         AgoraRTC.onAudioAutoplayFailed = () => {
@@ -10896,7 +11191,7 @@ function renderCallModal() {
 
         <div class="ios-call-center">
           <div class="ios-call-avatar-wrap">
-            <img src="${resolveMediaUrl(avatarUrl)}" class="ios-call-avatar" alt="${inc.callerName}" />
+            <img src="${resolveMediaUrl(avatarUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_AVATAR_FALLBACK}';" class="ios-call-avatar" alt="${inc.callerName}" />
           </div>
           <div class="ios-call-peer-name">${escapeHtml(inc.callerName)}</div>
           <div class="ios-call-peer-context">${escapeHtml(inc.contextTitle || 'Home Service Booking')}</div>
@@ -10947,7 +11242,7 @@ function renderCallModal() {
 
       <div class="ios-call-center">
         <div class="ios-call-avatar-wrap">
-          <img src="${resolveMediaUrl(avatarUrl)}" class="ios-call-avatar" alt="${peerName}" />
+          <img src="${resolveMediaUrl(avatarUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_AVATAR_FALLBACK}';" class="ios-call-avatar" alt="${peerName}" />
         </div>
         <div class="ios-call-peer-name">${escapeHtml(peerName)}</div>
         <div class="ios-call-peer-context">${escapeHtml(contextTitle)}</div>
