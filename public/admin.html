@@ -448,8 +448,11 @@
           renderAdmin();
         }
       } catch (err) {
-        console.error('Failed to load admin state:', err);
-        showAdminLockScreen();
+        console.warn('Admin background sync notice:', err);
+        // Only show lock screen if explicitly 401 Unauthorized, never on transient network hitch
+        if (err && (err.status === 401 || String(err).includes('401'))) {
+          showAdminLockScreen();
+        }
       }
     }
 
@@ -785,7 +788,40 @@
 
     async function adminTopUpProvider(providerId, amountUsd) {
       await api('/api/wallet/topup', 'POST', { providerId, amountUsd, method: 'Admin Cash USD Voucher' });
-      await loadAdminData();
+      await loadAdminData(true);
+    }
+
+    async function adminPromptWalletAdjust(providerId, providerName, action = 'DEDUCT', currentBalance = 0) {
+      const isDeduct = action === 'DEDUCT';
+      const promptMsg = isDeduct
+        ? `Enter USD amount to DEDUCT from ${providerName}'s wallet (Current balance: $${Number(currentBalance).toFixed(2)} USD):`
+        : `Enter USD amount to CREDIT to ${providerName}'s wallet (Current balance: $${Number(currentBalance).toFixed(2)} USD):`;
+      
+      const rawAmount = prompt(promptMsg, isDeduct ? '10' : '10');
+      if (rawAmount === null) return;
+      const amountUsd = parseFloat(rawAmount);
+      if (isNaN(amountUsd) || amountUsd <= 0) {
+        alert('Please enter a valid USD amount greater than 0.');
+        return;
+      }
+
+      const defaultReason = isDeduct
+        ? 'Admin adjustment: corrected excess credit'
+        : 'Admin manual wallet credit';
+      const reason = prompt(`Reason / Note for this ${action} operation:`, defaultReason) || defaultReason;
+
+      try {
+        const res = await api('/api/admin/wallet/adjust', 'POST', {
+          providerId,
+          amountUsd,
+          action,
+          reason
+        });
+        showAdminToast(res?.message || `Successfully adjusted wallet! New balance: $${res?.newBalanceUsd} USD`, 'success');
+        await loadAdminData(true);
+      } catch (err) {
+        showAdminToast(err.message || 'Failed to adjust wallet', 'error');
+      }
     }
 
     async function toggleCategoryStatus(categoryId) {
@@ -1699,7 +1735,11 @@
                         </td>
                         <td>
                           ${acc.role === 'PROVIDER' ? `
-                            <div style="font-weight:800; color:var(--blue-primary); font-size:13px;">$${Number(acc.walletBalanceUsd || 0).toFixed(2)} USD</div>
+                            <div style="font-weight:800; color:var(--blue-primary); font-size:13.5px;">$${Number(acc.walletBalanceUsd || 0).toFixed(2)} USD</div>
+                            <div style="display:flex; gap:4px; margin-top:4px;">
+                              <button type="button" class="btn-blue" style="padding:2px 6px; font-size:10px; font-weight:800; border-radius:5px;" onclick="adminPromptWalletAdjust('${acc.id}', '${(acc.name || '').replace(/'/g, "\\'")}', 'CREDIT', ${Number(acc.walletBalanceUsd || 0)})" title="Credit custom USD">+ Add</button>
+                              <button type="button" class="btn-outline" style="padding:2px 6px; font-size:10px; font-weight:800; border-radius:5px; color:#DC2626; border-color:#FCA5A5; background:#FEF2F2;" onclick="adminPromptWalletAdjust('${acc.id}', '${(acc.name || '').replace(/'/g, "\\'")}', 'DEDUCT', ${Number(acc.walletBalanceUsd || 0)})" title="Deduct custom USD">- Deduct</button>
+                            </div>
                           ` : `
                             <div style="font-size:11.5px; font-weight:700; color:#475569;">Client Account</div>
                           `}
@@ -2177,7 +2217,17 @@
                         <div style="font-weight:700;">📍 ${p.suburbName || 'Harare'}</div>
                         <div style="font-size:11.5px; color:var(--muted); font-weight:600;">⭐ ${p.rating} (${p.completedBookings} jobs)</div>
                       </td>
-                      <td style="font-weight:800; color:var(--blue-primary); font-size:15px;">$${Number(p.walletBalanceUsd || 0).toFixed(2)} USD</td>
+                      <td style="font-weight:800; color:var(--blue-primary); font-size:14.5px; min-width:130px;">
+                        <div>$${Number(p.walletBalanceUsd || 0).toFixed(2)} USD</div>
+                        <div style="display:flex; gap:4px; margin-top:5px;">
+                          <button type="button" class="btn-blue" style="padding:2px 7px; font-size:10px; border-radius:6px; font-weight:800;" onclick="adminPromptWalletAdjust('${p.id}', '${(p.name || '').replace(/'/g, "\\'")}', 'CREDIT', ${Number(p.walletBalanceUsd || 0)})" title="Credit custom USD to this wallet">
+                            + Credit
+                          </button>
+                          <button type="button" class="btn-outline" style="padding:2px 7px; font-size:10px; border-radius:6px; font-weight:800; color:#DC2626; border-color:#FCA5A5; background:#FEF2F2;" onclick="adminPromptWalletAdjust('${p.id}', '${(p.name || '').replace(/'/g, "\\'")}', 'DEDUCT', ${Number(p.walletBalanceUsd || 0)})" title="Deduct custom USD from this wallet">
+                            - Deduct
+                          </button>
+                        </div>
+                      </td>
                       <td>
                         <div style="display:flex; gap:6px; flex-wrap:wrap;">
                           <button class="btn-outline" style="border-color:${p.badges?.phoneVerified ? '#0066FF' : ''}; color:${p.badges?.phoneVerified ? '#0066FF' : ''};" onclick="toggleProviderBadge('${p.id}', 'phoneVerified')">
@@ -2196,8 +2246,11 @@
                       </td>
                       <td>
                         <div style="display:flex; gap:6px; flex-wrap:wrap;">
-                          <button class="btn-blue" style="padding:6px 10px; font-size:11.5px;" onclick="adminTopUpProvider('${p.id}', 10)">
-                            +$10 USD
+                          <button type="button" class="btn-blue" style="padding:5px 9px; font-size:11px; font-weight:800;" onclick="adminPromptWalletAdjust('${p.id}', '${(p.name || '').replace(/'/g, "\\'")}', 'CREDIT', ${Number(p.walletBalanceUsd || 0)})" title="Credit custom USD">
+                            + Add USD
+                          </button>
+                          <button type="button" class="btn-outline" style="padding:5px 9px; font-size:11px; font-weight:800; color:#DC2626; border-color:#FCA5A5; background:#FEF2F2;" onclick="adminPromptWalletAdjust('${p.id}', '${(p.name || '').replace(/'/g, "\\'")}', 'DEDUCT', ${Number(p.walletBalanceUsd || 0)})" title="Deduct custom USD">
+                            - Deduct USD
                           </button>
                           ${p.isBanned ? `
                             <button class="btn-green" style="padding:6px 10px; font-size:11.5px;" onclick="disciplineAccount('PROVIDER', '${p.id}', 'UNBAN')">

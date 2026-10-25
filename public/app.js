@@ -327,63 +327,65 @@ function getCategoryVectorSvg(catId, isSelected = false) {
 
   const icons = {
     // 1. Home Repairs & Construction
-    repairs_construction: `<svg width="24" height="22" viewBox="0 0 32 28" fill="none">
-      <path d="M7 21L19 9" stroke="${strokeMain}" stroke-width="2.5" stroke-linecap="round"/>
-      <path d="M15 5L23 13M9 8L13 12" stroke="${strokeSub}" stroke-width="2.3" stroke-linecap="round"/>
-      <rect x="18" y="4" width="7" height="4" rx="1.5" stroke="${strokeMain}" stroke-width="2"/>
+    repairs_construction: `<svg width="24" height="24" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" style="overflow:visible;">
+      <path d="M8 24L18 14" stroke="${strokeMain}" stroke-width="2.4" stroke-linecap="round"/>
+      <path d="M14 10L20 16M10 14L13 17" stroke="${strokeSub}" stroke-width="2.2" stroke-linecap="round"/>
+      <rect x="17" y="6" width="8" height="5" rx="1.5" transform="rotate(45 17 6)" stroke="${strokeMain}" stroke-width="2"/>
     </svg>`,
 
     // 2. Beauty & Personal Care
-    beauty_care: `<svg width="24" height="22" viewBox="0 0 32 28" fill="none">
-      <circle cx="9" cy="20" r="3.5" stroke="${strokeMain}" stroke-width="2.2"/>
-      <circle cx="21" cy="20" r="3.5" stroke="${strokeMain}" stroke-width="2.2"/>
-      <path d="M11.5 17.5L22 4M18.5 17.5L8 4" stroke="${strokeSub}" stroke-width="2.3" stroke-linecap="round"/>
-      <path d="M25 6L26 8L28 9L26 10L25 12L24 10L22 9L24 8Z" fill="${strokeMain}"/>
+    beauty_care: `<svg width="24" height="24" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" style="overflow:visible;">
+      <circle cx="10" cy="22" r="3.2" stroke="${strokeMain}" stroke-width="2.2"/>
+      <circle cx="22" cy="22" r="3.2" stroke="${strokeMain}" stroke-width="2.2"/>
+      <path d="M12.5 19.5L21.5 6M19.5 19.5L10.5 6" stroke="${strokeSub}" stroke-width="2.2" stroke-linecap="round"/>
+      <path d="M26 6L27 8L29 9L27 10L26 12L25 10L23 9L25 8Z" fill="${strokeMain}"/>
     </svg>`,
 
     // 3. Cleaning & Domestic Services
-    cleaning_domestic: `<svg width="24" height="22" viewBox="0 0 32 28" fill="none">
-      <path d="M21 4L14 14" stroke="${strokeSub}" stroke-width="2.3" stroke-linecap="round"/>
-      <path d="M9 14H19L21 22H7L9 14Z" stroke="${strokeMain}" stroke-width="2.1" stroke-linejoin="round"/>
-      <path d="M24 7L25 9L27 10L25 11L24 13L23 11L21 10L23 9Z" fill="${strokeMain}"/>
+    cleaning_domestic: `<svg width="24" height="24" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" style="overflow:visible;">
+      <path d="M14 7H19L20 11H13L14 7Z" stroke="${strokeSub}" stroke-width="2" stroke-linejoin="round"/>
+      <path d="M11 15H21L23 25H9L11 15Z" stroke="${strokeMain}" stroke-width="2.2" stroke-linejoin="round"/>
+      <path d="M12 9L8 11" stroke="${strokeSub}" stroke-width="2.2" stroke-linecap="round"/>
+      <circle cx="26" cy="10" r="1.5" fill="${strokeMain}"/>
+      <circle cx="7" cy="18" r="1.2" fill="${strokeMain}"/>
     </svg>`,
 
     // 4. Automotive Services
-    automotive: `<svg width="24" height="22" viewBox="0 0 32 28" fill="none">
-      <path d="M6 17L8 10C8.5 8.5 10 7.5 11.5 7.5H20.5C22 7.5 23.5 8.5 24 10L26 17" stroke="${strokeSub}" stroke-width="2.2" stroke-linecap="round"/>
+    automotive: `<svg width="24" height="24" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" style="overflow:visible;">
+      <path d="M7 17L9 11C9.5 9.5 11 8.5 12.5 8.5H19.5C21 8.5 22.5 9.5 23 11L25 17" stroke="${strokeSub}" stroke-width="2.2" stroke-linecap="round"/>
       <rect x="5" y="15" width="22" height="7" rx="3" stroke="${strokeMain}" stroke-width="2.2"/>
       <circle cx="10" cy="22" r="2.5" fill="${strokeMain}"/>
       <circle cx="22" cy="22" r="2.5" fill="${strokeMain}"/>
     </svg>`,
 
     // 5. Solar, Electrical Power & Water
-    solar_power_water: `<svg width="24" height="22" viewBox="0 0 32 28" fill="none">
-      <path d="M17 4L9 15H16L14 24L23 13H16L17 4Z" stroke="${strokeMain}" stroke-width="2.2" stroke-linejoin="round"/>
-      <circle cx="23" cy="7" r="3" stroke="${strokeSub}" stroke-width="1.8"/>
+    solar_power_water: `<svg width="24" height="24" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" style="overflow:visible;">
+      <path d="M17 5L9 16H16L14 26L24 14H16L17 5Z" stroke="${strokeMain}" stroke-width="2.2" stroke-linejoin="round"/>
+      <circle cx="23" cy="7" r="2.5" stroke="${strokeSub}" stroke-width="1.8"/>
     </svg>`,
 
     // 6. Gardening & Outdoor Work
-    gardening_outdoor: `<svg width="24" height="22" viewBox="0 0 32 28" fill="none">
-      <path d="M7 23C7 23 9 12 19 8C19 8 23 18 13 22C10 23.2 8 23 7 23Z" stroke="${strokeMain}" stroke-width="2.2" stroke-linejoin="round"/>
-      <path d="M8 22L16 14" stroke="${strokeSub}" stroke-width="2" stroke-linecap="round"/>
-      <circle cx="22" cy="18" r="2" fill="${strokeMain}"/>
+    gardening_outdoor: `<svg width="24" height="24" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" style="overflow:visible;">
+      <path d="M8 25C8 25 10 14 20 9C20 9 24 19 14 23C11 24.2 9 25 8 25Z" stroke="${strokeMain}" stroke-width="2.2" stroke-linejoin="round"/>
+      <path d="M9 24L17 15" stroke="${strokeSub}" stroke-width="2" stroke-linecap="round"/>
+      <circle cx="23" cy="18" r="2" fill="${strokeMain}"/>
     </svg>`,
 
     // 7. General Labour & Other Jobs
-    general_labour: `<svg width="24" height="22" viewBox="0 0 32 28" fill="none">
-      <path d="M7 10L16 5L25 10L16 15L7 10Z" stroke="${strokeMain}" stroke-width="2.2" stroke-linejoin="round"/>
-      <path d="M7 10V18L16 23V15" stroke="${strokeSub}" stroke-width="2.1" stroke-linejoin="round"/>
-      <path d="M25 10V18L16 23" stroke="${strokeMain}" stroke-width="2.1" stroke-linejoin="round"/>
+    general_labour: `<svg width="24" height="24" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" style="overflow:visible;">
+      <path d="M7 11L16 6L25 11L16 16L7 11Z" stroke="${strokeMain}" stroke-width="2.2" stroke-linejoin="round"/>
+      <path d="M7 11V20L16 25V16" stroke="${strokeSub}" stroke-width="2.1" stroke-linejoin="round"/>
+      <path d="M25 11V20L16 25" stroke="${strokeMain}" stroke-width="2.1" stroke-linejoin="round"/>
     </svg>`,
 
     // Backwards-compatible aliases
-    braiding: `<svg width="24" height="22" viewBox="0 0 32 28" fill="none"><path d="M8 5C8 10 12 12 12 17C12 21 9 23 9 25" stroke="${strokeMain}" stroke-width="2.4" stroke-linecap="round"/><path d="M13 5C13 10 9 12 9 17C9 21 12 23 12 25" stroke="${strokeSub}" stroke-width="2.2" stroke-linecap="round"/><rect x="18" y="5" width="9" height="18" rx="2" stroke="${strokeMain}" stroke-width="2.1"/><path d="M18 9H23M18 13H23M18 17H23M18 21H23" stroke="${strokeSub}" stroke-width="1.8" stroke-linecap="round"/></svg>`,
-    barber: `<svg width="24" height="22" viewBox="0 0 32 28" fill="none"><circle cx="9" cy="21" r="3.5" stroke="${strokeMain}" stroke-width="2.2"/><circle cx="21" cy="21" r="3.5" stroke="${strokeMain}" stroke-width="2.2"/><path d="M11.5 18.5L22 5M18.5 18.5L8 5" stroke="${strokeSub}" stroke-width="2.3" stroke-linecap="round"/><circle cx="15" cy="13" r="1.5" fill="${strokeMain}"/></svg>`,
-    nails: `<svg width="24" height="22" viewBox="0 0 32 28" fill="none"><rect x="8" y="12" width="12" height="12" rx="3" stroke="${strokeMain}" stroke-width="2.2"/><path d="M11 12V7H17V12" stroke="${strokeSub}" stroke-width="2.1" stroke-linejoin="round"/><path d="M14 4V7" stroke="${strokeMain}" stroke-width="2.4" stroke-linecap="round"/><path d="M24 6L25 9L28 10L25 11L24 14L23 11L20 10L23 9L24 6Z" fill="${strokeMain}"/></svg>`,
-    makeup: `<svg width="24" height="22" viewBox="0 0 32 28" fill="none"><rect x="7" y="14" width="8" height="10" rx="1.5" stroke="${strokeSub}" stroke-width="2.1"/><path d="M8.5 14V8.5C8.5 7 13.5 5.5 13.5 8.5V14" fill="${strokeMain}" stroke="${strokeMain}" stroke-width="1.5"/><path d="M21 15V24" stroke="${strokeSub}" stroke-width="2.4" stroke-linecap="round"/><path d="M17.5 9C17.5 6.5 24.5 6.5 24.5 9L23 15H19L17.5 9Z" stroke="${strokeMain}" stroke-width="2.1" stroke-linejoin="round"/></svg>`,
-    cleaning: `<svg width="24" height="22" viewBox="0 0 32 28" fill="none"><path d="M21 5L14 15" stroke="${strokeSub}" stroke-width="2.3" stroke-linecap="round"/><path d="M9 15H19L21 23H7L9 15Z" stroke="${strokeMain}" stroke-width="2.1" stroke-linejoin="round"/><circle cx="24" cy="11" r="1.5" fill="${strokeMain}"/></svg>`,
-    handyman: `<svg width="24" height="22" viewBox="0 0 32 28" fill="none"><path d="M9 22L21 10" stroke="${strokeMain}" stroke-width="2.4" stroke-linecap="round"/><path d="M18 7L24 13M10 9L14 13" stroke="${strokeSub}" stroke-width="2.3" stroke-linecap="round"/></svg>`,
-    plumbing: `<svg width="24" height="22" viewBox="0 0 32 28" fill="none"><path d="M17 5L10 15H16L14 23L22 13H16L17 5Z" stroke="${strokeMain}" stroke-width="2.1" stroke-linejoin="round"/></svg>`
+    braiding: `<svg width="24" height="24" viewBox="0 0 32 32" fill="none"><path d="M9 6C9 11 13 13 13 18C13 22 10 24 10 26" stroke="${strokeMain}" stroke-width="2.2" stroke-linecap="round"/><path d="M14 6C14 11 10 13 10 18C10 22 13 24 13 26" stroke="${strokeSub}" stroke-width="2" stroke-linecap="round"/><rect x="18" y="7" width="8" height="17" rx="2" stroke="${strokeMain}" stroke-width="2"/></svg>`,
+    barber: `<svg width="24" height="24" viewBox="0 0 32 32" fill="none"><circle cx="10" cy="22" r="3.2" stroke="${strokeMain}" stroke-width="2.2"/><circle cx="22" cy="22" r="3.2" stroke="${strokeMain}" stroke-width="2.2"/><path d="M12.5 19.5L21.5 6M19.5 19.5L10.5 6" stroke="${strokeSub}" stroke-width="2.2" stroke-linecap="round"/></svg>`,
+    nails: `<svg width="24" height="24" viewBox="0 0 32 32" fill="none"><rect x="9" y="13" width="12" height="12" rx="3" stroke="${strokeMain}" stroke-width="2.2"/><path d="M12 13V8H18V13" stroke="${strokeSub}" stroke-width="2" stroke-linejoin="round"/><path d="M15 5V8" stroke="${strokeMain}" stroke-width="2.2" stroke-linecap="round"/></svg>`,
+    makeup: `<svg width="24" height="24" viewBox="0 0 32 32" fill="none"><rect x="8" y="14" width="8" height="11" rx="1.5" stroke="${strokeSub}" stroke-width="2"/><path d="M9.5 14V9C9.5 7.5 14.5 6 14.5 9V14" fill="${strokeMain}" stroke="${strokeMain}" stroke-width="1.5"/><path d="M21 16V25" stroke="${strokeSub}" stroke-width="2.2" stroke-linecap="round"/></svg>`,
+    cleaning: `<svg width="24" height="24" viewBox="0 0 32 32" fill="none"><path d="M21 6L14 16" stroke="${strokeSub}" stroke-width="2.2" stroke-linecap="round"/><path d="M9 16H19L21 24H7L9 16Z" stroke="${strokeMain}" stroke-width="2" stroke-linejoin="round"/></svg>`,
+    handyman: `<svg width="24" height="24" viewBox="0 0 32 32" fill="none"><path d="M8 24L18 14" stroke="${strokeMain}" stroke-width="2.4" stroke-linecap="round"/><path d="M17 9L23 15M10 11L14 15" stroke="${strokeSub}" stroke-width="2.2" stroke-linecap="round"/></svg>`,
+    plumbing: `<svg width="24" height="24" viewBox="0 0 32 32" fill="none"><path d="M17 5L9 16H16L14 26L24 14H16L17 5Z" stroke="${strokeMain}" stroke-width="2.2" stroke-linejoin="round"/></svg>`
   };
 
   return icons[catId] || icons.repairs_construction;
@@ -1045,6 +1047,11 @@ async function fetchState(force = false) {
 
     syncNativeSessionBridge();
     syncRecommendedFare();
+
+    // Real-Time In-App Calling Sync (Guarantees incoming calls ring immediately across all devices & serverless instances)
+    if (Array.isArray(state.db?.activeCalls)) {
+      syncIncomingCallFromList(state.db.activeCalls);
+    }
 
     // Admin ban / unban takes effect instantly — no refresh needed
     if (state.currentUser && Boolean(state.currentUser.isBanned) !== prevBanned) {
@@ -9660,6 +9667,110 @@ function stopCallRingtones() {
   }
 }
 
+let activeCallPollTimer = null;
+
+function syncIncomingCallFromList(calls) {
+  if (!Array.isArray(calls)) return;
+  const myId = state.currentUser?.id;
+  const activeJob = state.role === 'PROVIDER' ? getProviderActiveBooking(myId) : getCustomerActiveRequest();
+
+  // 1. If we are currently in an OUTGOING call, check if the recipient answered (ACCEPTED)
+  if (state.activeCall && state.activeCall.callState === 'OUTGOING') {
+    const matched = calls.find((c) => c.channelId === state.activeCall.channelId);
+    if (matched) {
+      if (matched.status === 'ACCEPTED') {
+        stopCallRingtones();
+        state.activeCall.callState = 'CONNECTED';
+        state.callSeconds = 0;
+        if (callInterval) clearInterval(callInterval);
+        callInterval = setInterval(() => {
+          state.callSeconds++;
+          const el = document.getElementById('callTimerText');
+          if (el) {
+            const m = String(Math.floor(state.callSeconds / 60)).padStart(2, '0');
+            const s = String(state.callSeconds % 60).padStart(2, '0');
+            el.textContent = `${m}:${s}`;
+          }
+        }, 1000);
+        renderCallModal();
+      } else if (matched.status === 'ENDED') {
+        endInAppCall(false);
+        return;
+      }
+    }
+  }
+
+  // 2. If we have an incoming call or active call, and it is marked ENDED or removed from list
+  if (state.incomingCall || state.activeCall) {
+    const currentChan = (state.incomingCall || state.activeCall).channelId;
+    const currentReq = (state.incomingCall || state.activeCall).requestId;
+    const callStillActive = calls.some((c) => 
+      ((c.channelId && c.channelId === currentChan) || (c.requestId && c.requestId === currentReq)) &&
+      c.status !== 'ENDED'
+    );
+    if (!callStillActive && state.incomingCall) {
+      endInAppCall(false);
+      return;
+    }
+  }
+
+  // 3. Check for any ringing call intended for us
+  if (!state.activeCall && !state.incomingCall) {
+    const ringingCall = calls.find((c) => {
+      if (c.status !== 'RINGING') return false;
+      const isCaller = Boolean(myId && String(c.callerId) === String(myId));
+      if (isCaller) return false;
+      const isTarget = (myId && c.recipientId && String(c.recipientId) === String(myId)) ||
+        (c.requestId && ((state.activeRequestId === c.requestId) || (state.openChatRequestId === c.requestId) || (activeJob?.id === c.requestId)));
+      return Boolean(isTarget);
+    });
+
+    if (ringingCall) {
+      state.incomingCall = {
+        callerId: ringingCall.callerId,
+        callerName: ringingCall.callerName || 'User',
+        contextTitle: ringingCall.contextTitle || 'In-App Audio Call',
+        channelId: ringingCall.channelId || ('call_' + ringingCall.requestId),
+        requestId: ringingCall.requestId
+      };
+      playIncomingRingtone();
+      renderCallModal();
+      triggerSystemNotification('📞 Incoming Call from ' + (ringingCall.callerName || 'User'), ringingCall.contextTitle || 'Tap to answer', 'call_' + ringingCall.requestId);
+      startActiveCallPolling();
+    }
+  }
+}
+
+function startActiveCallPolling() {
+  if (activeCallPollTimer) return;
+  activeCallPollTimer = setInterval(async () => {
+    try {
+      const myId = state.currentUser?.id || '';
+      const reqId = state.activeRequestId || state.openChatRequestId || '';
+      const chanId = state.activeCall?.channelId || state.incomingCall?.channelId || '';
+      const query = `userId=${encodeURIComponent(myId)}&requestId=${encodeURIComponent(reqId)}&channelId=${encodeURIComponent(chanId)}`;
+      const res = await apiGet(`/api/calls/check?${query}`);
+      if (res && res.ok) {
+        const calls = [];
+        if (res.incomingCall) calls.push(res.incomingCall);
+        if (res.activeCall) calls.push(res.activeCall);
+        if (calls.length > 0) {
+          syncIncomingCallFromList(calls);
+        } else if (state.activeCall && state.activeCall.callState === 'OUTGOING' && !res.activeCall) {
+          // If outgoing call was declined or cancelled on server
+        }
+      }
+    } catch (e) {}
+  }, 1500);
+}
+
+function stopActiveCallPolling() {
+  if (activeCallPollTimer) {
+    clearInterval(activeCallPollTimer);
+    activeCallPollTimer = null;
+  }
+}
+
 async function startInAppCall(peerName, contextTitle, channelId = null, recipientId = null) {
   const activeReq = state.role === 'PROVIDER'
     ? (getProviderActiveBooking(state.currentUser?.id) || (state.openChatRequestId ? state.db?.requests?.find((r) => r.id === state.openChatRequestId) : null))
@@ -9692,6 +9803,7 @@ async function startInAppCall(peerName, contextTitle, channelId = null, recipien
     channelId: finalChannelId
   }).catch((e) => console.warn('Call initiate notice:', e));
 
+  startActiveCallPolling();
   joinDualEngineCall(finalChannelId, true);
 }
 
@@ -9731,6 +9843,7 @@ async function answerIncomingCall() {
 
 async function declineIncomingCall() {
   stopCallRingtones();
+  stopActiveCallPolling();
   if (state.incomingCall) {
     const inc = state.incomingCall;
     apiPost('/api/calls/respond', {
@@ -9965,6 +10078,7 @@ function showActiveCallPinNotice() {
 
 async function endInAppCall(notify = true) {
   stopCallRingtones();
+  stopActiveCallPolling();
   if (callInterval) clearInterval(callInterval);
   const chanId = state.activeCall?.channelId || state.incomingCall?.channelId;
   const reqId = state.activeChatRequestId || state.activeRequestId;

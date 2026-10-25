@@ -827,9 +827,19 @@ html, body {
 }
 
 .cat-tile-icon {
-  height: 22px;
+  width: 26px;
+  height: 26px;
   display: flex;
   align-items: center;
+  justify-content: center;
+  overflow: visible;
+  flex-shrink: 0;
+}
+
+.cat-tile-icon svg {
+  width: 24px;
+  height: 24px;
+  overflow: visible;
 }
 
 .cat-tile-label {
@@ -910,6 +920,13 @@ html, body {
   justify-content: center;
   color: var(--blue-primary);
   flex-shrink: 0;
+  overflow: visible;
+}
+
+.history-icon-circle svg {
+  width: 22px;
+  height: 22px;
+  overflow: visible;
 }
 
 .history-title {

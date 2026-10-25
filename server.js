@@ -3924,15 +3924,29 @@ Return ONLY JSON with keys:
     try {
       const body = await parseBody(req);
       const { requestId, callerId, callerName, recipientId, contextTitle, channelId } = body;
-      broadcastUpdate('CALL_INCOMING', {
-        requestId,
-        callerId,
-        callerName,
-        recipientId,
-        contextTitle,
-        channelId: channelId || ('call_' + requestId)
-      });
-      return sendJson(res, 200, { ok: true, channelId: channelId || ('call_' + requestId) });
+      const chan = channelId || ('call_' + (requestId || Date.now()));
+
+      if (!Array.isArray(db.activeCalls)) db.activeCalls = [];
+      // Clean up stale calls older than 50 seconds
+      const nowMs = Date.now();
+      db.activeCalls = db.activeCalls.filter((c) => (nowMs - (c.startedAt || 0) < 50000) && c.status !== 'ENDED');
+
+      const callEntry = {
+        id: 'call_' + (requestId || nowMs),
+        requestId: requestId || null,
+        callerId: String(callerId || ''),
+        callerName: callerName || 'User',
+        recipientId: recipientId ? String(recipientId) : null,
+        contextTitle: contextTitle || 'Home Visit Call',
+        channelId: chan,
+        status: 'RINGING',
+        startedAt: nowMs
+      };
+      db.activeCalls.push(callEntry);
+      saveDb(db);
+
+      broadcastUpdate('CALL_INCOMING', callEntry);
+      return sendJson(res, 200, { ok: true, channelId: chan, call: callEntry });
     } catch (e) {
       return sendJson(res, 400, { error: e.message });
     }
@@ -3943,6 +3957,21 @@ Return ONLY JSON with keys:
     try {
       const body = await parseBody(req);
       const { requestId, channelId, action } = body;
+
+      if (!Array.isArray(db.activeCalls)) db.activeCalls = [];
+      const match = db.activeCalls.find((c) => (channelId && c.channelId === channelId) || (requestId && c.requestId === requestId));
+
+      if (match) {
+        if (action === 'ACCEPT') {
+          match.status = 'ACCEPTED';
+          match.acceptedAt = Date.now();
+        } else {
+          match.status = 'ENDED';
+          db.activeCalls = db.activeCalls.filter((c) => c !== match);
+        }
+        saveDb(db);
+      }
+
       broadcastUpdate('CALL_RESPONSE', {
         requestId,
         channelId,
@@ -3954,11 +3983,61 @@ Return ONLY JSON with keys:
     }
   }
 
+  // Polling Fallback for In-App Calling (Guarantees delivery even across separate serverless instances or firewalled networks)
+  if (pathname === '/api/calls/check' && req.method === 'GET') {
+    try {
+      const userId = String(parsedUrl.searchParams.get('userId') || '');
+      const reqId = String(parsedUrl.searchParams.get('requestId') || '');
+      const chanId = String(parsedUrl.searchParams.get('channelId') || '');
+      const nowMs = Date.now();
+
+      if (!Array.isArray(db.activeCalls)) db.activeCalls = [];
+      db.activeCalls = db.activeCalls.filter((c) => (nowMs - (c.startedAt || 0) < 50000) && c.status !== 'ENDED');
+
+      const incoming = db.activeCalls.find((c) => {
+        if (c.status !== 'RINGING') return false;
+        if (userId && c.callerId === userId) return false; // don't ring caller
+        if (userId && c.recipientId && c.recipientId === userId) return true;
+        if (reqId && c.requestId && c.requestId === reqId) return true;
+        if (chanId && c.channelId === chanId) return true;
+        return false;
+      }) || null;
+
+      const activeOutgoing = db.activeCalls.find((c) => {
+        if (!userId) return false;
+        return c.callerId === userId && (c.status === 'ACCEPTED' || c.status === 'RINGING');
+      }) || null;
+
+      return sendJson(res, 200, {
+        ok: true,
+        incomingCall: incoming,
+        activeCall: activeOutgoing,
+        serverTime: nowMs
+      });
+    } catch (e) {
+      return sendJson(res, 400, { error: e.message });
+    }
+  }
+
   // Real-Time WebRTC P2P Direct Audio Signaling (Offer / Answer / Candidate)
   if (pathname === '/api/calls/signal' && req.method === 'POST') {
     try {
       const body = await parseBody(req);
       const { channelId, senderId, recipientId, signalType, data } = body;
+
+      if (!Array.isArray(db.callSignals)) db.callSignals = [];
+      const nowMs = Date.now();
+      db.callSignals = db.callSignals.filter((s) => nowMs - (s.timestamp || 0) < 30000);
+      db.callSignals.push({
+        channelId,
+        senderId,
+        recipientId,
+        signalType,
+        data,
+        timestamp: nowMs
+      });
+      if (db.callSignals.length > 50) db.callSignals = db.callSignals.slice(-50);
+
       broadcastUpdate('CALL_WEBRTC_SIGNAL', {
         channelId,
         senderId,
@@ -4629,6 +4708,26 @@ Return ONLY valid JSON with key: "reply" (string).`;
       const provider = db.providers.find((p) => p.id === body.providerId);
       if (!provider) return sendJson(res, 404, { error: 'Provider not found' });
 
+      if (body.action === 'DEDUCT') {
+        const deductAmount = Math.abs(Number(body.amountUsd || 0));
+        if (deductAmount <= 0) return sendJson(res, 400, { error: 'Invalid deduction amount' });
+        provider.walletBalanceUsd = Math.max(0, Math.round((provider.walletBalanceUsd - deductAmount) * 100) / 100);
+        const reason = body.reason || 'Admin Adjustment Deduction';
+        const tx = {
+          id: 'tx_deduct_' + Date.now(),
+          date: new Date().toISOString(),
+          type: 'ADMIN_DEDUCT',
+          method: 'Admin Manual Deduction',
+          amountUsd: -deductAmount,
+          note: `Wallet Funds Deducted: -$${deductAmount.toFixed(2)} (${reason})`
+        };
+        if (!Array.isArray(provider.walletTransactions)) provider.walletTransactions = [];
+        provider.walletTransactions.unshift(tx);
+        saveDb(db);
+        broadcastUpdate('WALLET_UPDATED', { providerId: provider.id, provider, transaction: tx });
+        return sendJson(res, 200, { ok: true, provider, transaction: tx });
+      }
+
       const amountUsd = Math.max(1, Number(body.amountUsd || 10));
       const method = body.method || 'Admin Manual Credit';
       provider.walletBalanceUsd = Math.round((provider.walletBalanceUsd + amountUsd) * 100) / 100;
@@ -4640,10 +4739,85 @@ Return ONLY valid JSON with key: "reply" (string).`;
         amountUsd,
         note: `Wallet Points Added via ${method} (+$${amountUsd.toFixed(2)})`
       };
+      if (!Array.isArray(provider.walletTransactions)) provider.walletTransactions = [];
       provider.walletTransactions.unshift(tx);
       saveDb(db);
-      broadcastUpdate('WALLET_UPDATED', { providerId: provider.id });
+      broadcastUpdate('WALLET_UPDATED', { providerId: provider.id, provider, transaction: tx });
       return sendJson(res, 200, { provider, transaction: tx });
+    } catch (e) {
+      return sendJson(res, 400, { error: e.message });
+    }
+  }
+
+  // Admin Custom Wallet Adjust Endpoint (Both Credit & Deduct on the same line)
+  if (pathname === '/api/admin/wallet/adjust' && req.method === 'POST') {
+    try {
+      const body = await parseBody(req);
+      const provider = db.providers.find((p) => p.id === body.providerId);
+      if (!provider) return sendJson(res, 404, { error: 'Provider not found' });
+
+      const amount = Math.abs(Number(body.amountUsd || 0));
+      if (amount <= 0 || isNaN(amount)) {
+        return sendJson(res, 400, { error: 'Please enter a valid USD amount greater than 0.' });
+      }
+
+      const action = (body.action || 'CREDIT').toUpperCase();
+      const reason = (body.reason || '').trim() || (action === 'DEDUCT' ? 'Admin Balance Deduction' : 'Admin Balance Credit');
+      const prevBal = Number(provider.walletBalanceUsd || 0);
+
+      if (action === 'DEDUCT') {
+        const newBal = Math.max(0, Math.round((prevBal - amount) * 100) / 100);
+        provider.walletBalanceUsd = newBal;
+        const tx = {
+          id: 'tx_adj_' + Date.now(),
+          date: new Date().toISOString(),
+          type: 'ADMIN_DEDUCT',
+          method: 'Admin Manual Deduction',
+          amountUsd: -amount,
+          previousBalanceUsd: prevBal,
+          newBalanceUsd: newBal,
+          note: `Wallet Deducted: -$${amount.toFixed(2)} (${reason})`
+        };
+        if (!Array.isArray(provider.walletTransactions)) provider.walletTransactions = [];
+        provider.walletTransactions.unshift(tx);
+        saveDb(db);
+        broadcastUpdate('WALLET_UPDATED', { providerId: provider.id, provider, transaction: tx });
+        return sendJson(res, 200, {
+          ok: true,
+          success: true,
+          providerId: provider.id,
+          previousBalanceUsd: prevBal,
+          newBalanceUsd: newBal,
+          deductedUsd: amount,
+          message: `Successfully deducted $${amount.toFixed(2)} from ${provider.name}'s wallet. New balance is $${newBal.toFixed(2)} USD.`
+        });
+      } else {
+        const newBal = Math.round((prevBal + amount) * 100) / 100;
+        provider.walletBalanceUsd = newBal;
+        const tx = {
+          id: 'tx_adj_' + Date.now(),
+          date: new Date().toISOString(),
+          type: 'ADMIN_CREDIT',
+          method: 'Admin Manual Credit',
+          amountUsd: amount,
+          previousBalanceUsd: prevBal,
+          newBalanceUsd: newBal,
+          note: `Wallet Credited: +$${amount.toFixed(2)} (${reason})`
+        };
+        if (!Array.isArray(provider.walletTransactions)) provider.walletTransactions = [];
+        provider.walletTransactions.unshift(tx);
+        saveDb(db);
+        broadcastUpdate('WALLET_UPDATED', { providerId: provider.id, provider, transaction: tx });
+        return sendJson(res, 200, {
+          ok: true,
+          success: true,
+          providerId: provider.id,
+          previousBalanceUsd: prevBal,
+          newBalanceUsd: newBal,
+          creditedUsd: amount,
+          message: `Successfully credited $${amount.toFixed(2)} to ${provider.name}'s wallet. New balance is $${newBal.toFixed(2)} USD.`
+        });
+      }
     } catch (e) {
       return sendJson(res, 400, { error: e.message });
     }
