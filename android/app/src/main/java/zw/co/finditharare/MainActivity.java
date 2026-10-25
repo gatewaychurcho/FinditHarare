@@ -39,7 +39,9 @@ public class MainActivity extends Activity {
     private WebView webView;
     private ValueCallback<Uri[]> fileUploadCallback;
     private final static int FILE_CHOOSER_RESULT_CODE = 1001;
-    private static final String APP_URL = "https://finditharare.vercel.app";
+    private static final String LOCAL_APP_URL = "file:///android_asset/index.html";
+    private static final String REMOTE_API_BASE = "https://finditharare.vercel.app";
+    private static final String APP_URL = LOCAL_APP_URL;
     private static final String CHANNEL_ID = "findit_harare_live_channel";
     private static final String CHANNEL_NAME = "Findit Harare Live Alerts";
     private static final String PREFS_NAME = "findit_native_prefs";
@@ -80,6 +82,8 @@ public class MainActivity extends Activity {
         settings.setMediaPlaybackRequiresUserGesture(false);
         settings.setAllowFileAccess(true);
         settings.setAllowContentAccess(true);
+        settings.setAllowFileAccessFromFileURLs(true);
+        settings.setAllowUniversalAccessFromFileURLs(true);
 
         // Offline caching mode (like inDrive): Cache first if offline, default when connected
         android.net.ConnectivityManager cm = (android.net.ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
@@ -213,6 +217,35 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public boolean hasOverlayPermission() {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                return android.provider.Settings.canDrawOverlays(MainActivity.this);
+            }
+            return true;
+        }
+
+        @JavascriptInterface
+        public void requestOverlayPermission() {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                try {
+                    if (!android.provider.Settings.canDrawOverlays(MainActivity.this)) {
+                        Intent intent = new Intent(
+                            android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                            Uri.parse("package:" + getPackageName())
+                        );
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        startActivity(intent);
+                    }
+                } catch (Exception ignored) {}
+            }
+        }
+
+        @JavascriptInterface
+        public void triggerIncomingCall(String callerName, String callType, String channelId) {
+            runOnUiThread(() -> triggerIncomingCallAlert(callerName, callType, channelId));
+        }
+
+        @JavascriptInterface
         public void syncUserSession(String userId, String role, String userName, String categoriesCsv) {
             try {
                 SharedPreferences prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
@@ -224,6 +257,44 @@ public class MainActivity extends Activity {
                     .apply();
             } catch (Exception e) {}
         }
+    }
+
+    public void triggerIncomingCallAlert(String callerName, String callType, String channelId) {
+        try {
+            // 1. Wake device screen up
+            android.os.PowerManager pm = (android.os.PowerManager) getSystemService(Context.POWER_SERVICE);
+            if (pm != null) {
+                android.os.PowerManager.WakeLock wl = pm.newWakeLock(
+                    android.os.PowerManager.FULL_WAKE_LOCK |
+                    android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP |
+                    android.os.PowerManager.ON_AFTER_RELEASE,
+                    "FinditHarare:IncomingCallWake"
+                );
+                wl.acquire(10000);
+            }
+        } catch (Exception ignored) {}
+
+        try {
+            // 2. Vibrate phone with call ring pattern
+            Vibrator vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
+            if (vibrator != null) {
+                vibrator.vibrate(new long[]{0, 800, 400, 800, 400, 800}, -1);
+            }
+        } catch (Exception ignored) {}
+
+        // 3. Post full screen incoming call alert
+        showSystemNotification(
+            "📞 Incoming " + (callType != null ? callType : "Audio") + " Call",
+            (callerName != null && !callerName.isEmpty() ? callerName : "Findit User") + " is calling you on Findit Harare...",
+            9999
+        );
+
+        // 4. Bring app activity to front if overlay is permitted
+        try {
+            Intent bringToFront = new Intent(this, MainActivity.class);
+            bringToFront.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
+            startActivity(bringToFront);
+        } catch (Exception ignored) {}
     }
 
     public void showSystemNotification(String title, String message, int notificationId) {
@@ -298,7 +369,40 @@ public class MainActivity extends Activity {
                 String cats = prefs.getString("categories", "");
                 long since = lastBackgroundPollMs;
 
-                String pollUrl = APP_URL + "/api/notifications/poll?userId=" + Uri.encode(userId)
+                // 1. Check for incoming calls in background (calls take top priority)
+                if (userId != null && !userId.isEmpty()) {
+                    try {
+                        String callCheckUrl = REMOTE_API_BASE + "/api/calls/check?userId=" + Uri.encode(userId);
+                        URL callUrl = new URL(callCheckUrl);
+                        HttpURLConnection callConn = (HttpURLConnection) callUrl.openConnection();
+                        callConn.setRequestMethod("GET");
+                        callConn.setConnectTimeout(3500);
+                        callConn.setReadTimeout(3500);
+
+                        if (callConn.getResponseCode() == 200) {
+                            BufferedReader callReader = new BufferedReader(new InputStreamReader(callConn.getInputStream()));
+                            StringBuilder callSb = new StringBuilder();
+                            String cLine;
+                            while ((cLine = callReader.readLine()) != null) {
+                                callSb.append(cLine);
+                            }
+                            callReader.close();
+
+                            JSONObject callRes = new JSONObject(callSb.toString());
+                            JSONObject incomingCall = callRes.optJSONObject("incomingCall");
+                            if (incomingCall != null) {
+                                String callerName = incomingCall.optString("callerName", "Findit User");
+                                String callType = incomingCall.optString("callType", "Voice");
+                                String channelId = incomingCall.optString("channelId", "");
+                                runOnUiThread(() -> triggerIncomingCallAlert(callerName, callType, channelId));
+                            }
+                        }
+                        callConn.disconnect();
+                    } catch (Exception ignored) {}
+                }
+
+                // 2. Poll for push alerts & bids
+                String pollUrl = REMOTE_API_BASE + "/api/notifications/poll?userId=" + Uri.encode(userId)
                     + "&role=" + Uri.encode(role)
                     + "&categories=" + Uri.encode(cats)
                     + "&since=" + since;

@@ -29,13 +29,18 @@ OUTPUT_APK="FinditHarare.apk"
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR/gen" "$BUILD_DIR/classes" "$BUILD_DIR/dex"
 
+echo "0. Syncing frontend web assets into android/app/src/main/assets..."
+mkdir -p android/app/src/main/assets
+rsync -av --delete --exclude="FinditHarare.apk" public/ android/app/src/main/assets/
+
 echo "1. Compiling Android Resources..."
 "$ANDROID_TOOLS/aapt2" compile --dir android/app/src/main/res -o "$BUILD_DIR/res.zip"
 
-echo "2. Linking APK & Generating R.java..."
+echo "2. Linking APK & Generating R.java with bundled local assets..."
 "$ANDROID_TOOLS/aapt2" link \
   -I "$ANDROID_JAR" \
   --manifest android/app/src/main/AndroidManifest.xml \
+  -A android/app/src/main/assets \
   --min-sdk-version 24 \
   --target-sdk-version 34 \
   --version-code 1 \

@@ -10,14 +10,17 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet" />
-  <!-- Leaflet Map CSS -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <!-- Leaflet Map CSS (Bundled Locally for 100% Offline Launch) -->
+  <link rel="stylesheet" href="vendor/leaflet.css" />
   <link rel="icon" type="image/png" href="/favicon.png" />
   <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
-  <link rel="stylesheet" href="styles.css?v=3.6.0" />
+  <link rel="stylesheet" href="styles.css?v=3.7.0" />
 </head>
 <body>
   <div id="appViewport" class="app-viewport">
+    <!-- inDrive Live Turn-by-Turn GPS Navigation HUD (Provider Mode) -->
+    <div id="navigationHudOverlay" class="navigation-hud-overlay" style="display:none;"></div>
+
     <!-- Clean Authentic Brand Splash Screen (No AI / Hyper Fake Graphics) -->
     <div id="splashScreen" class="splash-screen">
       <div class="splash-content">
@@ -105,10 +108,10 @@
   <!-- Toast Notifications -->
   <div class="toast-container" id="toastContainer"></div>
 
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
+  <script src="vendor/leaflet.js"></script>
+  <script src="vendor/AgoraRTC_N-4.20.0.js"></script>
   <script>
-    if ('serviceWorker' in navigator) {
+    if ('serviceWorker' in navigator && (window.location.protocol === 'http:' || window.location.protocol === 'https:')) {
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('/sw.js').catch((err) => {
           console.warn('SW register notice:', err);
@@ -116,6 +119,6 @@
       });
     }
   </script>
-  <script src="app.js?v=3.6.0"></script>
+  <script src="app.js?v=3.7.0"></script>
 </body>
 </html>

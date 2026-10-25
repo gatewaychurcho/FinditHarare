@@ -4,9 +4,11 @@
 
 const SESSION_KEY = 'findit_harare_session_v3';
 
-// Vercel handles all HTTP API routes natively via /api/index.js -> server.js.
-// Optional external WebSocket relay (leave empty while Render workspace is suspended so zero WS timeout occurs)
-const API_BASE = '';
+// Hybrid APK & Web Native API Base:
+// When running compiled inside Android APK (file:///android_asset/), dynamically connect to cloud backend
+const API_BASE = (typeof window !== 'undefined' && (window.location.protocol === 'file:' || !window.location.origin || window.location.origin === 'null' || (window.location.hostname === 'localhost' && window.location.port !== '3030')))
+  ? 'https://finditharare.vercel.app'
+  : '';
 const WS_RELAY_HOST = (typeof window !== 'undefined' && window.FINDIT_WS_HOST) ? window.FINDIT_WS_HOST : '';
 
 const state = {
@@ -311,12 +313,14 @@ function stopArrivalVibrationAlert() {
 let leafletMap = null;
 let leafletMarkersLayer = null;
 let leafletRoutePolyline = null;
+let leafletRoutePolylineCasing = null;
 let userLiveGpsMarker = null;
 let callInterval = null;
 let offerCountdownInterval = null;
 let mediaStreamRef = null;
 let geocodeDebounceTimer = null;
 const osrmRouteCache = new Map();
+const osrmStepsCache = new Map();
 
 // ============================================================================
 // CUSTOM ICONIFIED SERVICE ILLUSTRATIONS (MATCHING EACH SERVICE LABEL)
@@ -2002,20 +2006,224 @@ function reverseGeocodeHararePin(lat, lng) {
   }, 260);
 }
 
-async function drawRoadRouteOnMap(lat1, lng1, lat2, lng2, color = '#0066FF', weight = 5) {
+// ============================================================================
+// INDRIVE LIVE GPS NAVIGATION ENGINE & TURN-BY-TURN AUDIO DIRECTIONS
+// ============================================================================
+const liveNavState = {
+  active: false,
+  voiceEnabled: true,
+  steps: [],
+  currentStepIdx: 0,
+  totalDistanceMeters: 0,
+  totalDurationSeconds: 0,
+  destinationName: '',
+  destinationLat: null,
+  destinationLng: null,
+  bearingDeg: 0,
+  lastSpokenText: '',
+  lastSpokenMs: 0
+};
+
+function calculateBearingDegrees(lat1, lon1, lat2, lon2) {
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const y = Math.sin(dLon) * Math.cos(lat2 * Math.PI / 180);
+  const x = Math.cos(lat1 * Math.PI / 180) * Math.sin(lat2 * Math.PI / 180) -
+            Math.sin(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.cos(dLon);
+  const brng = Math.atan2(y, x) * 180 / Math.PI;
+  return Math.round((brng + 360) % 360);
+}
+
+function getManeuverSvgIcon(type = 'turn', modifier = 'straight', size = 26) {
+  const mod = (modifier || '').toLowerCase();
+  const t = (type || '').toLowerCase();
+
+  if (t === 'arrive') {
+    return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5" fill="#FFFFFF"/></svg>`;
+  }
+  if (mod.includes('left')) {
+    return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M19 19v-6a5 5 0 0 0-5-5H5M5 8l-4 4 4 4"/></svg>`;
+  }
+  if (mod.includes('right')) {
+    return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19v-6a5 5 0 0 1 5-5h9M19 8l4 4-4 4"/></svg>`;
+  }
+  if (mod.includes('u-turn') || mod.includes('uturn')) {
+    return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M9 10a5 5 0 1 1 10 0v9M9 10L5 6m4 4l-4 4"/></svg>`;
+  }
+  if (t.includes('roundabout')) {
+    return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.8 1.04 6.44 2.73M21 5v5h-5"/></svg>`;
+  }
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>`;
+}
+
+function speakNavigationDirection(text) {
+  if (!liveNavState.voiceEnabled) return;
+  if (!('speechSynthesis' in window)) return;
+  const now = Date.now();
+  if (liveNavState.lastSpokenText === text && now - liveNavState.lastSpokenMs < 12000) return;
+  liveNavState.lastSpokenText = text;
+  liveNavState.lastSpokenMs = now;
+  try {
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 1.03;
+    utterance.pitch = 1.0;
+    utterance.lang = 'en-US';
+    window.speechSynthesis.speak(utterance);
+  } catch (e) {}
+}
+
+function toggleNavVoice() {
+  liveNavState.voiceEnabled = !liveNavState.voiceEnabled;
+  if (liveNavState.voiceEnabled) {
+    speakNavigationDirection('Navigation voice guidance active');
+    showToast('Voice directions unmuted', 'info');
+  } else {
+    try { window.speechSynthesis.cancel(); } catch (e) {}
+    showToast('Voice directions muted', 'info');
+  }
+  renderNavigationHud();
+}
+
+function recenterNavigationCamera() {
+  if (!leafletMap) return;
+  const lat = state.userLiveGpsLat || state.pinnedLat;
+  const lng = state.userLiveGpsLng || state.pinnedLng;
+  if (lat && lng) {
+    leafletMap.flyTo([lat, lng], 16, { duration: 0.6 });
+    showToast('Centered on your live location', 'info');
+  }
+}
+
+function renderNavigationHud() {
+  const hud = document.getElementById('navigationHudOverlay');
+  if (!hud) return;
+
+  if (!liveNavState.active || !liveNavState.steps || liveNavState.steps.length === 0) {
+    hud.style.display = 'none';
+    return;
+  }
+
+  const currentStep = liveNavState.steps[liveNavState.currentStepIdx] || liveNavState.steps[0];
+  const stepDist = currentStep.distance || 0;
+  const distText = stepDist < 1000 ? `In ${Math.round(stepDist)} m` : `In ${(stepDist / 1000).toFixed(1)} km`;
+
+  const roadName = currentStep.name || 'Client Route';
+  const mod = currentStep.modifier || '';
+  const actionText = currentStep.type === 'arrive'
+    ? 'Arrive at client destination'
+    : mod ? `Turn ${mod} onto ${roadName}` : `Continue straight onto ${roadName}`;
+
+  const iconSvg = getManeuverSvgIcon(currentStep.type, currentStep.modifier, 24);
+
+  const totalDistKm = (liveNavState.totalDistanceMeters / 1000).toFixed(1);
+  const totalMins = Math.max(1, Math.round(liveNavState.totalDurationSeconds / 60));
+
+  hud.style.display = 'flex';
+  hud.innerHTML = `
+    <div class="nav-hud-main">
+      <div class="nav-maneuver-icon-box">
+        ${iconSvg}
+      </div>
+      <div class="nav-hud-info">
+        <div class="nav-hud-dist">${distText}</div>
+        <div class="nav-hud-street">${escapeHtml(actionText)}</div>
+      </div>
+      <div class="nav-hud-controls">
+        <button type="button" class="nav-hud-btn ${liveNavState.voiceEnabled ? 'active' : ''}" onclick="toggleNavVoice()" title="${liveNavState.voiceEnabled ? 'Mute Voice' : 'Enable Voice'}">
+          ${liveNavState.voiceEnabled
+            ? `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>`
+            : `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>`
+          }
+        </button>
+        <button type="button" class="nav-hud-btn" onclick="recenterNavigationCamera()" title="Recenter GPS">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="nav-hud-footer">
+      <div class="nav-hud-eta">
+        <span class="nav-pulse-dot"></span>
+        <span>${totalDistKm} km • ~${totalMins} min remaining</span>
+      </div>
+      <div style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:180px;">
+        To: ${escapeHtml(liveNavState.destinationName || 'Client Address')}
+      </div>
+    </div>
+  `;
+}
+
+function stopNavigationHud() {
+  liveNavState.active = false;
+  liveNavState.steps = [];
+  const hud = document.getElementById('navigationHudOverlay');
+  if (hud) hud.style.display = 'none';
+}
+
+function advanceNavigationStep(curLat, curLng) {
+  if (!liveNavState.active || !liveNavState.steps || liveNavState.steps.length === 0) return;
+  const currentStep = liveNavState.steps[liveNavState.currentStepIdx];
+  if (!currentStep) return;
+
+  let stepLoc = currentStep.location;
+  if (!stepLoc || !stepLoc[0]) {
+    stepLoc = [liveNavState.destinationLat, liveNavState.destinationLng];
+  }
+  const distToManeuver = calculateDistanceMeters(curLat, curLng, stepLoc[0], stepLoc[1]);
+  currentStep.distance = distToManeuver;
+
+  const distToDest = calculateDistanceMeters(curLat, curLng, liveNavState.destinationLat, liveNavState.destinationLng);
+  liveNavState.totalDistanceMeters = distToDest;
+  liveNavState.totalDurationSeconds = Math.round(distToDest / 8.5);
+
+  if (distToManeuver < 35 && liveNavState.currentStepIdx < liveNavState.steps.length - 1) {
+    liveNavState.currentStepIdx++;
+    const nextStep = liveNavState.steps[liveNavState.currentStepIdx];
+    const speech = nextStep.type === 'arrive'
+      ? `In 50 meters, your client's location is ahead.`
+      : `Turn ${nextStep.modifier || 'onto'} ${nextStep.name || 'next street'}`;
+    speakNavigationDirection(speech);
+  } else if (distToDest <= 25) {
+    speakNavigationDirection(`You have arrived outside your client's location. Please park safely and enter the 4-digit PIN.`);
+  } else if (distToManeuver <= 75 && distToManeuver > 35) {
+    const speech = `In ${Math.round(distToManeuver)} meters, turn ${currentStep.modifier || 'onto'} ${currentStep.name || 'next street'}`;
+    speakNavigationDirection(speech);
+  }
+
+  renderNavigationHud();
+}
+
+async function drawRoadRouteOnMap(lat1, lng1, lat2, lng2, color = '#0066FF', weight = 5, isNav = false, reqContext = null) {
   if (!leafletMap) return;
   const key = `${lat1.toFixed(4)},${lng1.toFixed(4)}->${lat2.toFixed(4)},${lng2.toFixed(4)}`;
 
   let coords = osrmRouteCache.get(key);
+  let steps = osrmStepsCache.get(key);
+
   if (!coords) {
     try {
-      const url = `https://router.project-osrm.org/route/v1/driving/${lng1},${lat1};${lng2},${lat2}?overview=full&geometries=geojson`;
+      const url = `https://router.project-osrm.org/route/v1/driving/${lng1},${lat1};${lng2},${lat2}?overview=full&geometries=geojson&steps=true`;
       const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
-        if (data.routes && data.routes[0] && data.routes[0].geometry) {
-          coords = data.routes[0].geometry.coordinates.map((c) => [c[1], c[0]]);
-          osrmRouteCache.set(key, coords);
+        if (data.routes && data.routes[0]) {
+          const r = data.routes[0];
+          if (r.geometry) {
+            coords = r.geometry.coordinates.map((c) => [c[1], c[0]]);
+            osrmRouteCache.set(key, coords);
+          }
+          if (r.legs && r.legs[0] && r.legs[0].steps) {
+            steps = r.legs[0].steps.map((st) => ({
+              type: st.maneuver?.type || 'turn',
+              modifier: st.maneuver?.modifier || '',
+              name: st.name || (st.maneuver?.modifier ? `onto ${st.maneuver.modifier} street` : 'Harare Route'),
+              distance: Math.round(st.distance || 0),
+              duration: Math.round(st.duration || 0),
+              location: st.maneuver?.location ? [st.maneuver.location[1], st.maneuver.location[0]] : [lat2, lng2]
+            }));
+            osrmStepsCache.set(key, steps);
+            liveNavState.totalDistanceMeters = Math.round(r.distance || calculateDistanceMeters(lat1, lng1, lat2, lng2));
+            liveNavState.totalDurationSeconds = Math.round(r.duration || (liveNavState.totalDistanceMeters / 8.5));
+          }
         }
       }
     } catch (e) {}
@@ -2025,21 +2233,88 @@ async function drawRoadRouteOnMap(lat1, lng1, lat2, lng2, color = '#0066FF', wei
     coords = buildCurvedPreviewPoints(lat1, lng1, lat2, lng2);
   }
 
+  if (!steps || steps.length === 0) {
+    const totalDist = calculateDistanceMeters(lat1, lng1, lat2, lng2);
+    const destName = reqContext?.exactAddress || reqContext?.suburbName || 'Client Address';
+    steps = [
+      {
+        type: 'depart',
+        modifier: 'straight',
+        name: 'Head towards destination',
+        distance: Math.round(totalDist * 0.4),
+        duration: Math.round(totalDist * 0.4 / 8.5),
+        location: coords[Math.floor(coords.length * 0.4)] || [lat2, lng2]
+      },
+      {
+        type: 'turn',
+        modifier: 'left',
+        name: `Turn onto ${destName}`,
+        distance: Math.round(totalDist * 0.6),
+        duration: Math.round(totalDist * 0.6 / 8.5),
+        location: [lat2, lng2]
+      },
+      {
+        type: 'arrive',
+        modifier: '',
+        name: `${reqContext?.customerName || 'Client'}'s Gate`,
+        distance: 25,
+        duration: 5,
+        location: [lat2, lng2]
+      }
+    ];
+    liveNavState.totalDistanceMeters = totalDist;
+    liveNavState.totalDurationSeconds = Math.round(totalDist / 8.5);
+  }
+
+  // inDrive Dual-Layer Route Polyline (Dark Casing + Glowing Blue Active Polyline)
+  if (leafletRoutePolylineCasing) {
+    leafletMap.removeLayer(leafletRoutePolylineCasing);
+  }
+  leafletRoutePolylineCasing = L.polyline(coords, {
+    color: '#0F172A',
+    weight: weight + 3,
+    opacity: 0.35
+  }).addTo(leafletMap);
+
   if (leafletRoutePolyline) {
     leafletMap.removeLayer(leafletRoutePolyline);
   }
   leafletRoutePolyline = L.polyline(coords, {
     color,
     weight,
-    opacity: 0.92
+    opacity: 0.95
   }).addTo(leafletMap);
 
-  // Automatically zoom and center the map so the full route to the client is visible
+  if (isNav && state.role === 'PROVIDER') {
+    liveNavState.active = true;
+    liveNavState.steps = steps;
+    liveNavState.currentStepIdx = 0;
+    renderNavigationHud();
+    const firstStep = steps[0];
+    const initialSpeech = firstStep ? `Navigating to ${reqContext?.customerName || 'client'}. In ${firstStep.distance} meters, ${firstStep.name}` : `Navigating to client location.`;
+    speakNavigationDirection(initialSpeech);
+  }
+
+  // Automatically zoom and center the map so the full route is visible
   if (coords && coords.length > 1) {
     try {
-      leafletMap.fitBounds(L.latLngBounds(coords), { padding: [60, 60], maxZoom: 16 });
+      leafletMap.fitBounds(L.latLngBounds(coords), { padding: [70, 70], maxZoom: 16 });
     } catch (e) {}
   }
+}
+
+async function updateProviderLiveNavigation(prov, req) {
+  if (!prov || !req) return;
+  const provLat = Number(prov.lat || state.userLiveGpsLat || -17.7885);
+  const provLng = Number(prov.lng || state.userLiveGpsLng || 31.0415);
+  const reqLat = Number(req.lat || -17.8292);
+  const reqLng = Number(req.lng || 31.0522);
+
+  liveNavState.destinationLat = reqLat;
+  liveNavState.destinationLng = reqLng;
+  liveNavState.destinationName = `${req.customerName || 'Client'}'s Location (${req.exactAddress || req.suburbName || 'Harare'})`;
+
+  await drawRoadRouteOnMap(provLat, provLng, reqLat, reqLng, '#0066FF', 5, true, req);
 }
 
 let providerLocationWatchId = null;
@@ -2060,10 +2335,14 @@ function startProviderLiveLocationWatcher() {
       // Jitter filter: calculate distance in meters from previous reading
       if (lastProviderReportedLat !== null && lastProviderReportedLng !== null) {
         const moveDistMeters = calculateDistanceMeters(lastProviderReportedLat, lastProviderReportedLng, rawLat, rawLng);
-        // Ignore microscopic GPS noise / jitter under 3.5 meters to prevent pin shaking
-        if (moveDistMeters < 3.5) {
+        // Ignore microscopic GPS noise / jitter under 3 meters to prevent pin shaking
+        if (moveDistMeters < 3.0) {
           return;
         }
+        const brng = calculateBearingDegrees(lastProviderReportedLat, lastProviderReportedLng, rawLat, rawLng);
+        liveNavState.bearingDeg = brng;
+        const arrow = document.getElementById('proHeadingArrow');
+        if (arrow) arrow.style.transform = `translateX(-50%) rotate(${brng}deg)`;
       }
 
       lastProviderReportedLat = rawLat;
@@ -2080,6 +2359,11 @@ function startProviderLiveLocationWatcher() {
         if (pMatch) {
           pMatch.lat = rawLat;
           pMatch.lng = rawLng;
+        }
+
+        // Advance live GPS turn-by-turn navigation step & directions
+        if (liveNavState.active && liveNavState.steps.length > 0) {
+          advanceNavigationStep(rawLat, rawLng);
         }
 
         // Throttle backend server sync to at most once every 3.5 seconds
@@ -2302,6 +2586,10 @@ function updateMapMarkers(force = false) {
     leafletMap.removeLayer(leafletRoutePolyline);
     leafletRoutePolyline = null;
   }
+  if (leafletRoutePolylineCasing) {
+    leafletMap.removeLayer(leafletRoutePolylineCasing);
+    leafletRoutePolylineCasing = null;
+  }
 
   // In Service Provider Mode: if there is an active accepted booking, show the route to the Client's Home!
   if (state.isAuthenticated && state.role === 'PROVIDER') {
@@ -2323,6 +2611,8 @@ function updateMapMarkers(force = false) {
       return;
     }
   }
+
+  stopNavigationHud();
 
   if (state.isAuthenticated && state.role === 'CUSTOMER' && state.screenStep === 'CONFIGURE' && !activeReq) {
     const catPros = state.db.providers.filter((p) => p.categoryId === state.selectedCategoryId && p.isOnline !== false);
@@ -2402,6 +2692,7 @@ function drawProviderAndClientRouteMarkers(prov, req) {
         <span>${escapeHtml(prov.shortName || prov.name.split(' ')[0])} • ${statusLabel}</span>
       </div>
       <div class="pro-map-marker-pill" style="border-color:#0066FF; border-width:3px; position:relative;">
+        <div class="pro-heading-arrow" id="proHeadingArrow" style="transform:translateX(-50%) rotate(${liveNavState.bearingDeg || 0}deg);"></div>
         ${prov.avatarUrl
           ? `<img src="${prov.avatarUrl}" alt="${escapeHtml(prov.name)}" />`
           : `<span style="font-size:11px; font-weight:800; color:#0066FF;">${prov.avatarInitials}</span>`
@@ -2440,8 +2731,13 @@ function drawProviderAndClientRouteMarkers(prov, req) {
   });
   L.marker([req.lat, req.lng], { icon: clientIcon }).addTo(leafletMarkersLayer);
 
-  // 3. Real Street Route between Service Provider and Client's Home
-  drawRoadRouteOnMap(prov.lat, prov.lng, req.lat, req.lng, '#0066FF', 5);
+  // 3. Real Street Route & Live Turn-by-Turn GPS Navigation
+  if (state.role === 'PROVIDER') {
+    updateProviderLiveNavigation(prov, req);
+  } else {
+    stopNavigationHud();
+    drawRoadRouteOnMap(prov.lat, prov.lng, req.lat, req.lng, '#0066FF', 5, false, req);
+  }
 }
 
 function buildCurvedPreviewPoints(lat1, lng1, lat2, lng2) {
@@ -9236,7 +9532,7 @@ function loadUserSupportHistory() {
   saveUserSupportHistory();
 
   // Also sync any server-stored history for this user in the background
-  fetch(`/api/support/history?userId=${encodeURIComponent(getSupportUserKey())}`)
+  fetch(`${API_BASE}/api/support/history?userId=${encodeURIComponent(getSupportUserKey())}`)
     .then((r) => r.json())
     .then((data) => {
       if (data && Array.isArray(data.messages) && data.messages.length > state.supportChatMessages.length) {

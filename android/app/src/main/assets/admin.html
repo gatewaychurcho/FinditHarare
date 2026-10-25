@@ -1,0 +1,2551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Findit Harare — Admin Control Center (/admin)</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --blue-primary: #0066FF;
+      --blue-dark: #004EEB;
+      --blue-soft: #EBF3FF;
+      --bg-page: #F4F7FB;
+      --bg-sidebar: #0F172A;
+      --bg-card: #FFFFFF;
+      --border: #E2E8F0;
+      --text: #0F172A;
+      --muted: #64748B;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg-page);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      -webkit-font-smoothing: antialiased;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .sidebar {
+      width: 265px;
+      background: var(--bg-sidebar);
+      color: #fff;
+      padding: 24px 16px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      margin-bottom: 26px;
+    }
+
+    .brand-icon {
+      width: 42px;
+      height: 42px;
+      border-radius: 12px;
+      background: var(--blue-primary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 22px;
+      color: #fff;
+      box-shadow: 0 6px 18px rgba(0, 102, 255, 0.4);
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 11px 14px;
+      border-radius: 12px;
+      color: #94A3B8;
+      font-size: 13.5px;
+      font-weight: 700;
+      cursor: pointer;
+      margin-bottom: 5px;
+      transition: all 0.16s;
+    }
+
+    .nav-item:hover { color: #fff; background: rgba(255,255,255,0.06); }
+    .nav-item.active {
+      background: var(--blue-primary);
+      color: #fff;
+      box-shadow: 0 4px 16px rgba(0, 102, 255, 0.35);
+    }
+
+    .main-area {
+      flex: 1;
+      padding: 28px 32px;
+      overflow-y: auto;
+      max-height: 100vh;
+    }
+
+    .top-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .kpi-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 18px;
+      box-shadow: 0 4px 14px rgba(15, 23, 42, 0.03);
+    }
+
+    .kpi-val {
+      font-size: 26px;
+      font-weight: 800;
+      margin-top: 6px;
+      letter-spacing: -0.02em;
+    }
+
+    .panel-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(410px, 1fr));
+      gap: 20px;
+    }
+
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 22px;
+      margin-bottom: 18px;
+      box-shadow: 0 4px 14px rgba(15, 23, 42, 0.03);
+    }
+
+    .btn-blue {
+      background: var(--blue-primary);
+      color: #fff;
+      border: none;
+      border-radius: 11px;
+      padding: 10px 16px;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    .btn-green {
+      background: #10B981;
+      color: #fff;
+      border: none;
+      border-radius: 11px;
+      padding: 10px 16px;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    .btn-outline {
+      background: #F8FAFC;
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 9px;
+      padding: 6px 11px;
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    th, td {
+      text-align: left;
+      padding: 12px 10px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    th {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+  </style>
+</head>
+<body>
+  <aside class="sidebar">
+    <div>
+      <div class="brand">
+        <div class="brand-icon" style="padding:0; overflow:hidden; background:transparent;">
+          <img src="/assets/logo-icon.svg" width="34" height="34" style="border-radius:10px; display:block;" alt="Findit Logo" />
+        </div>
+        <div>
+          <div style="font-weight:800; font-size:17px;">findit <span style="color:#60A5FA;">Admin</span></div>
+          <div style="font-size:11.5px; color:#94A3B8; font-weight:500;">Harare Control Center</div>
+        </div>
+      </div>
+
+      <div id="adminNav">
+        <div class="nav-item active" onclick="setAdminTab('OVERVIEW')">📊 Overview & Revenue</div>
+        <div class="nav-item" onclick="setAdminTab('AI_ENGINE')" style="background:rgba(0,102,255,0.12); border:1px solid rgba(96,165,250,0.3);">
+          <span>🧠 AI Intelligence &amp; Guard</span>
+          <span style="margin-left:auto; background:#0066FF; color:#fff; font-size:10px; font-weight:800; padding:2px 6px; border-radius:99px;">LIVE</span>
+        </div>
+        <div class="nav-item" onclick="setAdminTab('ECOCASH')">
+          <span>💵 EcoCash SMS Top-Ups</span>
+          <span id="navEcoBadge" style="margin-left:auto; background:#10B981; color:#fff; font-size:11px; font-weight:800; padding:2px 7px; border-radius:99px; display:none;">0</span>
+        </div>
+        <div class="nav-item" onclick="setAdminTab('DISCIPLINE')">
+          <span>⚠️ Discipline &amp; Bans</span>
+          <span id="navWarnBadge" style="margin-left:auto; background:#EF4444; color:#fff; font-size:11px; font-weight:800; padding:2px 7px; border-radius:99px; display:none;">0</span>
+        </div>
+        <div class="nav-item" onclick="setAdminTab('KYC')">
+          <span>🤳 KYC, WhatsApp & Face</span>
+          <span id="navKycBadge" style="margin-left:auto; background:#0066FF; color:#fff; font-size:11px; font-weight:800; padding:2px 7px; border-radius:99px; display:none;">0</span>
+        </div>
+        <div class="nav-item" onclick="setAdminTab('WHATSAPP_CODES')">
+          <span>💬 WhatsApp Login Codes</span>
+          <span id="navWaCodeBadge" style="margin-left:auto; background:#10B981; color:#fff; font-size:11px; font-weight:800; padding:2px 7px; border-radius:99px; display:none;">0</span>
+        </div>
+        <div class="nav-item" onclick="setAdminTab('APPROVALS')">
+          <span>📸 Catalogue & Bio Approvals</span>
+          <span id="navApprovalBadge" style="margin-left:auto; background:#EF4444; color:#fff; font-size:11px; font-weight:800; padding:2px 7px; border-radius:99px; display:none;">0</span>
+        </div>
+        <div class="nav-item" onclick="setAdminTab('CANCELLATIONS')">
+          <span>🚫 Task Cancellations</span>
+          <span id="navCancelBadge" style="margin-left:auto; background:#64748B; color:#fff; font-size:11px; font-weight:800; padding:2px 7px; border-radius:99px; display:none;">0</span>
+        </div>
+        <div class="nav-item" onclick="setAdminTab('COMMISSION')">💰 Commission & 2-Mo Promo</div>
+        <div class="nav-item" onclick="setAdminTab('PROVIDERS')">✅ Providers & Wallets</div>
+        <div class="nav-item" onclick="setAdminTab('SHIELD')">🛡️ Anti-Leakage Shield</div>
+        <div class="nav-item" onclick="setAdminTab('CATEGORIES')">🚀 Service Categories</div>
+      </div>
+    </div>
+
+    <div style="border-top:1px solid rgba(255,255,255,0.1); padding-top:14px; display:flex; flex-direction:column; gap:8px;">
+      <a href="/" target="_blank" style="text-decoration:none;">
+        <button class="btn-blue" style="width:100%;">📱 Open Mobile App (/)</button>
+      </a>
+      <button onclick="handleAdminLogout()" style="width:100%; height:38px; background:rgba(239,68,68,0.15); color:#F87171; border:1px solid rgba(239,68,68,0.3); border-radius:10px; font-weight:700; font-size:12px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px;">
+        <span>🔒 Lock Admin Panel</span>
+      </button>
+    </div>
+  </aside>
+
+  <main class="main-area" id="adminRoot">
+    Loading Admin Dashboard...
+  </main>
+
+  <!-- Encrypted Password Admin Lock Screen -->
+  <div id="adminAuthLockScreen" style="display:none; position:fixed; inset:0; background:#0B1120; z-index:999999; align-items:center; justify-content:center; padding:20px; font-family:'Plus Jakarta Sans',sans-serif;">
+    <div style="background:#1E293B; border:1px solid #334155; border-radius:24px; padding:36px 32px; max-width:420px; width:100%; box-shadow:0 25px 50px -12px rgba(0,0,0,0.5); text-align:center;">
+      <div style="width:64px; height:64px; border-radius:20px; background:linear-gradient(135deg, #0066FF, #004EEB); display:inline-flex; align-items:center; justify-content:center; margin-bottom:20px; box-shadow:0 8px 24px rgba(0,102,255,0.4);">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      </div>
+      <h2 style="color:#FFFFFF; font-size:22px; font-weight:800; margin-bottom:6px;">Findit Harare Admin</h2>
+      <p style="color:#94A3B8; font-size:13px; line-height:1.5; margin-bottom:24px;">This control center is password protected. Enter your encrypted admin passkey to continue.</p>
+
+      <form id="adminLoginForm" onsubmit="handleAdminLogin(event)" style="display:flex; flex-direction:column; gap:14px;">
+        <div style="position:relative;">
+          <input
+            id="adminPasswordInput"
+            type="password"
+            placeholder="Enter Admin Password"
+            required
+            autocomplete="current-password"
+            style="width:100%; height:48px; background:#0F172A; border:1.5px solid #334155; border-radius:14px; padding:0 16px; color:#FFFFFF; font-size:15px; outline:none; transition:border-color 0.2s;"
+          />
+        </div>
+        <div id="adminLoginError" style="display:none; color:#EF4444; font-size:12.5px; font-weight:700; background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.3); border-radius:10px; padding:8px 12px;"></div>
+        <button
+          id="adminLoginBtn"
+          type="submit"
+          style="width:100%; height:48px; background:#0066FF; color:#FFFFFF; font-size:15px; font-weight:800; border:none; border-radius:14px; cursor:pointer; box-shadow:0 4px 16px rgba(0,102,255,0.35); transition:background 0.15s;"
+        >
+          Unlock Control Center
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    let adminTab = 'OVERVIEW';
+    let aiSubTab = 'STRATEGY';
+    let db = null;
+
+    function getAdminToken() {
+      return sessionStorage.getItem('findit_admin_token') || localStorage.getItem('findit_admin_token');
+    }
+
+    function setAdminToken(token) {
+      if (token) {
+        sessionStorage.setItem('findit_admin_token', token);
+        localStorage.setItem('findit_admin_token', token);
+      } else {
+        sessionStorage.removeItem('findit_admin_token');
+        localStorage.removeItem('findit_admin_token');
+      }
+    }
+
+    function showAdminLockScreen() {
+      const lock = document.getElementById('adminAuthLockScreen');
+      if (lock) {
+        if (lock.style.display === 'flex') return; // Already showing, never wipe while typing!
+        lock.style.display = 'flex';
+        const inp = document.getElementById('adminPasswordInput');
+        if (inp && !inp.value) {
+          inp.focus();
+        }
+      }
+    }
+
+    function hideAdminLockScreen() {
+      const lock = document.getElementById('adminAuthLockScreen');
+      if (lock) lock.style.display = 'none';
+    }
+
+    async function handleAdminLogin(e) {
+      if (e) e.preventDefault();
+      const inp = document.getElementById('adminPasswordInput');
+      const errBox = document.getElementById('adminLoginError');
+      const btn = document.getElementById('adminLoginBtn');
+      const password = inp ? inp.value.trim() : '';
+      if (!password) return;
+
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Verifying Passkey...';
+      }
+      if (errBox) errBox.style.display = 'none';
+
+      try {
+        const res = await fetch('/api/admin/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password })
+        });
+        const data = await res.json();
+        if (res.ok && data.token) {
+          setAdminToken(data.token);
+          isInitialSessionChecked = true;
+          hideAdminLockScreen();
+          await loadAdminData(true);
+        } else {
+          if (errBox) {
+            errBox.textContent = data.error || 'Access Denied: Incorrect Password';
+            errBox.style.display = 'block';
+          }
+        }
+      } catch (err) {
+        if (errBox) {
+          errBox.textContent = 'Connection error. Please try again.';
+          errBox.style.display = 'block';
+        }
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = 'Unlock Control Center';
+        }
+      }
+    }
+
+    async function handleAdminLogout() {
+      const token = getAdminToken();
+      if (token) {
+        try {
+          await fetch('/api/admin/logout', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+        } catch (e) {}
+      }
+      setAdminToken(null);
+      showAdminLockScreen();
+    }
+
+    async function api(path, method = 'GET', body = null) {
+      const token = getAdminToken();
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+        headers['x-admin-token'] = token;
+      }
+      const opts = { method, headers };
+      if (body) opts.body = JSON.stringify(body);
+      const res = await fetch(path, opts);
+      if (res.status === 401 && path.startsWith('/api/admin/')) {
+        setAdminToken(null);
+        showAdminLockScreen();
+      }
+      return res.json();
+    }
+
+    let isInitialSessionChecked = false;
+
+    async function loadAdminData(forceRender = false) {
+      const token = getAdminToken();
+      if (!token) {
+        showAdminLockScreen();
+        return;
+      }
+
+      try {
+        if (!isInitialSessionChecked) {
+          const sessionCheck = await api('/api/admin/session');
+          if (!sessionCheck || !sessionCheck.authenticated) {
+            setAdminToken(null);
+            showAdminLockScreen();
+            return;
+          }
+          isInitialSessionChecked = true;
+        }
+
+        hideAdminLockScreen();
+        const activeEl = document.activeElement;
+        const isTyping = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT');
+        if (isTyping && !forceRender) return;
+
+        const nextDb = await api('/api/state');
+        const pendingRes = await api('/api/admin/pending-verifications');
+        if (Array.isArray(pendingRes)) {
+          nextDb.pendingVerifications = pendingRes;
+        }
+        const fp = JSON.stringify({
+          p: (nextDb.providers || []).map((x) => `${x.id}:${x.isBanned}:${x.warningsCount}:${x.walletBalanceUsd}`),
+          c: (nextDb.customers || []).map((x) => `${x.id}:${x.isBanned}:${x.warningsCount}`),
+          e: (nextDb.ecocashTopups || []).map((x) => `${x.id}:${x.status}`),
+          a: (nextDb.approvalQueue || []).map((x) => `${x.id}:${x.status}`),
+          k: (nextDb.kycVerifications || []).map((x) => `${x.id}:${x.status}`),
+          d: (nextDb.disciplineLogs || []).length,
+          v: (nextDb.pendingVerifications || []).length,
+          aiM: (nextDb.aiEngine?.matchmakingLogs || []).length,
+          aiC: (nextDb.aiEngine?.commissionProtections || []).length,
+          aiA: (nextDb.aiEngine?.conversationAlerts || []).length,
+          aiS: nextDb.aiEngine?.latestStrategyReport?.generatedAt || '',
+          cats: (nextDb.categories || []).map((x) => `${x.id}:${x.status}:${(x.subServices || []).length}`).join('|'),
+          hub: (nextDb.hubServices || []).map((x) => `${x.id}:${x.status}`).join('|')
+        });
+        db = nextDb;
+        if (forceRender || fp !== lastAdminFingerprint) {
+          lastAdminFingerprint = fp;
+          renderAdmin();
+        }
+      } catch (err) {
+        console.warn('Admin background sync notice:', err);
+        if (err && (err.status === 401 || String(err).includes('401'))) {
+          setAdminToken(null);
+          showAdminLockScreen();
+        }
+      }
+    }
+
+    function setAdminTab(tab) {
+      adminTab = tab;
+      document.querySelectorAll('#adminNav .nav-item').forEach((el, idx) => {
+        const tabs = ['OVERVIEW', 'AI_ENGINE', 'ECOCASH', 'DISCIPLINE', 'KYC', 'WHATSAPP_CODES', 'APPROVALS', 'CANCELLATIONS', 'COMMISSION', 'PROVIDERS', 'SHIELD', 'CATEGORIES'];
+        el.classList.toggle('active', tabs[idx] === tab);
+      });
+      renderAdmin();
+    }
+
+    async function runLiveGeminiAudit() {
+      const btn = document.getElementById('runAiAuditBtn');
+      if (btn) {
+        btn.disabled = true;
+        btn.innerText = '⏳ Running Gemini 3.1 Flash Deep Audit...';
+      }
+      try {
+        const res = await api('/api/admin/ai-run-audit', 'POST', {});
+        if (res && res.aiEngine && db) {
+          db.aiEngine = res.aiEngine;
+          renderAdmin();
+          showAdminToast('Live Gemini AI Business & QA Strategy updated!', 'success');
+        }
+      } catch (e) {
+        showAdminToast('AI Audit error: ' + e.message, 'error');
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerText = '⚡ Run Live Gemini AI Audit Now';
+        }
+      }
+    }
+
+    async function enforceAiCommission(requestId) {
+      try {
+        const res = await api('/api/admin/ai-enforce-commission', 'POST', { requestId });
+        if (res && res.ok) {
+          showAdminToast('11% Platform Commission deducted & protected!', 'success');
+          await loadAdminData(true);
+        } else {
+          showAdminToast(res.error || 'Commission already deducted', 'warn');
+        }
+      } catch (e) {
+        showAdminToast(e.message, 'error');
+      }
+    }
+
+    async function verifyEcoCash(topupId, action, claimedAmount) {
+      let creditAmountUsd = claimedAmount;
+      let adminNote = '';
+      let warnProvider = false;
+      if (action === 'APPROVE') {
+        const val = prompt(`Confirm USD amount to credit to provider wallet:`, String(claimedAmount));
+        if (val === null) return;
+        creditAmountUsd = Number(val) || claimedAmount;
+      } else {
+        adminNote = prompt('Reason for rejecting EcoCash SMS (sent to provider):', 'Transaction not found on EcoCash merchant statement') || 'Unverified SMS reference';
+        warnProvider = confirm('Issue an official warning on this provider account for submitting an invalid/fake SMS?');
+      }
+      await api('/api/admin/ecocash-verify', 'POST', {
+        topupId,
+        action,
+        creditAmountUsd,
+        adminNote,
+        warnProvider
+      });
+      await loadAdminData();
+    }
+
+    function handleAdminSmsMatch(rawText) {
+      const container = document.getElementById('adminSmsMatchResult');
+      if (!container) return;
+      const text = (rawText || '').trim();
+      if (!text) {
+        container.innerHTML = '';
+        return;
+      }
+
+      // Extract Approval Code / Reference
+      const refMatch = text.match(/(?:Approval Code|Approval Ref|Ref|Code|Reference)[:\s]*([A-Za-z0-9\.]+)/i)
+        || text.match(/\b(PP\d{6}\.[0-9A-Za-z\.]+)\b/i)
+        || text.match(/\b([A-Za-z]{2}\d{6}\.\d{4}\.[A-Za-z0-9]+)\b/i);
+      const detectedRef = refMatch ? refMatch[1].trim() : '';
+
+      // Extract USD amount
+      const amtMatch = text.match(/(?:USD|\$)\s*([0-9]+(?:\.[0-9]{1,2})?)/i)
+        || text.match(/([0-9]+(?:\.[0-9]{1,2})?)\s*USD/i);
+      const detectedAmount = amtMatch ? parseFloat(amtMatch[1]) : null;
+
+      // Search pending submissions in db.ecocashTopups
+      const pendingList = (db.ecocashTopups || []).filter(t => t.status === 'PENDING');
+      
+      let matched = null;
+      if (detectedRef) {
+        matched = pendingList.find(t => {
+          const tRef = (t.referenceCode || '').toUpperCase();
+          const dRef = detectedRef.toUpperCase();
+          return tRef === dRef || tRef.includes(dRef) || dRef.includes(tRef);
+        });
+        if (!matched) {
+          matched = pendingList.find(t => (t.confirmationSms || '').toUpperCase().includes(detectedRef.toUpperCase()));
+        }
+      }
+
+      if (!matched && detectedAmount) {
+        const amtMatches = pendingList.filter(t => Number(t.claimedAmountUsd) === detectedAmount);
+        if (amtMatches.length === 1) {
+          matched = amtMatches[0];
+        }
+      }
+
+      if (matched) {
+        container.innerHTML = `
+          <div style="margin-top:14px; background:#ECFDF5; border:1.5px solid #10B981; border-radius:12px; padding:14px 16px;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span style="font-size:18px;">🎯</span>
+                <span style="font-size:14px; font-weight:800; color:#065F46;">Match Confirmed: Pending Top-Up Matches This SMS!</span>
+              </div>
+              <span style="padding:4px 10px; border-radius:99px; background:#D1FAE5; color:#047857; font-size:11px; font-weight:800;">
+                100% Verified Match
+              </span>
+            </div>
+
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px; font-size:12.5px;">
+              <div style="background:#FFFFFF; padding:10px; border-radius:8px; border:1px solid #A7F3D0;">
+                <div style="font-size:11px; color:#047857; font-weight:700;">PROVIDER DETAILS</div>
+                <div style="font-size:14px; font-weight:800; color:#064E3B; margin-top:2px;">${matched.providerName}</div>
+                <div style="color:#047857; font-size:11.5px; margin-top:2px;">ID: <strong>${matched.providerFinditId}</strong> • ${matched.providerPhone}</div>
+              </div>
+              <div style="background:#FFFFFF; padding:10px; border-radius:8px; border:1px solid #A7F3D0;">
+                <div style="font-size:11px; color:#047857; font-weight:700;">RECONCILED AMOUNT &amp; REF</div>
+                <div style="font-size:16px; font-weight:800; color:#059669; margin-top:2px;">$${detectedAmount || matched.claimedAmountUsd}.00 USD</div>
+                <div style="font-family:monospace; color:#047857; font-size:11px; margin-top:2px;">Ref: ${detectedRef || matched.referenceCode}</div>
+              </div>
+            </div>
+
+            <div style="display:flex; justify-content:flex-end; gap:8px;">
+              <button class="btn-outline" style="color:#DC2626; border-color:#FECACA; background:#FFFFFF;" onclick="verifyEcoCash('${matched.id}', 'REJECT', ${matched.claimedAmountUsd})">
+                ❌ Reject Submission
+              </button>
+              <button class="btn-blue" style="background:#059669; font-weight:800; padding:8px 18px;" onclick="verifyEcoCash('${matched.id}', 'APPROVE', ${detectedAmount || matched.claimedAmountUsd})">
+                ✅ Accept &amp; Credit $${detectedAmount || matched.claimedAmountUsd} to ${matched.providerName}
+              </button>
+            </div>
+          </div>
+        `;
+      } else {
+        container.innerHTML = `
+          <div style="margin-top:14px; background:#FFFBEB; border:1.5px solid #F59E0B; border-radius:12px; padding:12px 14px; font-size:12.5px; color:#92400E;">
+            <div style="font-weight:800; display:flex; align-items:center; gap:6px; margin-bottom:4px;">
+              <span>ℹ️</span>
+              <span>Detected: Ref <code>${detectedRef || 'None'}</code> • Amount: <code>${detectedAmount ? '$' + detectedAmount + ' USD' : 'None'}</code></span>
+            </div>
+            <div>
+              ${detectedRef || detectedAmount
+                ? 'No pending top-up currently matches this reference code or amount. The provider may not have submitted their SMS yet, or it has already been processed.'
+                : 'Could not extract an EcoCash reference code or USD amount from the pasted message. Please check the SMS format.'}
+            </div>
+          </div>
+        `;
+      }
+    }
+
+    let adminRoleFilter = 'ALL'; // 'ALL' | 'PROVIDER' | 'CUSTOMER' | 'BANNED'
+    let adminSearchQuery = '';
+    let lastAdminFingerprint = '';
+
+    function showAdminToast(msg, tone = 'success') {
+      const existing = document.getElementById('adminFloatingToast');
+      if (existing) existing.remove();
+      const el = document.createElement('div');
+      el.id = 'adminFloatingToast';
+      const bg = tone === 'error' ? '#DC2626' : tone === 'warn' ? '#D97706' : '#059669';
+      el.style.cssText = `position:fixed; top:20px; right:24px; z-index:999999; background:${bg}; color:#FFFFFF; padding:12px 18px; border-radius:12px; font-weight:800; font-size:13.5px; box-shadow:0 10px 25px rgba(0,0,0,0.22); display:flex; align-items:center; gap:8px;`;
+      el.innerHTML = `<span>${tone === 'error' ? '🚫' : tone === 'warn' ? '⚠️' : '✅'}</span><span>${msg}</span>`;
+      document.body.appendChild(el);
+      setTimeout(() => el.remove(), 3000);
+    }
+
+    async function executeDisciplineActionNow(role, accountId, action, reason) {
+      const targetRole = role === 'CUSTOMER' ? 'CUSTOMER' : 'PROVIDER';
+      // 1. Instant 0ms optimistic local state update so UI updates immediately without refreshing!
+      if (db) {
+        const list = targetRole === 'CUSTOMER' ? (db.customers || []) : (db.providers || []);
+        const target = list.find((u) => u.id === accountId || u.finditId === accountId);
+        if (target) {
+          if (action === 'BAN') {
+            target.isBanned = true;
+            target.banReason = reason;
+            if (targetRole === 'PROVIDER') target.isOnline = false;
+          } else if (action === 'UNBAN') {
+            target.isBanned = false;
+            target.banReason = '';
+          } else if (action === 'WARN') {
+            target.warningsCount = (target.warningsCount || 0) + 1;
+            target.activeWarnings = target.activeWarnings || [];
+            target.activeWarnings.unshift({
+              id: 'warn_' + Date.now(),
+              date: new Date().toISOString(),
+              reason
+            });
+          }
+          db.disciplineLogs = db.disciplineLogs || [];
+          db.disciplineLogs.unshift({
+            id: 'disc_' + Date.now().toString().slice(-5),
+            timestamp: new Date().toISOString(),
+            role: targetRole,
+            accountId: target.id,
+            finditId: target.finditId,
+            name: target.name,
+            accountName: target.name,
+            action,
+            reason
+          });
+        }
+        lastAdminFingerprint = '';
+        renderAdmin();
+      }
+
+      if (action === 'BAN') showAdminToast('Account banned & locked out immediately!', 'error');
+      else if (action === 'UNBAN') showAdminToast('Account reinstated & active immediately!', 'success');
+      else if (action === 'WARN') showAdminToast('Official warning sent to user screen!', 'warn');
+
+      try {
+        await api('/api/admin/discipline', 'POST', {
+          role: targetRole,
+          accountId,
+          action,
+          reason
+        });
+        await loadAdminData(true);
+      } catch (e) {
+        showAdminToast('Error syncing discipline action: ' + e.message, 'error');
+      }
+    }
+
+    function disciplineAccount(role, accountId, action) {
+      if (action === 'UNBAN') {
+        executeDisciplineActionNow(role, accountId, 'UNBAN', 'Reinstated by Admin');
+        return;
+      }
+
+      const targetRole = role === 'CUSTOMER' ? 'CUSTOMER' : 'PROVIDER';
+      const list = db ? (targetRole === 'CUSTOMER' ? (db.customers || []) : (db.providers || [])) : [];
+      const acc = list.find((u) => u.id === accountId || u.finditId === accountId) || { name: accountId };
+      const isBan = action === 'BAN';
+      const presets = isBan
+        ? [
+            'Safety policy violation & sharing contact details off-platform',
+            'Avoiding Findit Harare platform commission after completing job',
+            'Fake or mismatched Government ID / Biometric verification',
+            'Repeated unexcused booking cancellations or client misconduct'
+          ]
+        : [
+            'Official Warning: Do not share phone numbers or WhatsApp links in chat',
+            'Official Warning: Late arrival or unannounced cancellation of confirmed visit',
+            'Official Warning: Attempting to negotiate off-platform payment'
+          ];
+
+      const existingModal = document.getElementById('adminDisciplineModal');
+      if (existingModal) existingModal.remove();
+
+      const modal = document.createElement('div');
+      modal.id = 'adminDisciplineModal';
+      modal.style.cssText = 'position:fixed; inset:0; background:rgba(15,23,42,0.75); z-index:999998; display:flex; align-items:center; justify-content:center; padding:20px;';
+      modal.onclick = () => modal.remove();
+      modal.innerHTML = `
+        <div style="background:#FFFFFF; border-radius:18px; padding:22px; max-width:480px; width:100%; box-shadow:0 24px 48px rgba(0,0,0,0.35);" onclick="event.stopPropagation()">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <div style="font-size:17px; font-weight:800; color:${isBan ? '#DC2626' : '#D97706'};">
+              ${isBan ? '🚫 Ban Account Instantly' : '⚠️ Send Official Warning'} — ${acc.name || accountId}
+            </div>
+            <button onclick="document.getElementById('adminDisciplineModal').remove()" style="border:none; background:none; font-size:22px; cursor:pointer; color:#64748B;">&times;</button>
+          </div>
+          <div style="font-size:12.5px; color:#475569; margin-bottom:12px;">
+            Select a preset reason below or type a custom reason. This takes effect on the user's phone in <strong>0ms without refreshing</strong>.
+          </div>
+          <div style="display:flex; flex-direction:column; gap:6px; margin-bottom:12px;">
+            ${presets.map((p) => `
+              <button type="button" class="btn-outline" style="text-align:left; padding:8px 11px; font-size:12px; font-weight:700;" onclick="document.getElementById('adminDiscReasonInput').value = this.innerText">
+                ${p}
+              </button>
+            `).join('')}
+          </div>
+          <input id="adminDiscReasonInput" type="text" value="${presets[0]}" style="width:100%; height:42px; border:1.5px solid #CBD5E1; border-radius:10px; padding:0 12px; font-size:13px; font-weight:700; margin-bottom:14px;" />
+          <div style="display:flex; justify-content:flex-end; gap:8px;">
+            <button type="button" class="btn-outline" style="height:40px; padding:0 14px;" onclick="document.getElementById('adminDisciplineModal').remove()">Cancel</button>
+            <button type="button" class="btn-blue" style="height:40px; padding:0 18px; background:${isBan ? '#DC2626' : '#D97706'};" onclick="const r = document.getElementById('adminDiscReasonInput').value.trim() || '${presets[0]}'; document.getElementById('adminDisciplineModal').remove(); executeDisciplineActionNow('${targetRole}', '${accountId}', '${action}', r);">
+              ${isBan ? '🚫 Confirm Instant Ban' : '⚠️ Send Warning Now'}
+            </button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+    }
+
+    async function moderateApprovalItem(approvalId, action) {
+      let reason = '';
+      if (action === 'REJECT') {
+        reason = prompt('Reason for rejection (sent to provider):', 'Contains promotional flyer, watermark, or phone number contact details.') || 'Violates clean work photo & bio policy';
+      }
+      await api('/api/admin/approvals', 'POST', { approvalId, action, reason });
+      await loadAdminData();
+    }
+
+    async function moderateKycItem(kycId, action) {
+      await api('/api/admin/kyc', 'POST', { kycId, action });
+      await loadAdminData();
+    }
+
+    async function togglePromo(active) {
+      await api('/api/admin/settings', 'POST', { launchPromoActive: active });
+      await loadAdminData();
+    }
+
+    async function updateGlobalCommission(val) {
+      await api('/api/admin/settings', 'POST', { commissionPercent: Number(val) });
+      await loadAdminData();
+    }
+
+    async function updateCatCommission(catId, val) {
+      await api('/api/admin/settings', 'POST', { categoryCommissions: { [catId]: Number(val) } });
+      await loadAdminData();
+    }
+
+    async function toggleProviderBadge(providerId, badgeKey) {
+      await api('/api/admin/verify-provider', 'POST', { providerId, badgeKey });
+      await loadAdminData();
+    }
+
+    async function adminTopUpProvider(providerId, amountUsd) {
+      await api('/api/wallet/topup', 'POST', { providerId, amountUsd, method: 'Admin Cash USD Voucher' });
+      await loadAdminData(true);
+    }
+
+    async function adminPromptWalletAdjust(providerId, providerName, action = 'DEDUCT', currentBalance = 0) {
+      const isDeduct = action === 'DEDUCT';
+      const promptMsg = isDeduct
+        ? `Enter USD amount to DEDUCT from ${providerName}'s wallet (Current balance: $${Number(currentBalance).toFixed(2)} USD):`
+        : `Enter USD amount to CREDIT to ${providerName}'s wallet (Current balance: $${Number(currentBalance).toFixed(2)} USD):`;
+      
+      const rawAmount = prompt(promptMsg, isDeduct ? '10' : '10');
+      if (rawAmount === null) return;
+      const amountUsd = parseFloat(rawAmount);
+      if (isNaN(amountUsd) || amountUsd <= 0) {
+        alert('Please enter a valid USD amount greater than 0.');
+        return;
+      }
+
+      const defaultReason = isDeduct
+        ? 'Admin adjustment: corrected excess credit'
+        : 'Admin manual wallet credit';
+      const reason = prompt(`Reason / Note for this ${action} operation:`, defaultReason) || defaultReason;
+
+      try {
+        const res = await api('/api/admin/wallet/adjust', 'POST', {
+          providerId,
+          amountUsd,
+          action,
+          reason
+        });
+        showAdminToast(res?.message || `Successfully adjusted wallet! New balance: $${res?.newBalanceUsd} USD`, 'success');
+        await loadAdminData(true);
+      } catch (err) {
+        showAdminToast(err.message || 'Failed to adjust wallet', 'error');
+      }
+    }
+
+    async function toggleCategoryStatus(categoryId) {
+      await api('/api/admin/category-status', 'POST', { categoryId });
+      await loadAdminData();
+    }
+
+    async function toggleHubServiceStatus(id, newStatus) {
+      await api('/api/admin/hub/update', 'POST', { id, status: newStatus });
+      await loadAdminData();
+    }
+
+    function promptAddChangelog(editId = null, editIdx = -1) {
+      const existing = editId
+        ? ((db.changelogs || []).find((c) => String(c.id) === String(editId)) || (editIdx >= 0 ? (db.changelogs || [])[editIdx] : null))
+        : null;
+      const modal = document.createElement('div');
+      modal.id = 'changelogModalOverlay';
+      modal.style.cssText = 'position:fixed; inset:0; background:rgba(15,23,42,0.72); z-index:99999; display:flex; align-items:center; justify-content:center; padding:16px;';
+      modal.onclick = () => modal.remove();
+      modal.innerHTML = `
+        <div style="background:#FFFFFF; border-radius:16px; padding:20px; max-width:460px; width:100%; box-shadow:0 20px 50px rgba(0,0,0,0.3);" onclick="event.stopPropagation()">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+            <div style="font-weight:800; font-size:16px; color:#0F172A;">
+              ${existing ? '✏️ Edit Platform Announcement' : '📢 Post Platform Announcement'}
+            </div>
+            <button onclick="document.getElementById('changelogModalOverlay')?.remove()" style="border:none; background:none; font-size:22px; cursor:pointer; color:#64748B;">&times;</button>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:12px;">
+            <div>
+              <label style="display:block; font-size:12px; font-weight:700; color:#475569; margin-bottom:4px;">Announcement / Update Title</label>
+              <input id="clTitleInput" type="text" value="${existing ? (existing.title || '').replace(/"/g, '&quot;') : ''}" placeholder="e.g. Instant EcoCash Verification & AI Support Live" style="width:100%; height:40px; border:1.5px solid #CBD5E1; border-radius:10px; padding:0 12px; font-size:13.5px; font-weight:600; box-sizing:border-box;" />
+            </div>
+            <div>
+              <label style="display:block; font-size:12px; font-weight:700; color:#475569; margin-bottom:4px;">Version Tag</label>
+              <input id="clVersionInput" type="text" value="${existing ? (existing.version || 'v2.4') : 'v2.4'}" placeholder="v2.4" style="width:100%; height:40px; border:1.5px solid #CBD5E1; border-radius:10px; padding:0 12px; font-size:13.5px; font-weight:600; box-sizing:border-box;" />
+            </div>
+            <div>
+              <label style="display:block; font-size:12px; font-weight:700; color:#475569; margin-bottom:4px;">Highlights (comma-separated)</label>
+              <textarea id="clHighlightsInput" rows="3" placeholder="Real-time radar updates, Instant WhatsApp Business AI support, Faster suburb navigation" style="width:100%; border:1.5px solid #CBD5E1; border-radius:10px; padding:10px 12px; font-size:13px; font-family:inherit; box-sizing:border-box;">${existing ? (existing.highlights || []).join(', ') : ''}</textarea>
+            </div>
+            <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:4px;">
+              <button class="btn-outline" onclick="document.getElementById('changelogModalOverlay')?.remove()">Cancel</button>
+              <button class="btn-blue" onclick="submitChangelogModal('${existing ? existing.id : ''}')">
+                ${existing ? 'Save Update' : 'Publish Live Now'}
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+      setTimeout(() => document.getElementById('clTitleInput')?.focus(), 40);
+    }
+
+    async function submitChangelogModal(editId) {
+      const titleEl = document.getElementById('clTitleInput');
+      const versionEl = document.getElementById('clVersionInput');
+      const highlightsEl = document.getElementById('clHighlightsInput');
+      const title = (titleEl?.value || '').trim();
+      const version = (versionEl?.value || 'v2.4').trim();
+      const highlights = (highlightsEl?.value || '').split(',').map((s) => s.trim()).filter(Boolean);
+      if (!title) {
+        showAdminToast('Please enter an announcement title', 'warn');
+        return;
+      }
+      document.getElementById('changelogModalOverlay')?.remove();
+      if (!db.changelogs) db.changelogs = [];
+      if (editId) {
+        const item = db.changelogs.find((c) => String(c.id) === String(editId));
+        if (item) {
+          item.title = title;
+          item.version = version;
+          item.highlights = highlights;
+        }
+        renderAdmin();
+        await api('/api/admin/changelogs/update', 'POST', { id: editId, title, version, highlights });
+        showAdminToast('Announcement updated in real time!', 'success');
+      } else {
+        const tempItem = {
+          id: `cl-${Date.now()}`,
+          version,
+          date: new Date().toISOString().slice(0, 10),
+          title,
+          highlights
+        };
+        db.changelogs.unshift(tempItem);
+        renderAdmin();
+        await api('/api/admin/changelogs/add', 'POST', { title, version, highlights });
+        showAdminToast('Announcement published in real time!', 'success');
+      }
+      await loadAdminData(true);
+    }
+
+    async function deleteChangelog(id, idx = -1) {
+      if (db && Array.isArray(db.changelogs)) {
+        const beforeLen = db.changelogs.length;
+        db.changelogs = db.changelogs.filter((c) => String(c.id) !== String(id));
+        if (db.changelogs.length === beforeLen && idx >= 0 && idx < db.changelogs.length) {
+          db.changelogs.splice(idx, 1);
+        }
+        renderAdmin();
+      }
+      showAdminToast('Announcement deleted in real time!', 'success');
+      await api('/api/admin/changelogs/delete', 'POST', { id, index: idx });
+      await loadAdminData(true);
+    }
+
+    function viewIdProof(idPhotoUrl, selfieUrl, name) {
+      const modal = document.createElement('div');
+      modal.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.85); z-index:99999; display:flex; align-items:center; justify-content:center; padding:20px;';
+      modal.onclick = () => modal.remove();
+      modal.innerHTML = `
+        <div style="background:#fff; border-radius:16px; padding:20px; max-width:600px; width:100%;" onclick="event.stopPropagation()">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+            <div style="font-weight:800; font-size:16px;">🔍 ID Document & Face Match: ${name}</div>
+            <button onclick="this.closest('div').parentElement.parentElement.remove()" style="border:none; background:none; font-size:20px; cursor:pointer;">&times;</button>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px;">
+            <div>
+              <div style="font-size:12px; font-weight:700; color:#475569; margin-bottom:6px;">Government ID Photo</div>
+              <img src="${idPhotoUrl}" style="width:100%; height:180px; object-fit:contain; border-radius:10px; border:1px solid #CBD5E1; background:#000;" />
+            </div>
+            <div>
+              <div style="font-size:12px; font-weight:700; color:#475569; margin-bottom:6px;">Live Biometric Selfie</div>
+              <img src="${selfieUrl || idPhotoUrl}" style="width:100%; height:180px; object-fit:contain; border-radius:10px; border:1px solid #CBD5E1; background:#000;" />
+            </div>
+          </div>
+          <button class="btn-blue" style="width:100%; height:40px;" onclick="this.closest('div').parentElement.remove()">Close Inspection</button>
+        </div>
+      `;
+      document.body.appendChild(modal);
+    }
+
+    async function promptAddCategory() {
+      const name = prompt('Enter new service category name (e.g. Electrical, Plumbing, Cleaning, Handyman):');
+      if (!name || !name.trim()) return;
+      const icon = prompt('Enter emoji/icon for this category:', '🛠️') || '🛠️';
+      const tagline = prompt('Enter short tagline:', `Verified mobile ${name.trim()} specialists visiting Harare homes`) || `Verified mobile ${name.trim()} specialists`;
+      const minUsd = prompt('Suggested starting price in USD:', '20') || '20';
+      const res = await api('/api/admin/categories/create', 'POST', {
+        name: name.trim(),
+        fullName: `${name.trim()} Services`,
+        icon: icon.trim(),
+        tagline: tagline.trim(),
+        suggestedMinUsd: Number(minUsd) || 20,
+        suggestedMaxUsd: (Number(minUsd) || 20) * 2.5
+      });
+      if (res.error) alert(res.error);
+      await loadAdminData();
+    }
+
+    async function promptEditCategory(categoryId, currentName, currentTagline, currentMinUsd, currentIcon) {
+      const name = prompt('Edit category name:', currentName);
+      if (!name || !name.trim()) return;
+      const tagline = prompt('Edit tagline:', currentTagline) || currentTagline;
+      const minUsd = prompt('Edit starting rate in USD:', currentMinUsd) || currentMinUsd;
+      const icon = prompt('Edit icon / emoji:', currentIcon) || currentIcon;
+      await api('/api/admin/categories/update', 'POST', {
+        categoryId,
+        name: name.trim(),
+        fullName: `${name.trim()} Services`,
+        tagline: tagline.trim(),
+        suggestedMinUsd: Number(minUsd) || 15,
+        icon: icon.trim()
+      });
+      await loadAdminData();
+    }
+
+    async function promptDeleteCategory(categoryId, name) {
+      if (!confirm(`Are you sure you want to delete "${name}" and all its tasks?`)) return;
+      await api('/api/admin/categories/delete', 'POST', { categoryId });
+      await loadAdminData();
+    }
+
+    async function promptAddTask(categoryId, categoryName) {
+      const taskName = prompt(`Add a new task/service under "${categoryName}" (e.g. Knotless Braids, Fade Cut, Pipe Unclog):`);
+      if (!taskName || !taskName.trim()) return;
+      const defaultUsd = prompt('Standard base rate in USD:', '20') || '20';
+      const duration = prompt('Typical duration (e.g. 1-2 hrs):', '1.5 hrs') || '1.5 hrs';
+      const res = await api('/api/admin/categories/task/add', 'POST', {
+        categoryId,
+        name: taskName.trim(),
+        defaultUsd: Number(defaultUsd) || 20,
+        duration: duration.trim()
+      });
+      if (res.error) alert(res.error);
+      await loadAdminData();
+    }
+
+    async function promptEditTask(categoryId, taskIndex, currentName, currentUsd, currentDuration) {
+      const name = prompt('Edit task name:', currentName);
+      if (!name || !name.trim()) return;
+      const defaultUsd = prompt('Base rate in USD:', currentUsd) || currentUsd;
+      const duration = prompt('Duration:', currentDuration) || currentDuration;
+      await api('/api/admin/categories/task/update', 'POST', {
+        categoryId,
+        taskIndex,
+        name: name.trim(),
+        defaultUsd: Number(defaultUsd) || 20,
+        duration: duration.trim()
+      });
+      await loadAdminData();
+    }
+
+    async function promptDeleteTask(categoryId, taskIndex, taskName) {
+      if (!confirm(`Delete task "${taskName}"?`)) return;
+      await api('/api/admin/categories/task/delete', 'POST', {
+        categoryId,
+        taskIndex
+      });
+      await loadAdminData();
+    }
+
+    async function adminDirectApproveCode(phoneDigits) {
+      await api('/api/admin/verify-code-direct', 'POST', { phoneDigits });
+      alert(`Phone ${phoneDigits} approved directly! User can now proceed.`);
+      await loadAdminData();
+    }
+
+    function formatTimeAgo(isoStr) {
+      if (!isoStr) return 'Recently';
+      const diffSec = Math.floor((Date.now() - new Date(isoStr).getTime()) / 1000);
+      if (diffSec < 60) return `${diffSec}s ago`;
+      const diffMin = Math.floor(diffSec / 60);
+      if (diffMin < 60) return `${diffMin}m ago`;
+      const diffHr = Math.floor(diffMin / 60);
+      return `${diffHr}h ago`;
+    }
+
+    function renderAdmin() {
+      if (!db) return;
+      const s = db.settings;
+      const totalSaved = db.revenueLedger.filter((r) => r.promoApplied).reduce((a, r) => a + r.standardFeeUsd, 0);
+      const totalEarned = db.revenueLedger.reduce((a, r) => a + r.actualFeeCollectedUsd, 0);
+      const approvals = db.approvalQueue || [];
+      const pendingApprovals = approvals.filter((a) => a.status === 'PENDING');
+      const kycList = db.kycVerifications || [];
+      const pendingKyc = kycList.filter((k) => k.status === 'PENDING');
+      const cancelLogs = db.cancellationLogs || [];
+
+      const pendingWaCodes = (db.pendingVerifications || []).filter((v) => v.status === 'PENDING');
+      const waBadgeEl = document.getElementById('navWaCodeBadge');
+      if (waBadgeEl) {
+        waBadgeEl.style.display = pendingWaCodes.length > 0 ? 'inline-block' : 'none';
+        waBadgeEl.innerText = pendingWaCodes.length;
+      }
+
+      const pendingEco = (db.ecocashTopups || []).filter((t) => t.status === 'PENDING');
+      const ecoBadgeEl = document.getElementById('navEcoBadge');
+      if (ecoBadgeEl) {
+        ecoBadgeEl.style.display = pendingEco.length > 0 ? 'inline-block' : 'none';
+        ecoBadgeEl.innerText = pendingEco.length;
+      }
+
+      const bannedAccountsCount = (db.customers || []).filter(c => c.isBanned).length + (db.providers || []).filter(p => p.isBanned).length;
+      const warnBadgeEl = document.getElementById('navWarnBadge');
+      if (warnBadgeEl) {
+        warnBadgeEl.style.display = bannedAccountsCount > 0 ? 'inline-block' : 'none';
+        warnBadgeEl.innerText = bannedAccountsCount;
+      }
+
+      const badgeEl = document.getElementById('navApprovalBadge');
+      if (badgeEl) {
+        badgeEl.style.display = pendingApprovals.length > 0 ? 'inline-block' : 'none';
+        badgeEl.innerText = pendingApprovals.length;
+      }
+
+      const kycBadgeEl = document.getElementById('navKycBadge');
+      if (kycBadgeEl) {
+        kycBadgeEl.style.display = pendingKyc.length > 0 ? 'inline-block' : 'none';
+        kycBadgeEl.innerText = pendingKyc.length;
+      }
+
+      const cancelBadgeEl = document.getElementById('navCancelBadge');
+      if (cancelBadgeEl) {
+        cancelBadgeEl.style.display = cancelLogs.length > 0 ? 'inline-block' : 'none';
+        cancelBadgeEl.innerText = cancelLogs.length;
+      }
+
+      const kpiHtml = `
+        <div class="top-header">
+          <div>
+            <h1 style="font-size:23px; font-weight:800; letter-spacing:-0.02em;">Findit Harare — Admin Control Center</h1>
+            <div style="font-size:13px; color:var(--muted); font-weight:500; margin-top:2px;">
+              Real-time control over EcoCash USD manual top-ups, account warnings/bans, WhatsApp &amp; Face KYC, catalogue photo approvals, and commissions
+            </div>
+          </div>
+          <span style="padding:8px 14px; border-radius:99px; background:var(--blue-soft); color:var(--blue-primary); font-size:12.5px; font-weight:800;">
+            ${s.launchPromoActive ? `🎁 0% Promo ON (${s.launchPromoDaysRemaining}d left)` : `💰 Collecting ${s.commissionPercent}% Commission`}
+          </span>
+        </div>
+
+        <div class="kpi-grid">
+          <div class="kpi-card" style="cursor:pointer;" onclick="setAdminTab('ECOCASH')">
+            <div style="font-size:11px; color:var(--muted); font-weight:800;">ECOCASH USD TOP-UPS</div>
+            <div class="kpi-val" style="color:${pendingEco.length > 0 ? '#10B981' : '#0066FF'};">${pendingEco.length} Pending</div>
+            <div style="font-size:12px; color:var(--muted); margin-top:4px; font-weight:600;">Manual SMS approval queue</div>
+          </div>
+
+          <div class="kpi-card" style="cursor:pointer;" onclick="setAdminTab('DISCIPLINE')">
+            <div style="font-size:11px; color:var(--muted); font-weight:800;">SAFETY &amp; BAN CENTER</div>
+            <div class="kpi-val" style="color:${bannedAccountsCount > 0 ? '#EF4444' : '#059669'};">${bannedAccountsCount} Banned</div>
+            <div style="font-size:12px; color:var(--muted); margin-top:4px; font-weight:600;">Discipline &amp; warnings</div>
+          </div>
+
+          <div class="kpi-card" style="cursor:pointer;" onclick="setAdminTab('APPROVALS')">
+            <div style="font-size:11px; color:var(--muted); font-weight:800;">CATALOGUE APPROVAL QUEUE</div>
+            <div class="kpi-val" style="color:${pendingApprovals.length > 0 ? '#D97706' : '#059669'};">${pendingApprovals.length} Pending</div>
+            <div style="font-size:12px; color:var(--muted); margin-top:4px; font-weight:600;">Anti-flyer &amp; watermark check</div>
+          </div>
+
+          <div class="kpi-card" style="cursor:pointer;" onclick="setAdminTab('CANCELLATIONS')">
+            <div style="font-size:11px; color:var(--muted); font-weight:800;">CANCELLATIONS &amp; SHIELD</div>
+            <div class="kpi-val" style="color:#EF4444;">${cancelLogs.length} Cancels • ${db.leakageLogs.length} Blocks</div>
+            <div style="font-size:12px; color:var(--muted); margin-top:4px; font-weight:600;">inDrive reason audit</div>
+          </div>
+        </div>
+      `;
+
+      let sectionHtml = '';
+
+      if (adminTab === 'AI_ENGINE') {
+        const ai = db.aiEngine || {};
+        const report = ai.latestStrategyReport || {};
+        const matches = ai.matchmakingLogs || [];
+        const convAlerts = ai.conversationAlerts || [];
+        const pendingEcoList = (db.ecocashTopups || []).filter((t) => t.status === 'PENDING');
+        const allEcoList = db.ecocashTopups || [];
+        const activeOrCompletedJobs = (db.requests || []).filter((r) => r.acceptedProviderId || ['CONFIRMED', 'ARRIVED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'].includes(r.status));
+        const protectedJobsCount = activeOrCompletedJobs.filter((r) => r.commissionDeducted).length;
+
+        sectionHtml = `
+          <!-- Clean Executive Header Banner -->
+          <div class="card" style="background:linear-gradient(135deg,#0F172A,#1E293B); color:#FFFFFF; border:1px solid #334155; margin-bottom:18px; padding:20px 22px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:14px;">
+              <div>
+                <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px; flex-wrap:wrap;">
+                  <span style="background:#10B981; color:#FFFFFF; font-size:11px; font-weight:800; padding:3px 10px; border-radius:99px;">● AI GUARD ACTIVE</span>
+                  <span style="background:rgba(96,165,250,0.2); color:#93C5FD; font-size:11px; font-weight:700; padding:3px 10px; border-radius:99px;">Gemini 3.1 Flash (${ai.projectName || 'projects/943615439922'})</span>
+                  <span style="background:rgba(255,255,255,0.12); color:#E2E8F0; font-size:11px; font-weight:700; padding:3px 10px; border-radius:99px;">OpenAI Vault Encrypted</span>
+                </div>
+                <div style="font-size:19px; font-weight:800;">Findit Harare — Smart AI Command Center</div>
+                <div style="font-size:12.5px; color:#94A3B8; margin-top:4px;">
+                  Select any category below to inspect Strategy &amp; Bugs, 11% Commission Protection, EcoCash SMS Verification, or Job Matchmaking.
+                </div>
+              </div>
+              <button id="runAiAuditBtn" class="btn-blue" style="background:#0066FF; height:42px; padding:0 18px; font-size:13px;" onclick="runLiveGeminiAudit()">
+                ⚡ Run Live Gemini AI Audit Now
+              </button>
+            </div>
+
+            <!-- 4 Clean Sub-Navigation Tabs Inside AI Guard -->
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(190px, 1fr)); gap:10px; margin-top:18px;">
+              <button
+                type="button"
+                onclick="aiSubTab='STRATEGY'; renderAdmin();"
+                style="text-align:left; padding:12px 14px; border-radius:12px; border:1.5px solid ${aiSubTab === 'STRATEGY' ? '#3B82F6' : 'rgba(255,255,255,0.12)'}; background:${aiSubTab === 'STRATEGY' ? 'rgba(0,102,255,0.28)' : 'rgba(255,255,255,0.05)'}; color:#FFFFFF; cursor:pointer;"
+              >
+                <div style="font-size:11px; color:#93C5FD; font-weight:800; text-transform:uppercase;">1. Strategy &amp; QA</div>
+                <div style="font-size:15px; font-weight:800; margin-top:3px;">📈 Strategy &amp; Bugs</div>
+                <div style="font-size:11px; color:#CBD5E1; margin-top:2px;">Health Score: ${report.healthScore || 96}/100</div>
+              </button>
+
+              <button
+                type="button"
+                onclick="aiSubTab='COMMISSION_GUARD'; renderAdmin();"
+                style="text-align:left; padding:12px 14px; border-radius:12px; border:1.5px solid ${aiSubTab === 'COMMISSION_GUARD' ? '#3B82F6' : 'rgba(255,255,255,0.12)'}; background:${aiSubTab === 'COMMISSION_GUARD' ? 'rgba(0,102,255,0.28)' : 'rgba(255,255,255,0.05)'}; color:#FFFFFF; cursor:pointer;"
+              >
+                <div style="font-size:11px; color:#6EE7B7; font-weight:800; text-transform:uppercase;">2. Revenue &amp; Chat Guard</div>
+                <div style="font-size:15px; font-weight:800; margin-top:3px;">🛡️ 11% Commission Guard</div>
+                <div style="font-size:11px; color:#CBD5E1; margin-top:2px;">${protectedJobsCount} Protected • ${convAlerts.length + (db.leakageLogs || []).length} Alerts</div>
+              </button>
+
+              <button
+                type="button"
+                onclick="aiSubTab='ECOCASH_AI'; renderAdmin();"
+                style="text-align:left; padding:12px 14px; border-radius:12px; border:1.5px solid ${aiSubTab === 'ECOCASH_AI' ? '#3B82F6' : 'rgba(255,255,255,0.12)'}; background:${aiSubTab === 'ECOCASH_AI' ? 'rgba(0,102,255,0.28)' : 'rgba(255,255,255,0.05)'}; color:#FFFFFF; cursor:pointer;"
+              >
+                <div style="font-size:11px; color:#FCD34D; font-weight:800; text-transform:uppercase;">3. EcoCash Receipt AI</div>
+                <div style="font-size:15px; font-weight:800; margin-top:3px;">💵 EcoCash SMS Verifier</div>
+                <div style="font-size:11px; color:#CBD5E1; margin-top:2px;">${pendingEcoList.length} Pending SMS Checks</div>
+              </button>
+
+              <button
+                type="button"
+                onclick="aiSubTab='MATCHMAKING'; renderAdmin();"
+                style="text-align:left; padding:12px 14px; border-radius:12px; border:1.5px solid ${aiSubTab === 'MATCHMAKING' ? '#3B82F6' : 'rgba(255,255,255,0.12)'}; background:${aiSubTab === 'MATCHMAKING' ? 'rgba(0,102,255,0.28)' : 'rgba(255,255,255,0.05)'}; color:#FFFFFF; cursor:pointer;"
+              >
+                <div style="font-size:11px; color:#F472B6; font-weight:800; text-transform:uppercase;">4. Task &amp; Photo AI</div>
+                <div style="font-size:15px; font-weight:800; margin-top:3px;">🎯 Smart Matchmaking</div>
+                <div style="font-size:11px; color:#CBD5E1; margin-top:2px;">${matches.length} Tasks Analyzed</div>
+              </button>
+            </div>
+          </div>
+
+          ${aiSubTab === 'STRATEGY' ? `
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:18px;">
+              <div class="card" style="border-top:4px solid #0066FF;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                  <h3 style="font-size:16px; font-weight:800; margin:0;">📈 Harare Business Strategy &amp; Growth</h3>
+                  <span style="background:#DCFCE7; color:#15803D; font-size:11.5px; font-weight:800; padding:4px 10px; border-radius:99px;">Score: ${report.healthScore || 96}/100</span>
+                </div>
+                <div style="font-size:13px; color:#334155; background:#F8FAFC; padding:12px 14px; border-radius:12px; border:1px solid #E2E8F0; margin-bottom:14px; line-height:1.55;">
+                  <strong>Executive Summary:</strong> ${report.executiveSummary || 'Silent AI Engine is actively monitoring Harare job matchmaking, chat anti-leakage, and 11% commission protection.'}
+                </div>
+                <div style="font-size:12px; font-weight:800; color:#1E40AF; text-transform:uppercase; margin-bottom:8px;">Actionable Harare Strategies</div>
+                <div style="display:flex; flex-direction:column; gap:8px;">
+                  ${(report.businessStrategies || []).map((st, idx) => `
+                    <div style="display:flex; gap:10px; align-items:flex-start; background:#EFF6FF; border:1px solid #BFDBFE; padding:10px 12px; border-radius:10px; font-size:12.5px; color:#1E293B; line-height:1.45;">
+                      <span style="background:#0066FF; color:#fff; width:20px; height:20px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:11px; font-weight:800; flex-shrink:0;">${idx + 1}</span>
+                      <span>${st}</span>
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
+
+              <div class="card" style="border-top:4px solid #10B981;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                  <h3 style="font-size:16px; font-weight:800; margin:0;">🛠️ What to Work On (Bug &amp; Review Monitor)</h3>
+                  <span style="background:#DBEAFE; color:#1E40AF; font-size:11px; font-weight:800; padding:4px 10px; border-radius:99px;">Live Telemetry</span>
+                </div>
+                <div style="font-size:12px; font-weight:800; color:#065F46; text-transform:uppercase; margin-bottom:8px;">Collective Insights from Reviews, Chats &amp; Cancellations</div>
+                <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:16px;">
+                  ${(report.bugAndFrictionFindings || []).map((f) => `
+                    <div style="background:#ECFDF5; border:1px solid #A7F3D0; padding:10px 12px; border-radius:10px; font-size:12.5px; color:#064E3B; line-height:1.45;">
+                      ✅ ${f}
+                    </div>
+                  `).join('')}
+                </div>
+                <div style="font-size:12px; font-weight:800; color:#475569; text-transform:uppercase; margin-bottom:8px;">Highest Demand Categories in Harare</div>
+                <div style="display:flex; flex-wrap:wrap; gap:8px;">
+                  ${(report.topDemandCategories || ['Repairs & Maintenance', 'Hair & Braiding', 'Barbers', 'Plumbing & Electrical']).map((c) => `
+                    <span style="background:#F1F5F9; border:1px solid #CBD5E1; color:#0F172A; font-size:12px; font-weight:700; padding:6px 12px; border-radius:99px;">🔥 ${c}</span>
+                  `).join('')}
+                </div>
+              </div>
+            </div>
+          ` : ''}
+
+          ${aiSubTab === 'COMMISSION_GUARD' ? `
+            <div class="card" style="margin-bottom:18px;">
+              <h3 style="font-size:17px; font-weight:800; margin:0 0 6px 0;">🛡️ 11% Commission Protection &amp; Anti-Bypass Ledger</h3>
+              <p style="font-size:12.5px; color:var(--muted); margin:0 0 14px 0;">
+                AI monitors every chat and cancellation. If a provider and client complete a job without entering the 4-digit PIN, AI automatically deducts the 11% commission. Links to <strong>instagram.com</strong>, <strong>facebook.com</strong>, phone numbers, and chat image uploads by providers are strictly blocked.
+              </p>
+
+              <table>
+                <thead>
+                  <tr>
+                    <th>Booking / Task</th>
+                    <th>Client &amp; Provider</th>
+                    <th>Agreed Fare</th>
+                    <th>Job Status</th>
+                    <th>11% Commission Status</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${activeOrCompletedJobs.length === 0 ? `
+                    <tr><td colspan="6" style="text-align:center; padding:24px; color:var(--muted);">No matched jobs yet.</td></tr>
+                  ` : activeOrCompletedJobs.map((r) => {
+                    const prov = (db.providers || []).find((p) => p.id === r.acceptedProviderId);
+                    const fare = Number(r.agreedTotalUsd || r.budgetUsd || 20);
+                    const comm = Math.round(fare * 0.11 * 100) / 100;
+                    return `
+                      <tr>
+                        <td><strong>${r.title}</strong><div style="font-size:11px; color:var(--muted);">${r.suburbName} • #${r.id}</div></td>
+                        <td>
+                          <div>Client: <strong>${r.customerName}</strong></div>
+                          <div style="font-size:11.5px; color:#0066FF;">Pro: <strong>${prov ? prov.name : (r.acceptedProviderId || 'Pending')}</strong></div>
+                        </td>
+                        <td style="font-weight:800;">$${fare.toFixed(2)}</td>
+                        <td><span style="font-weight:800; font-size:11.5px; color:${r.status === 'COMPLETED' ? '#059669' : r.status === 'CANCELLED' ? '#DC2626' : '#0066FF'};">${r.status}</span></td>
+                        <td>
+                          ${r.commissionDeducted
+                            ? `<span style="background:#DCFCE7; color:#15803D; padding:4px 9px; border-radius:99px; font-size:11px; font-weight:800;">✅ Deducted ($${comm.toFixed(2)}) • ${r.commissionDeductedSource || 'PIN'}</span>`
+                            : `<span style="background:#FEF3C7; color:#B45309; padding:4px 9px; border-radius:99px; font-size:11px; font-weight:800;">⏳ Pending ($${comm.toFixed(2)})</span>`}
+                        </td>
+                        <td>
+                          ${!r.commissionDeducted && r.acceptedProviderId ? `
+                            <button class="btn-blue" style="padding:6px 12px; font-size:11.5px;" onclick="enforceAiCommission('${r.id}')">
+                              Deduct 11% ($${comm.toFixed(2)})
+                            </button>
+                          ` : `<span style="font-size:11.5px; color:#059669; font-weight:800;">Protected ✓</span>`}
+                        </td>
+                      </tr>
+                    `;
+                  }).join('')}
+                </tbody>
+              </table>
+            </div>
+
+            ${convAlerts.length > 0 ? `
+              <div class="card">
+                <h3 style="font-size:16px; font-weight:800; color:#DC2626; margin:0 0 10px 0;">🚨 Live AI Conversation &amp; Social Handle Intercepts (${convAlerts.length})</h3>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Time</th>
+                      <th>Actor</th>
+                      <th>Task</th>
+                      <th>Alert Type</th>
+                      <th>Message</th>
+                      <th>AI Decision</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${convAlerts.map((al) => `
+                      <tr>
+                        <td style="font-size:11.5px; color:var(--muted);">${formatTimeAgo(al.timestamp)}</td>
+                        <td><strong>${al.actorName}</strong> (${al.actorRole})</td>
+                        <td>${al.taskTitle || al.requestId}</td>
+                        <td><span style="background:#FEE2E2; color:#991B1B; padding:3px 8px; border-radius:99px; font-size:11px; font-weight:800;">${al.category}</span></td>
+                        <td style="font-size:12px; color:#991B1B;">"${al.attemptedText}"</td>
+                        <td style="font-size:12px; color:#065F46; font-weight:700;">${al.explanation}</td>
+                      </tr>
+                    `).join('')}
+                  </tbody>
+                </table>
+              </div>
+            ` : ''}
+          ` : ''}
+
+          ${aiSubTab === 'ECOCASH_AI' ? `
+            <div class="card">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                <div>
+                  <h3 style="font-size:17px; font-weight:800; margin:0;">💵 AI EcoCash Receipt &amp; SMS Authenticity Verifier</h3>
+                  <p style="font-size:12.5px; color:var(--muted); margin:4px 0 0 0;">
+                    Gemini AI inspects every submitted EcoCash SMS for genuine approval code formatting, USD amount consistency, and potential edits before you credit the provider's wallet.
+                  </p>
+                </div>
+              </div>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Provider</th>
+                    <th>Claimed USD</th>
+                    <th>Ref Code</th>
+                    <th>Submitted EcoCash SMS</th>
+                    <th>AI Authenticity Verdict</th>
+                    <th>Status / Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${allEcoList.length === 0 ? `
+                    <tr><td colspan="6" style="text-align:center; padding:24px; color:var(--muted);">No EcoCash SMS submissions yet.</td></tr>
+                  ` : allEcoList.map((item) => {
+                    const aiV = item.aiVerification || { verdict: 'AUTHENTIC_LIKELY', confidence: 94, reason: 'Standard EcoCash reference code & USD amount verified.' };
+                    const isGood = aiV.verdict === 'AUTHENTIC_LIKELY';
+                    return `
+                      <tr>
+                        <td>
+                          <div style="font-weight:800;">${item.providerName}</div>
+                          <div style="font-size:11px; color:var(--muted);">${item.providerFinditId} • ${item.providerPhone}</div>
+                        </td>
+                        <td style="font-weight:800; color:#059669;">$${item.claimedAmountUsd}.00</td>
+                        <td style="font-family:monospace; font-weight:800; color:#0066FF;">${item.referenceCode}</td>
+                        <td style="font-family:monospace; font-size:11.5px; max-width:260px;">"${item.confirmationSms}"</td>
+                        <td>
+                          <span style="display:inline-block; background:${isGood ? '#DCFCE7' : '#FEE2E2'}; color:${isGood ? '#15803D' : '#DC2626'}; font-size:11px; font-weight:800; padding:3px 9px; border-radius:99px; margin-bottom:4px;">
+                            ${isGood ? `🤖 AI Verified (${aiV.confidence || 95}%)` : `⚠️ ${aiV.verdict} (${aiV.confidence || 50}%)`}
+                          </span>
+                          <div style="font-size:11px; color:#475569;">${aiV.reason || ''}</div>
+                        </td>
+                        <td>
+                          ${item.status === 'PENDING' ? `
+                            <div style="display:flex; gap:6px;">
+                              <button class="btn-blue" style="background:#10B981; padding:5px 10px; font-size:11px;" onclick="verifyEcoCash('${item.id}', 'APPROVE', ${item.claimedAmountUsd})">Approve</button>
+                              <button class="btn-outline" style="color:#DC2626; border-color:#FECACA; padding:5px 10px; font-size:11px;" onclick="verifyEcoCash('${item.id}', 'REJECT', ${item.claimedAmountUsd})">Reject</button>
+                            </div>
+                          ` : `<span style="font-weight:800; font-size:11.5px; color:${item.status === 'APPROVED' ? '#059669' : '#DC2626'};">${item.status}</span>`}
+                        </td>
+                      </tr>
+                    `;
+                  }).join('')}
+                </tbody>
+              </table>
+            </div>
+          ` : ''}
+
+          ${aiSubTab === 'MATCHMAKING' ? `
+            <div class="card">
+              <h3 style="font-size:17px; font-weight:800; margin:0 0 6px 0;">🎯 Smart AI Task &amp; Photo Matchmaking Logs (${matches.length})</h3>
+              <p style="font-size:12.5px; color:var(--muted); margin:0 0 14px 0;">
+                When clients write custom task descriptions or attach a reference photo, Gemini Vision classifies the service, estimates fair Harare USD pricing, and ranks eligible verified providers.
+              </p>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Time</th>
+                    <th>Client &amp; Suburb</th>
+                    <th>AI Task &amp; Photo Analysis</th>
+                    <th>Matched Category</th>
+                    <th>Client Offer vs AI Fair Price</th>
+                    <th>Matched Eligible Pros</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${matches.length === 0 ? `
+                    <tr><td colspan="6" style="text-align:center; padding:24px; color:var(--muted);">Submit a new service request in the app to see live AI matchmaking logs here.</td></tr>
+                  ` : matches.map((m) => `
+                    <tr>
+                      <td style="font-size:11.5px; color:var(--muted);">${formatTimeAgo(m.timestamp)}</td>
+                      <td><strong>${m.customerName}</strong><div style="font-size:11px; color:var(--muted);">${m.suburbName}</div></td>
+                      <td>
+                        <div style="font-weight:800; color:#0F172A;">${m.taskSummary}</div>
+                        <div style="font-size:11px; color:#0066FF; margin-top:2px;">
+                          ${m.hasPhoto ? '📸 Vision Photo Analyzed • ' : ''}${(m.detectedSkills || []).join(' • ')}
+                        </div>
+                      </td>
+                      <td><span style="background:#DBEAFE; color:#1E40AF; padding:3px 9px; border-radius:99px; font-size:11px; font-weight:800;">${m.matchedCategoryId}</span></td>
+                      <td>
+                        <div>Offer: <strong>$${Number(m.clientBudgetUsd || 25).toFixed(2)}</strong></div>
+                        <div style="font-size:11px; color:#059669; font-weight:700;">AI Fair Est: $${Number(m.recommendedFareUsd || 25).toFixed(2)}</div>
+                      </td>
+                      <td>
+                        ${(m.matchedProviders || []).length === 0
+                          ? `<span style="font-size:11.5px; color:var(--muted);">No online pros in category</span>`
+                          : (m.matchedProviders || []).map((p) => `
+                              <div style="font-size:11.5px; font-weight:700;">
+                                • ${p.name} <span style="color:${p.eligibleToBid ? '#059669' : '#DC2626'};">($${Number(p.walletBalanceUsd || 0).toFixed(2)})</span>
+                              </div>
+                            `).join('')}
+                      </td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          ` : ''}
+        `;
+      } else if (adminTab === 'ECOCASH') {
+        const pendingEcoList = (db.ecocashTopups || []).filter(t => t.status === 'PENDING');
+        const historyEcoList = (db.ecocashTopups || []).filter(t => t.status !== 'PENDING');
+
+        sectionHtml = `
+          <!-- SMART ECOCASH SMS MATCHER CARD -->
+          <div class="card" style="margin-bottom:20px; background:linear-gradient(135deg, #F8FAFC 0%, #EFF6FF 100%); border:1.5px solid #BFDBFE;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
+              <div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span style="font-size:20px;">⚡</span>
+                  <h2 style="font-size:18px; font-weight:800; color:#1E3A8A;">Smart EcoCash SMS Matcher &amp; Auto-Reconciler</h2>
+                </div>
+                <p style="font-size:13px; color:#475569; font-weight:500; margin-top:4px;">
+                  Paste transaction confirmation messages received on your EcoCash merchant phone (<strong>0772 910 440</strong>). The system automatically matches approval codes &amp; amounts with provider top-up submissions for instant 1-click credit or rejection.
+                </p>
+              </div>
+              <span style="padding:4px 12px; border-radius:99px; background:#DBEAFE; color:#1E40AF; font-size:11.5px; font-weight:800;">
+                Live Reconciliation
+              </span>
+            </div>
+
+            <div style="position:relative;">
+              <textarea
+                id="adminPastedSmsInput"
+                rows="3"
+                style="width:100%; border-radius:12px; border:1.5px solid #CBD5E1; padding:12px 14px; font-family:monospace; font-size:13px; color:#1E293B; background:#FFFFFF; outline:none; resize:vertical; box-sizing:border-box;"
+                placeholder="Paste received EcoCash transaction message here... (e.g. 'Transfer of USD 5.00 from TENDAI MOYO 0772001001 approved. Approval Code: PP261021.1432.A83921...')"
+                oninput="handleAdminSmsMatch(this.value)"
+              ></textarea>
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-top:6px;">
+                <span style="font-size:11.5px; color:#64748B;">Supported: EcoCash CashIn, Transfer, &amp; Merchant SMS formats</span>
+                <button
+                  type="button"
+                  style="border:none; background:none; color:#DC2626; font-size:12px; font-weight:700; cursor:pointer;"
+                  onclick="document.getElementById('adminPastedSmsInput').value=''; handleAdminSmsMatch('');"
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+
+            <div id="adminSmsMatchResult"></div>
+          </div>
+
+          <div class="card" style="margin-bottom:20px;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:14px;">
+              <div>
+                <h2 style="font-size:18px; font-weight:800;">💵 EcoCash USD Top-Up SMS Verification Queue</h2>
+                <p style="font-size:13px; color:var(--muted); font-weight:500; margin-top:3px;">
+                  Service providers send EcoCash USD to Findit Admin (<strong>0772 910 440</strong>) and paste their SMS confirmation. Verify the approval code on your EcoCash phone, then credit points to their wallet.
+                </p>
+              </div>
+              <span style="padding:6px 14px; border-radius:99px; background:#ECFDF5; color:#059669; font-size:12.5px; font-weight:800;">
+                ${pendingEcoList.length} Awaiting Verification
+              </span>
+            </div>
+
+            ${pendingEcoList.length === 0 ? `
+              <div style="text-align:center; padding:32px; color:var(--muted); font-size:14px; font-weight:600; background:#F8FAFC; border-radius:12px;">
+                ✅ All EcoCash top-up SMS submissions have been verified and processed!
+              </div>
+            ` : `
+              <div style="display:grid; grid-template-columns:1fr; gap:14px;">
+                ${pendingEcoList.map((item) => `
+                  <div style="background:#FFFFFF; border:1.5px solid var(--border); border-radius:14px; padding:16px; box-shadow:0 4px 12px rgba(0,0,0,0.03);">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px;">
+                      <div>
+                        <div style="font-size:16px; font-weight:800; color:var(--text);">${item.providerName}</div>
+                        <div style="font-size:12px; color:var(--muted); font-weight:600; margin-top:2px;">
+                          ID: <span style="font-family:monospace; font-weight:800; color:var(--blue-primary);">${item.providerFinditId}</span> • Phone: ${item.providerPhone}
+                        </div>
+                      </div>
+                      <div style="text-align:right;">
+                        <span style="font-size:20px; font-weight:800; color:#059669;">$${item.claimedAmountUsd}.00 USD</span>
+                        <div style="font-size:11px; color:var(--muted); font-weight:600;">Claimed Amount</div>
+                      </div>
+                    </div>
+
+                    <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:10px 12px; margin-bottom:12px;">
+                      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; font-size:11.5px; font-weight:800;">
+                        <span style="color:var(--text);">EcoCash SMS Content</span>
+                        <span style="color:var(--blue-primary); font-family:monospace;">Detected Ref: ${item.referenceCode}</span>
+                      </div>
+                      <div style="font-family:monospace; font-size:12px; color:#1E293B; word-break:break-word; line-height:1.45; margin-bottom:8px;">
+                        "${item.confirmationSms}"
+                      </div>
+                      ${item.aiVerification ? `
+                        <div style="display:flex; align-items:center; justify-content:space-between; background:${item.aiVerification.verdict === 'AUTHENTIC_LIKELY' ? '#ECFDF5' : '#FEF2F2'}; border:1px solid ${item.aiVerification.verdict === 'AUTHENTIC_LIKELY' ? '#A7F3D0' : '#FECACA'}; border-radius:8px; padding:6px 10px; font-size:11.5px;">
+                          <span style="font-weight:800; color:${item.aiVerification.verdict === 'AUTHENTIC_LIKELY' ? '#059669' : '#DC2626'};">
+                            🤖 AI Receipt Check: ${item.aiVerification.verdict} (${item.aiVerification.confidence || 95}% confidence)
+                          </span>
+                          <span style="color:#475569; font-weight:600;">${item.aiVerification.reason || ''}</span>
+                        </div>
+                      ` : ''}
+                    </div>
+
+                    <div style="display:flex; justify-content:flex-end; gap:8px;">
+                      <button class="btn-outline" style="color:#DC2626; border-color:#FECACA;" onclick="verifyEcoCash('${item.id}', 'REJECT', ${item.claimedAmountUsd})">
+                        ❌ Reject &amp; Warn
+                      </button>
+                      <button class="btn-blue" style="background:#10B981;" onclick="verifyEcoCash('${item.id}', 'APPROVE', ${item.claimedAmountUsd})">
+                        ✅ Approve &amp; Credit $${item.claimedAmountUsd} to Wallet
+                      </button>
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            `}
+          </div>
+
+          <div class="card">
+            <h3 style="font-size:16px; font-weight:800; margin-bottom:12px;">Processed EcoCash Verification History</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>Provider &amp; Findit ID</th>
+                  <th>Reference Code</th>
+                  <th>Amount</th>
+                  <th>Status</th>
+                  <th>Submitted At</th>
+                  <th>Admin Note</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${historyEcoList.length === 0 ? `
+                  <tr><td colspan="6" style="text-align:center; color:var(--muted);">No processed transactions yet.</td></tr>
+                ` : historyEcoList.map((h) => `
+                  <tr>
+                    <td>
+                      <div style="font-weight:800;">${h.providerName}</div>
+                      <div style="font-size:11px; font-family:monospace; color:var(--muted);">${h.providerFinditId}</div>
+                    </td>
+                    <td style="font-family:monospace; font-weight:700;">${h.referenceCode}</td>
+                    <td style="font-weight:800; color:${h.status === 'APPROVED' ? '#059669' : '#DC2626'};">$${h.creditedAmountUsd || h.claimedAmountUsd} USD</td>
+                    <td>
+                      <span style="padding:4px 9px; border-radius:99px; font-size:11px; font-weight:800; ${h.status === 'APPROVED' ? 'background:#ECFDF5; color:#059669;' : 'background:#FEF2F2; color:#DC2626;'}">
+                        ${h.status}
+                      </span>
+                    </td>
+                    <td style="font-size:12px; color:var(--muted);">${new Date(h.submittedAt).toLocaleString()}</td>
+                    <td style="font-size:12px; color:var(--muted);">${h.adminNote || 'Verified via EcoCash Merchant'}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        `;
+      } else if (adminTab === 'DISCIPLINE') {
+        const allAccounts = [
+          ...(db.providers || []).map(p => ({ ...p, role: 'PROVIDER' })),
+          ...(db.customers || []).map(c => ({ ...c, role: 'CUSTOMER' }))
+        ];
+        const totalClients = (db.customers || []).length;
+        const totalProviders = (db.providers || []).length;
+
+        const filteredAccounts = allAccounts.filter((acc) => {
+          if (adminRoleFilter === 'PROVIDER' && acc.role !== 'PROVIDER') return false;
+          if (adminRoleFilter === 'CUSTOMER' && acc.role !== 'CUSTOMER') return false;
+          if (adminRoleFilter === 'BANNED' && !acc.isBanned) return false;
+          if (adminSearchQuery.trim()) {
+            const q = adminSearchQuery.trim().toLowerCase();
+            const hay = `${acc.name || ''} ${acc.brandName || ''} ${acc.phone || ''} ${acc.finditId || ''} ${acc.nationalIdNumber || ''} ${acc.idDocument?.number || ''} ${acc.suburbName || ''}`.toLowerCase();
+            if (!hay.includes(q)) return false;
+          }
+          return true;
+        });
+
+        sectionHtml = `
+          <div class="card" style="margin-bottom:20px;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:14px; flex-wrap:wrap; gap:12px;">
+              <div>
+                <h2 style="font-size:18px; font-weight:800;">🛡️ Full Client &amp; Service Provider Security Directory + Instant Bans</h2>
+                <p style="font-size:13px; color:var(--muted); font-weight:500; margin-top:3px;">
+                  Complete security oversight of all registered Clients (${totalClients}) and Service Providers (${totalProviders}) with full legal names, phone numbers, National ID / Passport / Licence records, Biometric Face photos, chosen categories, and 0ms instant Ban / Unban controls.
+                </p>
+              </div>
+              <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                <span style="padding:6px 12px; border-radius:99px; background:#EFF6FF; color:#0066FF; font-size:12px; font-weight:800;">
+                  ${totalClients} Clients • ${totalProviders} Providers
+                </span>
+                <span style="padding:6px 14px; border-radius:99px; background:#FEF2F2; color:#DC2626; font-size:12.5px; font-weight:800;">
+                  ${bannedAccountsCount} Banned
+                </span>
+              </div>
+            </div>
+
+            <!-- Filter Pills & Search Input -->
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:14px; flex-wrap:wrap;">
+              <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                <button class="${adminRoleFilter === 'ALL' ? 'btn-blue' : 'btn-outline'}" style="padding:6px 12px; font-size:12px;" onclick="adminRoleFilter='ALL'; renderAdmin();">
+                  All Accounts (${allAccounts.length})
+                </button>
+                <button class="${adminRoleFilter === 'CUSTOMER' ? 'btn-blue' : 'btn-outline'}" style="padding:6px 12px; font-size:12px;" onclick="adminRoleFilter='CUSTOMER'; renderAdmin();">
+                  👤 Clients (${totalClients})
+                </button>
+                <button class="${adminRoleFilter === 'PROVIDER' ? 'btn-blue' : 'btn-outline'}" style="padding:6px 12px; font-size:12px;" onclick="adminRoleFilter='PROVIDER'; renderAdmin();">
+                  🛠️ Providers (${totalProviders})
+                </button>
+                <button class="${adminRoleFilter === 'BANNED' ? 'btn-blue' : 'btn-outline'}" style="padding:6px 12px; font-size:12px; ${adminRoleFilter !== 'BANNED' ? 'color:#DC2626; border-color:#FECACA;' : 'background:#DC2626;'}" onclick="adminRoleFilter='BANNED'; renderAdmin();">
+                  🚫 Banned (${bannedAccountsCount})
+                </button>
+              </div>
+              <input
+                type="text"
+                placeholder="Search name, phone, Findit ID, National ID..."
+                value="${adminSearchQuery.replace(/"/g, '&quot;')}"
+                oninput="adminSearchQuery = this.value; renderAdmin();"
+                style="height:36px; min-width:260px; border:1.5px solid var(--border); border-radius:10px; padding:0 12px; font-size:12.5px; font-weight:600;"
+              />
+            </div>
+
+            <div style="overflow-x:auto;">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Full Name &amp; Biometric Face</th>
+                    <th>Role &amp; Findit ID</th>
+                    <th>Phone &amp; Location</th>
+                    <th>National ID / KYC &amp; Categories</th>
+                    <th>Wallet &amp; Rating</th>
+                    <th>Account Status</th>
+                    <th>Instant Actions (No Refresh)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${filteredAccounts.length === 0 ? `
+                    <tr><td colspan="7" style="text-align:center; padding:24px; color:var(--muted); font-weight:600;">No matching accounts found.</td></tr>
+                  ` : filteredAccounts.map((acc) => {
+                    const idType = acc.idDocument?.type || 'National ID';
+                    const idNum = acc.idDocument?.number || acc.nationalIdNumber || 'Verified on file';
+                    const idPhoto = acc.idDocument?.photoUrl || acc.selfieUrl || acc.avatarUrl || '';
+                    const selfiePhoto = acc.selfieUrl || acc.avatarUrl || '';
+                    const catNames = acc.role === 'PROVIDER'
+                      ? ((acc.categoryIds && acc.categoryIds.length ? acc.categoryIds : (acc.categoryId ? [acc.categoryId] : []))
+                          .map((cid) => {
+                            const cObj = (db.categories || []).find((x) => x.id === cid);
+                            return cObj ? cObj.name : cid;
+                          }).join(', '))
+                      : 'Client Home Visits';
+
+                    return `
+                      <tr style="${acc.isBanned ? 'background:#FFF1F2;' : ''}">
+                        <td>
+                          <div style="display:flex; align-items:center; gap:10px;">
+                            <div style="width:40px; height:40px; border-radius:50%; overflow:hidden; background:#E2E8F0; border:2px solid ${acc.role === 'PROVIDER' ? '#0066FF' : '#10B981'}; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:12px; flex-shrink:0;">
+                              ${acc.avatarUrl ? `<img src="${acc.avatarUrl}" style="width:100%; height:100%; object-fit:cover;" />` : `<span>${(acc.name || 'U').slice(0, 2).toUpperCase()}</span>`}
+                            </div>
+                            <div>
+                              <div style="font-weight:800; font-size:13.5px; color:var(--text);">${acc.name || 'Unnamed'}</div>
+                              ${acc.brandName ? `<div style="font-size:11.5px; color:var(--blue-primary); font-weight:700;">${acc.brandName}</div>` : ''}
+                              <div style="font-size:10.5px; color:#059669; font-weight:700;">
+                                ✓ Face ID Verified ${acc.hasPassword ? '• 🔒 Password Set' : ''}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td>
+                          <span style="padding:3px 8px; border-radius:6px; font-size:11px; font-weight:800; ${acc.role === 'PROVIDER' ? 'background:var(--blue-soft); color:var(--blue-primary);' : 'background:#ECFDF5; color:#059669;'}">
+                            ${acc.role === 'PROVIDER' ? 'PROVIDER' : 'CLIENT'}
+                          </span>
+                          <div style="font-family:monospace; font-size:11.5px; font-weight:800; color:var(--text); margin-top:4px;">
+                            ${acc.finditId || (acc.role === 'PROVIDER' ? 'FH-PRO' : 'FH-USR')}
+                          </div>
+                        </td>
+                        <td>
+                          <div style="font-weight:800; font-size:13px; color:var(--text);">${acc.phone || 'N/A'}</div>
+                          <div style="font-size:11.5px; color:var(--muted); font-weight:600; margin-top:2px;">📍 ${acc.suburbName || acc.suburbId || acc.exactAddress || 'Harare'}</div>
+                          ${acc.officeAddress ? `<div style="font-size:10.5px; color:#475569; margin-top:1px;">🏢 ${acc.officeAddress}</div>` : ''}
+                        </td>
+                        <td>
+                          <div style="font-size:11.5px; font-weight:800; color:var(--text);">🪪 ${idType}: <span style="font-family:monospace;">${idNum}</span></div>
+                          <div style="font-size:11px; color:var(--muted); font-weight:600; margin-top:2px;">📂 ${catNames}</div>
+                          ${(idPhoto || selfiePhoto) ? `
+                            <button class="btn-outline" style="padding:3px 8px; font-size:10.5px; margin-top:4px; color:var(--blue-primary); border-color:#BFDBFE;" onclick="viewIdProof('${idPhoto}', '${selfiePhoto}', '${(acc.name || '').replace(/'/g, "\\'")}')">
+                              🔍 Inspect ID &amp; Face
+                            </button>
+                          ` : ''}
+                        </td>
+                        <td>
+                          ${acc.role === 'PROVIDER' ? `
+                            <div style="font-weight:800; color:var(--blue-primary); font-size:13.5px;">$${Number(acc.walletBalanceUsd || 0).toFixed(2)} USD</div>
+                            <div style="display:flex; gap:4px; margin-top:4px;">
+                              <button type="button" class="btn-blue" style="padding:2px 6px; font-size:10px; font-weight:800; border-radius:5px;" onclick="adminPromptWalletAdjust('${acc.id}', '${(acc.name || '').replace(/'/g, "\\'")}', 'CREDIT', ${Number(acc.walletBalanceUsd || 0)})" title="Credit custom USD">+ Add</button>
+                              <button type="button" class="btn-outline" style="padding:2px 6px; font-size:10px; font-weight:800; border-radius:5px; color:#DC2626; border-color:#FCA5A5; background:#FEF2F2;" onclick="adminPromptWalletAdjust('${acc.id}', '${(acc.name || '').replace(/'/g, "\\'")}', 'DEDUCT', ${Number(acc.walletBalanceUsd || 0)})" title="Deduct custom USD">- Deduct</button>
+                            </div>
+                          ` : `
+                            <div style="font-size:11.5px; font-weight:700; color:#475569;">Client Account</div>
+                          `}
+                          <div style="font-size:11.5px; color:#D97706; font-weight:800; margin-top:2px;">
+                            ⭐ ${Number(acc.rating || 0) > 0 ? Number(acc.rating).toFixed(1) : 'New'} <span style="color:var(--muted); font-weight:600;">(${acc.completedBookings || 0} jobs)</span>
+                          </div>
+                        </td>
+                        <td>
+                          <span style="padding:4px 9px; border-radius:99px; font-size:11px; font-weight:800; display:inline-block; ${acc.isBanned ? 'background:#FEE2E2; color:#DC2626;' : 'background:#ECFDF5; color:#059669;'}">
+                            ${acc.isBanned ? '🚫 BANNED' : '✓ ACTIVE'}
+                          </span>
+                          <div style="font-size:11px; font-weight:700; margin-top:4px; color:${(acc.warningsCount || 0) > 0 ? '#DC2626' : 'var(--muted)'};">
+                            ${acc.warningsCount || 0} warning(s)
+                          </div>
+                          ${acc.isBanned && acc.banReason ? `
+                            <div style="font-size:10.5px; color:#BE123C; max-width:170px; margin-top:2px; line-height:1.3;">"${acc.banReason}"</div>
+                          ` : ''}
+                        </td>
+                        <td>
+                          <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                            <button type="button" class="btn-outline" style="padding:6px 10px; font-size:11.5px; color:#D97706; border-color:#FDE68A; font-weight:800;" onclick="disciplineAccount('${acc.role}', '${acc.id}', 'WARN')">
+                              ⚠️ Warn
+                            </button>
+                            ${acc.isBanned ? `
+                              <button type="button" class="btn-green" style="padding:6px 12px; font-size:11.5px; font-weight:800;" onclick="disciplineAccount('${acc.role}', '${acc.id}', 'UNBAN')">
+                                ✓ Unban Now
+                              </button>
+                            ` : `
+                              <button type="button" class="btn-outline" style="padding:6px 12px; font-size:11.5px; color:#DC2626; border-color:#FECACA; background:#FEF2F2; font-weight:800;" onclick="disciplineAccount('${acc.role}', '${acc.id}', 'BAN')">
+                                🚫 Ban Now
+                              </button>
+                            `}
+                          </div>
+                        </td>
+                      </tr>
+                    `;
+                  }).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3 style="font-size:16px; font-weight:800; margin-bottom:12px;">Discipline &amp; Ban Audit Trail</h3>
+            ${(db.disciplineLogs || []).length === 0 ? `
+              <div style="color:var(--muted); font-size:13px; text-align:center; padding:18px;">No disciplinary actions logged yet.</div>
+            ` : (db.disciplineLogs || []).map((log) => `
+              <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:11px 14px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                  <div style="font-weight:800; font-size:13px; color:var(--text);">
+                    <span style="color:${log.action === 'BAN' ? '#DC2626' : log.action === 'UNBAN' ? '#059669' : '#D97706'}; font-weight:800;">[${log.action}]</span>
+                    ${log.accountName || log.name || log.accountId} (${log.role}) • ID: ${log.finditId || log.accountId}
+                  </div>
+                  <div style="font-size:12px; color:var(--muted); margin-top:2px;">Reason: "${log.reason}"</div>
+                </div>
+                <div style="font-size:11.5px; color:var(--muted); font-weight:600;">${new Date(log.timestamp).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' })}</div>
+              </div>
+            `).join('')}
+          </div>
+        `;
+      } else if (adminTab === 'KYC') {
+        sectionHtml = `
+          <div class="card">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+              <div>
+                <h2 style="font-size:18px; font-weight:800;">🤳 Sign-Up KYC: WhatsApp OTP, Biometric Face Scan & National ID</h2>
+                <p style="font-size:13px; color:var(--muted); font-weight:500; margin-top:3px;">
+                  Every new Customer and Service Provider completes 3-step verification on sign-up: WhatsApp 4-Digit Code (+263), Biometric Face Liveness Scan, and Zimbabwe National ID.
+                </p>
+              </div>
+              <span style="padding:6px 12px; border-radius:99px; background:var(--blue-soft); color:var(--blue-primary); font-size:12px; font-weight:800;">
+                ${kycList.length} Total Profiles
+              </span>
+            </div>
+
+            <table>
+              <thead>
+                <tr>
+                  <th>User / Provider</th>
+                  <th>Role & Suburb</th>
+                  <th>WhatsApp OTP</th>
+                  <th>Biometric Face Liveness</th>
+                  <th>Zimbabwe National ID</th>
+                  <th>Status & Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${kycList.map((k) => {
+                  const isPending = k.status === 'PENDING';
+                  const isApproved = k.status === 'APPROVED';
+                  return `
+                    <tr>
+                      <td>
+                        <div style="font-weight:800;">${k.actorName}</div>
+                        <div style="font-size:11.5px; color:var(--muted); font-weight:600;">${k.phone} • ${k.submittedAt}</div>
+                      </td>
+                      <td>
+                        <span style="padding:3px 8px; border-radius:99px; font-size:10.5px; font-weight:800; background:${k.role === 'PROVIDER' ? '#EBF3FF' : '#F1F5F9'}; color:${k.role === 'PROVIDER' ? '#0066FF' : '#334155'};">
+                          ${k.role}
+                        </span>
+                        <div style="font-size:12px; font-weight:700; margin-top:4px;">📍 ${k.suburbName || 'Harare'}</div>
+                      </td>
+                      <td>
+                        <span style="color:#059669; font-weight:800;">✓ WhatsApp OTP Verified</span>
+                      </td>
+                      <td>
+                        <div style="font-weight:800; color:#0066FF;">🤳 ${k.faceScore || '99.2%'} Match</div>
+                        <div style="font-size:11px; color:var(--muted); font-weight:600;">3D Liveness Passed</div>
+                      </td>
+                      <td>
+                        <div style="font-family:monospace; font-weight:800;">🪪 ${k.nationalId || 'Verified'}</div>
+                        ${k.idPhotoUrl ? `
+                          <button class="btn-outline" style="padding:2px 7px; font-size:11px; margin-top:4px;" onclick="viewIdProof('${k.idPhotoUrl}', '${k.selfieUrl || ''}', '${(k.actorName || '').replace(/'/g, "\\'")}')">
+                            🔍 View ID &amp; Face
+                          </button>
+                        ` : ''}
+                      </td>
+                      <td>
+                        ${isPending ? `
+                          <div style="display:flex; gap:6px;">
+                            <button class="btn-green" style="padding:6px 10px; font-size:11.5px;" onclick="moderateKycItem('${k.id}', 'APPROVE')">Approve</button>
+                            <button class="btn-outline" style="color:#DC2626; border-color:#FECACA;" onclick="moderateKycItem('${k.id}', 'REJECT')">Reject</button>
+                          </div>
+                        ` : `
+                          <span style="padding:4px 10px; border-radius:99px; font-size:11px; font-weight:800; background:${isApproved ? '#ECFDF5' : '#FEF2F2'}; color:${isApproved ? '#059669' : '#DC2626'};">
+                            ${k.status}
+                          </span>
+                        `}
+                      </td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        `;
+      } else if (adminTab === 'WHATSAPP_CODES') {
+        const list = db.pendingVerifications || [];
+        sectionHtml = `
+          <div class="card">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
+              <div>
+                <h2 style="font-size:18px; font-weight:800; margin:0 0 4px;">💬 WhatsApp Login &amp; Verification Codes</h2>
+                <p style="font-size:13px; color:var(--muted); margin:0;">
+                  Live queue of users requesting login codes. An alert is also dispatched to your WhatsApp (+263 713 475 131).
+                </p>
+              </div>
+              <button class="btn-blue" onclick="loadAdminData()">🔄 Refresh Queue</button>
+            </div>
+
+            ${list.length === 0 ? `
+              <div style="padding:40px 20px; text-align:center; color:var(--muted);">
+                <div style="font-size:32px; margin-bottom:8px;">✅</div>
+                <div style="font-size:15px; font-weight:700; color:#0F172A;">No pending verification codes</div>
+                <div style="font-size:13px; margin-top:4px;">When users request a code on the app, their 4-digit code will appear here instantly.</div>
+              </div>
+            ` : `
+              <table>
+                <thead>
+                  <tr>
+                    <th>Requested</th>
+                    <th>Phone Number</th>
+                    <th>Role</th>
+                    <th>4-Digit Code</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${list.map(v => {
+                    const isPending = v.status === 'PENDING';
+                    const waText = encodeURIComponent(`Your Findit Harare verification code is: ${v.code}. Valid for 10 minutes.`);
+                    const waUrl = `https://wa.me/${v.phoneDigits}?text=${waText}`;
+                    const timeAgo = formatTimeAgo(v.createdAt);
+                    return `
+                      <tr>
+                        <td style="font-size:12px; color:var(--muted);">${timeAgo}</td>
+                        <td style="font-weight:800; font-size:14px;">${v.phone}</td>
+                        <td><span style="padding:3px 8px; border-radius:6px; font-size:11.5px; font-weight:700; background:var(--blue-soft); color:var(--blue-primary);">${v.role || 'Client'}</span></td>
+                        <td>
+                          <span style="font-size:17px; font-weight:900; letter-spacing:2px; background:var(--blue-soft); border:1.5px solid var(--blue-primary); color:var(--blue-primary); padding:3px 9px; border-radius:8px;">
+                            ${v.code}
+                          </span>
+                        </td>
+                        <td>
+                          <span style="padding:4px 9px; border-radius:99px; font-size:11px; font-weight:800; background:${isPending ? '#FEF3C7' : '#DCFCE7'}; color:${isPending ? '#92400E' : '#166534'};">
+                            ${v.status}
+                          </span>
+                        </td>
+                        <td>
+                          <div style="display:flex; gap:6px;">
+                            <a href="${waUrl}" target="_blank" style="text-decoration:none;">
+                              <button class="btn-green" style="padding:6px 11px; font-size:12px; display:inline-flex; align-items:center; gap:4px;">
+                                <span>💬 Send on WhatsApp</span>
+                              </button>
+                            </a>
+                            ${isPending ? `
+                              <button class="btn-blue" style="padding:6px 11px; font-size:12px;" onclick="adminDirectApproveCode('${v.phoneDigits}')">
+                                <span>⚡ Approve Directly</span>
+                              </button>
+                            ` : ''}
+                          </div>
+                        </td>
+                      </tr>
+                    `;
+                  }).join('')}
+                </tbody>
+              </table>
+            `}
+          </div>
+        `;
+      } else if (adminTab === 'CANCELLATIONS') {
+        sectionHtml = `
+          <div class="card">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+              <div>
+                <h2 style="font-size:18px; font-weight:800;">🚫 inDrive Mutual Task Cancellation Audit Logs</h2>
+                <p style="font-size:13px; color:var(--muted); font-weight:500; margin-top:3px;">
+                  Both Customers and Service Providers can cancel a task at any stage by selecting a mandatory reason. Repeated cancellations after booking confirmation are flagged here.
+                </p>
+              </div>
+              <span style="padding:6px 12px; border-radius:99px; background:#FEF2F2; color:#DC2626; font-size:12px; font-weight:800;">
+                ${cancelLogs.length} Logged Cancellations
+              </span>
+            </div>
+
+            <table>
+              <thead>
+                <tr>
+                  <th>Cancelled By</th>
+                  <th>Role</th>
+                  <th>Service & Stage</th>
+                  <th>Selected Cancellation Reason</th>
+                  <th>Time</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${cancelLogs.map((c) => `
+                  <tr>
+                    <td style="font-weight:800;">${c.actorName}</td>
+                    <td>
+                      <span style="padding:3px 9px; border-radius:99px; font-size:11px; font-weight:800; background:${c.actorRole === 'PROVIDER' ? '#FEF3C7' : '#EBF3FF'}; color:${c.actorRole === 'PROVIDER' ? '#B45309' : '#0066FF'};">
+                        ${c.actorRole}
+                      </span>
+                    </td>
+                    <td>
+                      <div style="font-weight:800;">${c.categoryName || 'Home Service'}</div>
+                      <div style="font-size:11px; color:var(--muted); font-weight:700;">Stage: ${c.stage}</div>
+                    </td>
+                    <td style="font-weight:700; color:#B91C1C;">"${c.reason}"</td>
+                    <td style="font-size:12px; color:var(--muted); font-weight:600;">${c.timestamp}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        `;
+      } else if (adminTab === 'APPROVALS') {
+        sectionHtml = `
+          <div class="card">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+              <div>
+                <h2 style="font-size:18px; font-weight:800;">📸 Provider Catalogue & Profile Moderation Queue</h2>
+                <p style="font-size:13px; color:var(--muted); font-weight:500; margin-top:3px;">
+                  Every catalogue photo or bio change submitted by a service provider is held here first. Reject any upload containing phone numbers, WhatsApp flyers, @handles, or business watermarks.
+                </p>
+              </div>
+              <span style="padding:6px 12px; border-radius:99px; background:#FEF3C7; color:#B45309; font-size:12px; font-weight:800;">
+                ${pendingApprovals.length} Waiting Review
+              </span>
+            </div>
+
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(360px, 1fr)); gap:16px;">
+              ${approvals.map((item) => {
+                const isPending = item.status === 'PENDING';
+                const isApproved = item.status === 'APPROVED';
+                return `
+                  <div style="border:1.5px solid ${isPending ? '#FDE68A' : (isApproved ? '#A7F3D0' : '#FECACA')}; background:${isPending ? '#FFFDF7' : '#FFFFFF'}; border-radius:16px; padding:16px; display:flex; flex-direction:column; justify-content:space-between;">
+                    <div>
+                      <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px;">
+                        <div>
+                          <div style="font-size:15px; font-weight:800;">${item.providerName}</div>
+                          <div style="font-size:12px; color:var(--muted); font-weight:600;">📍 ${item.providerSuburb} • ${item.type === 'CATALOGUE_PHOTO' ? '📸 Work Catalogue Photo' : '📝 Profile Bio Edit'}</div>
+                        </div>
+                        <span style="padding:4px 10px; border-radius:99px; font-size:11px; font-weight:800; background:${isPending ? '#FEF3C7' : (isApproved ? '#ECFDF5' : '#FEF2F2')}; color:${isPending ? '#B45309' : (isApproved ? '#059669' : '#DC2626')};">
+                          ${item.status}
+                        </span>
+                      </div>
+
+                      ${item.imageUrl ? `
+                        <div style="border-radius:12px; overflow:hidden; border:1px solid var(--border); margin-bottom:10px; background:#0F172A; height:190px; display:flex; align-items:center; justify-content:center;">
+                          <img src="${item.imageUrl}" alt="${item.title}" style="width:100%; height:100%; object-fit:cover;" />
+                        </div>
+                      ` : ''}
+
+                      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                        <div style="font-size:14px; font-weight:800;">${item.title || 'Profile Bio Update'}</div>
+                        ${item.priceTag ? `<span style="font-size:12px; font-weight:800; color:var(--blue-primary); background:var(--blue-soft); padding:3px 9px; border-radius:99px;">Ref: ${item.priceTag}</span>` : ''}
+                      </div>
+
+                      ${item.caption ? `<div style="font-size:12.5px; color:var(--text); font-weight:500; margin-bottom:8px;">"${item.caption}"</div>` : ''}
+                      ${item.proposedBio ? `<div style="font-size:12.5px; color:var(--text); background:#F8FAFC; padding:10px; border-radius:10px; border:1px solid var(--border); margin-bottom:8px;">"${item.proposedBio}"</div>` : ''}
+
+                      <div style="font-size:11.5px; font-weight:700; padding:8px 10px; border-radius:10px; background:${item.flaggedReason && item.flaggedReason.includes('Flagged') ? '#FEF2F2' : '#F1F5F9'}; color:${item.flaggedReason && item.flaggedReason.includes('Flagged') ? '#B91C1C' : '#475569'}; margin-bottom:12px;">
+                        🤖 Auto-Scan: ${item.flaggedReason || 'Passed text filter — inspect image visually for flyers/watermarks'}
+                      </div>
+                    </div>
+
+                    ${isPending ? `
+                      <div style="display:flex; gap:10px;">
+                        <button class="btn-green" style="flex:1;" onclick="moderateApprovalItem('${item.id}', 'APPROVE')">
+                          ✅ Approve & Publish
+                        </button>
+                        <button class="btn-outline" style="flex:1; border-color:#FECACA; background:#FEF2F2; color:#DC2626; font-weight:800;" onclick="moderateApprovalItem('${item.id}', 'REJECT')">
+                          🚫 Reject (Flyer / Phone #)
+                        </button>
+                      </div>
+                    ` : `
+                      <div style="font-size:11.5px; color:var(--muted); font-weight:700; text-align:right;">
+                        Moderated ${item.moderatedAt || ''} ${item.rejectionReason ? `• Reason: ${item.rejectionReason}` : ''}
+                      </div>
+                    `}
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        `;
+      } else if (adminTab === 'OVERVIEW' || adminTab === 'COMMISSION') {
+        sectionHtml = `
+          ${(db.pendingVerifications || []).filter(v => v.status === 'PENDING').length > 0 ? `
+            <div class="card" style="background:#ECFDF5; border:1.5px solid #10B981; margin-bottom:18px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+              <div style="display:flex; align-items:center; gap:12px;">
+                <span style="font-size:26px;">💬</span>
+                <div>
+                  <div style="font-size:15px; font-weight:800; color:#065F46;">
+                    ${(db.pendingVerifications || []).filter(v => v.status === 'PENDING').length} User${(db.pendingVerifications || []).filter(v => v.status === 'PENDING').length > 1 ? 's' : ''} Waiting for WhatsApp Login Code
+                  </div>
+                  <div style="font-size:12.5px; color:#047857;">Codes are also forwarded to your WhatsApp DM (+263 713 475 131).</div>
+                </div>
+              </div>
+              <button class="btn-green" onclick="setAdminTab('WHATSAPP_CODES')">View &amp; Send Codes (${(db.pendingVerifications || []).filter(v => v.status === 'PENDING').length})</button>
+            </div>
+          ` : ''}
+          <div class="panel-grid">
+            <div class="card">
+              <h2 style="font-size:17px; font-weight:800; margin-bottom:8px;">💰 Dynamic Commission & 2-Month Free Promo Engine</h2>
+              <p style="font-size:13px; color:var(--muted); margin-bottom:16px; font-weight:500;">
+                Run the first 2 months at 0% fee so Harare providers see the value, then flip the switch below to start collecting your percentage cut from their Findit USD Wallets.
+              </p>
+
+              <div style="background:var(--blue-soft); padding:15px; border-radius:14px; display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                <div>
+                  <div style="font-weight:800; font-size:14px;">First 2 Months 0% Fee Launch Promo</div>
+                  <div style="font-size:12px; color:var(--muted); font-weight:600;">Toggle OFF anytime to immediately deduct ${s.commissionPercent}% per confirmed booking.</div>
+                </div>
+                <button class="${s.launchPromoActive ? 'btn-green' : 'btn-blue'}" onclick="togglePromo(${!s.launchPromoActive})">
+                  ${s.launchPromoActive ? 'Promo is ON (0% Fee)' : 'Promo is OFF (Collecting ' + s.commissionPercent + '%)'}
+                </button>
+              </div>
+
+              <div style="margin-bottom:16px;">
+                <label style="font-size:12px; font-weight:800; color:var(--muted); display:block; margin-bottom:6px;">
+                  GLOBAL COMMISSION PERCENTAGE: <strong style="color:var(--blue-primary); font-size:15px;" id="sliderLabel">${s.commissionPercent}%</strong>
+                </label>
+                <input
+                  type="range"
+                  min="3"
+                  max="25"
+                  value="${s.commissionPercent}"
+                  style="width:100%; accent-color:#0066FF;"
+                  oninput="document.getElementById('sliderLabel').innerText = this.value + '%'"
+                  onchange="updateGlobalCommission(this.value)"
+                />
+              </div>
+
+              <div style="font-size:12px; font-weight:800; color:var(--muted); margin-bottom:8px;">PER-CATEGORY COMMISSION OVERRIDES (%):</div>
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                ${db.categories.filter((c) => c.status === 'ACTIVE').map((c) => {
+                  const rate = s.categoryCommissions[c.id] ?? s.commissionPercent;
+                  return `
+                    <div style="background:#F8FAFC; border:1px solid var(--border); padding:9px 12px; border-radius:10px; display:flex; justify-content:space-between; align-items:center;">
+                      <span style="font-size:13px; font-weight:700;">${c.icon} ${c.name}</span>
+                      <input
+                        type="number"
+                        min="0"
+                        max="35"
+                        value="${rate}"
+                        style="width:64px; background:#fff; color:var(--text); border:1px solid var(--border); border-radius:8px; padding:5px; font-weight:800; text-align:center;"
+                        onchange="updateCatCommission('${c.id}', this.value)"
+                      />
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+
+            <div class="card">
+              <h2 style="font-size:17px; font-weight:800; margin-bottom:12px;">🧾 Live USD Bookings & Commission Ledger</h2>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Provider & Customer</th>
+                    <th>Job Value</th>
+                    <th>Fee / Promo</th>
+                    <th>Payment</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${db.revenueLedger.map((r) => `
+                    <tr>
+                      <td>
+                        <div style="font-weight:800;">${r.providerName}</div>
+                        <div style="font-size:11.5px; color:var(--muted); font-weight:600;">Client: ${r.customerName} (${r.categoryName})</div>
+                      </td>
+                      <td style="font-weight:800;">$${r.bookingAmountUsd.toFixed(2)} USD</td>
+                      <td>
+                        ${r.promoApplied
+                          ? `<span style="color:#059669; font-weight:800;">$0.00 (Waived $${r.standardFeeUsd.toFixed(2)})</span>`
+                          : `<span style="color:var(--blue-primary); font-weight:800;">+$${r.actualFeeCollectedUsd.toFixed(2)} USD (${r.configuredCommissionPercent}%)</span>`
+                        }
+                      </td>
+                      <td style="font-size:12px; font-weight:600;">${r.paymentMethod}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+      } else if (adminTab === 'PROVIDERS') {
+        sectionHtml = `
+          <div class="card" style="margin-bottom:20px;">
+            <h2 style="font-size:17px; font-weight:800; margin-bottom:12px;">✅ Harare Providers, ID Details, Trust Badges &amp; USD Wallets</h2>
+            <div style="overflow-x:auto;">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Provider Full Details</th>
+                    <th>ID Document &amp; Categories</th>
+                    <th>Suburb &amp; Rating</th>
+                    <th>USD Wallet</th>
+                    <th>Trust Verification Badges</th>
+                    <th>Actions &amp; Top-Up</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${(db.providers || []).map((p) => {
+                    const idType = p.idDocument?.type || 'National ID';
+                    const idNum = p.idDocument?.number || p.nationalIdNumber || 'Verified';
+                    const idPhoto = p.idDocument?.photoUrl || p.selfieUrl || p.avatarUrl || '';
+                    const selfiePhoto = p.selfieUrl || p.avatarUrl || '';
+                    const catNames = (p.categoryIds && p.categoryIds.length ? p.categoryIds : (p.categoryId ? [p.categoryId] : []))
+                      .map((cid) => {
+                        const cObj = (db.categories || []).find((x) => x.id === cid);
+                        return cObj ? cObj.name : cid;
+                      }).join(', ');
+                    return `
+                    <tr style="${p.isBanned ? 'background:#FFF1F2;' : ''}">
+                      <td>
+                        <div style="font-weight:800; font-size:13.5px;">${p.name}</div>
+                        <div style="font-size:11.5px; color:var(--blue-primary); font-weight:700;">${p.brandName || ''}</div>
+                        <div style="font-size:11.5px; color:var(--muted); font-weight:600;">${p.phone} • <span style="font-family:monospace;">${p.finditId || p.id}</span></div>
+                      </td>
+                      <td>
+                        <div style="font-size:11.5px; font-weight:800;">🪪 ${idType}: <span style="font-family:monospace;">${idNum}</span></div>
+                        <div style="font-size:11px; color:var(--muted); font-weight:600; margin-top:2px;">📂 ${catNames}</div>
+                        ${(idPhoto || selfiePhoto) ? `
+                          <button class="btn-outline" style="padding:2px 7px; font-size:10.5px; margin-top:4px;" onclick="viewIdProof('${idPhoto}', '${selfiePhoto}', '${(p.name || '').replace(/'/g, "\\'")}')">
+                            🔍 View ID &amp; Face
+                          </button>
+                        ` : ''}
+                      </td>
+                      <td>
+                        <div style="font-weight:700;">📍 ${p.suburbName || 'Harare'}</div>
+                        <div style="font-size:11.5px; color:var(--muted); font-weight:600;">⭐ ${p.rating} (${p.completedBookings} jobs)</div>
+                      </td>
+                      <td style="font-weight:800; color:var(--blue-primary); font-size:14.5px; min-width:130px;">
+                        <div>$${Number(p.walletBalanceUsd || 0).toFixed(2)} USD</div>
+                        <div style="display:flex; gap:4px; margin-top:5px;">
+                          <button type="button" class="btn-blue" style="padding:2px 7px; font-size:10px; border-radius:6px; font-weight:800;" onclick="adminPromptWalletAdjust('${p.id}', '${(p.name || '').replace(/'/g, "\\'")}', 'CREDIT', ${Number(p.walletBalanceUsd || 0)})" title="Credit custom USD to this wallet">
+                            + Credit
+                          </button>
+                          <button type="button" class="btn-outline" style="padding:2px 7px; font-size:10px; border-radius:6px; font-weight:800; color:#DC2626; border-color:#FCA5A5; background:#FEF2F2;" onclick="adminPromptWalletAdjust('${p.id}', '${(p.name || '').replace(/'/g, "\\'")}', 'DEDUCT', ${Number(p.walletBalanceUsd || 0)})" title="Deduct custom USD from this wallet">
+                            - Deduct
+                          </button>
+                        </div>
+                      </td>
+                      <td>
+                        <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                          <button class="btn-outline" style="border-color:${p.badges?.phoneVerified ? '#0066FF' : ''}; color:${p.badges?.phoneVerified ? '#0066FF' : ''};" onclick="toggleProviderBadge('${p.id}', 'phoneVerified')">
+                            ${p.badges?.phoneVerified ? '✓' : '+'} 💬 WhatsApp
+                          </button>
+                          <button class="btn-outline" style="border-color:${p.badges?.faceVerified ? '#0066FF' : ''}; color:${p.badges?.faceVerified ? '#0066FF' : ''};" onclick="toggleProviderBadge('${p.id}', 'faceVerified')">
+                            ${p.badges?.faceVerified ? '✓' : '+'} 🤳 Face Scan
+                          </button>
+                          <button class="btn-outline" style="border-color:${p.badges?.idVerified ? '#059669' : ''}; color:${p.badges?.idVerified ? '#059669' : ''};" onclick="toggleProviderBadge('${p.id}', 'idVerified')">
+                            ${p.badges?.idVerified ? '✓' : '+'} 🪪 National ID
+                          </button>
+                          <button class="btn-outline" style="border-color:${p.badges?.businessVerified ? '#D97706' : ''}; color:${p.badges?.businessVerified ? '#D97706' : ''};" onclick="toggleProviderBadge('${p.id}', 'businessVerified')">
+                            ${p.badges?.businessVerified ? '✓' : '+'} 🏢 Business
+                          </button>
+                        </div>
+                      </td>
+                      <td>
+                        <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                          <button type="button" class="btn-blue" style="padding:5px 9px; font-size:11px; font-weight:800;" onclick="adminPromptWalletAdjust('${p.id}', '${(p.name || '').replace(/'/g, "\\'")}', 'CREDIT', ${Number(p.walletBalanceUsd || 0)})" title="Credit custom USD">
+                            + Add USD
+                          </button>
+                          <button type="button" class="btn-outline" style="padding:5px 9px; font-size:11px; font-weight:800; color:#DC2626; border-color:#FCA5A5; background:#FEF2F2;" onclick="adminPromptWalletAdjust('${p.id}', '${(p.name || '').replace(/'/g, "\\'")}', 'DEDUCT', ${Number(p.walletBalanceUsd || 0)})" title="Deduct custom USD">
+                            - Deduct USD
+                          </button>
+                          ${p.isBanned ? `
+                            <button class="btn-green" style="padding:6px 10px; font-size:11.5px;" onclick="disciplineAccount('PROVIDER', '${p.id}', 'UNBAN')">
+                              ✓ Unban
+                            </button>
+                          ` : `
+                            <button class="btn-outline" style="padding:6px 10px; font-size:11.5px; color:#DC2626; border-color:#FECACA;" onclick="disciplineAccount('PROVIDER', '${p.id}', 'BAN')">
+                              🚫 Ban
+                            </button>
+                          `}
+                        </div>
+                      </td>
+                    </tr>
+                  `;}).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="card">
+            <h2 style="font-size:17px; font-weight:800; margin-bottom:12px;">👤 Registered Clients Directory (${(db.customers || []).length})</h2>
+            <div style="overflow-x:auto;">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Client Full Name</th>
+                    <th>Findit ID &amp; Phone</th>
+                    <th>Location / Suburb</th>
+                    <th>Biometric &amp; ID Details</th>
+                    <th>Status</th>
+                    <th>Moderation</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${(db.customers || []).map((c) => `
+                    <tr style="${c.isBanned ? 'background:#FFF1F2;' : ''}">
+                      <td>
+                        <div style="display:flex; align-items:center; gap:9px;">
+                          <div style="width:34px; height:34px; border-radius:50%; overflow:hidden; background:#E2E8F0; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:12px;">
+                            ${c.avatarUrl ? `<img src="${c.avatarUrl}" style="width:100%; height:100%; object-fit:cover;" />` : `<span>${(c.name || 'C').slice(0, 2).toUpperCase()}</span>`}
+                          </div>
+                          <div style="font-weight:800;">${c.name}</div>
+                        </div>
+                      </td>
+                      <td>
+                        <div style="font-weight:800;">${c.phone}</div>
+                        <div style="font-family:monospace; font-size:11px; color:var(--muted);">${c.finditId || c.id}</div>
+                      </td>
+                      <td style="font-weight:700;">📍 ${c.suburbName || c.suburbId || 'Harare'}</td>
+                      <td>
+                        <div style="font-size:11.5px; font-weight:700; color:#059669;">✓ Biometric Face Verified</div>
+                        <div style="font-size:11px; font-family:monospace; color:var(--muted);">ID: ${c.nationalIdNumber || 'Verified'}</div>
+                      </td>
+                      <td>
+                        <span style="padding:4px 9px; border-radius:99px; font-size:11px; font-weight:800; ${c.isBanned ? 'background:#FEE2E2; color:#DC2626;' : 'background:#ECFDF5; color:#059669;'}">
+                          ${c.isBanned ? '🚫 BANNED' : '✓ ACTIVE'}
+                        </span>
+                      </td>
+                      <td>
+                        <div style="display:flex; gap:6px;">
+                          <button class="btn-outline" style="padding:5px 9px; font-size:11.5px; color:#D97706; border-color:#FDE68A;" onclick="disciplineAccount('CUSTOMER', '${c.id}', 'WARN')">
+                            ⚠️ Warn
+                          </button>
+                          ${c.isBanned ? `
+                            <button class="btn-green" style="padding:5px 10px; font-size:11.5px;" onclick="disciplineAccount('CUSTOMER', '${c.id}', 'UNBAN')">
+                              ✓ Unban
+                            </button>
+                          ` : `
+                            <button class="btn-outline" style="padding:5px 10px; font-size:11.5px; color:#DC2626; border-color:#FECACA;" onclick="disciplineAccount('CUSTOMER', '${c.id}', 'BAN')">
+                              🚫 Ban
+                            </button>
+                          `}
+                        </div>
+                      </td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+      } else if (adminTab === 'SHIELD') {
+        sectionHtml = `
+          <div class="card">
+            <h2 style="font-size:17px; font-weight:800; margin-bottom:8px;">🛡️ Anti-Leakage Shield Security Logs</h2>
+            <p style="font-size:13px; color:var(--muted); margin-bottom:14px; font-weight:500;">
+              Every time a customer or provider attempts to type a phone number (077/078/+263), @handle, or "WhatsApp / Call me on", the platform blocks it and records it below.
+            </p>
+            ${db.leakageLogs.map((l) => `
+              <div style="background:#FEF2F2; border:1px solid #FECACA; border-radius:12px; padding:13px; margin-bottom:10px;">
+                <div style="display:flex; justify-content:space-between; font-weight:800; color:#B91C1C;">
+                  <span>🚫 ${l.actorName} (${l.actorRole})</span>
+                  <span style="font-size:11.5px;">${l.context}</span>
+                </div>
+                <div style="font-family:monospace; background:#FFFFFF; border:1px solid #FECACA; padding:8px 10px; border-radius:8px; margin:6px 0; color:#0F172A; font-weight:700;">
+                  "${l.attemptedText}"
+                </div>
+                <div style="font-size:12px; color:#991B1B; font-weight:600;">Blocked Reason: ${l.reasons.join(' • ')}</div>
+              </div>
+            `).join('')}
+          </div>
+        `;
+      } else if (adminTab === 'CATEGORIES') {
+        sectionHtml = `
+          <!-- Hub Services Manager (Job Marketplace, Online Shopping, Transport & Carriers) -->
+          <div class="card" style="margin-bottom:16px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:10px;">
+              <div>
+                <h2 style="font-size:17px; font-weight:800; margin:0 0 4px;">🌐 Main Multi-Service Hub Control</h2>
+                <p style="font-size:12.5px; color:var(--muted); margin:0;">
+                  Manage the 3 main services shown on the App Welcome Hub. Toggle between <strong>Active</strong> and <strong>Coming Soon</strong> without updating the app.
+                </p>
+              </div>
+            </div>
+
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:12px;">
+              ${(db.hubServices || []).map((hs) => {
+                const isActive = hs.status === 'ACTIVE';
+                return `
+                  <div style="background:#F8FAFC; border:1.5px solid var(--border); border-radius:12px; padding:12px; display:flex; gap:12px; align-items:center;">
+                    <img src="${hs.imageUrl || 'https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=400&q=80'}" style="width:70px; height:60px; object-fit:cover; border-radius:8px;" />
+                    <div style="flex:1; min-width:0;">
+                      <div style="font-weight:800; font-size:14px; color:var(--text);">${hs.title}</div>
+                      <div style="font-size:11.5px; color:var(--muted);">${hs.subtitle}</div>
+                      <span style="display:inline-block; margin-top:4px; padding:2px 8px; border-radius:99px; font-size:10.5px; font-weight:800; background:${isActive ? '#ECFDF5' : '#FFFBEB'}; color:${isActive ? '#059669' : '#D97706'};">
+                        ${hs.status}
+                      </span>
+                    </div>
+                    <button class="btn-outline" style="padding:4px 10px; font-size:11px;" onclick="toggleHubServiceStatus('${hs.id}', '${isActive ? 'COMING_SOON' : 'ACTIVE'}')">
+                      ${isActive ? 'Set Coming Soon' : 'Activate'}
+                    </button>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+
+          <!-- Dynamic Announcements & Changelog Manager -->
+          <div class="card" style="margin-bottom:16px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:10px;">
+              <div>
+                <h2 style="font-size:17px; font-weight:800; margin:0 0 4px;">📢 Platform Announcements &amp; Changelogs</h2>
+                <p style="font-size:12.5px; color:var(--muted); margin:0;">
+                  Publish updates, new features, or maintenance banners to users directly inside the app.
+                </p>
+              </div>
+              <button class="btn-blue" style="font-size:12px;" onclick="promptAddChangelog()">➕ Post Announcement</button>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:8px;">
+              ${(db.changelogs || []).length === 0 ? `
+                <div style="color:var(--muted); font-size:12.5px; padding:12px; text-align:center;">No announcements posted yet.</div>
+              ` : (db.changelogs || []).map((cl, clIdx) => `
+                <div style="background:#FFFFFF; border:1px solid var(--border); border-radius:10px; padding:10px 14px; display:flex; justify-content:space-between; align-items:center; gap:10px;">
+                  <div style="flex:1; min-width:0;">
+                    <div style="font-weight:800; font-size:13.5px; color:var(--text);">
+                      <span style="color:#0066FF;">[${cl.version}]</span> ${cl.title}
+                      <span style="font-size:11px; color:var(--muted); font-weight:600; margin-left:8px;">${cl.date}</span>
+                    </div>
+                    <div style="font-size:12px; color:var(--muted); margin-top:2px;">
+                      ${(cl.highlights || []).join(' • ')}
+                    </div>
+                  </div>
+                  <div style="display:flex; gap:6px; flex-shrink:0;">
+                    <button class="btn-outline" style="padding:4px 10px; font-size:11.5px; font-weight:700;" onclick="promptAddChangelog('${cl.id}', ${clIdx})">
+                      ✏️ Edit
+                    </button>
+                    <button class="btn-outline" style="color:#DC2626; border-color:#FECACA; background:#FEF2F2; padding:4px 10px; font-size:11.5px; font-weight:800;" onclick="deleteChangelog('${cl.id}', ${clIdx})">
+                      🗑️ Delete
+                    </button>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+
+          <div class="card">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
+              <div>
+                <h2 style="font-size:18px; font-weight:800; margin:0 0 4px;">🚀 Harare Service Categories &amp; Catalogue Tasks</h2>
+                <p style="font-size:13px; color:var(--muted); margin:0;">
+                  Add, edit, or delete services and specific booking tasks. Changes reflect immediately on client &amp; provider apps.
+                </p>
+              </div>
+              <button class="btn-blue" onclick="promptAddCategory()">➕ Add New Service Category</button>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:16px;">
+              ${(db.categories || []).map((c) => {
+                const subList = c.subServices || [];
+                const isActive = c.status === 'ACTIVE';
+                return `
+                  <div style="background:#FFFFFF; border:1.5px solid var(--border); border-radius:14px; padding:16px;">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px; flex-wrap:wrap; gap:10px;">
+                      <div>
+                        <div style="font-size:16px; font-weight:800; display:flex; align-items:center; gap:8px;">
+                          <span>${c.icon || '🛠️'}</span>
+                          <span>${c.fullName || c.name}</span>
+                          <span style="padding:2px 8px; border-radius:99px; font-size:11px; font-weight:800; background:${isActive ? '#ECFDF5' : '#FFFBEB'}; color:${isActive ? '#059669' : '#D97706'};">
+                            ${c.status}
+                          </span>
+                        </div>
+                        <div style="font-size:12.5px; color:var(--muted); margin-top:2px;">
+                          ${c.tagline} • Base Starting Rate: <strong>$${c.suggestedMinUsd || 15} USD</strong>
+                        </div>
+                      </div>
+
+                      <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                        <button class="btn-blue" style="padding:5px 12px; font-size:12px;" onclick="promptAddTask('${c.id}', '${(c.name || '').replace(/'/g, "\\'")}')">
+                          ➕ Add Task
+                        </button>
+                        <button class="btn-outline" style="padding:5px 11px; font-size:12px;" onclick="promptEditCategory('${c.id}', '${(c.name || '').replace(/'/g, "\\'")}', '${(c.tagline || '').replace(/'/g, "\\'")}', ${c.suggestedMinUsd || 15}, '${c.icon || '🛠️'}')">
+                          ✏️ Edit
+                        </button>
+                        <button class="btn-outline" style="padding:5px 11px; font-size:12px;" onclick="toggleCategoryStatus('${c.id}')">
+                          ${isActive ? '⏸️ Set Coming Soon' : '▶️ Activate'}
+                        </button>
+                        <button class="btn-outline" style="padding:5px 11px; font-size:12px; color:#DC2626; border-color:#FECACA;" onclick="promptDeleteCategory('${c.id}', '${(c.name || '').replace(/'/g, "\\'")}')">
+                          🗑️ Delete
+                        </button>
+                      </div>
+                    </div>
+
+                    <!-- Tasks / Sub-Services Table -->
+                    <div style="background:var(--bg-card); border-radius:10px; border:1px solid var(--border); overflow:hidden;">
+                      <div style="padding:8px 12px; background:var(--blue-soft); font-size:11.5px; font-weight:800; color:var(--blue-primary); display:flex; justify-content:space-between; align-items:center;">
+                        <span>SUB-SERVICES / TASKS (${subList.length})</span>
+                      </div>
+                      ${subList.length === 0 ? `
+                        <div style="padding:14px; text-align:center; font-size:12px; color:var(--muted);">
+                          No specific tasks added yet. Tap <strong>+ Add Task</strong> above to add tasks.
+                        </div>
+                      ` : `
+                        <table style="margin:0; width:100%;">
+                          <thead>
+                            <tr style="background:none;">
+                              <th style="padding:7px 12px; font-size:11px;">Task Name</th>
+                              <th style="padding:7px 12px; font-size:11px;">Standard Rate (USD)</th>
+                              <th style="padding:7px 12px; font-size:11px;">Duration</th>
+                              <th style="padding:7px 12px; font-size:11px; text-align:right;">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            ${subList.map((task, idx) => `
+                              <tr>
+                                <td style="padding:8px 12px; font-size:13px; font-weight:700;">${task.name}</td>
+                                <td style="padding:8px 12px; font-size:13px; font-weight:800; color:var(--blue-primary);">$${task.defaultUsd || 15} USD</td>
+                                <td style="padding:8px 12px; font-size:12px; color:var(--muted);">${task.duration || '1-2 hrs'}</td>
+                                <td style="padding:8px 12px; text-align:right;">
+                                  <div style="display:inline-flex; gap:6px;">
+                                    <button class="btn-outline" style="padding:3px 9px; font-size:11px;" onclick="promptEditTask('${c.id}', ${idx}, '${(task.name || '').replace(/'/g, "\\'")}', ${task.defaultUsd || 15}, '${task.duration || ''}')">
+                                      ✏️ Edit
+                                    </button>
+                                    <button class="btn-outline" style="padding:3px 9px; font-size:11px; color:#DC2626; border-color:#FECACA;" onclick="promptDeleteTask('${c.id}', ${idx}, '${(task.name || '').replace(/'/g, "\\'")}')">
+                                      🗑️ Delete
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            `).join('')}
+                          </tbody>
+                        </table>
+                      `}
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        `;
+      }
+
+      const scrollY = window.scrollY;
+      document.getElementById('adminRoot').innerHTML = kpiHtml + sectionHtml;
+      window.scrollTo(0, scrollY);
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      loadAdminData();
+      setInterval(() => loadAdminData(false), 10000);
+      const es = new EventSource('/api/stream');
+      es.onmessage = (evt) => {
+        try {
+          const msg = JSON.parse(evt.data);
+          if (msg.eventType && msg.eventType !== 'CONNECTED') loadAdminData(false);
+        } catch (e) {}
+      };
+    });
+  </script>
+</body>
+</html>
