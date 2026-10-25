@@ -934,7 +934,23 @@ async function fetchState(force = false) {
   isFetchingState = true;
   const fetchStartEpoch = stateMutationEpoch;
   try {
-    const newDb = await apiGet('/api/state', 2);
+    let newDb = null;
+    try {
+      newDb = await apiGet('/api/state', 2);
+      if (newDb && Array.isArray(newDb.categories)) {
+        try { localStorage.setItem('findit_offline_db', JSON.stringify(newDb)); } catch (e) {}
+      }
+    } catch (netErr) {
+      // Offline fallback: load from localStorage
+      const cachedStr = localStorage.getItem('findit_offline_db');
+      if (cachedStr) {
+        try { newDb = JSON.parse(cachedStr); } catch (e) {}
+      }
+      if (!newDb) throw netErr;
+      updateNetworkOfflineStatus();
+    }
+
+    if (!newDb) return;
 
     // If a local user action happened while this background poll was in flight, ignore stale poll
     if (!force && fetchStartEpoch !== stateMutationEpoch) {
@@ -2102,6 +2118,25 @@ function stopProviderLiveLocationWatcher() {
   }
 }
 
+function updateNetworkOfflineStatus() {
+  const banner = document.getElementById('offlineModeBanner');
+  const isOnline = navigator.onLine;
+  if (banner) {
+    banner.style.display = isOnline ? 'none' : 'flex';
+  }
+}
+
+window.addEventListener('online', () => {
+  updateNetworkOfflineStatus();
+  showToast('Back online — syncing latest data', 'info');
+  fetchState(true);
+});
+
+window.addEventListener('offline', () => {
+  updateNetworkOfflineStatus();
+  showToast('Offline Mode: Cached services and GPS map active', 'info');
+});
+
 function useBrowserGeolocation(silent = false) {
   if (state.role === 'PROVIDER') {
     startProviderLiveLocationWatcher();
@@ -2113,12 +2148,10 @@ function useBrowserGeolocation(silent = false) {
         state.userLiveGpsLat = Number(latitude.toFixed(5));
         state.userLiveGpsLng = Number(longitude.toFixed(5));
 
-        if (latitude > -18.3 && latitude < -17.5 && longitude > 30.8 && longitude < 31.4) {
-          state.pinnedLat = state.userLiveGpsLat;
-          state.pinnedLng = state.userLiveGpsLng;
-          if (state.role !== 'PROVIDER') {
-            reverseGeocodeHararePin(state.pinnedLat, state.pinnedLng);
-          }
+        state.pinnedLat = state.userLiveGpsLat;
+        state.pinnedLng = state.userLiveGpsLng;
+        if (state.role !== 'PROVIDER') {
+          reverseGeocodeHararePin(state.pinnedLat, state.pinnedLng);
         }
 
         if (state.role === 'PROVIDER' && state.currentUser) {
@@ -2146,10 +2179,10 @@ function useBrowserGeolocation(silent = false) {
         updateLiveGpsMarker();
         if (!silent && leafletMap) {
           leafletMap.flyTo([state.pinnedLat, state.pinnedLng], 15, { duration: 0.7 });
-          showToast('Centered on Harare default location');
+          showToast('Centered on Harare location');
         }
       },
-      { enableHighAccuracy: true, timeout: 5000 }
+      { enableHighAccuracy: true, timeout: 8000 }
     );
   } else if (!silent && leafletMap) {
     leafletMap.flyTo([state.pinnedLat, state.pinnedLng], 15, { duration: 0.7 });
@@ -3057,7 +3090,6 @@ function getHubServiceVectorBanner(serviceId) {
 }
 
 function renderMainHubOverlay() {
-  const changelog = (state.db?.changelogs && state.db.changelogs[0]) || null;
   const hubServices = [
     {
       id: 'job_marketplace',
@@ -3108,20 +3140,6 @@ function renderMainHubOverlay() {
           </button>
         `}
       </div>
-
-      <!-- Admin Dynamic Changelog / Announcement Banner -->
-      ${changelog ? `
-        <div style="background:#EFF6FF; border:1.5px solid #BFDBFE; border-radius:14px; padding:10px 14px; margin-bottom:14px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
-          <div style="display:flex; align-items:center; gap:8px; min-width:0;">
-            <span style="color:#0066FF; flex-shrink:0;">${uiIcon('sparkle', 16)}</span>
-            <div style="min-width:0;">
-              <div style="font-size:12px; font-weight:800; color:#1E40AF; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${changelog.title}</div>
-              <div style="font-size:11px; color:#3B82F6; font-weight:600;">${changelog.version} • Latest Updates</div>
-            </div>
-          </div>
-          <button class="small-pill-btn" onclick="openChangelogModal()" style="font-size:11px; padding:4px 8px; flex-shrink:0;">View</button>
-        </div>
-      ` : ''}
 
       <!-- Main Welcome Header -->
       <div class="fh-hub-header">
@@ -8163,6 +8181,36 @@ function renderProviderWalletTab(prov) {
         </div>
       </div>
 
+      <!-- Instant 1-Tap USD Top-Up Card -->
+      <div style="background:#FFFFFF; border:1.5px solid var(--border-light); border-radius:14px; padding:14px; margin-bottom:12px; box-shadow:0 1px 3px rgba(0,0,0,0.03);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <div style="font-size:13px; font-weight:800; color:var(--text-main);">Instant Prepaid Top-Up</div>
+          <span style="font-size:10.5px; font-weight:700; color:#059669; background:#ECFDF5; padding:2px 8px; border-radius:99px;">Instant USD Balance</span>
+        </div>
+
+        <div class="wallet-amount-grid" style="margin-bottom:12px;">
+          ${quickAmounts.map((amt) => `
+            <button
+              type="button"
+              class="wallet-amt-chip ${Number(state.walletTopupAmount || 5) === amt ? 'active' : ''}"
+              onclick="state.walletTopupAmount=${amt}; renderUiOverlay();"
+            >
+              $${amt}
+            </button>
+          `).join('')}
+        </div>
+
+        <button
+          type="button"
+          class="btn-primary-blue"
+          style="width:100%; height:42px; font-size:13.5px; font-weight:800; background:#0066FF;"
+          onclick="topUpProviderWallet(Number(state.walletTopupAmount || 5), 'Instant Top-Up')"
+        >
+          ${uiIcon('wallet', 15)}
+          <span>⚡ Top Up $${Number(state.walletTopupAmount || 5).toFixed(2)} USD Now</span>
+        </button>
+      </div>
+
       <!-- Compact EcoCash USD Top-Up Card -->
       <div style="background:#FFFFFF; border:1px solid var(--border-light); border-radius:14px; padding:14px; margin-bottom:12px; box-shadow:0 1px 3px rgba(0,0,0,0.03);">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
@@ -8177,32 +8225,22 @@ function renderProviderWalletTab(prov) {
           </button>
         </div>
 
-        <div class="wallet-amount-grid" style="margin-bottom:10px;">
-          ${quickAmounts.map((amt) => `
-            <button
-              class="wallet-amt-chip ${Number(state.walletTopupAmount) === amt ? 'active' : ''}"
-              onclick="state.walletTopupAmount=${amt}; renderUiOverlay();"
-            >
-              $${amt}
-            </button>
-          `).join('')}
-        </div>
-
         <textarea
           id="walletEcocashSmsInput"
           class="dark-input"
           rows="2"
           style="width:100%; font-size:11.5px; line-height:1.4; padding:8px 10px; resize:none; margin-bottom:8px;"
-          placeholder="Paste EcoCash confirmation SMS here..."
+          placeholder="Paste EcoCash confirmation SMS or enter Ref Code (e.g. PP261021...)..."
         ></textarea>
 
         <button
+          type="button"
           class="btn-primary-blue"
-          style="width:100%; height:40px; font-size:13px;"
+          style="width:100%; height:40px; font-size:13px; background:#10B981;"
           onclick="submitEcoCashTopup()"
         >
           ${uiIcon('check', 14)}
-          <span>Submit $${Number(state.walletTopupAmount || 5).toFixed(2)} Top-Up</span>
+          <span>Verify &amp; Add $${Number(state.walletTopupAmount || 5).toFixed(2)} USD</span>
         </button>
       </div>
 
@@ -8254,21 +8292,26 @@ async function submitEcoCashTopup() {
   const inputEl = document.getElementById('walletEcocashSmsInput');
   const sms = (inputEl ? inputEl.value : '').trim();
   if (!sms) {
-    showToast('Please paste your EcoCash confirmation SMS', 'error');
+    showToast('Please enter your EcoCash confirmation SMS or Reference Code', 'error');
     return;
   }
   const amt = Number(state.walletTopupAmount || 5);
   try {
     const res = await apiPost('/api/wallet/ecocash-submit', {
       providerId: prov.id,
+      phone: prov.phone,
       amountUsd: amt,
       confirmationSms: sms
     });
     if (inputEl) inputEl.value = '';
-    showToast(`EcoCash SMS submitted (Ref: ${res.submission.referenceCode}). Sent to Admin verification queue.`);
-    await fetchState();
+    showToast(res.message || `EcoCash Ref ${res.submission?.referenceCode} verified! +$${amt.toFixed(2)} USD added to wallet.`, 'success');
+    if (res.provider && state.currentUser) {
+      state.currentUser.walletBalanceUsd = res.provider.walletBalanceUsd;
+    }
+    await fetchState(true);
+    renderAll(true);
   } catch (err) {
-    showToast(err.message, 'error');
+    showToast(err.message || 'EcoCash top-up failed', 'error');
   }
 }
 
@@ -8626,18 +8669,25 @@ function promptProviderCustomBid(requestId, baseUsd) {
   }
 }
 
-async function topUpProviderWallet(amountUsd, method) {
+async function topUpProviderWallet(amountUsd, method = 'Instant USD Credit') {
   const prov = state.currentUser || state.db.providers[0];
+  if (!prov) return;
+  const numAmt = Math.max(1, Number(amountUsd) || 5);
   try {
-    await apiPost('/api/wallet/topup', {
+    const res = await apiPost('/api/wallet/topup', {
       providerId: prov.id,
-      amountUsd,
+      phone: prov.phone,
+      amountUsd: numAmt,
       method
     });
-    showToast(`+$${Number(amountUsd).toFixed(2)} added to your Findit USD Wallet via ${method}`);
+    showToast(`+$${numAmt.toFixed(2)} added to your Findit USD Wallet!`, 'success');
+    if (res?.provider && state.currentUser) {
+      state.currentUser.walletBalanceUsd = res.provider.walletBalanceUsd;
+    }
     await fetchState(true);
+    renderAll(true);
   } catch (err) {
-    showToast(err.message, 'error');
+    showToast(err.message || 'Failed to top up wallet', 'error');
   }
 }
 

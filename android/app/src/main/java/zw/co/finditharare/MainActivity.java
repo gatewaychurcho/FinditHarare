@@ -76,11 +76,20 @@ public class MainActivity extends Activity {
         settings.setDomStorageEnabled(true);
         settings.setDatabaseEnabled(true);
         settings.setGeolocationEnabled(true);
+        settings.setGeolocationDatabasePath(getFilesDir().getPath());
         settings.setMediaPlaybackRequiresUserGesture(false);
         settings.setAllowFileAccess(true);
         settings.setAllowContentAccess(true);
-        settings.setCacheMode(WebSettings.LOAD_NO_CACHE);
-        webView.clearCache(true);
+
+        // Offline caching mode (like inDrive): Cache first if offline, default when connected
+        android.net.ConnectivityManager cm = (android.net.ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+        android.net.NetworkInfo activeNetwork = cm != null ? cm.getActiveNetworkInfo() : null;
+        boolean isConnected = activeNetwork != null && activeNetwork.isConnectedOrConnecting();
+        if (isConnected) {
+            settings.setCacheMode(WebSettings.LOAD_DEFAULT);
+        } else {
+            settings.setCacheMode(WebSettings.LOAD_CACHE_ELSE_NETWORK);
+        }
 
         // Expose Native Android Notification & Session Bridge to JavaScript
         webView.addJavascriptInterface(new FinditNativeBridge(), "FinditNative");
@@ -98,6 +107,13 @@ public class MainActivity extends Activity {
                     }
                 }
                 return false;
+            }
+
+            @Override
+            public void onReceivedError(WebView view, int errorCode, String description, String failingUrl) {
+                try {
+                    view.getSettings().setCacheMode(WebSettings.LOAD_CACHE_ELSE_NETWORK);
+                } catch (Exception ignored) {}
             }
 
             @Override

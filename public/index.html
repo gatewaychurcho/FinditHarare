@@ -96,11 +96,26 @@
   <!-- Masked In-App Voice Call Modal -->
   <div id="callModalRoot"></div>
 
+  <!-- Offline Mode Indicator (like inDrive) -->
+  <div id="offlineModeBanner" class="offline-mode-banner" style="display:none;">
+    <span class="offline-dot"></span>
+    <span>Offline Mode — Live GPS &amp; Cached Data Active</span>
+  </div>
+
   <!-- Toast Notifications -->
   <div class="toast-container" id="toastContainer"></div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch((err) => {
+          console.warn('SW register notice:', err);
+        });
+      });
+    }
+  </script>
   <script src="app.js?v=3.6.0"></script>
 </body>
 </html>

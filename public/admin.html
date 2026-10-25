@@ -351,8 +351,9 @@
         const data = await res.json();
         if (res.ok && data.token) {
           setAdminToken(data.token);
+          isInitialSessionChecked = true;
           hideAdminLockScreen();
-          await loadAdminData();
+          await loadAdminData(true);
         } else {
           if (errBox) {
             errBox.textContent = data.error || 'Access Denied: Incorrect Password';
@@ -397,10 +398,13 @@
       if (body) opts.body = JSON.stringify(body);
       const res = await fetch(path, opts);
       if (res.status === 401 && path.startsWith('/api/admin/')) {
+        setAdminToken(null);
         showAdminLockScreen();
       }
       return res.json();
     }
+
+    let isInitialSessionChecked = false;
 
     async function loadAdminData(forceRender = false) {
       const token = getAdminToken();
@@ -410,10 +414,14 @@
       }
 
       try {
-        const sessionCheck = await api('/api/admin/session');
-        if (!sessionCheck.authenticated) {
-          showAdminLockScreen();
-          return;
+        if (!isInitialSessionChecked) {
+          const sessionCheck = await api('/api/admin/session');
+          if (!sessionCheck || !sessionCheck.authenticated) {
+            setAdminToken(null);
+            showAdminLockScreen();
+            return;
+          }
+          isInitialSessionChecked = true;
         }
 
         hideAdminLockScreen();
@@ -438,7 +446,6 @@
           aiC: (nextDb.aiEngine?.commissionProtections || []).length,
           aiA: (nextDb.aiEngine?.conversationAlerts || []).length,
           aiS: nextDb.aiEngine?.latestStrategyReport?.generatedAt || '',
-          cl: (nextDb.changelogs || []).map((x) => `${x.id}:${x.title}:${x.version}`).join('|'),
           cats: (nextDb.categories || []).map((x) => `${x.id}:${x.status}:${(x.subServices || []).length}`).join('|'),
           hub: (nextDb.hubServices || []).map((x) => `${x.id}:${x.status}`).join('|')
         });
@@ -449,8 +456,8 @@
         }
       } catch (err) {
         console.warn('Admin background sync notice:', err);
-        // Only show lock screen if explicitly 401 Unauthorized, never on transient network hitch
         if (err && (err.status === 401 || String(err).includes('401'))) {
+          setAdminToken(null);
           showAdminLockScreen();
         }
       }
@@ -2523,17 +2530,19 @@
         `;
       }
 
+      const scrollY = window.scrollY;
       document.getElementById('adminRoot').innerHTML = kpiHtml + sectionHtml;
+      window.scrollTo(0, scrollY);
     }
 
     document.addEventListener('DOMContentLoaded', () => {
       loadAdminData();
-      setInterval(loadAdminData, 4000);
+      setInterval(() => loadAdminData(false), 10000);
       const es = new EventSource('/api/stream');
       es.onmessage = (evt) => {
         try {
           const msg = JSON.parse(evt.data);
-          if (msg.eventType && msg.eventType !== 'CONNECTED') loadAdminData();
+          if (msg.eventType && msg.eventType !== 'CONNECTED') loadAdminData(false);
         } catch (e) {}
       };
     });
