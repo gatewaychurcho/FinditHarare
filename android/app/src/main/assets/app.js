@@ -9,6 +9,14 @@ const SESSION_KEY = 'findit_harare_session_v3';
 const API_BASE = (typeof window !== 'undefined' && (window.location.protocol === 'file:' || !window.location.origin || window.location.origin === 'null' || (window.location.hostname === 'localhost' && window.location.port !== '3030')))
   ? 'https://finditharare.vercel.app'
   : '';
+
+function resolveMediaUrl(url) {
+  if (!url || typeof url !== 'string') return '';
+  if (url.startsWith('/api/')) {
+    return (API_BASE || '') + url;
+  }
+  return url;
+}
 const WS_RELAY_HOST = (typeof window !== 'undefined' && window.FINDIT_WS_HOST) ? window.FINDIT_WS_HOST : '';
 
 const state = {
@@ -455,6 +463,15 @@ document.addEventListener('DOMContentLoaded', async () => {
   useBrowserGeolocation(true);
   initRealtimeSync();
   startOfferCountdownLoop();
+
+  // Notify user if offline upon launching app
+  setTimeout(() => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      showToast('⚠️ You are currently offline. Connect to internet to receive real-time job posts.', 'warning', 6000);
+    } else if (state.role === 'PROVIDER' && (state.currentUser?.isOnline === false || state.db?.providers?.find((p) => p.id === state.currentUser?.id)?.isOnline === false)) {
+      showToast('🔴 You are currently offline. Tap "Go Online" in your Workspace to receive job posts!', 'warning', 6000);
+    }
+  }, 1200);
 
   // Mobile & Android Hardware Back Button Handler: Exit modals/steps smoothly rather than leaving app
   window.addEventListener('popstate', () => {
@@ -1143,6 +1160,65 @@ function initRealtimeSync() {
   }
 }
 
+let audioCtxForChime = null;
+
+function playIncomingMessageSoundAndVibrate(message) {
+  // 1. Phone vibration (Standard message haptic pattern: vibrate - pause - vibrate)
+  try {
+    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+      navigator.vibrate([140, 70, 140]);
+    }
+  } catch (e) {}
+
+  // 2. High-Fidelity Pleasant WhatsApp/iOS Message Chime using Web Audio API
+  try {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (AudioContextClass) {
+      if (!audioCtxForChime || audioCtxForChime.state === 'closed') {
+        audioCtxForChime = new AudioContextClass();
+      }
+      if (audioCtxForChime.state === 'suspended') {
+        audioCtxForChime.resume().catch(() => {});
+      }
+      const ctx = audioCtxForChime;
+      const now = ctx.currentTime;
+
+      // Note 1: 587.33 Hz (D5 chime)
+      const osc1 = ctx.createOscillator();
+      const gain1 = ctx.createGain();
+      osc1.type = 'sine';
+      osc1.frequency.setValueAtTime(587.33, now);
+      gain1.gain.setValueAtTime(0.28, now);
+      gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+      osc1.connect(gain1);
+      gain1.connect(ctx.destination);
+      osc1.start(now);
+      osc1.stop(now + 0.15);
+
+      // Note 2: 880 Hz (A5 bell harmonic)
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.type = 'sine';
+      osc2.frequency.setValueAtTime(880, now + 0.08);
+      gain2.gain.setValueAtTime(0.32, now + 0.08);
+      gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+      osc2.connect(gain2);
+      gain2.connect(ctx.destination);
+      osc2.start(now + 0.08);
+      osc2.stop(now + 0.35);
+    }
+  } catch (audioErr) {}
+
+  // 3. Android Native Bridge notification & vibration
+  try {
+    if (window.FinditNative && typeof window.FinditNative.triggerNotification === 'function') {
+      const sender = message?.senderName || 'Findit User';
+      const text = message?.text || 'Sent you a message';
+      window.FinditNative.triggerNotification(`💬 ${sender}`, text, 7777);
+    }
+  } catch (nativeErr) {}
+}
+
 function handleIncomingRealtimeEvent(data) {
   if (!data || data.eventType === 'CONNECTED' || data.eventType === 'PING') return;
 
@@ -1220,14 +1296,18 @@ function handleIncomingRealtimeEvent(data) {
       } else {
         targetReq.messages.push(message);
       }
-      if (state.chatDrawerOpen && message.senderRole !== state.role) {
-        markRequestMessagesRead(targetReq.id);
-      } else if (message.senderRole && message.senderRole !== 'SYSTEM' && message.senderRole !== state.role) {
-        triggerSystemNotification(
-          `New Message from ${message.senderName || 'Findit User'}`,
-          message.text,
-          `msg_${message.id || message.clientMsgId || Date.now()}`
-        );
+      if (message.senderRole && message.senderRole !== 'SYSTEM' && message.senderRole !== state.role) {
+        playIncomingMessageSoundAndVibrate(message);
+        if (state.chatDrawerOpen) {
+          markRequestMessagesRead(targetReq.id);
+        } else {
+          showToast(`💬 ${message.senderName || 'Findit User'}: ${message.text || 'Photo attached'}`, 'info', 4500);
+          triggerSystemNotification(
+            `New Message from ${message.senderName || 'Findit User'}`,
+            message.text,
+            `msg_${message.id || message.clientMsgId || Date.now()}`
+          );
+        }
       }
       updateChatFeedDomOnly(targetReq);
     }
@@ -1424,26 +1504,24 @@ function handleIncomingRealtimeEvent(data) {
 
   // 8. REAL-TIME CALL INCOMING (Signaling to recipient)
   if (data.eventType === 'CALL_INCOMING' && data.payload) {
-    const { callerId, callerName, recipientId, contextTitle, channelId, requestId } = data.payload;
-    const myId = state.currentUser?.id;
-    const isCaller = Boolean(myId && String(callerId) === String(myId));
-    if (isCaller) return;
-
-    const activeJob = state.role === 'PROVIDER' ? getProviderActiveBooking(myId) : getCustomerActiveRequest();
-    const isTargetRecipient = (myId && recipientId && String(recipientId) === String(myId)) ||
-      (requestId && ((state.activeRequestId === requestId) || (state.openChatRequestId === requestId) || (activeJob?.id === requestId)));
-
-    if (isTargetRecipient) {
+    const c = data.payload;
+    if (isCallForCurrentUser(c)) {
       state.incomingCall = {
-        callerId,
-        callerName: callerName || 'User',
-        contextTitle: contextTitle || 'In-App Audio Call',
-        channelId: channelId || ('call_' + requestId),
-        requestId
+        callerId: c.callerId,
+        callerName: c.callerName || 'User',
+        contextTitle: c.contextTitle || 'In-App Audio Call',
+        channelId: c.channelId || ('call_' + c.requestId),
+        requestId: c.requestId
       };
       playIncomingRingtone();
       renderCallModal();
-      triggerSystemNotification('📞 Incoming Call from ' + (callerName || 'User'), contextTitle || 'Tap to answer', 'call_' + requestId);
+      triggerSystemNotification('📞 Incoming Call from ' + (c.callerName || 'User'), c.contextTitle || 'Tap to answer', 'call_' + c.requestId);
+      try {
+        if (window.FinditNative && typeof window.FinditNative.triggerIncomingCall === 'function') {
+          window.FinditNative.triggerIncomingCall(c.callerName || 'Findit User', 'Voice', c.channelId);
+        }
+      } catch (nativeCallErr) {}
+      startActiveCallPolling();
     }
     return;
   }
@@ -1466,6 +1544,8 @@ function handleIncomingRealtimeEvent(data) {
         }
       }, 1000);
       renderCallModal();
+      // Caller initiates dual-engine audio streams now that callee has accepted!
+      joinDualEngineCall(channelId, true);
     } else if ((action === 'DECLINE' || action === 'END') && (state.activeCall || state.incomingCall)) {
       endInAppCall(false);
     }
@@ -2055,19 +2135,59 @@ function getManeuverSvgIcon(type = 'turn', modifier = 'straight', size = 26) {
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>`;
 }
 
+let cachedNavigationVoice = null;
+
+function getGoogleMapsNavigationVoice() {
+  if (typeof window === 'undefined' || !('speechSynthesis' in window)) return null;
+  const voices = window.speechSynthesis.getVoices() || [];
+  if (!voices.length) return null;
+
+  // 1. Google Maps native voice (Chrome, Android, and Google TTS)
+  const googleVoice = voices.find((v) =>
+    v.name.includes('Google') && (v.name.includes('US English') || v.name.includes('UK English Female') || v.name.includes('English') || v.lang.startsWith('en'))
+  );
+  if (googleVoice) return googleVoice;
+
+  // 2. High-quality natural English voices (iOS / macOS / Windows)
+  const naturalVoices = ['Samantha', 'Karen', 'Victoria', 'Moira', 'Tessa', 'Jenny', 'Aria', 'Natural'];
+  for (const name of naturalVoices) {
+    const match = voices.find((v) => v.name.includes(name) && v.lang.startsWith('en'));
+    if (match) return match;
+  }
+
+  // 3. Clean standard English voice (strictly avoid novelty/robotic voices like Fred, Bad News, Albert, etc.)
+  const noveltyVoices = ['Fred', 'Bad News', 'Bells', 'Cellos', 'Good News', 'Organ', 'Trinoids', 'Whisper', 'Zarvox', 'Albert', 'Boing', 'Bubbles', 'Deranged', 'Hysterical', 'Jester'];
+  const cleanEnglish = voices.find((v) =>
+    v.lang.startsWith('en') && !noveltyVoices.some((nov) => v.name.includes(nov))
+  );
+  return cleanEnglish || voices[0] || null;
+}
+
+if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+  window.speechSynthesis.onvoiceschanged = () => {
+    cachedNavigationVoice = getGoogleMapsNavigationVoice();
+  };
+}
+
 function speakNavigationDirection(text) {
   if (!liveNavState.voiceEnabled) return;
   if (!('speechSynthesis' in window)) return;
   const now = Date.now();
-  if (liveNavState.lastSpokenText === text && now - liveNavState.lastSpokenMs < 12000) return;
+  if (liveNavState.lastSpokenText === text && now - liveNavState.lastSpokenMs < 10000) return;
   liveNavState.lastSpokenText = text;
   liveNavState.lastSpokenMs = now;
   try {
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 1.03;
+    const voice = cachedNavigationVoice || getGoogleMapsNavigationVoice();
+    if (voice) {
+      utterance.voice = voice;
+      utterance.lang = voice.lang || 'en-US';
+    } else {
+      utterance.lang = 'en-US';
+    }
+    utterance.rate = 1.0;
     utterance.pitch = 1.0;
-    utterance.lang = 'en-US';
     window.speechSynthesis.speak(utterance);
   } catch (e) {}
 }
@@ -2634,7 +2754,7 @@ function updateMapMarkers(force = false) {
         ` : ''}
         <div class="pro-map-marker-pill">
           ${p.avatarUrl
-            ? `<img src="${p.avatarUrl}" alt="${p.shortName || p.name}" />`
+            ? `<img src="${resolveMediaUrl(p.avatarUrl)}" alt="${p.shortName || p.name}" />`
             : `<span style="font-size:11px; font-weight:800; color:#0066FF;">${p.avatarInitials}</span>`
           }
           <div class="pro-map-category-dot" title="${p.brandName}">
@@ -2694,7 +2814,7 @@ function drawProviderAndClientRouteMarkers(prov, req) {
       <div class="pro-map-marker-pill" style="border-color:#0066FF; border-width:3px; position:relative;">
         <div class="pro-heading-arrow" id="proHeadingArrow" style="transform:translateX(-50%) rotate(${liveNavState.bearingDeg || 0}deg);"></div>
         ${prov.avatarUrl
-          ? `<img src="${prov.avatarUrl}" alt="${escapeHtml(prov.name)}" />`
+          ? `<img src="${resolveMediaUrl(prov.avatarUrl)}" alt="${escapeHtml(prov.name)}" />`
           : `<span style="font-size:11px; font-weight:800; color:#0066FF;">${prov.avatarInitials}</span>`
         }
         <div class="pro-map-category-dot" title="${escapeHtml(prov.brandName || 'Specialist')}">
@@ -2984,7 +3104,7 @@ function renderFloatingOffersOverlay(force = false) {
 
           <div class="offer-pro-row" onclick="openProviderCatalogueModal('${offer.providerId}', '${req.id}', '${offer.id}')" style="cursor:pointer;">
             <div class="offer-avatar-wrap ${isPlatinum ? 'platinum' : ''}">
-              <img src="${avatarUrl}" alt="${escapeHtml(shortName)}" />
+              <img src="${resolveMediaUrl(avatarUrl)}" alt="${escapeHtml(shortName)}" />
               ${isPlatinum ? `<div class="platinum-diamond-badge">${uiIcon('diamond', 9)}</div>` : ''}
             </div>
             <div class="offer-pro-details">
@@ -3878,7 +3998,7 @@ function renderSearchingRadarOverlay(req) {
             ${viewingPros.length > 0 ? `
               <div class="viewing-avatars-stack">
                 ${viewingPros.map((p) => `
-                  <img src="${p.avatarUrl || 'https://images.unsplash.com/photo-1531123897727-8f129e1688ce?auto=format&fit=crop&w=120&q=80'}" alt="${p.shortName || p.name}" />
+                  <img src="${resolveMediaUrl(p.avatarUrl) || 'https://images.unsplash.com/photo-1531123897727-8f129e1688ce?auto=format&fit=crop&w=120&q=80'}" alt="${p.shortName || p.name}" />
                 `).join('')}
               </div>
             ` : ''}
@@ -4150,7 +4270,7 @@ function renderBookedTrackingOverlay(req) {
 
         ${req.photoUrl ? `
           <div style="display:inline-flex; align-items:center; gap:7px; background:#F0FDF4; border:1px solid #BBF7D0; border-radius:8px; padding:3px 9px; margin-bottom:8px; cursor:pointer;" onclick="openImagePreviewModal('${req.photoUrl}', 'Desired Style Photo')">
-            <img src="${req.photoUrl}" style="width:20px; height:20px; border-radius:4px; object-fit:cover;" alt="Reference" />
+            <img src="${resolveMediaUrl(req.photoUrl)}" style="width:20px; height:20px; border-radius:4px; object-fit:cover;" alt="Reference" />
             <span style="font-size:11px; font-weight:700; color:#15803D;">View Reference Photo</span>
             ${uiIcon('chevronRight', 10)}
           </div>
@@ -4160,7 +4280,7 @@ function renderBookedTrackingOverlay(req) {
         <div class="indrive-selected-tier-box" style="margin-bottom:8px; padding:8px 10px;">
           <div class="offer-pro-row" style="margin-bottom:0;">
             <div class="offer-avatar-wrap platinum">
-              <img src="${avatarUrl}" alt="${prov?.name}" />
+              <img src="${resolveMediaUrl(avatarUrl)}" alt="${prov?.name}" />
               <div class="platinum-diamond-badge">${uiIcon('diamond', 9)}</div>
             </div>
             <div class="offer-pro-details">
@@ -4212,21 +4332,50 @@ function renderBookedTrackingOverlay(req) {
           </div>
         ` : ''}
 
-        <!-- Action Buttons: Masked Call, Full Screen Chat, Complete Service -->
-        <div style="display:grid; grid-template-columns:1fr 1fr 1.25fr; gap:8px;">
-          <button class="btn-dark-sec" onclick="startInAppCall('${prov?.name || 'Pro'}', '${req.title}')">
-            ${uiIcon('phone', 14)}
-            <span>Call</span>
-          </button>
-          <button class="btn-dark-sec" onclick="openChatDrawer('${req.id}', '${prov?.id}')">
-            ${uiIcon('chat', 14)}
-            <span>Chat ${(req.messages && req.messages.length > 0) ? `(${req.messages.length})` : ''}</span>
-          </button>
-          <button class="btn-primary-blue" style="height:42px; font-size:13px;" onclick="openRateBookingModal('${req.id}')">
-            ${uiIcon('check', 15)}
-            <span>Complete</span>
-          </button>
-        </div>
+        <!-- Action Buttons: Masked Call, Full Screen Chat, and Complete Service (unlocked after code confirmation) -->
+        ${(() => {
+          const isCodeConfirmed = Boolean(req.pinVerifiedByProvider || req.status === 'IN_PROGRESS' || req.status === 'COMPLETED');
+          if (!isCodeConfirmed) {
+            return `
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                <button class="btn-dark-sec" onclick="startInAppCall('${(prov?.name || 'Pro').replace(/'/g, "\\'")}', '${escapeHtml(req.title)}', 'call_${req.id}', '${prov?.id || ''}')">
+                  ${uiIcon('phone', 14)}
+                  <span>Call</span>
+                </button>
+                <button class="btn-dark-sec" onclick="openChatDrawer('${req.id}', '${prov?.id || ''}')">
+                  ${uiIcon('chat', 14)}
+                  <span>Chat ${(req.messages && req.messages.length > 0) ? `(${req.messages.length})` : ''}</span>
+                </button>
+              </div>
+              <div style="margin-top:8px; background:#EFF6FF; border:1.5px dashed #3B82F6; border-radius:12px; padding:8px 12px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
+                <div style="display:flex; align-items:center; gap:8px; min-width:0;">
+                  <span style="font-size:16px; flex-shrink:0;">🔑</span>
+                  <div style="min-width:0;">
+                    <div style="font-size:12px; font-weight:800; color:#1E40AF;">Share Start PIN with Specialist</div>
+                    <div style="font-size:10.5px; color:#3B82F6;">Complete button unlocks once code is verified</div>
+                  </div>
+                </div>
+                <span style="background:#2563EB; color:#FFFFFF; font-size:13.5px; font-weight:900; letter-spacing:1.5px; padding:3px 9px; border-radius:8px; flex-shrink:0;">#${req.startPinCode || '4829'}</span>
+              </div>
+            `;
+          }
+          return `
+            <div style="display:grid; grid-template-columns:1fr 1fr 1.35fr; gap:8px;">
+              <button class="btn-dark-sec" onclick="startInAppCall('${(prov?.name || 'Pro').replace(/'/g, "\\'")}', '${escapeHtml(req.title)}', 'call_${req.id}', '${prov?.id || ''}')">
+                ${uiIcon('phone', 14)}
+                <span>Call</span>
+              </button>
+              <button class="btn-dark-sec" onclick="openChatDrawer('${req.id}', '${prov?.id || ''}')">
+                ${uiIcon('chat', 14)}
+                <span>Chat ${(req.messages && req.messages.length > 0) ? `(${req.messages.length})` : ''}</span>
+              </button>
+              <button class="btn-primary-blue" style="height:42px; font-size:13px; background:#10B981;" onclick="openRateBookingModal('${req.id}')">
+                ${uiIcon('check', 15)}
+                <span>Complete</span>
+              </button>
+            </div>
+          `;
+        })()}
       </div>
     `}
   `;
@@ -5657,7 +5806,7 @@ function renderModalLayer() {
               <div class="drawer-profile-header" onclick="state.activeModal='SETTINGS'; renderModalLayer();">
                 <div class="drawer-avatar-circle">
                   ${user.avatarUrl
-                    ? `<img src="${user.avatarUrl}" alt="${user.name}" />`
+                    ? `<img src="${resolveMediaUrl(user.avatarUrl)}" alt="${user.name}" />`
                     : `<span>${user.avatarInitials || (user.name ? user.name.slice(0, 2).toUpperCase() : 'FH')}</span>`
                   }
                 </div>
@@ -5833,7 +5982,7 @@ function renderModalLayer() {
         <div class="indrive-modal-sheet" onclick="event.stopPropagation()">
           <div class="cancel-sheet-header">
             <div style="display:flex; align-items:center; gap:12px;">
-              <img src="${prov.avatarUrl}" alt="${prov.name}" style="width:48px; height:48px; border-radius:50%; object-fit:cover; border:2.5px solid #0066FF;" />
+              <img src="${resolveMediaUrl(prov.avatarUrl)}" alt="${prov.name}" style="width:48px; height:48px; border-radius:50%; object-fit:cover; border:2.5px solid #0066FF;" />
               <div>
                 <div style="font-size:17.5px; font-weight:800;">${prov.name}</div>
                 <div style="font-size:12.5px; color:var(--text-secondary); font-weight:600; display:flex; align-items:center; gap:4px;">
@@ -5938,7 +6087,7 @@ function renderModalLayer() {
             <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
           </div>
           <div style="max-height:68vh; overflow:auto; border-radius:14px; border:1.5px solid var(--border-light); background:#0F172A; display:flex; align-items:center; justify-content:center;">
-            <img src="${photoUrl}" style="max-width:100%; max-height:65vh; display:block; object-fit:contain; border-radius:14px;" alt="Desired Style Reference" />
+            <img src="${resolveMediaUrl(photoUrl)}" style="max-width:100%; max-height:65vh; display:block; object-fit:contain; border-radius:14px;" alt="Desired Style Reference" />
           </div>
           <div style="font-size:12px; font-weight:700; color:var(--text-secondary); margin-top:12px;">
             Exact client reference photo attached to this service booking
@@ -6010,13 +6159,21 @@ function renderModalLayer() {
 
           <!-- Account Identity & Verification Card -->
           <div style="background:linear-gradient(135deg, #EFF6FF 0%, #F8FAFC 100%); border:1.5px solid #BFDBFE; border-radius:16px; padding:12px 14px; margin-bottom:14px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
-            <div style="display:flex; align-items:center; gap:10px; min-width:0;">
-              <div style="width:46px; height:46px; border-radius:50%; background:#0066FF; color:#FFFFFF; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:16px; overflow:hidden; border:2px solid #FFFFFF; box-shadow:0 2px 8px rgba(0,102,255,0.25); flex-shrink:0;">
+            <div style="display:flex; align-items:center; gap:12px; min-width:0;">
+              <div
+                style="position:relative; width:50px; height:50px; border-radius:50%; background:#0066FF; color:#FFFFFF; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:16px; border:2px solid #FFFFFF; box-shadow:0 2px 8px rgba(0,102,255,0.25); flex-shrink:0; cursor:pointer;"
+                onclick="document.getElementById('profileAvatarUploadInput').click()"
+                title="Tap to change profile picture"
+              >
                 ${currentUser.avatarUrl
-                  ? `<img src="${currentUser.avatarUrl}" alt="Profile" style="width:100%; height:100%; object-fit:cover;" />`
+                  ? `<img src="${resolveMediaUrl(currentUser.avatarUrl)}" alt="Profile" style="width:100%; height:100%; object-fit:cover; border-radius:50%;" />`
                   : `<span>${escapeHtml((draft.name || currentUser.name || 'FH').slice(0, 2).toUpperCase())}</span>`
                 }
+                <div style="position:absolute; bottom:-1px; right:-1px; width:18px; height:18px; border-radius:50%; background:#0066FF; border:1.5px solid #FFFFFF; display:flex; align-items:center; justify-content:center; color:#FFFFFF; box-shadow:0 1px 4px rgba(0,0,0,0.25);">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                </div>
               </div>
+              <input type="file" id="profileAvatarUploadInput" accept="image/*" style="display:none;" onchange="handleProfileAvatarUpload(this)" />
               <div style="min-width:0;">
                 <div style="font-size:14.5px; font-weight:800; color:#0F172A; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
                   ${escapeHtml(draft.name || currentUser.name || 'Verified Member')}
@@ -8137,7 +8294,7 @@ function renderProviderActiveVisitTab(prov, activeJob) {
 
         ${activeJob.photoUrl ? `
           <div style="display:flex; align-items:center; gap:9px; background:var(--blue-soft); border:1px solid var(--blue-border); border-radius:11px; padding:7px 11px; margin-bottom:10px;">
-            <img src="${activeJob.photoUrl}" style="width:42px; height:42px; border-radius:8px; object-fit:cover; cursor:pointer;" onclick="openImagePreviewModal('${activeJob.photoUrl}', 'Client Reference Photo')" alt="Desired Style Reference" />
+            <img src="${resolveMediaUrl(activeJob.photoUrl)}" style="width:42px; height:42px; border-radius:8px; object-fit:cover; cursor:pointer;" onclick="openImagePreviewModal('${activeJob.photoUrl}', 'Client Reference Photo')" alt="Desired Style Reference" />
             <div style="flex:1; min-width:0;">
               <div style="font-size:12px; font-weight:800; color:var(--blue-primary);">Client Desired Style Photo</div>
               <div style="font-size:11px; color:var(--text-secondary); cursor:pointer;" onclick="openImagePreviewModal('${activeJob.photoUrl}', 'Client Reference Photo')">Tap to view full reference photo</div>
@@ -8159,7 +8316,7 @@ function renderProviderActiveVisitTab(prov, activeJob) {
                 ${isEnRoute ? `
                   <button class="btn-primary-blue" style="height:36px; font-size:12px; font-weight:700; padding:0 12px; white-space:nowrap; flex-shrink:0; border-radius:8px;" onclick="providerMarkArrived('${activeJob.id}')">
                     ${uiIcon('pin', 13)}
-                    <span>I'm Outside</span>
+                    <span>I'm Waiting Outside</span>
                   </button>
                 ` : `
                   <div style="height:36px; padding:0 10px; background:#FEF3C7; border:1px solid #FCD34D; border-radius:8px; display:flex; align-items:center; gap:5px; font-size:11.5px; font-weight:800; color:#B45309; white-space:nowrap; flex-shrink:0;">
@@ -8221,7 +8378,7 @@ function renderProviderActiveVisitTab(prov, activeJob) {
           <span>⏱️</span>
           <span>Delay (+15m)</span>
         </button>
-        <button class="btn-dark-sec" style="font-size:11.5px; padding:0 8px; justify-content:center; gap:4px;" onclick="startInAppCall('${activeJob.customerName}', '${activeJob.title}')">
+        <button class="btn-dark-sec" style="font-size:11.5px; padding:0 8px; justify-content:center; gap:4px;" onclick="startInAppCall('${(activeJob.customerName || 'Client').replace(/'/g, "\\'")}', '${escapeHtml(activeJob.title)}', 'call_${activeJob.id}', '${activeJob.customerId || activeJob.customerPhone || ''}')">
           ${uiIcon('phone', 13)}
           <span>Call</span>
         </button>
@@ -8263,8 +8420,32 @@ async function promptProviderDelayNotice(requestId) {
 // PROVIDER TAB 2: LIVE HARARE CLIENT REQUESTS FEED (WITH INDRIVE BID BUTTONS)
 // ----------------------------------------------------------------------------
 function renderProviderRequestsFeedTab(prov, openRequests, activeJob) {
+  const isProvOffline = prov.isOnline === false;
   return `
     <div>
+      ${isProvOffline ? `
+        <div
+          onclick="toggleProviderOnlineStatus()"
+          style="background:linear-gradient(135deg, #FEF2F2 0%, #FEE2E2 100%); border:1.5px solid #F87171; border-radius:14px; padding:10px 14px; margin-bottom:12px; display:flex; justify-content:space-between; align-items:center; cursor:pointer; box-shadow:0 2px 8px rgba(220,38,38,0.12);"
+        >
+          <div style="display:flex; align-items:center; gap:10px; min-width:0;">
+            <div style="width:10px; height:10px; border-radius:50%; background:#EF4444; box-shadow:0 0 0 3px rgba(239,68,68,0.25); flex-shrink:0;"></div>
+            <div style="min-width:0;">
+              <div style="font-size:13px; font-weight:800; color:#B91C1C;">You are currently Offline</div>
+              <div style="font-size:11px; color:#991B1B; margin-top:1px;">You will not receive client job posts or alerts until you go online.</div>
+            </div>
+          </div>
+          <button
+            type="button"
+            class="btn-primary-blue"
+            style="height:32px; font-size:11px; font-weight:800; padding:0 12px; background:#DC2626; border-color:#DC2626; border-radius:99px; flex-shrink:0;"
+            onclick="event.stopPropagation(); toggleProviderOnlineStatus();"
+          >
+            Go Online
+          </button>
+        </div>
+      ` : ''}
+
       ${activeJob ? `
         <div
           onclick="state.providerTab='ACTIVE_JOB'; renderUiOverlay();"
@@ -8355,7 +8536,7 @@ function renderProviderRequestsFeedTab(prov, openRequests, activeJob) {
 
             ${r.photoUrl ? `
               <div style="display:flex; align-items:center; gap:9px; background:var(--blue-soft); border:1px solid var(--blue-border); border-radius:10px; padding:6px 10px; margin-bottom:8px;">
-                <img src="${r.photoUrl}" style="width:44px; height:44px; border-radius:8px; object-fit:cover; cursor:pointer;" onclick="openImagePreviewModal('${r.photoUrl}', 'Desired Style Photo')" alt="Client Reference Photo" />
+                <img src="${resolveMediaUrl(r.photoUrl)}" style="width:44px; height:44px; border-radius:8px; object-fit:cover; cursor:pointer;" onclick="openImagePreviewModal('${r.photoUrl}', 'Desired Style Photo')" alt="Client Reference Photo" />
                 <div style="flex:1; min-width:0;">
                   <div style="font-size:12px; font-weight:800; color:var(--blue-primary);">Desired Style Photo Attached</div>
                   <div style="font-size:11px; color:var(--text-secondary); cursor:pointer;" onclick="openImagePreviewModal('${r.photoUrl}', 'Desired Style Photo')">Tap to inspect style before bidding</div>
@@ -8861,6 +9042,21 @@ async function submitProviderBioUpdate() {
 
 async function providerMarkArrived(requestId) {
   try {
+    // 1. Immediately dismiss turn-by-turn navigation HUD and voice directions upon arrival
+    stopNavigationHud();
+    if ('speechSynthesis' in window) {
+      try { window.speechSynthesis.cancel(); } catch (e) {}
+    }
+    if (leafletRoutePolyline) {
+      try { leafletRoutePolyline.remove(); } catch (e) {}
+      leafletRoutePolyline = null;
+    }
+    if (leafletRoutePolylineCasing) {
+      try { leafletRoutePolylineCasing.remove(); } catch (e) {}
+      leafletRoutePolylineCasing = null;
+    }
+    liveNavState.isActive = false;
+
     markLocalStateMutation();
     const reqSnap = (state.db?.requests || []).find((r) => r.id === requestId) || null;
     await apiPost('/api/bookings/status', {
@@ -9360,14 +9556,12 @@ function renderChatDrawer() {
           </div>
 
           <div class="chat-inline-input-row">
-            ${state.role !== 'PROVIDER' ? `
-              <button type="button" class="whatsapp-ios-plus-btn" onclick="document.getElementById('chatPhotoInput').click()" title="Attach Reference Photo">+</button>
-              <input type="file" id="chatPhotoInput" accept="image/*" style="display:none;" onchange="handleChatPhotoUpload(this, '${req?.id || ''}')" />
-            ` : ''}
+            <button type="button" class="whatsapp-ios-plus-btn" onclick="document.getElementById('chatPhotoInput').click()" title="Attach Photo">+</button>
+            <input type="file" id="chatPhotoInput" accept="image/*" style="display:none;" onchange="handleChatPhotoUpload(this, '${req?.id || ''}')" />
             <input
               id="chatTextInput"
               class="whatsapp-ios-input"
-              placeholder="${state.role === 'PROVIDER' ? 'Message client (No links/images allowed)' : 'Message'}"
+              placeholder="Message..."
               onkeydown="if(event.key==='Enter'){ event.preventDefault(); sendCustomChat('${req?.id || ''}'); }"
             />
             <button
@@ -9471,7 +9665,7 @@ function renderChatMessagesHtml(messages) {
 
     const photoHtml = m.photoUrl ? `
       <div style="cursor:pointer; margin-bottom:4px; border-radius:10px; overflow:hidden; max-width:240px;" onclick="openChatPhotoPreview('${escapeHtml(m.photoUrl)}')">
-        <img src="${escapeHtml(m.photoUrl)}" alt="Photo Attachment" style="display:block; width:100%; max-height:220px; object-fit:cover; border-radius:10px;" />
+        <img src="${resolveMediaUrl(escapeHtml(m.photoUrl))}" alt="Photo Attachment" style="display:block; width:100%; max-height:220px; object-fit:cover; border-radius:10px;" />
       </div>
     ` : '';
 
@@ -9632,6 +9826,41 @@ function toggleSettingsProviderCategory(catId) {
   state.settingsDraft.categoryIds = list;
   lastRenderedModalKey = '';
   renderModalLayer();
+}
+
+async function handleProfileAvatarUpload(input) {
+  if (!input.files || !input.files[0]) return;
+  const file = input.files[0];
+  showToast('Updating profile photo...', 'info');
+  const compressed = await compressImageFileToDataUrl(file, 600, 0.78);
+  if (!compressed) {
+    showToast('Could not process photo. Please choose another image.', 'error');
+    return;
+  }
+  if (state.currentUser) {
+    state.currentUser.avatarUrl = compressed;
+    state.currentUser.selfieUrl = compressed;
+  }
+  if (state.settingsDraft) {
+    state.settingsDraft.avatarUrl = compressed;
+  }
+  if (state.role === 'PROVIDER') {
+    const p = (state.db?.providers || []).find((x) => x.id === state.currentUser?.id);
+    if (p) { p.avatarUrl = compressed; p.selfieUrl = compressed; }
+  } else {
+    const c = (state.db?.customers || []).find((x) => x.id === state.currentUser?.id);
+    if (c) { c.avatarUrl = compressed; c.selfieUrl = compressed; }
+  }
+  saveSession(state.role, state.currentUser, false);
+  lastRenderedModalKey = '';
+  renderAll();
+  showToast('Profile picture updated successfully!', 'success');
+
+  apiPost('/api/account/update-settings', {
+    role: state.role,
+    userId: state.currentUser?.id,
+    avatarUrl: compressed
+  }).catch((e) => console.warn('Profile avatar sync notice:', e));
 }
 
 async function saveAccountSettingsChanges() {
@@ -9808,13 +10037,9 @@ async function sendSupportAiMessage(presetText = null) {
 }
 
 async function handleChatPhotoUpload(input, requestId) {
-  if (state.role === 'PROVIDER') {
-    showToast('Providers are not allowed to upload images or flyers in chat. Use your Catalogue instead.', 'error');
-    return;
-  }
   if (!input.files || !input.files[0]) return;
   const file = input.files[0];
-  const photoDataUrl = await compressImageFileToDataUrl(file, 1200, 0.82);
+  const photoDataUrl = await compressImageFileToDataUrl(file, 800, 0.75);
   input.value = '';
   if (photoDataUrl) {
     sendChatMessage('', requestId, photoDataUrl);
@@ -10013,6 +10238,46 @@ function stopCallRingtones() {
   }
 }
 
+function isCallForCurrentUser(c) {
+  if (!c || c.status !== 'RINGING') return false;
+  const myId = String(state.currentUser?.id || '');
+  const myPhone = String(state.currentUser?.phone || '').replace(/\D/g, '');
+  const myFinditId = String(state.currentUser?.finditId || '');
+  const callerId = String(c.callerId || '');
+
+  // Never ring caller themselves
+  if (myId && callerId === myId) return false;
+  if (myPhone && callerId.replace(/\D/g, '') === myPhone) return false;
+
+  // Direct recipient match (by ID, phone digits, or Findit ID)
+  const recId = String(c.recipientId || '');
+  if (myId && recId === myId) return true;
+  if (myPhone && recId.replace(/\D/g, '') && recId.replace(/\D/g, '') === myPhone) return true;
+  if (myFinditId && recId === myFinditId) return true;
+
+  // Request context match (active request, open chat, or booking match)
+  if (c.requestId) {
+    if (state.activeRequestId === c.requestId) return true;
+    if (state.openChatRequestId === c.requestId) return true;
+    const activeBooking = state.role === 'PROVIDER' ? getProviderActiveBooking(myId) : getCustomerActiveRequest();
+    if (activeBooking && activeBooking.id === c.requestId) return true;
+
+    if (state.db && Array.isArray(state.db.requests)) {
+      const matchReq = state.db.requests.find((r) => r.id === c.requestId);
+      if (matchReq) {
+        if (state.role === 'CUSTOMER' && (matchReq.customerId === myId || (matchReq.customerPhone && matchReq.customerPhone.replace(/\D/g, '') === myPhone))) {
+          return true;
+        }
+        if (state.role === 'PROVIDER' && (matchReq.acceptedProviderId === myId || (matchReq.offers || []).some((o) => o.providerId === myId))) {
+          return true;
+        }
+      }
+    }
+  }
+
+  return false;
+}
+
 let activeCallPollTimer = null;
 
 function syncIncomingCallFromList(calls) {
@@ -10039,6 +10304,8 @@ function syncIncomingCallFromList(calls) {
           }
         }, 1000);
         renderCallModal();
+        // Caller initiates audio stream now that recipient answered!
+        joinDualEngineCall(state.activeCall.channelId, true);
       } else if (matched.status === 'ENDED') {
         endInAppCall(false);
         return;
@@ -10062,14 +10329,7 @@ function syncIncomingCallFromList(calls) {
 
   // 3. Check for any ringing call intended for us
   if (!state.activeCall && !state.incomingCall) {
-    const ringingCall = calls.find((c) => {
-      if (c.status !== 'RINGING') return false;
-      const isCaller = Boolean(myId && String(c.callerId) === String(myId));
-      if (isCaller) return false;
-      const isTarget = (myId && c.recipientId && String(c.recipientId) === String(myId)) ||
-        (c.requestId && ((state.activeRequestId === c.requestId) || (state.openChatRequestId === c.requestId) || (activeJob?.id === c.requestId)));
-      return Boolean(isTarget);
-    });
+    const ringingCall = calls.find((c) => isCallForCurrentUser(c));
 
     if (ringingCall) {
       state.incomingCall = {
@@ -10082,6 +10342,11 @@ function syncIncomingCallFromList(calls) {
       playIncomingRingtone();
       renderCallModal();
       triggerSystemNotification('📞 Incoming Call from ' + (ringingCall.callerName || 'User'), ringingCall.contextTitle || 'Tap to answer', 'call_' + ringingCall.requestId);
+      try {
+        if (window.FinditNative && typeof window.FinditNative.triggerIncomingCall === 'function') {
+          window.FinditNative.triggerIncomingCall(ringingCall.callerName || 'Findit User', 'Voice', ringingCall.channelId);
+        }
+      } catch (nativeErr) {}
       startActiveCallPolling();
     }
   }
@@ -10150,7 +10415,6 @@ async function startInAppCall(peerName, contextTitle, channelId = null, recipien
   }).catch((e) => console.warn('Call initiate notice:', e));
 
   startActiveCallPolling();
-  joinDualEngineCall(finalChannelId, true);
 }
 
 async function answerIncomingCall() {
@@ -10486,7 +10750,7 @@ function renderCallModal() {
 
         <div class="ios-call-center">
           <div class="ios-call-avatar-wrap">
-            <img src="${avatarUrl}" class="ios-call-avatar" alt="${inc.callerName}" />
+            <img src="${resolveMediaUrl(avatarUrl)}" class="ios-call-avatar" alt="${inc.callerName}" />
           </div>
           <div class="ios-call-peer-name">${escapeHtml(inc.callerName)}</div>
           <div class="ios-call-peer-context">${escapeHtml(inc.contextTitle || 'Home Service Booking')}</div>
@@ -10537,7 +10801,7 @@ function renderCallModal() {
 
       <div class="ios-call-center">
         <div class="ios-call-avatar-wrap">
-          <img src="${avatarUrl}" class="ios-call-avatar" alt="${peerName}" />
+          <img src="${resolveMediaUrl(avatarUrl)}" class="ios-call-avatar" alt="${peerName}" />
         </div>
         <div class="ios-call-peer-name">${escapeHtml(peerName)}</div>
         <div class="ios-call-peer-context">${escapeHtml(contextTitle)}</div>

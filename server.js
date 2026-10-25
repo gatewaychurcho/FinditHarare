@@ -1529,7 +1529,11 @@ async function r2GetObject(objectKey, timeoutMs = 2000) {
 }
 
 function offloadDataUriToR2Url(val) {
-  if (typeof val !== 'string' || !val.startsWith('data:image/') || val.length < 2500) {
+  if (typeof val !== 'string' || !val.startsWith('data:image/')) {
+    return val;
+  }
+  // Keep compressed data URIs (<= 140KB) directly intact so they render at 0ms offline/online without breaking
+  if (val.length < 140000) {
     return val;
   }
   const match = val.match(/^data:(image\/[a-zA-Z0-9+.-]+);base64,(.+)$/);
@@ -1538,17 +1542,15 @@ function offloadDataUriToR2Url(val) {
   const base64Data = match[2];
   const hash = crypto.createHash('sha1').update(base64Data).digest('hex').slice(0, 20);
   const mediaKey = `img_${hash}`;
-  if (!r2MediaCache.has(mediaKey)) {
-    try {
-      const buffer = Buffer.from(base64Data, 'base64');
-      r2MediaCache.set(mediaKey, { buffer, contentType });
-      if (!r2UploadedKeys.has(mediaKey)) {
-        r2UploadedKeys.add(mediaKey);
-        r2PutObject(`media/${mediaKey}`, buffer, contentType, 4000).catch(() => {});
-      }
-    } catch (e) {
-      return val;
+  try {
+    const buffer = Buffer.from(base64Data, 'base64');
+    r2MediaCache.set(mediaKey, { buffer, contentType });
+    if (!r2UploadedKeys.has(mediaKey)) {
+      r2UploadedKeys.add(mediaKey);
+      r2PutObject(`media/${mediaKey}`, buffer, contentType, 4000).catch(() => {});
     }
+  } catch (e) {
+    return val;
   }
   return `/api/media/${mediaKey}`;
 }
@@ -4046,8 +4048,9 @@ Return ONLY JSON with keys:
 
       const incoming = db.activeCalls.find((c) => {
         if (c.status !== 'RINGING') return false;
-        if (userId && c.callerId === userId) return false; // don't ring caller
-        if (userId && c.recipientId && c.recipientId === userId) return true;
+        const userPhoneDigits = userId.replace(/\D/g, '');
+        if (userId && (c.callerId === userId || (userPhoneDigits && c.callerId.replace(/\D/g, '') === userPhoneDigits))) return false; // don't ring caller
+        if (userId && c.recipientId && (c.recipientId === userId || (userPhoneDigits && c.recipientId.replace(/\D/g, '') === userPhoneDigits))) return true;
         if (reqId && c.requestId && c.requestId === reqId) return true;
         if (chanId && c.channelId === chanId) return true;
         return false;
@@ -4329,12 +4332,8 @@ Return ONLY JSON with keys:
       if (!text && !photoUrl) return sendJson(res, 400, { error: 'Empty message' });
       if (!text && photoUrl) text = '📷 Photo attached';
 
-      // Strictly block providers from uploading images, flyers, or logos in chat
-      if (body.senderRole === 'PROVIDER' && (photoUrl || body.imageUrl || text.includes('data:image/') || text.includes('📷 Photo'))) {
-        return sendJson(res, 422, {
-          error: 'Providers are not allowed to upload images, logos, or flyers in chat. Please use your verified Catalogue instead.'
-        });
-      }
+      // Both clients and providers can attach photos in chat (e.g. site photos, parts needed, proof of work)
+      // Anti-leakage shield below ensures no off-platform phone numbers or external links are exchanged
 
       const check = checkAntiLeakage(text);
       if (!check.allowed) {
@@ -4699,6 +4698,10 @@ Return ONLY valid JSON with key: "reply" (string).`;
         if (body.startingPriceUsd !== undefined && Number(body.startingPriceUsd) >= 5) {
           prov.startingPriceUsd = Number(body.startingPriceUsd);
         }
+        if (body.avatarUrl) {
+          prov.avatarUrl = offloadDataUriToR2Url(body.avatarUrl);
+          prov.selfieUrl = prov.avatarUrl;
+        }
         if (typeof body.isOnline === 'boolean') {
           prov.isOnline = body.isOnline;
         }
@@ -4742,6 +4745,10 @@ Return ONLY valid JSON with key: "reply" (string).`;
         }
         if (body.preferredPaymentMethod) {
           cust.preferredPaymentMethod = body.preferredPaymentMethod;
+        }
+        if (body.avatarUrl) {
+          cust.avatarUrl = offloadDataUriToR2Url(body.avatarUrl);
+          cust.selfieUrl = cust.avatarUrl;
         }
         saveDb(db);
         broadcastUpdate('ACCOUNT_UPDATED', { role: 'CUSTOMER', user: cust });
