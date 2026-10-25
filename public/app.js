@@ -464,15 +464,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   initRealtimeSync();
   startOfferCountdownLoop();
 
-  // Notify user if offline upon launching app
-  setTimeout(() => {
-    if (typeof navigator !== 'undefined' && !navigator.onLine) {
-      showToast('⚠️ You are currently offline. Connect to internet to receive real-time job posts.', 'warning', 6000);
-    } else if (state.role === 'PROVIDER' && (state.currentUser?.isOnline === false || state.db?.providers?.find((p) => p.id === state.currentUser?.id)?.isOnline === false)) {
-      showToast('🔴 You are currently offline. Tap "Go Online" in your Workspace to receive job posts!', 'warning', 6000);
-    }
-  }, 1200);
-
   // Mobile & Android Hardware Back Button Handler: Exit modals/steps smoothly rather than leaving app
   window.addEventListener('popstate', () => {
     if (state.incomingCall) {
@@ -2638,7 +2629,6 @@ window.addEventListener('online', () => {
 
 window.addEventListener('offline', () => {
   updateNetworkOfflineStatus();
-  showToast('Offline Mode: Cached services and GPS map active', 'info');
 });
 
 function useBrowserGeolocation(silent = false) {
@@ -6625,10 +6615,10 @@ function renderModalLayer() {
     const formatWaBold = (str) => escapeHtml(str || '').replace(/\*([^*]+)\*/g, '<strong style="color:#111B21;">$1</strong>').replace(/\n/g, '<br/>');
 
     root.innerHTML = `
-      <div class="fullscreen-chat-backdrop" style="z-index:99999;" onclick="closeModal()">
-        <div class="fullscreen-chat-modal" style="background:#EFEAE2; display:flex; flex-direction:column; height:100%; width:100%; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color:#111B21;" onclick="event.stopPropagation()">
+      <div class="fullscreen-chat-backdrop" style="z-index:99999; position:fixed; inset:0; width:100vw; height:100vh; height:100dvh; padding:0; margin:0;" onclick="closeModal()">
+        <div class="fullscreen-chat-modal" style="background:#EFEAE2; display:flex; flex-direction:column; height:100%; height:100dvh; width:100%; width:100vw; border-radius:0; margin:0; padding:0; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color:#111B21;" onclick="event.stopPropagation()">
           <!-- Authentic Light WhatsApp Business Top Bar (No 3-Dots, No Bin) -->
-          <div style="background:#F0F2F5; border-bottom:1px solid #D1D7DB; padding:10px 12px; display:flex; align-items:center; justify-content:space-between; gap:8px; flex-shrink:0;">
+          <div style="background:#F0F2F5; border-bottom:1px solid #D1D7DB; padding:max(10px, env(safe-area-inset-top)) 12px 10px 12px; display:flex; align-items:center; justify-content:space-between; gap:8px; flex-shrink:0;">
             <div style="display:flex; align-items:center; gap:8px; min-width:0; flex:1;">
               <button type="button" onclick="closeModal()" style="background:none; border:none; color:#54656F; display:flex; align-items:center; padding:4px 4px 4px 0; cursor:pointer;" title="Back">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#54656F" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
@@ -6738,7 +6728,7 @@ function renderModalLayer() {
           </div>
 
           <!-- Authentic Light WhatsApp Bottom Input Bar -->
-          <form onsubmit="event.preventDefault(); sendSupportAiMessage(); return false;" style="background:#F0F2F5; padding:8px 10px 14px 10px; display:flex; align-items:center; gap:8px; flex-shrink:0; margin:0;">
+          <form onsubmit="event.preventDefault(); sendSupportAiMessage(); return false;" style="background:#F0F2F5; padding:8px 10px max(14px, env(safe-area-inset-bottom)) 10px; display:flex; align-items:center; gap:8px; flex-shrink:0; margin:0;">
             <div style="flex:1; display:flex; align-items:center; background:#FFFFFF; border-radius:24px; padding:0 12px; height:42px; border:1px solid #E2E8F0;">
               <span style="color:#54656F; cursor:pointer; font-size:18px; margin-right:8px; display:flex; align-items:center;">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
@@ -8546,48 +8536,23 @@ async function promptProviderDelayNotice(requestId) {
 // PROVIDER TAB 2: LIVE HARARE CLIENT REQUESTS FEED (WITH INDRIVE BID BUTTONS)
 // ----------------------------------------------------------------------------
 function renderProviderRequestsFeedTab(prov, openRequests, activeJob) {
-  const isProvOffline = prov.isOnline === false;
   return `
     <div>
-      ${isProvOffline ? `
-        <div
-          onclick="toggleProviderOnlineStatus()"
-          style="background:linear-gradient(135deg, #FEF2F2 0%, #FEE2E2 100%); border:1.5px solid #F87171; border-radius:14px; padding:10px 14px; margin-bottom:12px; display:flex; justify-content:space-between; align-items:center; cursor:pointer; box-shadow:0 2px 8px rgba(220,38,38,0.12);"
-        >
-          <div style="display:flex; align-items:center; gap:10px; min-width:0;">
-            <div style="width:10px; height:10px; border-radius:50%; background:#EF4444; box-shadow:0 0 0 3px rgba(239,68,68,0.25); flex-shrink:0;"></div>
-            <div style="min-width:0;">
-              <div style="font-size:13px; font-weight:800; color:#B91C1C;">You are currently Offline</div>
-              <div style="font-size:11px; color:#991B1B; margin-top:1px;">You will not receive client job posts or alerts until you go online.</div>
-            </div>
-          </div>
-          <button
-            type="button"
-            class="btn-primary-blue"
-            style="height:32px; font-size:11px; font-weight:800; padding:0 12px; background:#DC2626; border-color:#DC2626; border-radius:99px; flex-shrink:0;"
-            onclick="event.stopPropagation(); toggleProviderOnlineStatus();"
-          >
-            Go Online
-          </button>
-        </div>
-      ` : ''}
-
       ${activeJob ? `
         <div
           onclick="state.providerTab='ACTIVE_JOB'; renderUiOverlay();"
-          style="background:#ECFDF5; border:1.5px solid #10B981; border-radius:14px; padding:10px 13px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; cursor:pointer;"
+          style="background:linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%); border:1.5px solid #10B981; border-radius:14px; padding:11px 14px; margin-bottom:12px; display:flex; justify-content:space-between; align-items:center; cursor:pointer;"
         >
-          <div style="display:flex; align-items:center; gap:9px;">
-            <span style="color:#059669; display:inline-flex;">${uiIcon('routeCar', 18)}</span>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span style="color:#059669; display:inline-flex;">${uiIcon('routeCar', 20)}</span>
             <div>
-              <div style="font-size:12.5px; font-weight:800; color:#059669;">Active Visit with ${activeJob.customerName}</div>
-              <div style="font-size:11px; color:#047857;">Tap to open route &amp; live client chat</div>
+              <div style="font-size:13px; font-weight:800; color:#065F46;">Active Job in Progress (${escapeHtml(activeJob.customerName)})</div>
+              <div style="font-size:11px; color:#047857; margin-top:2px;">You can only do 1 job at a time. Complete this visit before placing bids on new requests.</div>
             </div>
           </div>
-          <span style="font-size:12px; font-weight:800; color:#059669; display:inline-flex; align-items:center; gap:3px;">
-            <span>Open</span>
-            ${uiIcon('chevronRight', 14)}
-          </span>
+          <button class="btn-primary-blue" style="height:32px; font-size:11px; font-weight:800; padding:0 12px; background:#059669; border-color:#059669; border-radius:99px; flex-shrink:0;">
+            Go to Job
+          </button>
         </div>
       ` : ''}
 
@@ -8713,32 +8678,48 @@ function renderProviderRequestsFeedTab(prov, openRequests, activeJob) {
               </div>
             ` : ''}
 
-            <div class="provider-bid-grid">
-              <button
-                class="btn-primary-blue"
-                ${surpassesWallet ? 'disabled style="height:38px; font-size:12px; opacity:0.42; cursor:not-allowed; pointer-events:none; filter:grayscale(0.5);"' : `style="height:38px; font-size:12.5px;" onclick="providerSubmitBid('${r.id}', ${r.budgetUsd})"`}
-              >
-                ${surpassesWallet ? `🔒 Need ${commPercent}% ($${requiredCommUsd.toFixed(2)})` : `Accept ${formatUsdPrice(r.budgetUsd)}`}
-              </button>
-              <button
-                class="btn-dark-sec"
-                ${bid1Surpasses ? 'disabled style="padding:7px 6px; font-size:12px; opacity:0.42; cursor:not-allowed; pointer-events:none;"' : `style="padding:7px 6px; font-size:12px;" onclick="providerSubmitBid('${r.id}', ${bid1Usd})"`}
-              >
-                ${formatUsdPrice(bid1Usd)}
-              </button>
-              <button
-                class="btn-dark-sec"
-                ${bid2Surpasses ? 'disabled style="padding:7px 6px; font-size:12px; opacity:0.42; cursor:not-allowed; pointer-events:none;"' : `style="padding:7px 6px; font-size:12px;" onclick="providerSubmitBid('${r.id}', ${bid2Usd})"`}
-              >
-                ${formatUsdPrice(bid2Usd)}
-              </button>
-              <button
-                class="btn-dark-sec"
-                ${surpassesWallet ? 'disabled style="padding:7px 6px; font-size:12px; opacity:0.42; cursor:not-allowed; pointer-events:none;"' : `style="padding:7px 6px; font-size:12px;" onclick="promptProviderCustomBid('${r.id}', ${r.budgetUsd})"`}
-              >
-                ${isOfferDeclined ? 'Edit Price $' : 'Custom $'}
-              </button>
-            </div>
+            ${activeJob ? `
+              <div style="background:#FFFBEB; border:1px solid #FDE68A; border-radius:11px; padding:9px 12px; display:flex; align-items:center; justify-content:space-between; gap:8px;">
+                <div style="display:flex; align-items:center; gap:6px; font-size:11.5px; color:#92400E; font-weight:700;">
+                  ${uiIcon('lock', 13)}
+                  <span>Active job with ${escapeHtml(activeJob.customerName)} in progress. Complete current visit to bid.</span>
+                </div>
+                <button
+                  type="button"
+                  onclick="state.providerTab='ACTIVE_JOB'; renderUiOverlay();"
+                  style="border:none; background:#F59E0B; color:#FFFFFF; font-size:11px; font-weight:800; padding:5px 10px; border-radius:8px; cursor:pointer; flex-shrink:0;"
+                >
+                  View Job
+                </button>
+              </div>
+            ` : `
+              <div class="provider-bid-grid">
+                <button
+                  class="btn-primary-blue"
+                  ${surpassesWallet ? 'disabled style="height:38px; font-size:12px; opacity:0.42; cursor:not-allowed; pointer-events:none; filter:grayscale(0.5);"' : `style="height:38px; font-size:12.5px;" onclick="providerSubmitBid('${r.id}', ${r.budgetUsd})"`}
+                >
+                  ${surpassesWallet ? `🔒 Need ${commPercent}% ($${requiredCommUsd.toFixed(2)})` : `Accept ${formatUsdPrice(r.budgetUsd)}`}
+                </button>
+                <button
+                  class="btn-dark-sec"
+                  ${bid1Surpasses ? 'disabled style="padding:7px 6px; font-size:12px; opacity:0.42; cursor:not-allowed; pointer-events:none;"' : `style="padding:7px 6px; font-size:12px;" onclick="providerSubmitBid('${r.id}', ${bid1Usd})"`}
+                >
+                  ${formatUsdPrice(bid1Usd)}
+                </button>
+                <button
+                  class="btn-dark-sec"
+                  ${bid2Surpasses ? 'disabled style="padding:7px 6px; font-size:12px; opacity:0.42; cursor:not-allowed; pointer-events:none;"' : `style="padding:7px 6px; font-size:12px;" onclick="providerSubmitBid('${r.id}', ${bid2Usd})"`}
+                >
+                  ${formatUsdPrice(bid2Usd)}
+                </button>
+                <button
+                  class="btn-dark-sec"
+                  ${surpassesWallet ? 'disabled style="padding:7px 6px; font-size:12px; opacity:0.42; cursor:not-allowed; pointer-events:none;"' : `style="padding:7px 6px; font-size:12px;" onclick="promptProviderCustomBid('${r.id}', ${r.budgetUsd})"`}
+                >
+                  ${isOfferDeclined ? 'Edit Price $' : 'Custom $'}
+                </button>
+              </div>
+            `}
           </div>
         `;
       }).join('')}
@@ -9351,6 +9332,11 @@ async function toggleProviderOnlineStatus() {
 
 async function providerSubmitBid(requestId, priceUsd) {
   const prov = state.currentUser || state.db.providers[0];
+  const activeJob = getProviderActiveBooking(prov?.id);
+  if (activeJob) {
+    showToast(`⚠️ You have an active job in progress (${activeJob.customerName || 'Client'}). You can only do 1 job at a time to prevent clients waiting. Please complete this job first.`, 'warning', 6000);
+    return;
+  }
   const currentBalance = Number(prov.walletBalanceUsd || 0);
   const minReserve = Number(state.db?.settings?.minWalletBalanceUsd || 2.00);
   const commPercent = Number(state.db?.settings?.commissionPercent || 11);

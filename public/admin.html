@@ -211,6 +211,10 @@
 
       <div id="adminNav">
         <div class="nav-item active" onclick="setAdminTab('OVERVIEW')">📊 Overview & Revenue</div>
+        <div class="nav-item" onclick="setAdminTab('DISPATCH')" style="background:rgba(16,185,129,0.12); border:1px solid rgba(16,185,129,0.3);">
+          <span>📍 Live GPS Dispatch &amp; Orders</span>
+          <span id="navDispatchBadge" style="margin-left:auto; background:#10B981; color:#fff; font-size:11px; font-weight:800; padding:2px 7px; border-radius:99px; display:none;">0</span>
+        </div>
         <div class="nav-item" onclick="setAdminTab('AI_ENGINE')" style="background:rgba(0,102,255,0.12); border:1px solid rgba(96,165,250,0.3);">
           <span>🧠 AI Intelligence &amp; Guard</span>
           <span style="margin-left:auto; background:#0066FF; color:#fff; font-size:10px; font-weight:800; padding:2px 6px; border-radius:99px;">LIVE</span>
@@ -466,10 +470,77 @@
     function setAdminTab(tab) {
       adminTab = tab;
       document.querySelectorAll('#adminNav .nav-item').forEach((el, idx) => {
-        const tabs = ['OVERVIEW', 'AI_ENGINE', 'ECOCASH', 'DISCIPLINE', 'KYC', 'WHATSAPP_CODES', 'APPROVALS', 'CANCELLATIONS', 'COMMISSION', 'PROVIDERS', 'SHIELD', 'CATEGORIES'];
+        const tabs = ['OVERVIEW', 'DISPATCH', 'AI_ENGINE', 'ECOCASH', 'DISCIPLINE', 'KYC', 'WHATSAPP_CODES', 'APPROVALS', 'CANCELLATIONS', 'COMMISSION', 'PROVIDERS', 'SHIELD', 'CATEGORIES'];
         el.classList.toggle('active', tabs[idx] === tab);
       });
       renderAdmin();
+    }
+
+    let dispatchFilter = 'ALL'; // 'ALL' | 'ACTIVE' | 'OPEN' | 'COMPLETED' | 'CANCELLED'
+
+    async function adminJobAction(requestId, action, defaultNote = '') {
+      let note = defaultNote;
+      if (action === 'FORCE_CANCEL') {
+        const val = prompt('Enter reason for cancelling this job:', defaultNote || 'Client or Provider dispute resolved by Admin');
+        if (val === null) return;
+        note = val;
+      } else if (action === 'FORCE_COMPLETE') {
+        if (!confirm('Are you sure you want to FORCE COMPLETE this job? This will mark it finished, release the provider from the 1-job lock, and deduct platform commission.')) return;
+      } else if (action === 'FORCE_VERIFY_PIN') {
+        if (!confirm('Force verify client 4-digit Start PIN? This will start work in-progress immediately.')) return;
+      } else if (action === 'RELEASE_LOCK') {
+        if (!confirm('Release provider active job lock? This will clear active job and allow provider to place new bids.')) return;
+      }
+
+      try {
+        const res = await api('/api/admin/job/action', 'POST', { requestId, action, note });
+        if (res && res.ok) {
+          showAdminToast(`Job action ${action} executed successfully!`, 'success');
+          await loadAdminData(true);
+        } else {
+          showAdminToast(res?.error || 'Action failed', 'error');
+        }
+      } catch (e) {
+        showAdminToast(e.message, 'error');
+      }
+    }
+
+    async function adminEditProviderShift(providerId, currentStart = '08:00', currentEnd = '18:00') {
+      const start = prompt('Enter Daily Shift Start Time (HH:MM Harare CAT):', currentStart || '08:00');
+      if (start === null) return;
+      const end = prompt('Enter Daily Shift End Time (HH:MM Harare CAT):', currentEnd || '18:00');
+      if (end === null) return;
+
+      try {
+        const res = await api('/api/admin/provider/shift', 'POST', {
+          providerId,
+          workStartTime: start.trim(),
+          workEndTime: end.trim()
+        });
+        if (res && res.ok) {
+          showAdminToast(`Provider shift updated: ${start.trim()} - ${end.trim()} CAT`, 'success');
+          await loadAdminData(true);
+        } else {
+          showAdminToast(res?.error || 'Failed to update shift', 'error');
+        }
+      } catch (e) {
+        showAdminToast(e.message, 'error');
+      }
+    }
+
+    async function adminToggleProviderOnline(providerId, currentOnline) {
+      try {
+        const res = await api('/api/admin/provider/shift', 'POST', {
+          providerId,
+          isOnline: !currentOnline
+        });
+        if (res && res.ok) {
+          showAdminToast(`Provider is now ${!currentOnline ? 'Online' : 'Offline'}`, 'success');
+          await loadAdminData(true);
+        }
+      } catch (e) {
+        showAdminToast(e.message, 'error');
+      }
     }
 
     async function runLiveGeminiAudit() {
@@ -1108,6 +1179,13 @@
         cancelBadgeEl.innerText = cancelLogs.length;
       }
 
+      const activeRequests = (db.requests || []).filter((r) => ['BOOKED', 'CONFIRMED', 'ARRIVED', 'IN_PROGRESS'].includes(r.status));
+      const dispatchBadgeEl = document.getElementById('navDispatchBadge');
+      if (dispatchBadgeEl) {
+        dispatchBadgeEl.style.display = activeRequests.length > 0 ? 'inline-block' : 'none';
+        dispatchBadgeEl.innerText = activeRequests.length;
+      }
+
       const kpiHtml = `
         <div class="top-header">
           <div>
@@ -1150,7 +1228,228 @@
 
       let sectionHtml = '';
 
-      if (adminTab === 'AI_ENGINE') {
+      if (adminTab === 'DISPATCH') {
+        const allReqs = db.requests || [];
+        const filteredReqs = allReqs.filter((r) => {
+          if (dispatchFilter === 'ACTIVE') return ['BOOKED', 'CONFIRMED', 'ARRIVED', 'IN_PROGRESS'].includes(r.status);
+          if (dispatchFilter === 'OPEN') return r.status === 'OPEN';
+          if (dispatchFilter === 'COMPLETED') return r.status === 'COMPLETED';
+          if (dispatchFilter === 'CANCELLED') return r.status === 'CANCELLED';
+          return true;
+        });
+
+        const liveLocationCount = allReqs.filter(r => r.isLiveLocationOrder).length;
+
+        sectionHtml = `
+          <div class="card" style="margin-bottom:18px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:16px;">
+              <div>
+                <h2 style="font-size:18px; font-weight:800; display:flex; align-items:center; gap:8px;">
+                  <span>📍 Real-Time Live GPS Job Dispatch &amp; Active Orders</span>
+                  <span style="background:#10B981; color:#fff; font-size:11px; font-weight:800; padding:3px 9px; border-radius:99px;">0ms SSE LIVE</span>
+                </h2>
+                <div style="font-size:12.5px; color:var(--muted); margin-top:3px;">
+                  Manage client live GPS orders (inDrive mode), monitor turn-by-turn arrivals, verify 4-digit Start PINs, and enforce 1-job-at-a-time rule.
+                </div>
+              </div>
+              <div style="display:flex; gap:8px;">
+                <button class="btn-outline" style="font-size:12px; padding:6px 12px;" onclick="loadAdminData(true)">🔄 Refresh Real-Time Data</button>
+              </div>
+            </div>
+
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:12px; margin-bottom:18px;">
+              <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px; padding:12px;">
+                <div style="font-size:11px; font-weight:800; color:var(--muted);">TOTAL POSTED JOBS</div>
+                <div style="font-size:22px; font-weight:800; color:#0F172A; margin-top:2px;">${allReqs.length}</div>
+              </div>
+              <div style="background:#ECFDF5; border:1.5px solid #10B981; border-radius:12px; padding:12px;">
+                <div style="font-size:11px; font-weight:800; color:#059669;">ACTIVE ON-SITE / EN ROUTE</div>
+                <div style="font-size:22px; font-weight:800; color:#059669; margin-top:2px;">${activeRequests.length}</div>
+              </div>
+              <div style="background:#EFF6FF; border:1px solid #BFDBFE; border-radius:12px; padding:12px;">
+                <div style="font-size:11px; font-weight:800; color:#0066FF;">OPEN FOR BIDS</div>
+                <div style="font-size:22px; font-weight:800; color:#0066FF; margin-top:2px;">${allReqs.filter(r => r.status === 'OPEN').length}</div>
+              </div>
+              <div style="background:#F0FDF4; border:1px solid #BBF7D0; border-radius:12px; padding:12px;">
+                <div style="font-size:11px; font-weight:800; color:#15803D;">⚡ LIVE GPS PICKUP ORDERS</div>
+                <div style="font-size:22px; font-weight:800; color:#15803D; margin-top:2px;">${liveLocationCount}</div>
+              </div>
+            </div>
+
+            <!-- Filter tabs -->
+            <div style="display:flex; gap:8px; border-bottom:1px solid #E2E8F0; padding-bottom:12px; margin-bottom:16px; overflow-x:auto;">
+              ${['ALL', 'ACTIVE', 'OPEN', 'COMPLETED', 'CANCELLED'].map((f) => `
+                <button
+                  type="button"
+                  onclick="dispatchFilter='${f}'; renderAdmin();"
+                  style="border:none; padding:7px 14px; border-radius:99px; font-size:12px; font-weight:800; cursor:pointer; background:${dispatchFilter === f ? 'var(--blue-primary)' : '#F1F5F9'}; color:${dispatchFilter === f ? '#FFFFFF' : '#475569'};"
+                >
+                  ${f === 'ALL' ? `All Requests (${allReqs.length})` : f === 'ACTIVE' ? `Active On-Site (${activeRequests.length})` : f === 'OPEN' ? `Open Bidding (${allReqs.filter(r => r.status === 'OPEN').length})` : f === 'COMPLETED' ? `Completed (${allReqs.filter(r => r.status === 'COMPLETED').length})` : `Cancelled (${allReqs.filter(r => r.status === 'CANCELLED').length})`}
+                </button>
+              `).join('')}
+            </div>
+
+            <!-- Requests Table -->
+            <div style="overflow-x:auto;">
+              <table style="width:100%; border-collapse:collapse; font-size:12.5px;">
+                <thead>
+                  <tr style="background:#F8FAFC; text-align:left; border-bottom:2px solid #E2E8F0;">
+                    <th style="padding:10px 12px; font-weight:800;">Job ID &amp; Created</th>
+                    <th style="padding:10px 12px; font-weight:800;">Client &amp; Live Location</th>
+                    <th style="padding:10px 12px; font-weight:800;">Service &amp; Fare</th>
+                    <th style="padding:10px 12px; font-weight:800;">Assigned Provider (1-Job Rule)</th>
+                    <th style="padding:10px 12px; font-weight:800;">4-Digit PIN &amp; Step</th>
+                    <th style="padding:10px 12px; font-weight:800; text-align:right;">Admin Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${filteredReqs.length === 0 ? `
+                    <tr>
+                      <td colspan="6" style="padding:28px; text-align:center; color:var(--muted); font-size:13.5px;">
+                        No orders match the selected filter (${dispatchFilter}).
+                      </td>
+                    </tr>
+                  ` : filteredReqs.map((r) => {
+                    const isLive = Boolean(r.isLiveLocationOrder);
+                    const lat = r.clientLiveLat || r.lat || -17.8252;
+                    const lng = r.clientLiveLng || r.lng || 31.0335;
+                    const googleMapsUrl = `https://www.google.com/maps?q=${lat},${lng}`;
+                    const assignedProv = (db.providers || []).find((p) => p.id === r.acceptedProviderId || (r.offers || []).find(o => o.id === r.acceptedOfferId)?.providerId === p.id);
+                    const isJobActive = ['BOOKED', 'CONFIRMED', 'ARRIVED', 'IN_PROGRESS'].includes(r.status);
+                    const statusColor = r.status === 'IN_PROGRESS' ? '#059669' : r.status === 'ARRIVED' ? '#0284C7' : r.status === 'BOOKED' ? '#0066FF' : r.status === 'COMPLETED' ? '#10B981' : r.status === 'CANCELLED' ? '#EF4444' : '#D97706';
+
+                    return `
+                      <tr style="border-bottom:1px solid #E2E8F0; vertical-align:top;">
+                        <td style="padding:12px;">
+                          <div style="font-family:monospace; font-weight:800; color:var(--blue-primary); font-size:12px;">${r.id}</div>
+                          <div style="font-size:11px; color:var(--muted); margin-top:2px;">${r.createdAt ? new Date(r.createdAt).toLocaleDateString([], { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }) : 'Recent'}</div>
+                          <div style="margin-top:6px;">
+                            <span style="font-size:10.5px; font-weight:800; color:${statusColor}; background:${statusColor}18; padding:3px 8px; border-radius:99px; display:inline-block;">
+                              ${r.status === 'IN_PROGRESS' ? '🔨 In Progress' : r.status === 'ARRIVED' ? '🚪 At Gate (PIN)' : r.status === 'BOOKED' ? '🚗 En Route' : r.status === 'OPEN' ? `⏳ Open (${(r.offers || []).length} bids)` : r.status === 'COMPLETED' ? '✅ Completed' : '❌ Cancelled'}
+                            </span>
+                          </div>
+                        </td>
+
+                        <td style="padding:12px; min-width:180px;">
+                          <div style="font-weight:800; font-size:13px; color:#0F172A;">${escapeHtml(r.customerName || 'Client')}</div>
+                          <div style="font-size:11.5px; color:var(--muted);">
+                            <a href="tel:${r.customerPhone}" style="color:var(--muted); text-decoration:none;">📞 ${r.customerPhone || 'N/A'}</a>
+                          </div>
+                          <div style="font-size:11.5px; color:#334155; margin-top:4px; font-weight:600;">
+                            📍 ${escapeHtml(r.exactAddress || r.suburbName || 'Harare')}
+                          </div>
+                          <div style="margin-top:4px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                            ${isLive ? `<span style="background:#ECFDF5; color:#059669; font-size:10.5px; font-weight:800; padding:2px 6px; border-radius:4px; border:1px solid #A7F3D0;">⚡ inDrive Live GPS</span>` : ''}
+                            <a href="${googleMapsUrl}" target="_blank" rel="noopener" style="font-size:11px; color:var(--blue-primary); text-decoration:none; font-weight:700;">
+                              🗺️ ${lat.toFixed(4)}, ${lng.toFixed(4)} ↗
+                            </a>
+                          </div>
+                        </td>
+
+                        <td style="padding:12px; min-width:170px;">
+                          <div style="font-weight:800; color:#0F172A;">${escapeHtml(r.title)}</div>
+                          <div style="font-size:11px; color:var(--muted); margin-top:1px;">Category: <strong>${r.categoryId}</strong></div>
+                          ${r.description ? `<div style="font-size:11px; color:#475569; margin-top:3px; background:#F8FAFC; padding:4px 6px; border-radius:6px; max-width:220px;">${escapeHtml(r.description)}</div>` : ''}
+                          <div style="margin-top:5px; font-size:13px; font-weight:800; color:#059669;">
+                            $${Number(r.agreedTotalUsd || r.budgetUsd || 0).toFixed(2)} USD
+                            <span style="font-size:11px; font-weight:600; color:var(--muted);">(${r.paymentMethod || 'Cash USD'})</span>
+                          </div>
+                        </td>
+
+                        <td style="padding:12px; min-width:170px;">
+                          ${assignedProv ? `
+                            <div style="font-weight:800; color:#0F172A;">${escapeHtml(assignedProv.name)}</div>
+                            <div style="font-size:11.5px; color:var(--blue-primary); font-weight:700;">${assignedProv.brandName || ''}</div>
+                            <div style="font-size:11px; color:var(--muted);">
+                              <a href="tel:${assignedProv.phone}" style="color:var(--muted); text-decoration:none;">📞 ${assignedProv.phone}</a>
+                            </div>
+                            <div style="font-size:11px; color:#475569; margin-top:2px;">Wallet: $${Number(assignedProv.walletBalanceUsd || 0).toFixed(2)} USD</div>
+                            <div style="font-size:10.5px; color:#D97706; font-weight:800; margin-top:2px;">🔒 1-Job Limit Active</div>
+                          ` : (r.offers && r.offers.length > 0) ? `
+                            <div style="font-size:12px; font-weight:800; color:var(--blue-primary);">${r.offers.length} Offer(s) Submitted</div>
+                            <div style="font-size:11px; color:var(--muted); margin-top:2px;">
+                              ${r.offers.slice(0, 3).map(o => `<div>• ${escapeHtml(o.providerName || o.providerShortName)}: $${o.priceUsd}</div>`).join('')}
+                            </div>
+                          ` : `
+                            <div style="font-size:11.5px; color:var(--muted); font-style:italic;">No provider assigned yet</div>
+                          `}
+                        </td>
+
+                        <td style="padding:12px; min-width:140px;">
+                          <div style="font-family:monospace; font-size:15px; font-weight:800; background:#F1F5F9; padding:4px 8px; border-radius:6px; letter-spacing:2px; display:inline-block; border:1px solid #CBD5E1;">
+                            ${r.startPin || '----'}
+                          </div>
+                          <div style="margin-top:4px;">
+                            ${r.pinVerifiedByProvider ? `
+                              <span style="color:#059669; font-size:11px; font-weight:800;">✓ PIN Verified</span>
+                            ` : `
+                              <span style="color:#D97706; font-size:11px; font-weight:800;">⏳ Unverified</span>
+                            `}
+                          </div>
+                          ${isJobActive && !r.pinVerifiedByProvider ? `
+                            <button
+                              type="button"
+                              class="btn-outline"
+                              style="margin-top:5px; font-size:10.5px; padding:3px 8px; color:#059669; border-color:#10B981; background:#ECFDF5;"
+                              onclick="adminJobAction('${r.id}', 'FORCE_VERIFY_PIN')"
+                              title="Force verify PIN if client is outside"
+                            >
+                              ⚡ Force Verify PIN
+                            </button>
+                          ` : ''}
+                        </td>
+
+                        <td style="padding:12px; text-align:right; min-width:150px;">
+                          <div style="display:flex; flex-direction:column; gap:4px; align-items:flex-end;">
+                            ${isJobActive ? `
+                              <button
+                                type="button"
+                                class="btn-blue"
+                                style="font-size:11px; padding:4px 9px; background:#059669; border:none;"
+                                onclick="adminJobAction('${r.id}', 'FORCE_COMPLETE')"
+                              >
+                                ✓ Force Complete
+                              </button>
+                              <button
+                                type="button"
+                                class="btn-outline"
+                                style="font-size:11px; padding:4px 9px; color:#DC2626; border-color:#FCA5A5; background:#FEF2F2;"
+                                onclick="adminJobAction('${r.id}', 'FORCE_CANCEL')"
+                              >
+                                ✕ Cancel Job
+                              </button>
+                              <button
+                                type="button"
+                                class="btn-outline"
+                                style="font-size:10.5px; padding:3px 8px; color:#D97706; border-color:#FCD34D;"
+                                onclick="adminJobAction('${r.id}', 'RELEASE_LOCK')"
+                                title="Release provider so they can bid on other jobs"
+                              >
+                                🔓 Release Lock
+                              </button>
+                            ` : r.status === 'OPEN' ? `
+                              <button
+                                type="button"
+                                class="btn-outline"
+                                style="font-size:11px; padding:4px 9px; color:#DC2626; border-color:#FCA5A5; background:#FEF2F2;"
+                                onclick="adminJobAction('${r.id}', 'FORCE_CANCEL', 'Closed by Admin')"
+                              >
+                                ✕ Close Request
+                              </button>
+                            ` : `
+                              <span style="font-size:11px; color:var(--muted); font-weight:600;">No active action needed</span>
+                            `}
+                          </div>
+                        </td>
+                      </tr>
+                    `;
+                  }).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+      } else if (adminTab === 'AI_ENGINE') {
         const ai = db.aiEngine || {};
         const report = ai.latestStrategyReport || {};
         const matches = ai.matchmakingLogs || [];
@@ -2188,6 +2487,8 @@
                     <th>Provider Full Details</th>
                     <th>ID Document &amp; Categories</th>
                     <th>Suburb &amp; Rating</th>
+                    <th>Shift &amp; Status</th>
+                    <th>1-Job Workload</th>
                     <th>USD Wallet</th>
                     <th>Trust Verification Badges</th>
                     <th>Actions &amp; Top-Up</th>
@@ -2223,6 +2524,35 @@
                       <td>
                         <div style="font-weight:700;">📍 ${p.suburbName || 'Harare'}</div>
                         <div style="font-size:11.5px; color:var(--muted); font-weight:600;">⭐ ${p.rating} (${p.completedBookings} jobs)</div>
+                      </td>
+                      <td style="min-width:140px;">
+                        <div style="font-weight:800; font-size:12px; color:#0F172A;">
+                          ${p.workStartTime || '08:00'} - ${p.workEndTime || '18:00'}
+                          <span style="font-size:10px; color:var(--blue-primary); font-weight:700;">CAT</span>
+                        </div>
+                        <div style="display:flex; gap:4px; margin-top:4px;">
+                          <button type="button" class="btn-outline" style="padding:2px 6px; font-size:10px;" onclick="adminEditProviderShift('${p.id}', '${p.workStartTime || '08:00'}', '${p.workEndTime || '18:00'}')" title="Edit daily shift hours">
+                            ✏️ Shift
+                          </button>
+                          <button type="button" class="btn-outline" style="padding:2px 6px; font-size:10px; border-color:${p.isOnline !== false ? '#10B981' : '#EF4444'}; color:${p.isOnline !== false ? '#059669' : '#DC2626'};" onclick="adminToggleProviderOnline('${p.id}', ${p.isOnline !== false})">
+                            ${p.isOnline !== false ? '● Online' : '○ Offline'}
+                          </button>
+                        </div>
+                      </td>
+                      <td style="min-width:150px;">
+                        ${(() => {
+                          const activeJob = (db.requests || []).find((r) => ['BOOKED', 'CONFIRMED', 'ARRIVED', 'IN_PROGRESS'].includes(r.status) && (r.acceptedProviderId === p.id || (r.offers || []).find(o => o.id === r.acceptedOfferId)?.providerId === p.id));
+                          if (activeJob) {
+                            return `
+                              <div style="font-size:11px; font-weight:800; color:#D97706;">🟡 On Job (1-Job Limit)</div>
+                              <div style="font-size:11px; color:#334155; font-weight:600; margin-top:1px;">${escapeHtml(activeJob.customerName)} (${escapeHtml(activeJob.title)})</div>
+                              <button type="button" class="btn-outline" style="padding:2px 6px; font-size:10px; color:#D97706; border-color:#FCD34D; margin-top:3px;" onclick="adminJobAction('${activeJob.id}', 'RELEASE_LOCK')">
+                                🔓 Release Job
+                              </button>
+                            `;
+                          }
+                          return `<span style="font-size:11px; font-weight:800; color:#059669;">🟢 Free to Bid (0 active)</span>`;
+                        })()}
                       </td>
                       <td style="font-weight:800; color:var(--blue-primary); font-size:14.5px; min-width:130px;">
                         <div>$${Number(p.walletBalanceUsd || 0).toFixed(2)} USD</div>

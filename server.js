@@ -3740,6 +3740,24 @@ Return ONLY JSON with keys:
         return sendJson(res, 403, { code: 'CATEGORY_MISMATCH', error: 'This job is outside your registered business categories.' });
       }
 
+      // 1-JOB-AT-A-TIME RULE: Provider can bid on as many open jobs as they want,
+      // but can only do 1 active job at a time to prevent clients from being kept waiting
+      const activeJobStatuses = ['BOOKED', 'CONFIRMED', 'ARRIVED', 'IN_PROGRESS'];
+      const activeJob = (db.requests || []).find((r) => {
+        if (!activeJobStatuses.includes(r.status)) return false;
+        if (r.acceptedProviderId && r.acceptedProviderId === provider.id) return true;
+        if (r.providerId && r.providerId === provider.id) return true;
+        const accOffer = (r.offers || []).find((o) => o.id === r.acceptedOfferId);
+        return accOffer && accOffer.providerId === provider.id;
+      });
+
+      if (activeJob) {
+        return sendJson(res, 400, {
+          code: 'ACTIVE_JOB_IN_PROGRESS',
+          error: `You currently have an active job in progress (${activeJob.customerName || 'Client'} - ${activeJob.title || 'Service'}). You can only do 1 job at a time to prevent client delays. Please complete your current job before bidding on new jobs.`
+        });
+      }
+
       const priceUsd = Number(body.priceUsd);
       const minReserveUsd = Number(db.settings.minWalletBalanceUsd || 2.00);
       const commissionPercent = Number(db.settings.commissionPercent || 11);
@@ -4951,6 +4969,105 @@ Return ONLY valid JSON with key: "reply" (string).`;
       saveDb(db);
       broadcastUpdate('SETTINGS_UPDATED', { settings: db.settings });
       return sendJson(res, 200, { settings: db.settings });
+    } catch (e) {
+      return sendJson(res, 400, { error: e.message });
+    }
+  }
+
+  // Admin Job Operations: Force Complete, Force Verify PIN, Cancel & Release Locks
+  if (pathname === '/api/admin/job/action' && req.method === 'POST') {
+    try {
+      const body = await parseBody(req);
+      const reqItem = (db.requests || []).find((r) => r.id === body.requestId);
+      if (!reqItem) return sendJson(res, 404, { error: 'Request not found' });
+
+      const action = body.action; // 'FORCE_COMPLETE' | 'FORCE_VERIFY_PIN' | 'FORCE_CANCEL' | 'RELEASE_LOCK'
+      const note = body.note || 'Admin Control Action';
+
+      if (action === 'FORCE_VERIFY_PIN') {
+        reqItem.pinVerifiedByProvider = true;
+        reqItem.status = 'IN_PROGRESS';
+        reqItem.updatedAt = Date.now();
+        if (!reqItem.messages) reqItem.messages = [];
+        reqItem.messages.push({
+          id: 'msg_' + Date.now(),
+          senderRole: 'SYSTEM',
+          senderName: 'Findit Harare Admin',
+          text: `Start PIN verified by Admin Override. Work has commenced.`,
+          timestamp: new Date().toISOString()
+        });
+        deductBookingCommissionIfNeeded(reqItem, 'Admin Forced PIN Verification');
+        saveDb(db);
+        broadcastUpdate('PIN_VERIFIED', { requestId: reqItem.id, request: reqItem });
+        broadcastUpdate('STATUS_UPDATED', { requestId: reqItem.id, request: reqItem });
+        return sendJson(res, 200, { ok: true, request: reqItem });
+      }
+
+      if (action === 'FORCE_COMPLETE') {
+        reqItem.pinVerifiedByProvider = true;
+        reqItem.status = 'COMPLETED';
+        reqItem.updatedAt = Date.now();
+        deductBookingCommissionIfNeeded(reqItem, 'Admin Force Completed Job');
+        if (!reqItem.messages) reqItem.messages = [];
+        reqItem.messages.push({
+          id: 'msg_' + Date.now(),
+          senderRole: 'SYSTEM',
+          senderName: 'Findit Harare Admin',
+          text: `Job marked COMPLETED by Admin. ${note}`,
+          timestamp: new Date().toISOString()
+        });
+        saveDb(db);
+        broadcastUpdate('STATUS_UPDATED', { requestId: reqItem.id, request: reqItem });
+        return sendJson(res, 200, { ok: true, request: reqItem });
+      }
+
+      if (action === 'FORCE_CANCEL') {
+        reqItem.status = 'CANCELLED';
+        reqItem.cancelReason = note;
+        reqItem.cancelledBy = 'ADMIN';
+        reqItem.updatedAt = Date.now();
+        if (!reqItem.messages) reqItem.messages = [];
+        reqItem.messages.push({
+          id: 'msg_' + Date.now(),
+          senderRole: 'SYSTEM',
+          senderName: 'Findit Harare Admin',
+          text: `Job CANCELLED by Admin. ${note}`,
+          timestamp: new Date().toISOString()
+        });
+        saveDb(db);
+        broadcastUpdate('STATUS_UPDATED', { requestId: reqItem.id, request: reqItem });
+        return sendJson(res, 200, { ok: true, request: reqItem });
+      }
+
+      if (action === 'RELEASE_LOCK') {
+        const previousStatus = reqItem.status;
+        reqItem.status = 'COMPLETED';
+        reqItem.updatedAt = Date.now();
+        saveDb(db);
+        broadcastUpdate('STATUS_UPDATED', { requestId: reqItem.id, request: reqItem });
+        return sendJson(res, 200, { ok: true, message: `Job ${reqItem.id} released from ${previousStatus} to COMPLETED.` });
+      }
+
+      return sendJson(res, 400, { error: 'Unknown admin job action' });
+    } catch (e) {
+      return sendJson(res, 400, { error: e.message });
+    }
+  }
+
+  // Admin Provider Shift & Working Hours Control
+  if (pathname === '/api/admin/provider/shift' && req.method === 'POST') {
+    try {
+      const body = await parseBody(req);
+      const provider = (db.providers || []).find((p) => p.id === body.providerId);
+      if (!provider) return sendJson(res, 404, { error: 'Provider not found' });
+
+      if (body.workStartTime) provider.workStartTime = String(body.workStartTime);
+      if (body.workEndTime) provider.workEndTime = String(body.workEndTime);
+      if (typeof body.isOnline === 'boolean') provider.isOnline = body.isOnline;
+
+      saveDb(db);
+      broadcastUpdate('ACCOUNT_UPDATED', { role: 'PROVIDER', user: provider });
+      return sendJson(res, 200, { ok: true, provider });
     } catch (e) {
       return sendJson(res, 400, { error: e.message });
     }
