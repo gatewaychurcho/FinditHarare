@@ -27,3 +27,4 @@ build-android/
 
 # Local uploaded media cache
 public/uploads/
+android/app/src/main/assets/uploads/

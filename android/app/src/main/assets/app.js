@@ -1910,7 +1910,7 @@ function checkProximityAutoPairTick() {
     ? getProviderActiveBooking(state.currentUser?.id)
     : getCustomerActiveRequest();
 
-  if (!bookedJob || (bookedJob.status !== 'CONFIRMED' && bookedJob.status !== 'ARRIVED')) {
+  if (!bookedJob || bookedJob.status === 'COMPLETED' || bookedJob.status === 'CANCELLED' || bookedJob.status === 'OPEN') {
     return;
   }
 
@@ -1925,14 +1925,19 @@ function checkProximityAutoPairTick() {
     state.bookingProximitySeconds[bookedJob.id] = (state.bookingProximitySeconds[bookedJob.id] || 0) + 1;
     const currentSec = state.bookingProximitySeconds[bookedJob.id];
 
-    // Client's phone starts ringing asking to give provider the Start PIN!
-    // Rings for up to 5 minutes (300 seconds), cannot be cancelled unless PIN verified.
+    // 1. Client's phone starts ringing & vibrating when provider says "I'm outside" OR is within 20 meters!
     if (state.role === 'CUSTOMER' && !bookedJob.pinVerifiedByProvider) {
       if (currentSec <= 300) {
         startArrivalVibrationAlert(bookedJob);
       } else {
         stopArrivalVibrationAlert();
       }
+    }
+
+    // 2. If provider is within 20 meters for 1.5 minutes (90 seconds), the "I'm Outside" button
+    // disappears automatically as if clicked, and the provider screen now waits for PIN!
+    if (state.role === 'PROVIDER' && bookedJob.status !== 'ARRIVED' && !bookedJob.pinVerifiedByProvider && currentSec >= 90) {
+      providerMarkArrived(bookedJob.id);
     }
 
     // Update countdown timer on DOM: 3 minutes = 180 seconds auto-pair threshold
@@ -2129,23 +2134,12 @@ function initLeafletMap() {
 
     leafletMarkersLayer = L.layerGroup().addTo(leafletMap);
 
-    leafletMap.on('movestart', () => {
-      const pin = document.getElementById('centerMapPin');
-      if (pin) pin.classList.add('lifting');
-    });
+    leafletMap.on('movestart', () => {});
 
     leafletMap.on('moveend', () => {
-      const pin = document.getElementById('centerMapPin');
-      if (pin) pin.classList.remove('lifting');
+      // User requested: Moving the map must NOT change your position or sitting.
+      // Only dragging the YOU icon changes your position!
       if (!leafletMap) return;
-
-      const activeReq = getCustomerActiveRequest();
-      if (state.role !== 'PROVIDER' && !activeReq && (state.screenStep === 'HOME' || state.screenStep === 'CONFIGURE')) {
-        const center = leafletMap.getCenter();
-        state.pinnedLat = Number(center.lat.toFixed(5));
-        state.pinnedLng = Number(center.lng.toFixed(5));
-        reverseGeocodeHararePin(state.pinnedLat, state.pinnedLng);
-      }
     });
 
     updateLiveGpsMarker();
@@ -2166,6 +2160,7 @@ function syncPinDomLabels() {
   if (routeAddrEl) {
     routeAddrEl.textContent = `${state.customAddress}, ${(state.customSuburbLabel || 'Harare').split(',')[0]}`;
   }
+  updateLiveGpsMarker();
 }
 
 function handleCenterPinBubbleClick() {
@@ -2445,8 +2440,11 @@ function advanceNavigationStep(curLat, curLng) {
       ? `In 50 meters, your client's live location is ahead.`
       : `Turn ${nextStep.modifier || 'onto'} ${nextStep.name || 'next street'}`;
     speakNavigationDirection(speech);
-  } else if (distToDest <= 25) {
-    speakNavigationDirection(`You have arrived at your client's live location. Waiting outside.`);
+  } else if (distToDest <= 20) {
+    speakNavigationDirection("You have arrived at your destination, thanks for using Findit");
+    setTimeout(() => {
+      stopNavigationHud();
+    }, 3200);
   } else if (distToManeuver <= 75 && distToManeuver > 35) {
     const speech = `In ${Math.round(distToManeuver)} meters, turn ${currentStep.modifier || 'onto'} ${currentStep.name || 'next street'}`;
     speakNavigationDirection(speech);
@@ -2814,7 +2812,6 @@ function updateLiveGpsMarker() {
   if (!leafletMap) return;
 
   // In provider mode, provider's own position is rendered with their trade avatar icon
-  // Remove the redundant blue beacon to prevent dual-marker overlay and shaking!
   if (state.role === 'PROVIDER') {
     if (userLiveGpsMarker) {
       leafletMap.removeLayer(userLiveGpsMarker);
@@ -2823,41 +2820,57 @@ function updateLiveGpsMarker() {
     return;
   }
 
-  const lat = state.userLiveGpsLat || state.pinnedLat;
-  const lng = state.userLiveGpsLng || state.pinnedLng;
+  const lat = state.pinnedLat || state.userLiveGpsLat || -17.7955;
+  const lng = state.pinnedLng || state.userLiveGpsLng || 31.0365;
   if (!lat || !lng) return;
 
+  const userAvatar = state.isAuthenticated && state.currentUser?.avatarUrl ? state.currentUser.avatarUrl : '';
   const gpsIcon = L.divIcon({
-    className: 'live-gps-user-beacon-wrapper',
+    className: 'draggable-you-pin-wrapper',
     html: `
-      <div class="live-gps-pulse-outer"></div>
-      <div class="live-gps-pulse-inner"></div>
-      <div class="live-gps-core-dot"></div>
+      <div style="position:relative; display:flex; flex-direction:column; align-items:center; cursor:grab; pointer-events:auto;" title="Drag me to change service location">
+        <div style="background:#0F172A; color:#FFFFFF; font-size:10.5px; font-weight:800; padding:3px 9px; border-radius:99px; margin-bottom:4px; white-space:nowrap; box-shadow:0 4px 12px rgba(15,23,42,0.35); display:inline-flex; align-items:center; gap:5px;">
+          <span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:#10B981; box-shadow:0 0 0 2px rgba(16,185,129,0.35);"></span>
+          <span>${state.customAddress || 'Harare'}</span>
+        </div>
+        <div class="indrive-waving-pin-box" style="position:relative; width:44px; height:44px; box-shadow:0 8px 24px rgba(0,102,255,0.45);">
+          <div class="user-pin-pulse-ring"></div>
+          ${userAvatar ? `<img src="${userAvatar}" onerror="this.style.display='none';" style="width:100%; height:100%; object-fit:cover; border-radius:11px;" alt="You" />` : `
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="5" r="2.6" fill="#FFFFFF"/>
+              <path d="M6.5 4.5C6.5 8.5 9 11 12 11.5L14.5 19.5M9.5 11.2L7.5 19.5M12 11.5L17.5 13.5" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          `}
+          <div class="user-pin-you-badge" style="font-weight:900;">YOU</div>
+        </div>
+        <div class="indrive-pin-stem" style="height:12px; width:3px; background:#0066FF;"></div>
+        <div class="indrive-pin-anchor-dot" style="width:8px; height:8px; background:#0066FF; border-radius:50%;"></div>
+      </div>
     `,
-    iconSize: [32, 32],
-    iconAnchor: [16, 16]
+    iconSize: [120, 90],
+    iconAnchor: [60, 90]
   });
 
   if (userLiveGpsMarker) {
     userLiveGpsMarker.setLatLng([lat, lng]);
+    userLiveGpsMarker.setIcon(gpsIcon);
   } else {
     userLiveGpsMarker = L.marker([lat, lng], {
       icon: gpsIcon,
-      zIndexOffset: 1000,
+      zIndexOffset: 1200,
       draggable: state.role !== 'PROVIDER'
     }).addTo(leafletMap);
-    userLiveGpsMarker.bindTooltip(
-      state.role === 'PROVIDER' ? 'Your Live Location (Pro)' : 'Your GPS Location (Drag map or pin to move)',
-      { direction: 'top', offset: [0, -10] }
-    );
+
     userLiveGpsMarker.on('dragend', (evt) => {
       if (state.role === 'PROVIDER') return;
       state.userHasManuallyDraggedPin = true;
+      state.isCustomAddressSelected = true;
       const pos = evt.target.getLatLng();
       state.pinnedLat = Number(pos.lat.toFixed(5));
       state.pinnedLng = Number(pos.lng.toFixed(5));
-      if (leafletMap) leafletMap.panTo([state.pinnedLat, state.pinnedLng]);
       reverseGeocodeHararePin(state.pinnedLat, state.pinnedLng);
+      showToast(`📍 Position updated: ${state.customAddress}`);
+      updateLiveGpsMarker();
     });
   }
 }
@@ -3819,12 +3832,21 @@ function renderHomeDiscoveryOverlay() {
   const topServices = getPersonalizedAndTopServices();
 
   return `
-    <!-- Top Row: Left Hamburger Menu + Profile / Sign In -->
-    <div class="indrive-top-left-row">
+    <!-- Top Row: Left Hamburger Menu + Notification Bell + Profile / Sign In -->
+    <div class="indrive-top-left-row" style="display:flex; align-items:center; gap:8px;">
       <button class="indrive-circle-btn" onclick="openSideDrawerModal()" title="Menu">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
           <path d="M4 7h16M4 12h16M4 17h16"/>
         </svg>
+      </button>
+
+      <button class="indrive-circle-btn" style="position:relative;" onclick="openNotificationCenterModal()" title="Notification Center &amp; Admin Notices">
+        ${uiIcon('bell', 18)}
+        ${getUnreadNotificationsCount() > 0 ? `
+          <span style="position:absolute; top:-2px; right:-2px; background:#EF4444; color:#FFFFFF; font-size:9.5px; font-weight:800; min-width:17px; height:17px; border-radius:99px; display:inline-flex; align-items:center; justify-content:center; border:2px solid #FFFFFF; padding:0 3px;">
+            ${getUnreadNotificationsCount()}
+          </span>
+        ` : ''}
       </button>
 
       ${state.isAuthenticated ? `
@@ -5663,6 +5685,12 @@ function markAllNotificationsRead() {
   renderUiOverlay();
 }
 
+function openNotificationCenterModal() {
+  state.activeModal = 'NOTIFICATIONS';
+  lastRenderedModalKey = '';
+  renderModalLayer();
+}
+
 function renderModalLayer() {
   const root = document.getElementById('pickerModalRoot');
   if (!root) return;
@@ -5681,7 +5709,11 @@ function renderModalLayer() {
         ? `SUBURB_PICKER_${(state.locationSearchResults || []).length}_${state.locationSearching ? 1 : 0}`
         : state.activeModal === 'SETTINGS'
           ? `SETTINGS_${state.role}_${(state.settingsDraft?.categoryIds || []).join(',')}_${state.settingsDraft?.isOnline !== false ? 1 : 0}`
-          : `${state.activeModal}_${JSON.stringify(state.modalData || {})}`;
+          : state.activeModal === 'PROVIDER_OFFICE_MODAL'
+            ? `PROVIDER_OFFICE_${state.officeDraftHasOffice ? 1 : 0}`
+            : state.activeModal === 'NOTIFICATIONS'
+              ? `NOTIFICATIONS_${(getRelevantNotifications() || []).length}_${getUnreadNotificationsCount()}`
+              : `${state.activeModal}_${JSON.stringify(state.modalData || {})}`;
 
   if (modalKey === lastRenderedModalKey && root.firstElementChild) {
     return;
@@ -7404,8 +7436,8 @@ function renderModalLayer() {
             <button
               type="button"
               class="${hasOffice ? 'btn-primary-blue' : 'btn-dark-sec'}"
-              style="height:44px; font-size:12px;"
-              onclick="state.officeDraftHasOffice = true; renderModalLayer();"
+              style="height:44px; font-size:12px; cursor:pointer;"
+              onclick="setProviderWorkplaceType(true)"
             >
               ${uiIcon('buildingOffice', 15)}
               <span>🏢 Shop / Office</span>
@@ -7413,8 +7445,8 @@ function renderModalLayer() {
             <button
               type="button"
               class="${!hasOffice ? 'btn-primary-blue' : 'btn-dark-sec'}"
-              style="height:44px; font-size:12px;"
-              onclick="state.officeDraftHasOffice = false; renderModalLayer();"
+              style="height:44px; font-size:12px; cursor:pointer;"
+              onclick="setProviderWorkplaceType(false)"
             >
               ${uiIcon('briefcase', 15)}
               <span>🧰 Mobile Freelancer</span>
@@ -7466,10 +7498,44 @@ function renderModalLayer() {
   }
 }
 
+function setProviderWorkplaceType(hasOffice) {
+  state.officeDraftHasOffice = Boolean(hasOffice);
+  lastRenderedModalKey = '';
+  renderModalLayer();
+}
+
+async function quickToggleProviderOffice() {
+  const prov = state.currentUser || (state.db.providers || [])[0];
+  if (!prov) return;
+  const newHasOffice = !prov.hasOffice;
+  prov.hasOffice = newHasOffice;
+  prov.workplaceType = newHasOffice ? 'OFFICE' : 'FREELANCER';
+  if (state.currentUser && state.currentUser.id === prov.id) {
+    state.currentUser = { ...prov };
+    saveSession(state.role, state.currentUser, false);
+  }
+  renderAll();
+  showToast(newHasOffice ? 'Switched to Shop / Office mode' : 'Switched to Mobile Freelancer mode', 'success');
+  try {
+    await apiPost('/api/providers/office', {
+      providerId: prov.id,
+      hasOffice: newHasOffice,
+      workplaceType: prov.workplaceType,
+      officeSuburb: prov.officeSuburb || prov.primarySuburb || 'Avondale',
+      officeAddress: prov.officeAddress || '',
+      providerSnapshot: prov
+    });
+    await fetchState(true);
+  } catch (e) {
+    console.warn('Quick toggle sync note:', e);
+  }
+}
+
 function openProviderOfficeModal() {
   const prov = state.currentUser || (state.db.providers || [])[0] || {};
   state.officeDraftHasOffice = Boolean(prov.hasOffice);
   state.activeModal = 'PROVIDER_OFFICE_MODAL';
+  lastRenderedModalKey = '';
   renderModalLayer();
 }
 
@@ -8522,9 +8588,20 @@ function renderProviderModeOverlay() {
 
   return `
     <div class="provider-top-bar">
-      <button class="indrive-circle-btn" onclick="openSideDrawerModal()" title="Menu">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
-      </button>
+      <div style="display:flex; align-items:center; gap:6px;">
+        <button class="indrive-circle-btn" onclick="openSideDrawerModal()" title="Menu">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        </button>
+
+        <button class="indrive-circle-btn" style="position:relative;" onclick="openNotificationCenterModal()" title="Notification Center &amp; Admin Notices">
+          ${uiIcon('bell', 18)}
+          ${getUnreadNotificationsCount() > 0 ? `
+            <span style="position:absolute; top:-2px; right:-2px; background:#EF4444; color:#FFFFFF; font-size:9.5px; font-weight:800; min-width:17px; height:17px; border-radius:99px; display:inline-flex; align-items:center; justify-content:center; border:2px solid #FFFFFF; padding:0 3px;">
+              ${getUnreadNotificationsCount()}
+            </span>
+          ` : ''}
+        </button>
+      </div>
 
       <button
         class="provider-online-slider ${prov.isOnline !== false ? 'online' : 'offline'}"
@@ -8735,7 +8812,8 @@ function renderProviderActiveVisitTab(prov, activeJob) {
           const distMeters = calculateDistanceMeters(provUser?.lat, provUser?.lng, activeJob.lat, activeJob.lng);
           const isWithin20m = distMeters <= 20 || isArrived;
           const proximitySec = (state.bookingProximitySeconds && state.bookingProximitySeconds[activeJob.id]) || 0;
-          const autoPairRemaining = Math.max(0, 60 - proximitySec);
+          const autoOutsideRemaining = Math.max(0, 90 - proximitySec);
+          const autoPairRemaining = Math.max(0, 180 - proximitySec);
 
           return `
             <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px; padding:7px 9px; margin-bottom:10px;">
@@ -8773,7 +8851,7 @@ function renderProviderActiveVisitTab(prov, activeJob) {
               ${isWithin20m ? `
                 <div style="font-size:10.5px; font-weight:700; color:#059669; margin-top:5px; display:flex; align-items:center; gap:4px;">
                   <span style="width:5px; height:5px; border-radius:50%; background:#10B981;"></span>
-                  <span>Within 20m • Auto-pairs in <span class="proximity-autopair-timer">${autoPairRemaining}s</span> if PIN not entered</span>
+                  <span>Within 20m of client ${isEnRoute ? `• Auto-notifying Outside in ${autoOutsideRemaining}s` : `• Auto-pairs in <span class="proximity-autopair-timer">${autoPairRemaining}s</span>`}</span>
                 </div>
               ` : ''}
             </div>
@@ -9209,21 +9287,28 @@ function renderProviderCatalogueTab(prov, myPendingApprovals) {
         </div>
       </div>
 
-      <!-- Physical Workshop / Office Base Card -->
+      <!-- Physical Workshop / Office Base Card with Instant Mode Toggle -->
       <div style="background:var(--bg-card); border:1.5px solid var(--border-light); border-radius:14px; padding:12px; margin-bottom:12px; box-shadow:0 2px 8px rgba(0,0,0,0.03);">
         <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
           <div style="display:flex; align-items:center; gap:8px;">
             <span style="color:var(--blue-primary);">${uiIcon('buildingOffice', 18)}</span>
             <div>
-              <div style="font-size:13px; font-weight:800; color:var(--text-main);">Physical Workshop / Office</div>
+              <div style="font-size:13px; font-weight:800; color:var(--text-main);">
+                ${prov.hasOffice ? '🏢 Physical Shop / Office' : '🧰 Mobile Freelancer'}
+              </div>
               <div style="font-size:11.5px; color:var(--text-secondary); margin-top:2px;">
-                ${prov.hasOffice ? `${prov.officeAddress || 'Harare Workshop'}, ${prov.officeSuburb || 'Harare'}` : 'No workshop listed (Mobile / Home visits only)'}
+                ${prov.hasOffice ? `${prov.officeAddress || 'Harare Workshop'}, ${prov.officeSuburb || 'Harare'}` : 'Mobile home visits across Harare (No shop base)'}
               </div>
             </div>
           </div>
-          <button class="btn-dark-sec" style="height:32px; padding:0 10px; font-size:11.5px; white-space:nowrap;" onclick="openProviderOfficeModal()">
-            ${prov.hasOffice ? 'Edit Office' : '+ Add Office'}
-          </button>
+          <div style="display:flex; gap:6px;">
+            <button class="btn-dark-sec" style="height:32px; padding:0 10px; font-size:11.5px; white-space:nowrap; cursor:pointer;" onclick="quickToggleProviderOffice()" title="Switch between Shop and Mobile Freelance">
+              <span>${prov.hasOffice ? 'Switch to Mobile' : 'Switch to Shop'}</span>
+            </button>
+            <button class="btn-primary-blue" style="width:auto; height:32px; padding:0 10px; font-size:11.5px; white-space:nowrap; cursor:pointer;" onclick="openProviderOfficeModal()">
+              <span>${prov.hasOffice ? 'Edit Address' : '+ Set Shop'}</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -9445,20 +9530,23 @@ async function submitProviderBioUpdate() {
 
 async function providerMarkArrived(requestId) {
   try {
-    // 1. Immediately dismiss turn-by-turn navigation HUD and voice directions upon arrival
-    stopNavigationHud();
-    if ('speechSynthesis' in window) {
-      try { window.speechSynthesis.cancel(); } catch (e) {}
-    }
-    if (leafletRoutePolyline) {
-      try { leafletRoutePolyline.remove(); } catch (e) {}
-      leafletRoutePolyline = null;
-    }
-    if (leafletRoutePolylineCasing) {
-      try { leafletRoutePolylineCasing.remove(); } catch (e) {}
-      leafletRoutePolylineCasing = null;
-    }
-    liveNavState.isActive = false;
+    // 1. Google Maps voice arrival announcement
+    speakNavigationDirection("You have arrived at your destination, thanks for using Findit");
+
+    // 2. Allow voice directions to finish speaking, then dismiss turn-by-turn navigation HUD and clear route
+    setTimeout(() => {
+      stopNavigationHud();
+      if (leafletRoutePolyline) {
+        try { leafletRoutePolyline.remove(); } catch (e) {}
+        leafletRoutePolyline = null;
+      }
+      if (leafletRoutePolylineCasing) {
+        try { leafletRoutePolylineCasing.remove(); } catch (e) {}
+        leafletRoutePolylineCasing = null;
+      }
+      liveNavState.isActive = false;
+      liveNavState.active = false;
+    }, 3200);
 
     markLocalStateMutation();
     const reqSnap = (state.db?.requests || []).find((r) => r.id === requestId) || null;

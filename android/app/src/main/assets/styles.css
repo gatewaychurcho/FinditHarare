@@ -162,18 +162,18 @@ html, body {
   background: radial-gradient(circle at 50% 35%, #EBF3FF 0%, #DBEAFE 65%, #CBD5E1 100%);
 }
 
-/* Center Pin Container (Above Leaflet Panes at z-index 950) */
+/* Center Pin Container - Hidden in favor of Real Draggable Leaflet Marker (Moving map does NOT change location, dragging YOU icon does) */
 .center-map-pin {
-  position: absolute;
-  top: 32%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 950;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  pointer-events: none;
-  transition: top 0.28s ease;
+  display: none !important;
+}
+
+.draggable-you-pin-wrapper {
+  overflow: visible !important;
+  cursor: grab !important;
+}
+
+.draggable-you-pin-wrapper:active {
+  cursor: grabbing !important;
 }
 
 .center-map-pin.searching-mode {
