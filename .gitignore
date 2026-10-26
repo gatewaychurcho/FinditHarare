@@ -24,3 +24,6 @@ Thumbs.db
 # Android Build Outputs
 build-android/
 *.idsig
+
+# Local uploaded media cache
+public/uploads/

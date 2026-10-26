@@ -17,6 +17,9 @@ function resolveMediaUrl(url, type = 'avatar') {
   if (!url || typeof url !== 'string' || url === 'undefined' || url === 'null') {
     return type === 'task' ? DEFAULT_TASK_PHOTO_FALLBACK : DEFAULT_AVATAR_FALLBACK;
   }
+  if (url.includes('tinashe_selfie.png')) {
+    return (API_BASE || '') + '/api/media/img_689d999fee5679b5b5c5';
+  }
   if (url.startsWith('data:image/')) {
     return url;
   }
@@ -183,8 +186,8 @@ function uiIcon(name, size = 16) {
     buildingOffice: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="10" y2="6"/><line x1="14" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="10" y2="10"/><line x1="14" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="10" y2="14"/><line x1="14" y1="14" x2="16" y2="14"/><path d="M10 22v-4h4v4"/></svg>`,
     trash: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>`,
     plus: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
-    dotOnline: `<svg width="${s}" height="${s}" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;"><circle cx="8" cy="8" r="6" fill="#FFFFFF"/><circle cx="8" cy="8" r="3.5" fill="#10B981"/></svg>`,
-    dotOffline: `<svg width="${s}" height="${s}" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;"><circle cx="8" cy="8" r="5" stroke="#FFFFFF" stroke-width="2"/></svg>`,
+    dotOnline: `<span style="width:8px; height:8px; border-radius:50%; background:#10B981; box-shadow:0 0 0 2.5px rgba(16,185,129,0.28); display:inline-block; flex-shrink:0;"></span>`,
+    dotOffline: `<span style="width:8px; height:8px; border-radius:50%; background:#94A3B8; display:inline-block; flex-shrink:0;"></span>`,
     refresh: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>`,
     zwFlag: `<svg width="${s}" height="${Math.round(s * 0.72)}" viewBox="0 0 28 20" fill="none" style="border-radius:3px; flex-shrink:0;"><rect width="28" height="20" fill="#006400"/><rect y="3" width="28" height="14" fill="#FFD200"/><rect y="6" width="28" height="8" fill="#D40000"/><rect y="8.5" width="28" height="3" fill="#000000"/><polygon points="0,0 11,10 0,20" fill="#FFFFFF"/></svg>`
   };
@@ -3255,7 +3258,7 @@ function renderFloatingOffersOverlay(force = false) {
               Full-screen map active • Tap to view offers
             </div>
           </div>
-          <button class="minimized-restore-btn">
+          <button type="button" class="minimized-restore-btn" onclick="toggleOffersMinimize(false); event.stopPropagation();">
             ${uiIcon('chevronUp', 14)}
             <span>Show Offers (${activeOffers.length})</span>
           </button>
@@ -3848,7 +3851,7 @@ function renderHomeDiscoveryOverlay() {
             <div style="font-size:13.5px; font-weight:800; color:var(--text-main);">Explore Harare Home Services</div>
             <div style="font-size:11.5px; color:var(--text-secondary); font-weight:600;">Full-screen map active • Tap to open services</div>
           </div>
-          <button class="minimized-restore-btn">
+          <button type="button" class="minimized-restore-btn" onclick="toggleSheetMinimize(false); event.stopPropagation();">
             ${uiIcon('chevronUp', 14)}
             <span>Services</span>
           </button>
@@ -4049,7 +4052,7 @@ function renderConfigureFareOverlay() {
             <div style="font-size:13.5px; font-weight:800; color:var(--text-main);">${currentSub.name} • ${formatUsdPrice(state.draftFareUsd)}</div>
             <div style="font-size:11.5px; color:var(--text-secondary); font-weight:600;">Full-screen map active • Tap to continue booking</div>
           </div>
-          <button class="minimized-restore-btn">
+          <button type="button" class="minimized-restore-btn" onclick="toggleSheetMinimize(false); event.stopPropagation();">
             ${uiIcon('chevronUp', 14)}
             <span>Open Fare</span>
           </button>
@@ -4163,7 +4166,7 @@ function renderConfigureFareOverlay() {
             <input type="file" id="stylePhotoInput" accept="image/*" style="display:none;" onchange="handleDraftStylePhotoUpload(this)" />
             ${state.draftPhotoUrl ? `
               <div class="style-photo-preview-wrap" style="background:#EFF6FF; border:1.5px solid #0066FF; border-radius:14px; padding:10px 12px; display:flex; align-items:center; gap:10px;">
-                <img src="${state.draftPhotoUrl}" class="style-photo-thumb" style="width:52px; height:52px; border-radius:10px; object-fit:cover; cursor:pointer;" onclick="openImagePreviewModal('${state.draftPhotoUrl}', 'Desired Style Photo')" alt="Style Photo" />
+                <img src="${resolveMediaUrl(state.draftPhotoUrl, 'task')}" onerror="this.onerror=null; this.src='${DEFAULT_TASK_PHOTO_FALLBACK}';" class="style-photo-thumb" style="width:52px; height:52px; border-radius:10px; object-fit:cover; cursor:pointer;" onclick="openImagePreviewModal('${state.draftPhotoUrl}', 'Desired Style Photo')" alt="Style Photo" />
                 <div style="flex:1; min-width:0;">
                   <div style="font-size:13px; font-weight:800; color:#0066FF;">Desired Style Photo Attached</div>
                   <div style="font-size:11.5px; color:#1E40AF; cursor:pointer;" onclick="openImagePreviewModal('${state.draftPhotoUrl}', 'Desired Style Photo')">Tap photo to view full size</div>
@@ -4247,7 +4250,7 @@ function renderSearchingRadarOverlay(req) {
           <div style="font-size:13.5px; font-weight:800; color:var(--text-main);">Searching Pros • ${formatUsdPrice(currentFare)}</div>
           <div style="font-size:11.5px; color:var(--text-secondary); font-weight:600;">${viewingLabel} • Tap to adjust fare</div>
         </div>
-        <button class="minimized-restore-btn">
+        <button type="button" class="minimized-restore-btn" onclick="toggleSheetMinimize(false); event.stopPropagation();">
           ${uiIcon('chevronUp', 14)}
           <span>Open Radar</span>
         </button>
@@ -4435,7 +4438,7 @@ function renderBookedTrackingOverlay(req) {
           </div>
           <div style="font-size:11.5px; color:var(--text-secondary); font-weight:600;">Start PIN: #${req.startPinCode || '4829'} • Tap to open chat &amp; details</div>
         </div>
-        <button class="minimized-restore-btn">
+        <button type="button" class="minimized-restore-btn" onclick="toggleSheetMinimize(false); event.stopPropagation();">
           ${uiIcon('chevronUp', 14)}
           <span>Open Chat</span>
         </button>
@@ -7838,6 +7841,15 @@ async function handleDraftStylePhotoUpload(inputEl) {
   if (compressed) {
     state.draftPhotoUrl = compressed;
     renderAll();
+    try {
+      const upRes = await apiPost('/api/upload', { dataUrl: compressed });
+      if (upRes && upRes.mediaUrl) {
+        state.draftPhotoUrl = upRes.mediaUrl;
+        renderAll();
+      }
+    } catch (e) {
+      console.warn('Bucket upload note:', e);
+    }
     showToast('Desired style reference photo attached!');
     triggerSilentAiTaskAnalysis();
   }
@@ -8544,7 +8556,7 @@ function renderProviderModeOverlay() {
           </div>
           <div style="font-size:11.5px; color:var(--text-secondary); font-weight:600;">Full-screen Harare map active • Tap to open Workspace</div>
         </div>
-        <button class="minimized-restore-btn">
+        <button type="button" class="minimized-restore-btn" onclick="toggleSheetMinimize(false); event.stopPropagation();">
           ${uiIcon('chevronUp', 14)}
           <span>Workspace</span>
         </button>
@@ -8852,6 +8864,7 @@ function renderProviderRequestsFeedTab(prov, openRequests, activeJob) {
           </div>
           <button
             type="button"
+            onclick="state.providerTab='ACTIVE_JOB'; renderUiOverlay(); event.stopPropagation();"
             style="border:none; background:#0066FF; color:#FFFFFF; font-size:11.5px; font-weight:800; padding:6px 14px; border-radius:99px; cursor:pointer; flex-shrink:0; white-space:nowrap; display:inline-flex; align-items:center; gap:4px;"
           >
             <span>Open Job</span>
@@ -9255,7 +9268,7 @@ function renderProviderCatalogueTab(prov, myPendingApprovals) {
             <div style="background:var(--bg-card); border:1.5px solid var(--border-light); border-radius:14px; overflow:hidden; display:flex; flex-direction:column; justify-content:space-between; box-shadow:0 2px 8px rgba(0,0,0,0.03);">
               <div>
                 <div style="position:relative;">
-                  <img src="${item.imageUrl || 'https://images.unsplash.com/photo-1595476108010-b4d1f102b1b1?auto=format&fit=crop&w=600&q=80'}" style="width:100%; height:110px; object-fit:cover; display:block;" />
+                  <img src="${resolveMediaUrl(item.imageUrl, 'task')}" onerror="this.onerror=null; this.src='${DEFAULT_TASK_PHOTO_FALLBACK}';" style="width:100%; height:110px; object-fit:cover; display:block;" alt="${escapeHtml(item.title || 'Work')}" />
                   <span style="position:absolute; top:6px; right:6px; padding:2px 7px; border-radius:99px; background:rgba(0,0,0,0.68); color:#FFFFFF; font-size:10px; font-weight:800; backdrop-filter:blur(4px);">
                     ${item.duration || '2 hrs'}
                   </span>
@@ -9781,15 +9794,25 @@ async function submitProviderCatalogueUpload() {
   }
 
   try {
+    let finalImageUrl = state.uploadedFileDataUrl;
+    try {
+      const upRes = await apiPost('/api/upload', { dataUrl: state.uploadedFileDataUrl });
+      if (upRes && upRes.mediaUrl) {
+        finalImageUrl = upRes.mediaUrl;
+      }
+    } catch (e) {
+      console.warn('Bucket upload note:', e);
+    }
+
     await apiPost('/api/providers/catalogue', {
       providerId: prov.id,
       title,
       priceUsd,
       hasSuspectedWatermarkOrFlyer: Boolean(state.uploadSuspectedWatermark),
-      imageUrl: state.uploadedFileDataUrl
+      imageUrl: finalImageUrl
     });
     closeModal();
-    showToast('Photo submitted for Admin approval');
+    showToast('Photo uploaded & submitted for Admin approval');
     await fetchState();
   } catch (err) {
     showToast(err.message, 'error');

@@ -1534,10 +1534,6 @@ function offloadDataUriToR2Url(val) {
   if (typeof val !== 'string' || !val.startsWith('data:image/')) {
     return val;
   }
-  // Keep compressed data URIs (<= 500KB) directly intact so they render at 0ms offline/online without breaking
-  if (val.length < 500000) {
-    return val;
-  }
   const match = val.match(/^data:(image\/[a-zA-Z0-9+.-]+);base64,(.+)$/);
   if (!match) return val;
   const contentType = match[1];
@@ -1597,6 +1593,9 @@ function compactDbMediaForFastSync(stateObj) {
     if (!k) return;
     if (k.selfieUrl) k.selfieUrl = offloadDataUriToR2Url(k.selfieUrl);
     if (k.idPhotoUrl) k.idPhotoUrl = offloadDataUriToR2Url(k.idPhotoUrl);
+  });
+  (stateObj.approvalQueue || []).forEach((item) => {
+    if (item && item.imageUrl) item.imageUrl = offloadDataUriToR2Url(item.imageUrl);
   });
 }
 
@@ -2231,6 +2230,47 @@ const server = http.createServer(async (req, res) => {
     sseClients.add(res);
     req.on('close', () => sseClients.delete(res));
     return;
+  }
+
+  // Direct Multi-Cloud R2 Media Upload API (Permanent Cloudflare S3 Persistence)
+  if (pathname === '/api/upload' && req.method === 'POST') {
+    try {
+      const body = await parseBody(req);
+      const dataUrl = body.dataUrl || body.image || '';
+      if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) {
+        return sendJson(res, 400, { error: 'Invalid or missing data URL' });
+      }
+      const match = dataUrl.match(/^data:(image\/[a-zA-Z0-9+.-]+);base64,(.+)$/);
+      if (!match) return sendJson(res, 400, { error: 'Malformed base64 image data' });
+      const contentType = match[1];
+      const base64Data = match[2];
+      const hash = crypto.createHash('sha1').update(base64Data).digest('hex').slice(0, 20);
+      const mediaKey = `img_${hash}`;
+      const buffer = Buffer.from(base64Data, 'base64');
+
+      r2MediaCache.set(mediaKey, { buffer, contentType });
+
+      // Save to local disk uploads directory if available
+      try {
+        const uploadsDir = path.join(__dirname, 'public', 'uploads');
+        if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+        const ext = contentType.includes('png') ? 'png' : 'jpg';
+        fs.writeFileSync(path.join(uploadsDir, `${mediaKey}.${ext}`), buffer);
+      } catch (e) {}
+
+      // Await upload directly to Cloudflare R2 bucket so it is guaranteed available across all instances
+      const uploaded = await r2PutObject(`media/${mediaKey}`, buffer, contentType, 4000);
+      if (uploaded) r2UploadedKeys.add(mediaKey);
+
+      return sendJson(res, 200, {
+        ok: true,
+        mediaUrl: `/api/media/${mediaKey}`,
+        mediaKey,
+        uploadedToBucket: Boolean(uploaded)
+      });
+    } catch (e) {
+      return sendJson(res, 500, { error: e.message });
+    }
   }
 
   // Serve Cloudflare R2 offloaded media images with 1-year immutable browser cache

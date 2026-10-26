@@ -2493,14 +2493,38 @@ html, body {
   transition: all 0.2s ease;
 }
 
+.provider-online-slider {
+  pointer-events: auto;
+  height: 40px;
+  background: #FFFFFF;
+  color: var(--text-main);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 15px;
+  border-radius: 99px;
+  border: 1.5px solid #E2E8F0;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
+  transition: all 0.2s ease;
+}
+
 .provider-online-slider.online {
-  background: #10B981;
-  color: #FFFFFF;
+  background: #FFFFFF;
+  color: #0F172A;
+  border: 1.5px solid #10B981;
+  box-shadow: 0 4px 16px rgba(16, 185, 129, 0.16);
 }
 
 .provider-online-slider.offline {
-  background: #475569;
-  color: #FFFFFF;
+  background: #F8FAFC;
+  color: #64748B;
+  border: 1.5px solid #CBD5E1;
 }
 
 .provider-wallet-pill {
