@@ -381,7 +381,19 @@ function parseEcoCashConfirmationSms(smsText) {
 const HARARE_SUBURBS = [
   { id: 'avondale', name: 'Avondale', lat: -17.7955, lng: 31.0365, zone: 'North-Central', sampleStreet: '14 Lomagundi Rd, Avondale' },
   { id: 'borrowdale', name: 'Borrowdale', lat: -17.7520, lng: 31.0890, zone: 'Northern Suburbs', sampleStreet: '88 Borrowdale Rd, Borrowdale' },
+  { id: 'vainona', name: 'Vainona', lat: -17.7645, lng: 31.0715, zone: 'Northern Suburbs', sampleStreet: '12 Jedburgh Rd, Vainona' },
+  { id: 'borrowdale_west', name: 'Borrowdale West', lat: -17.7540, lng: 31.0680, zone: 'Northern Suburbs', sampleStreet: '34 Luna Rd, Borrowdale West' },
+  { id: 'pomona', name: 'Pomona', lat: -17.7420, lng: 31.0960, zone: 'Northern Suburbs', sampleStreet: '15 Pomona Industrial Park, Pomona' },
+  { id: 'chisipite', name: 'Chisipite', lat: -17.7780, lng: 31.1200, zone: 'East', sampleStreet: '18 Hindhead Ave, Chisipite' },
+  { id: 'helensvale', name: 'Helensvale', lat: -17.7280, lng: 31.1250, zone: 'Northern Suburbs', sampleStreet: '42 Crowhill Rd, Helensvale' },
   { id: 'mt_pleasant', name: 'Mt Pleasant', lat: -17.7680, lng: 31.0450, zone: 'North', sampleStreet: '22 Upper East Rd, Mt Pleasant' },
+  { id: 'highlands', name: 'Highlands', lat: -17.7920, lng: 31.0980, zone: 'East', sampleStreet: '5 Enterprise Rd, Highlands' },
+  { id: 'newlands', name: 'Newlands', lat: -17.8080, lng: 31.0820, zone: 'East', sampleStreet: '21 Enterprise Rd, Newlands' },
+  { id: 'alexandra_park', name: 'Alexandra Park', lat: -17.7850, lng: 31.0550, zone: 'North', sampleStreet: '7 Churchill Ave, Alexandra Park' },
+  { id: 'gunhill', name: 'Gunhill', lat: -17.7950, lng: 31.0680, zone: 'North', sampleStreet: '11 Steppes Rd, Gunhill' },
+  { id: 'belgravia', name: 'Belgravia', lat: -17.8020, lng: 31.0420, zone: 'North', sampleStreet: '28 Oxford Rd, Belgravia' },
+  { id: 'milton_park', name: 'Milton Park', lat: -17.8120, lng: 31.0260, zone: 'North-West', sampleStreet: '16 Prince Edward St, Milton Park' },
+  { id: 'strathaven', name: 'Strathaven', lat: -17.7920, lng: 31.0180, zone: 'North-West', sampleStreet: '20 Suffolk Rd, Strathaven' },
   { id: 'cbd', name: 'Harare CBD', lat: -17.8292, lng: 31.0522, zone: 'Central', sampleStreet: '45 Sam Nujoma St, Harare CBD' },
   { id: 'eastlea', name: 'Eastlea', lat: -17.8190, lng: 31.0810, zone: 'East', sampleStreet: '19 Samora Machel Ave, Eastlea' },
   { id: 'mabelreign', name: 'Mabelreign', lat: -17.7910, lng: 30.9960, zone: 'West', sampleStreet: '11 Sherwood Dr, Mabelreign' },
@@ -389,6 +401,7 @@ const HARARE_SUBURBS = [
   { id: 'greendale', name: 'Greendale', lat: -17.8040, lng: 31.1240, zone: 'East', sampleStreet: '64 Arcturus Rd, Greendale' },
   { id: 'westgate', name: 'Westgate', lat: -17.7640, lng: 30.9670, zone: 'North-West', sampleStreet: '102 Lomagundi Rd, Westgate' },
   { id: 'hatfield', name: 'Hatfield', lat: -17.8680, lng: 31.0820, zone: 'South', sampleStreet: '15 Kilwinning Rd, Hatfield' },
+  { id: 'waterfalls', name: 'Waterfalls', lat: -17.8920, lng: 31.0480, zone: 'South', sampleStreet: '30 Parktown Cres, Waterfalls' },
   { id: 'glen_lorne', name: 'Glen Lorne', lat: -17.7410, lng: 31.1480, zone: 'North-East', sampleStreet: '9 Enterprise Rd, Glen Lorne' },
   { id: 'chitungwiza', name: 'Chitungwiza', lat: -18.0127, lng: 31.0756, zone: 'Greater Harare', sampleStreet: '40 Seke Rd, Chitungwiza' }
 ];
@@ -2446,7 +2459,7 @@ const server = http.createServer(async (req, res) => {
       ecocashTopups: isAdminViewer ? db.ecocashTopups : [],
       disciplineLogs: isAdminViewer ? db.disciplineLogs : [],
       cancellationLogs: isAdminViewer ? db.cancellationLogs : [],
-      approvalQueue: isAdminViewer ? db.approvalQueue : [],
+      approvalQueue: isAdminViewer ? db.approvalQueue : (db.approvalQueue || []).filter((a) => a.status === 'PENDING'),
       leakageLogs: isAdminViewer ? db.leakageLogs : [],
       revenueLedger: isAdminViewer ? db.revenueLedger : [],
       pendingVerifications: isAdminViewer ? db.pendingVerifications : [],
@@ -4462,7 +4475,11 @@ Return ONLY JSON with keys:
       }
 
       await saveDbAsync(db);
-      broadcastUpdate('BOOKING_STATUS_UPDATED', { requestId: reqItem.id, status: reqItem.status });
+      if (reqItem.status === 'COMPLETED') {
+        broadcastUpdate('BOOKING_COMPLETED', { requestId: reqItem.id, request: reqItem, status: 'COMPLETED' });
+      }
+      broadcastUpdate('BOOKING_STATUS_UPDATED', { requestId: reqItem.id, request: reqItem, status: reqItem.status });
+      broadcastUpdate('STATUS_UPDATED', { requestId: reqItem.id, request: reqItem, status: reqItem.status });
       return sendJson(res, 200, { request: reqItem });
     } catch (e) {
       return sendJson(res, 400, { error: e.message });
@@ -4602,6 +4619,60 @@ Return ONLY JSON with keys:
       return sendJson(res, 200, { ok: true, updatedCount, request: reqItem });
     } catch (e) {
       return sendJson(res, 200, { ok: false });
+    }
+  }
+
+  // Server-side Harare Reverse Geocode with OpenStreetMap & Harare Suburb Fallback
+  if (pathname === '/api/reverse-geocode' && req.method === 'GET') {
+    try {
+      const lat = Number(parsedUrl.searchParams.get('lat'));
+      const lng = Number(parsedUrl.searchParams.get('lng'));
+      if (isNaN(lat) || isNaN(lng)) {
+        return sendJson(res, 400, { error: 'Valid lat and lng required' });
+      }
+      let nearest = HARARE_SUBURBS[0];
+      let bestDist = Infinity;
+      for (const s of HARARE_SUBURBS) {
+        const d = Math.hypot(s.lat - lat, s.lng - lng);
+        if (d < bestDist) {
+          bestDist = d;
+          nearest = s;
+        }
+      }
+      try {
+        const fetchRes = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
+          {
+            headers: {
+              'User-Agent': 'FinditHarare/2.0 (contact@finditharare.co.zw)',
+              'Accept-Language': 'en'
+            },
+            signal: AbortSignal.timeout(3500)
+          }
+        );
+        if (fetchRes.ok) {
+          const data = await fetchRes.json();
+          const addr = data.address || {};
+          const suburb = addr.suburb || addr.neighbourhood || addr.city_district || nearest.name;
+          const road = addr.road || addr.pedestrian || addr.residential || addr.street || suburb;
+          const houseNumber = addr.house_number ? ` ${addr.house_number}` : '';
+          return sendJson(res, 200, {
+            suburb,
+            road: `${road}${houseNumber}`,
+            suburbId: nearest.id,
+            exactAddress: `${road}${houseNumber}, ${suburb}`
+          });
+        }
+      } catch (err) {}
+
+      return sendJson(res, 200, {
+        suburb: nearest.name,
+        road: nearest.sampleStreet.split(',')[0],
+        suburbId: nearest.id,
+        exactAddress: nearest.sampleStreet
+      });
+    } catch (e) {
+      return sendJson(res, 500, { error: e.message });
     }
   }
 
@@ -5133,7 +5204,9 @@ Return ONLY valid JSON with key: "reply" (string).`;
           timestamp: new Date().toISOString()
         });
         saveDb(db);
-        broadcastUpdate('STATUS_UPDATED', { requestId: reqItem.id, request: reqItem });
+        broadcastUpdate('BOOKING_COMPLETED', { requestId: reqItem.id, request: reqItem, status: 'COMPLETED' });
+        broadcastUpdate('BOOKING_STATUS_UPDATED', { requestId: reqItem.id, request: reqItem, status: 'COMPLETED' });
+        broadcastUpdate('STATUS_UPDATED', { requestId: reqItem.id, request: reqItem, status: 'COMPLETED' });
         return sendJson(res, 200, { ok: true, request: reqItem });
       }
 
@@ -5151,7 +5224,9 @@ Return ONLY valid JSON with key: "reply" (string).`;
           timestamp: new Date().toISOString()
         });
         saveDb(db);
-        broadcastUpdate('STATUS_UPDATED', { requestId: reqItem.id, request: reqItem });
+        broadcastUpdate('BOOKING_COMPLETED', { requestId: reqItem.id, request: reqItem, status: 'COMPLETED' });
+        broadcastUpdate('BOOKING_STATUS_UPDATED', { requestId: reqItem.id, request: reqItem, status: 'COMPLETED' });
+        broadcastUpdate('STATUS_UPDATED', { requestId: reqItem.id, request: reqItem, status: 'COMPLETED' });
         return sendJson(res, 200, { ok: true, request: reqItem });
       }
 

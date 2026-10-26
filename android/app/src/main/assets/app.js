@@ -1596,6 +1596,50 @@ function handleIncomingRealtimeEvent(data) {
     return;
   }
 
+  // 6B. BOOKING STATUS UPDATED / COMPLETED (By client, provider, or admin)
+  if (data.eventType === 'BOOKING_STATUS_UPDATED' || data.eventType === 'STATUS_UPDATED' || data.eventType === 'BOOKING_COMPLETED') {
+    const reqId = data.payload?.requestId || data.payload?.request?.id;
+    const reqObj = data.payload?.request;
+    const newStatus = data.payload?.status || reqObj?.status;
+    if (state.db?.requests && reqId) {
+      const idx = state.db.requests.findIndex((r) => r.id === reqId);
+      if (idx >= 0) {
+        if (reqObj) state.db.requests[idx] = reqObj;
+        else if (newStatus) state.db.requests[idx].status = newStatus;
+      }
+    }
+    if (newStatus === 'COMPLETED' || newStatus === 'CANCELLED') {
+      stopArrivalVibrationAlert();
+      stopNavigationHud();
+      if (leafletRoutePolyline) {
+        try { leafletRoutePolyline.remove(); } catch (e) {}
+        leafletRoutePolyline = null;
+      }
+      if (leafletRoutePolylineCasing) {
+        try { leafletRoutePolylineCasing.remove(); } catch (e) {}
+        leafletRoutePolylineCasing = null;
+      }
+      if (reqId) delete state.bookingProximitySeconds[reqId];
+      if (state.activeRequestId === reqId) {
+        state.activeRequestId = null;
+      }
+      state.activeModal = null;
+      lastRenderedModalKey = '';
+      if (state.role === 'CUSTOMER') {
+        state.screenStep = 'HOME';
+        state.pendingSearchFareUsd = null;
+      }
+      if (state.role === 'PROVIDER') {
+        state.providerTab = 'FEED';
+      }
+      lastUiOverlaySignature = '';
+      lastOffersSignature = '';
+      showToast(newStatus === 'COMPLETED' ? 'Job completed successfully! Thank you.' : 'Job was cancelled.', 'info');
+      renderAll(true);
+      return;
+    }
+  }
+
   // 7. TASK CANCELLED (By user or provider)
   if (data.eventType === 'TASK_CANCELLED') {
     stopArrivalVibrationAlert();
@@ -1911,6 +1955,9 @@ function checkProximityAutoPairTick() {
     : getCustomerActiveRequest();
 
   if (!bookedJob || bookedJob.status === 'COMPLETED' || bookedJob.status === 'CANCELLED' || bookedJob.status === 'OPEN') {
+    if (bookedJob?.id && state.bookingProximitySeconds[bookedJob.id]) {
+      delete state.bookingProximitySeconds[bookedJob.id];
+    }
     return;
   }
 
@@ -2194,12 +2241,26 @@ function reverseGeocodeHararePin(lat, lng) {
     }
   }
   state.selectedSuburbId = nearest.id;
-  state.customAddress = nearest.name;
+  state.customAddress = nearest.sampleStreet ? nearest.sampleStreet.split(',')[0] : nearest.name;
   state.customSuburbLabel = `${nearest.name}, Harare`;
   syncPinDomLabels();
 
   if (geocodeDebounceTimer) clearTimeout(geocodeDebounceTimer);
   geocodeDebounceTimer = setTimeout(async () => {
+    try {
+      const srvRes = await fetch(`/api/reverse-geocode?lat=${lat}&lng=${lng}`);
+      if (srvRes.ok) {
+        const data = await srvRes.json();
+        if (data && data.suburb) {
+          state.customAddress = data.road || data.suburb;
+          state.customSuburbLabel = `${data.suburb}, Harare`;
+          if (data.suburbId) state.selectedSuburbId = data.suburbId;
+          syncPinDomLabels();
+          return;
+        }
+      }
+    } catch (e) {}
+
     try {
       const res = await fetch(
         `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
@@ -2221,7 +2282,7 @@ function reverseGeocodeHararePin(lat, lng) {
     state.customAddress = nearest.name;
     state.customSuburbLabel = `${nearest.name}, Harare`;
     syncPinDomLabels();
-  }, 260);
+  }, 200);
 }
 
 // ============================================================================
@@ -3158,10 +3219,12 @@ function renderAll(force = true) {
       }
     } else if (activeReq && isBookedStatus(activeReq.status)) {
       state.screenStep = 'BOOKED';
-    } else if (state.activeRequestId && (state.screenStep === 'SEARCHING' || state.screenStep === 'BOOKED')) {
-      // Retain searching/booked state while request is active locally
-    } else if (state.screenStep === 'SEARCHING' || state.screenStep === 'BOOKED') {
-      state.screenStep = 'HOME';
+    } else {
+      if (state.screenStep === 'SEARCHING' || state.screenStep === 'BOOKED') {
+        state.screenStep = 'HOME';
+      }
+      state.activeRequestId = null;
+      state.pendingSearchFareUsd = null;
     }
   }
 
@@ -5179,7 +5242,8 @@ function toggleProviderAuthCategory(catId) {
     }
     state.authCategoryIds.push(catId);
   }
-  renderAll();
+  lastRenderedModalKey = '';
+  renderModalLayer();
 }
 
 function handleAuthIdFileUpload(inputEl) {
@@ -5467,6 +5531,14 @@ function handleAuthFaceFileUpload(inputEl) {
 }
 
 async function finishNativeRegistration() {
+  const submitBtns = document.querySelectorAll('#pickerModalRoot .btn-primary-blue');
+  submitBtns.forEach((b) => {
+    b.disabled = true;
+    b.style.opacity = '0.7';
+    b.style.pointerEvents = 'none';
+    b.innerHTML = '<span>Creating Account &amp; Loading...</span>';
+  });
+
   const name = (state.authName || '').trim();
   if (!name) {
     showToast('Please enter your full legal name', 'error');
@@ -5702,7 +5774,7 @@ function renderModalLayer() {
 
   // Generate unique modal rendering key to prevent wiping inputs or camera streams on periodic polling
   const modalKey = state.activeModal === 'SIGNUP_FLOW'
-    ? `SIGNUP_${state.authRole}_${state.authStep}_${state.faceVerifiedSuccess ? 'VERIFIED' : 'SCAN'}`
+    ? `SIGNUP_${state.authRole}_${state.authStep}_${(state.authCategoryIds || []).join(',')}_${state.faceVerifiedSuccess ? 'VERIFIED' : 'SCAN'}`
     : state.activeModal === 'SUPPORT'
       ? `SUPPORT_${(state.supportChatMessages || []).length}_${state.supportAiTyping ? 1 : 0}_${state.supportShowBizInfo ? 1 : 0}`
       : state.activeModal === 'SUBURB_PICKER'
@@ -5711,9 +5783,13 @@ function renderModalLayer() {
           ? `SETTINGS_${state.role}_${(state.settingsDraft?.categoryIds || []).join(',')}_${state.settingsDraft?.isOnline !== false ? 1 : 0}`
           : state.activeModal === 'PROVIDER_OFFICE_MODAL'
             ? `PROVIDER_OFFICE_${state.officeDraftHasOffice ? 1 : 0}`
-            : state.activeModal === 'NOTIFICATIONS'
-              ? `NOTIFICATIONS_${(getRelevantNotifications() || []).length}_${getUnreadNotificationsCount()}`
-              : `${state.activeModal}_${JSON.stringify(state.modalData || {})}`;
+            : state.activeModal === 'ADD_SERVICE_MODAL'
+              ? `ADD_SERVICE_${state.newServicePhotoDataUrl ? 1 : 0}`
+              : state.activeModal === 'EDIT_SERVICE_MODAL'
+                ? `EDIT_SERVICE_${state.modalData?.item?.id}_${state.editServicePhotoDataUrl ? 1 : 0}`
+                : state.activeModal === 'NOTIFICATIONS'
+                  ? `NOTIFICATIONS_${(getRelevantNotifications() || []).length}_${getUnreadNotificationsCount()}`
+                  : `${state.activeModal}_${JSON.stringify(state.modalData || {})}`;
 
   if (modalKey === lastRenderedModalKey && root.firstElementChild) {
     return;
@@ -7181,13 +7257,61 @@ function renderModalLayer() {
 
   // SPECIAL INSTRUCTIONS MODAL WITH QUICK PRESET CHIPS & REAL-TIME ANTI-LEAKAGE SHIELD
   if (state.activeModal === 'NOTES_MODAL') {
-    const presetNotes = [
-      'Hair is washed & blow-dried',
-      'Power socket & chair ready',
-      'Gate code at security',
-      'Bring full mobile kit',
-      'Parking available inside yard'
-    ];
+    const categoryPresets = {
+      beauty_care: [
+        'Hair is washed & blow-dried',
+        'Power socket & chair ready',
+        'Mirror & clean lighting available',
+        'Bring full mobile styling kit',
+        'Parking available inside yard'
+      ],
+      repairs_construction: [
+        'Main water shutoff located',
+        'Power socket & extension ready',
+        'Bring ladder & tools',
+        'Materials already on site',
+        'Parking available inside yard'
+      ],
+      cleaning_domestic: [
+        'Water & power ready',
+        'Cleaning detergents provided at home',
+        'Bring cloths, mops & equipment',
+        'Pets secured in yard',
+        'Gate code at security'
+      ],
+      automotive: [
+        'Car parked on flat level ground',
+        'Vehicle keys ready on site',
+        'Shaded driveway available',
+        'Bring diagnostic tools & jump pack',
+        'Gate code at security'
+      ],
+      solar_power_water: [
+        'Roof access & ladder point clear',
+        'Inverter & battery room accessible',
+        'Main breaker switch identified',
+        'Borehole pump switch accessible',
+        'Parking available inside yard'
+      ],
+      gardening_outdoor: [
+        'Outdoor water tap & hose ready',
+        'Power socket near garden',
+        'Green waste compost area available',
+        'Bring lawnmower & trimmer',
+        'Pets secured in house'
+      ],
+      general_labour: [
+        'Items packed & ready on ground floor',
+        'Stairs / elevator available',
+        'Heavy items require 2-person lift',
+        'Straps & trolley needed',
+        'Truck parking available at gate'
+      ]
+    };
+    const catId = normalizeCategoryId(state.selectedCategoryId || 'repairs_construction');
+    const presetNotes = categoryPresets[catId] || categoryPresets.general_labour || categoryPresets.repairs_construction;
+    const currentCat = (state.db?.categories || []).find((c) => c.id === catId);
+    const catName = currentCat ? (currentCat.name || currentCat.fullName) : 'service';
     root.innerHTML = `
       <div class="modal-backdrop" onclick="closeModal()">
         <div class="indrive-modal-sheet" onclick="event.stopPropagation()">
@@ -7216,7 +7340,7 @@ function renderModalLayer() {
             id="draftNotesInput"
             class="dark-input"
             rows="3"
-            placeholder="Add details about your service (e.g. hair length, gate note)..."
+            placeholder="Add details about your ${escapeHtml(catName)} (e.g. materials, gate note)..."
             oninput="handleLiveNotesInput(this.value)"
           >${state.draftNotes}</textarea>
 
@@ -7319,7 +7443,7 @@ function renderModalLayer() {
             <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
           </div>
           <p style="font-size:12px; color:var(--text-secondary); margin-bottom:12px; line-height:1.45;">
-            Add a specialist home service with your price and duration so Harare clients can book you directly.
+            Add a specialist service with your price and duration. Uploaded photos are checked by Findit Admins before appearing publicly.
           </p>
 
           <div style="display:flex; flex-direction:column; gap:11px;">
@@ -7344,14 +7468,37 @@ function renderModalLayer() {
               <input id="newServiceTag" class="dark-input" placeholder="e.g. Precision Finish, Mobile Kit" value="Verified Quality" style="width:100%; margin-top:4px;" />
             </div>
 
+            <!-- Upload Photo from Local Storage (Admin Approval Required) -->
             <div>
-              <label style="font-size:12px; font-weight:700; color:var(--text-main);">Work Photo URL (Optional)</label>
-              <input id="newServiceImg" class="dark-input" placeholder="https://... (or leave empty for default)" style="width:100%; margin-top:4px;" />
+              <label style="font-size:12px; font-weight:700; color:var(--text-main); display:flex; justify-content:space-between; align-items:center;">
+                <span>Work Photo (Device Upload)</span>
+                <span style="font-size:10.5px; color:#D97706; font-weight:700;">Admin Verified</span>
+              </label>
+              <div
+                onclick="document.getElementById('newServiceFileInput').click()"
+                style="margin-top:6px; border:2px dashed ${state.newServicePhotoDataUrl ? 'var(--blue-primary)' : 'var(--border-light)'}; border-radius:12px; padding:12px; text-align:center; background:var(--bg-card); cursor:pointer; transition:all 0.2s ease;"
+              >
+                <input type="file" id="newServiceFileInput" accept="image/*" style="display:none;" onchange="handleNewServiceFileSelect(this)" />
+                ${state.newServicePhotoDataUrl ? `
+                  <div style="display:flex; flex-direction:column; align-items:center; gap:6px;">
+                    <img src="${state.newServicePhotoDataUrl}" style="max-height:130px; max-width:100%; border-radius:8px; object-fit:cover;" alt="Work Photo" />
+                    <span style="font-size:11px; font-weight:700; color:var(--blue-primary);">Tap to change photo</span>
+                  </div>
+                ` : `
+                  <div style="display:flex; flex-direction:column; align-items:center; gap:6px; padding:6px 0;">
+                    <div style="width:38px; height:38px; border-radius:50%; background:var(--blue-soft); color:var(--blue-primary); display:flex; align-items:center; justify-content:center;">
+                      ${uiIcon('image', 18)}
+                    </div>
+                    <div style="font-size:12px; font-weight:800; color:var(--text-main);">Tap to upload photo from your device</div>
+                    <div style="font-size:11px; color:var(--text-secondary); line-height:1.35;">Photos must be approved by Admins before showing publicly</div>
+                  </div>
+                `}
+              </div>
             </div>
 
-            <button class="btn-primary-blue" onclick="saveNewCatalogueService()" style="margin-top:6px; height:42px;">
+            <button class="btn-primary-blue" id="addServiceSubmitBtn" onclick="saveNewCatalogueService()" style="margin-top:6px; height:42px;">
               ${uiIcon('check', 16)}
-              <span>Add Service to Catalogue</span>
+              <span>Submit Service for Admin Approval</span>
             </button>
           </div>
         </div>
@@ -7396,12 +7543,25 @@ function renderModalLayer() {
               <input id="editServiceTag" class="dark-input" value="${item.tag || 'Verified Quality'}" style="width:100%; margin-top:4px;" />
             </div>
 
+            <!-- Replace Photo from Device -->
             <div>
-              <label style="font-size:12px; font-weight:700; color:var(--text-main);">Photo Image URL</label>
-              <input id="editServiceImg" class="dark-input" value="${item.imageUrl || ''}" style="width:100%; margin-top:4px;" />
+              <label style="font-size:12px; font-weight:700; color:var(--text-main); display:flex; justify-content:space-between; align-items:center;">
+                <span>Work Photo</span>
+                <span style="font-size:10.5px; color:var(--text-secondary); font-weight:600;">Tap to replace</span>
+              </label>
+              <div
+                onclick="document.getElementById('editServiceFileInput').click()"
+                style="margin-top:6px; border:2px dashed var(--border-light); border-radius:12px; padding:12px; text-align:center; background:var(--bg-card); cursor:pointer;"
+              >
+                <input type="file" id="editServiceFileInput" accept="image/*" style="display:none;" onchange="handleEditServiceFileSelect(this)" />
+                <div style="display:flex; flex-direction:column; align-items:center; gap:6px;">
+                  <img src="${state.editServicePhotoDataUrl || resolveMediaUrl(item.imageUrl, 'task')}" onerror="this.onerror=null; this.src='${DEFAULT_TASK_PHOTO_FALLBACK}';" style="max-height:120px; max-width:100%; border-radius:8px; object-fit:cover;" alt="Service Photo" />
+                  <span style="font-size:11px; font-weight:700; color:var(--blue-primary);">Tap to choose new photo from device</span>
+                </div>
+              </div>
             </div>
 
-            <button class="btn-primary-blue" onclick="saveEditedCatalogueService('${item.id}')" style="margin-top:6px; height:42px;">
+            <button class="btn-primary-blue" id="editServiceSubmitBtn" onclick="saveEditedCatalogueService('${item.id}')" style="margin-top:6px; height:42px;">
               ${uiIcon('check', 16)}
               <span>Save Changes</span>
             </button>
@@ -7792,9 +7952,9 @@ async function submitServiceRequest() {
     const isLive = !state.isCustomAddressSelected;
     const targetLat = isLive ? (state.userLiveGpsLat || state.pinnedLat) : state.pinnedLat;
     const targetLng = isLive ? (state.userLiveGpsLng || state.pinnedLng) : state.pinnedLng;
-    const targetAddress = isLive
-      ? (state.customAddress && state.customAddress !== 'Current Live Location' ? `My Current Live Location (${state.customAddress})` : 'My Current Live Location')
-      : `${state.customAddress}, ${(state.customSuburbLabel || 'Harare').split(',')[0]}`;
+    const suburbClean = (state.customSuburbLabel || 'Harare').split(',')[0].trim();
+    const streetClean = state.customAddress && state.customAddress !== 'Current Live Location' ? state.customAddress : suburbClean;
+    const targetAddress = streetClean.toLowerCase().includes(suburbClean.toLowerCase()) ? streetClean : `${streetClean}, ${suburbClean}`;
 
     // 0ms Optimistic Broadcast: Transition immediately to SEARCHING without any delay!
     const optimisticReq = {
@@ -7807,10 +7967,10 @@ async function submitServiceRequest() {
       categoryId: cat.id,
       categoryName: cat.fullName || cat.name,
       title: sub.name,
-      description: state.draftNotes || (isLive ? `Service delivery straight to my live location.` : `Service at ${targetAddress}.`),
+      description: state.draftNotes || (isLive ? `Service delivery straight to my location at ${targetAddress}.` : `Service at ${targetAddress}.`),
       photoUrl: attachedPhoto,
       suburbId: state.selectedSuburbId,
-      suburbName: (state.customSuburbLabel || 'Harare').split(',')[0],
+      suburbName: suburbClean,
       exactAddress: targetAddress,
       lat: targetLat,
       lng: targetLng,
@@ -8991,27 +9151,46 @@ function renderProviderRequestsFeedTab(prov, openRequests, activeJob) {
         const bid1Surpasses = !isPromo && (walletBalUsd < bid1CommUsd || (walletBalUsd - bid1CommUsd) < minReserve);
         const bid2Surpasses = !isPromo && (walletBalUsd < bid2CommUsd || (walletBalUsd - bid2CommUsd) < minReserve);
 
+        let displayLocation = r.exactAddress || r.clientLiveAddress || r.suburbName || 'Harare';
+        displayLocation = displayLocation
+          .replace(/^My Current Live Location \((.*)\)$/i, '$1')
+          .replace(/^My Current Live Location$/i, r.suburbName ? `${r.suburbName}, Harare` : 'Harare');
+
+        let badgeSuburb = r.suburbName;
+        if (!badgeSuburb || badgeSuburb === 'Harare') {
+          const parts = displayLocation.split(',');
+          badgeSuburb = (parts[parts.length > 1 ? 1 : 0] || 'Harare').trim();
+        }
+
         return `
           <div class="provider-order-card">
-            <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px;">
+            <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px;">
               <div>
                 <span style="font-size:23px; font-weight:800; color:var(--blue-primary);">${formatUsdPrice(r.budgetUsd)}</span>
                 <span style="font-size:12px; font-weight:700; color:var(--text-secondary); margin-left:6px;">${r.paymentMethod}</span>
               </div>
-              <span style="font-size:11.5px; color:var(--blue-primary); font-weight:800; background:var(--blue-soft); padding:3px 9px; border-radius:99px; display:inline-flex; align-items:center; gap:4px;">
+              <span style="font-size:11.5px; color:var(--blue-primary); font-weight:800; background:var(--blue-soft); padding:3px 9px; border-radius:99px; display:inline-flex; align-items:center; gap:4px; max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
                 ${uiIcon('pin', 12)}
-                <span>${r.suburbName}</span>
+                <span>${escapeHtml(badgeSuburb)}</span>
               </span>
             </div>
 
-            <div style="font-size:15px; font-weight:800; color:var(--text-main); margin-bottom:2px;">${r.title}</div>
-            <div style="font-size:12px; color:var(--text-secondary); margin-bottom:6px; display:flex; align-items:center; gap:5px; flex-wrap:wrap;">
+            <div style="font-size:15px; font-weight:800; color:var(--text-main); margin-bottom:4px;">${escapeHtml(r.title)}</div>
+
+            <!-- Client Real Street Address Card -->
+            <div style="display:flex; align-items:flex-start; gap:6px; font-size:12px; color:#0F172A; font-weight:700; margin-bottom:8px; background:rgba(0,102,255,0.06); border:1px solid rgba(0,102,255,0.14); padding:6px 9px; border-radius:8px;">
+              <span style="color:var(--blue-primary); flex-shrink:0; margin-top:2px;">${uiIcon('pin', 13)}</span>
+              <div style="flex:1; min-width:0; line-height:1.4;">
+                <span style="font-weight:800; color:var(--text-main);">${escapeHtml(displayLocation)}</span>
+              </div>
+            </div>
+
+            <div style="font-size:12px; color:var(--text-secondary); margin-bottom:8px; display:flex; align-items:center; gap:5px; flex-wrap:wrap;">
               ${uiIcon('user', 13)}
-              <span>${r.customerName}</span>
+              <span>${escapeHtml(r.customerName)}</span>
               <span style="display:inline-flex; align-items:center; gap:2px;">
                 ${(Number(r.customerRating) || 0) > 0 ? `(${uiIcon('star', 11)} ${r.customerRating})` : '(New Client)'}
               </span>
-              <span>• ${r.exactAddress}</span>
             </div>
 
             ${r.description ? `
@@ -9333,6 +9512,44 @@ function renderProviderCatalogueTab(prov, myPendingApprovals) {
         </div>
       </div>
 
+      <!-- Pending Admin Approvals Section -->
+      ${Array.isArray(myPendingApprovals) && myPendingApprovals.length > 0 ? `
+        <div style="background:#FFFBEB; border:1.5px solid #FDE68A; border-radius:14px; padding:12px; margin-bottom:14px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <div style="font-size:12.5px; font-weight:800; color:#B45309; display:flex; align-items:center; gap:6px;">
+              <span>⏳ Awaiting Admin Approval (${myPendingApprovals.length})</span>
+            </div>
+            <span style="font-size:10.5px; font-weight:700; color:#92400E; background:#FEF3C7; padding:2px 8px; border-radius:99px;">
+              Reviewing Photos
+            </span>
+          </div>
+          <div style="font-size:11px; color:#92400E; margin-bottom:10px; line-height:1.4;">
+            These submissions are in the Admin queue. Once verified for clean presentation, they will go live in your public catalogue for all clients.
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+            ${myPendingApprovals.map((pa) => `
+              <div style="background:#FFFFFF; border:1px solid #FCD34D; border-radius:12px; overflow:hidden; display:flex; flex-direction:column; justify-content:space-between; box-shadow:0 1px 4px rgba(0,0,0,0.04);">
+                <div>
+                  <div style="position:relative;">
+                    <img src="${resolveMediaUrl(pa.imageUrl, 'task')}" onerror="this.onerror=null; this.src='${DEFAULT_TASK_PHOTO_FALLBACK}';" style="width:100%; height:95px; object-fit:cover; display:block;" alt="${escapeHtml(pa.title)}" />
+                    <span style="position:absolute; top:5px; right:5px; padding:2px 6px; border-radius:99px; background:#D97706; color:#FFFFFF; font-size:9.5px; font-weight:800;">
+                      In Review
+                    </span>
+                  </div>
+                  <div style="padding:7px 8px;">
+                    <div style="font-size:12px; font-weight:800; color:#0F172A; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(pa.title)}</div>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:3px;">
+                      <span style="font-size:13px; font-weight:800; color:var(--blue-primary);">$${pa.priceUsd}</span>
+                      <span style="font-size:10px; color:#92400E; font-weight:700;">${escapeHtml(pa.duration || '2 hrs')}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      ` : ''}
+
       ${(prov.portfolio || []).length === 0 ? `
         <div style="text-align:center; padding:32px 16px; background:var(--bg-card); border:1.5px dashed var(--border-light); border-radius:16px;">
           <div style="width:48px; height:48px; border-radius:50%; background:var(--blue-soft); color:var(--blue-primary); display:flex; align-items:center; justify-content:center; margin:0 auto 10px;">
@@ -9397,8 +9614,10 @@ function renderProviderCatalogueTab(prov, myPendingApprovals) {
 }
 
 function openAddServiceModal() {
+  state.newServicePhotoDataUrl = null;
   state.activeModal = 'ADD_SERVICE_MODAL';
   state.modalData = {};
+  lastRenderedModalKey = '';
   renderModalLayer();
 }
 
@@ -9406,9 +9625,33 @@ function openEditServiceModal(itemId) {
   const prov = state.currentUser || state.db.providers[0];
   const item = (prov.portfolio || []).find((p) => p.id === itemId);
   if (!item) return;
+  state.editServicePhotoDataUrl = null;
   state.activeModal = 'EDIT_SERVICE_MODAL';
   state.modalData = { item };
+  lastRenderedModalKey = '';
   renderModalLayer();
+}
+
+async function handleNewServiceFileSelect(inputEl) {
+  const file = inputEl.files && inputEl.files[0];
+  if (!file) return;
+  const compressed = await compressImageFileToDataUrl(file, 1200, 0.82);
+  if (compressed) {
+    state.newServicePhotoDataUrl = compressed;
+    lastRenderedModalKey = '';
+    renderModalLayer();
+  }
+}
+
+async function handleEditServiceFileSelect(inputEl) {
+  const file = inputEl.files && inputEl.files[0];
+  if (!file) return;
+  const compressed = await compressImageFileToDataUrl(file, 1200, 0.82);
+  if (compressed) {
+    state.editServicePhotoDataUrl = compressed;
+    lastRenderedModalKey = '';
+    renderModalLayer();
+  }
 }
 
 async function saveNewCatalogueService() {
@@ -9417,7 +9660,7 @@ async function saveNewCatalogueService() {
   const price = document.getElementById('newServicePrice')?.value;
   const duration = document.getElementById('newServiceDuration')?.value.trim();
   const tag = document.getElementById('newServiceTag')?.value.trim();
-  const img = document.getElementById('newServiceImg')?.value.trim();
+  const submitBtn = document.getElementById('addServiceSubmitBtn');
 
   if (!title) {
     showToast('Please enter a service title', 'error');
@@ -9428,20 +9671,46 @@ async function saveNewCatalogueService() {
     return;
   }
 
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = `<span>Uploading &amp; Submitting...</span>`;
+  }
+
   try {
-    await apiPost('/api/providers/catalogue/add-direct', {
+    let finalImageUrl = state.newServicePhotoDataUrl;
+    if (finalImageUrl && finalImageUrl.startsWith('data:')) {
+      try {
+        const upRes = await apiPost('/api/upload', { dataUrl: finalImageUrl });
+        if (upRes && upRes.mediaUrl) {
+          finalImageUrl = upRes.mediaUrl;
+        }
+      } catch (e) {
+        console.warn('Upload bucket note:', e);
+      }
+    }
+
+    // Submit to Admin approval queue before appearing publicly
+    await apiPost('/api/providers/catalogue', {
       providerId: prov.id,
       title,
       priceUsd: Number(price),
       duration: duration || '2 hrs',
       tag: tag || 'Verified Quality',
-      imageUrl: img || null
+      imageUrl: finalImageUrl || null
     });
+
+    state.newServicePhotoDataUrl = null;
     closeModal();
-    showToast('Service added to catalogue successfully!');
+    showToast('🎉 Service submitted! Findit Admins will verify the photo before it appears publicly.');
     await fetchState();
+    state.providerTab = 'CATALOGUE';
+    renderAll(true);
   } catch (err) {
     showToast(err.message, 'error');
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = `<span>Submit Service for Admin Approval</span>`;
+    }
   }
 }
 
@@ -9451,7 +9720,7 @@ async function saveEditedCatalogueService(itemId) {
   const price = document.getElementById('editServicePrice')?.value;
   const duration = document.getElementById('editServiceDuration')?.value.trim();
   const tag = document.getElementById('editServiceTag')?.value.trim();
-  const img = document.getElementById('editServiceImg')?.value.trim();
+  const submitBtn = document.getElementById('editServiceSubmitBtn');
 
   if (!title) {
     showToast('Please enter a service title', 'error');
@@ -9462,7 +9731,24 @@ async function saveEditedCatalogueService(itemId) {
     return;
   }
 
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = `<span>Saving Changes...</span>`;
+  }
+
   try {
+    let finalImageUrl = state.editServicePhotoDataUrl;
+    if (finalImageUrl && finalImageUrl.startsWith('data:')) {
+      try {
+        const upRes = await apiPost('/api/upload', { dataUrl: finalImageUrl });
+        if (upRes && upRes.mediaUrl) {
+          finalImageUrl = upRes.mediaUrl;
+        }
+      } catch (e) {
+        console.warn('Upload bucket note:', e);
+      }
+    }
+
     await apiPost('/api/providers/catalogue/edit', {
       providerId: prov.id,
       itemId,
@@ -9470,13 +9756,20 @@ async function saveEditedCatalogueService(itemId) {
       priceUsd: Number(price),
       duration: duration || '2 hrs',
       tag: tag || 'Verified Quality',
-      imageUrl: img || null
+      imageUrl: finalImageUrl || undefined
     });
+
+    state.editServicePhotoDataUrl = null;
     closeModal();
-    showToast('Service details updated successfully!');
+    showToast('Service updated successfully!');
     await fetchState();
+    renderAll(true);
   } catch (err) {
     showToast(err.message, 'error');
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = `<span>Save Changes</span>`;
+    }
   }
 }
 
