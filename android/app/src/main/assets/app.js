@@ -5733,6 +5733,16 @@ function setSignInModalData(patch) {
   renderModalLayer();
 }
 
+function quickFillTestUser(role, phone, pwd) {
+  state.loginPhone = '+263 ' + phone.replace(/^0/, '');
+  state.loginPassword = pwd;
+  setSignInModalData({ loginRole: role, notice: null });
+  const pInput = document.getElementById('loginPhoneInput');
+  if (pInput) pInput.value = phone.replace(/^0/, '');
+  const pwdInput = document.getElementById('loginPasswordInput');
+  if (pwdInput) pwdInput.value = pwd;
+}
+
 async function submitExistingAccountLogin() {
   const md = state.modalData || {};
   const role = md.loginRole || 'CUSTOMER';
@@ -5966,6 +5976,28 @@ function renderModalLayer() {
       <button type="button" class="btn-primary-blue" style="height:48px; font-size:15px; font-weight:800;" onclick="submitExistingAccountLogin()">
         <span>Log In as ${loginRole === 'PROVIDER' ? 'Service Provider' : 'Client'}</span>
       </button>
+
+      <!-- Quick Test Accounts 1-Tap Fill -->
+      <div style="margin-top:14px; padding:10px 12px; background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px; text-align:left;">
+        <div style="font-size:11px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:8px;">
+          ⚡ Quick Test Logins (Tap to Autofill)
+        </div>
+        <div style="display:flex; flex-direction:column; gap:6px;">
+          <div style="font-size:10.5px; font-weight:700; color:#2563EB;">Clients (Password: test1234):</div>
+          <div style="display:flex; gap:5px; flex-wrap:wrap;">
+            <button type="button" class="btn-dark-sec" style="height:26px; padding:0 8px; font-size:11px;" onclick="quickFillTestUser('CUSTOMER', '0771110001', 'test1234')">Tapiwa (Avondale)</button>
+            <button type="button" class="btn-dark-sec" style="height:26px; padding:0 8px; font-size:11px;" onclick="quickFillTestUser('CUSTOMER', '0771110002', 'test1234')">Ruvimbo (Borrowdale)</button>
+            <button type="button" class="btn-dark-sec" style="height:26px; padding:0 8px; font-size:11px;" onclick="quickFillTestUser('CUSTOMER', '0771110003', 'test1234')">Farai (Eastlea)</button>
+            <button type="button" class="btn-dark-sec" style="height:26px; padding:0 8px; font-size:11px;" onclick="quickFillTestUser('CUSTOMER', '0771110004', 'test1234')">Nyasha (Mt Pleasant)</button>
+          </div>
+          <div style="font-size:10.5px; font-weight:700; color:#059669; margin-top:2px;">Providers (Password: test1234):</div>
+          <div style="display:flex; gap:5px; flex-wrap:wrap;">
+            <button type="button" class="btn-dark-sec" style="height:26px; padding:0 8px; font-size:11px;" onclick="quickFillTestUser('PROVIDER', '0772220001', 'test1234')">Kuda (Plumbing/Repairs)</button>
+            <button type="button" class="btn-dark-sec" style="height:26px; padding:0 8px; font-size:11px;" onclick="quickFillTestUser('PROVIDER', '0772220002', 'test1234')">Tariro (Hair &amp; Beauty)</button>
+            <button type="button" class="btn-dark-sec" style="height:26px; padding:0 8px; font-size:11px;" onclick="quickFillTestUser('PROVIDER', '0772220003', 'test1234')">Simba (Auto Mechanics)</button>
+          </div>
+        </div>
+      </div>
 
       <div style="font-size:11.5px; color:var(--text-secondary); text-align:center; margin-top:10px; line-height:1.45;">
         One phone number can hold both a Client and a Provider profile. You can switch modes anytime from the side menu.
