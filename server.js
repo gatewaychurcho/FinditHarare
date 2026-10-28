@@ -2457,6 +2457,7 @@ const server = http.createServer(async (req, res) => {
       customers: (db.customers || []).map(stripPrivate),
       providers: (db.providers || []).map(stripPrivate),
       activeCalls: (db.activeCalls || []).filter((c) => Date.now() - (c.startedAt || 0) < 50000 && c.status !== 'ENDED'),
+      callLogs: isAdminViewer ? (db.callLogs || []) : [],
       adminNotifications: db.adminNotifications || [],
       supportChats: isAdminViewer ? (db.supportChats || {}) : {},
       kycVerifications: isAdminViewer ? db.kycVerifications : [],
@@ -3289,8 +3290,9 @@ const server = http.createServer(async (req, res) => {
   if (pathname === '/api/wallet/ecocash-submit' && req.method === 'POST') {
     try {
       const body = await parseBody(req);
-      const provider = db.providers.find((p) => p.id === body.providerId);
-      if (!provider) return sendJson(res, 404, { error: 'Provider not found' });
+      const targetId = body.providerId || body.userId || body.accountId;
+      const provider = (db.providers || []).find((p) => p.id === targetId) || (db.customers || []).find((c) => c.id === targetId);
+      if (!provider) return sendJson(res, 404, { error: 'Account not found' });
       if (provider.isBanned) return sendJson(res, 403, { error: 'Your account is suspended.' });
 
       const claimedAmountUsd = Number(body.amountUsd || 0);
@@ -4205,6 +4207,14 @@ Return ONLY JSON with keys:
           match.acceptedAt = Date.now();
         } else {
           match.status = 'ENDED';
+          if (!Array.isArray(db.callLogs)) db.callLogs = [];
+          db.callLogs.unshift({
+            ...match,
+            endedAt: Date.now(),
+            durationSec: match.acceptedAt ? Math.round((Date.now() - match.acceptedAt) / 1000) : 0,
+            outcome: action === 'DECLINE' ? 'DECLINED' : (match.acceptedAt ? 'COMPLETED' : 'MISSED')
+          });
+          if (db.callLogs.length > 100) db.callLogs = db.callLogs.slice(0, 100);
           db.activeCalls = db.activeCalls.filter((c) => c !== match);
         }
         saveDb(db);
@@ -5065,8 +5075,9 @@ Return ONLY valid JSON with key: "reply" (string).`;
   if (pathname === '/api/admin/wallet/adjust' && req.method === 'POST') {
     try {
       const body = await parseBody(req);
-      const provider = db.providers.find((p) => p.id === body.providerId);
-      if (!provider) return sendJson(res, 404, { error: 'Provider not found' });
+      const targetId = body.providerId || body.userId || body.accountId;
+      const provider = (db.providers || []).find((p) => p.id === targetId) || (db.customers || []).find((c) => c.id === targetId);
+      if (!provider) return sendJson(res, 404, { error: 'Account not found' });
 
       const amount = Math.abs(Number(body.amountUsd || 0));
       if (amount <= 0 || isNaN(amount)) {
@@ -5254,6 +5265,61 @@ Return ONLY valid JSON with key: "reply" (string).`;
     }
   }
 
+  // Admin Force End Active Voice Call
+  if (pathname === '/api/admin/calls/end' && req.method === 'POST') {
+    if (!validateAdminToken(req)) return sendJson(res, 401, { error: 'Unauthorized: Admin authentication required' });
+    try {
+      const body = await parseBody(req);
+      const channelId = body.channelId;
+      if (!Array.isArray(db.activeCalls)) db.activeCalls = [];
+      const match = db.activeCalls.find((c) => c.channelId === channelId);
+      if (match) {
+        match.status = 'ENDED';
+        if (!Array.isArray(db.callLogs)) db.callLogs = [];
+        db.callLogs.unshift({
+          ...match,
+          endedAt: Date.now(),
+          durationSec: match.acceptedAt ? Math.round((Date.now() - match.acceptedAt) / 1000) : 0,
+          outcome: 'ENDED_BY_ADMIN'
+        });
+        db.activeCalls = db.activeCalls.filter((c) => c !== match);
+        saveDb(db);
+        broadcastUpdate('CALL_RESPONSE', { channelId, action: 'HANGUP' });
+      }
+      return sendJson(res, 200, { ok: true, activeCalls: db.activeCalls });
+    } catch (e) {
+      return sendJson(res, 400, { error: e.message });
+    }
+  }
+
+  // Admin Moderate / Delete Review
+  if (pathname === '/api/admin/reviews/delete' && req.method === 'POST') {
+    if (!validateAdminToken(req)) return sendJson(res, 401, { error: 'Unauthorized: Admin authentication required' });
+    try {
+      const body = await parseBody(req);
+      const targetId = body.targetId;
+      const reviewIndex = Number(body.reviewIndex);
+      const account = (db.providers || []).find((p) => p.id === targetId) || (db.customers || []).find((c) => c.id === targetId);
+      if (!account) return sendJson(res, 404, { error: 'Account not found' });
+      if (!Array.isArray(account.reviews) || !account.reviews[reviewIndex]) {
+        return sendJson(res, 404, { error: 'Review not found at specified index' });
+      }
+      account.reviews.splice(reviewIndex, 1);
+      account.reviewCount = account.reviews.length;
+      if (account.reviews.length > 0) {
+        const sum = account.reviews.reduce((acc, r) => acc + Number(r.rating || 5), 0);
+        account.rating = Math.round((sum / account.reviews.length) * 10) / 10;
+      } else {
+        account.rating = 5.0;
+      }
+      saveDb(db);
+      broadcastUpdate('ACCOUNT_UPDATED', { role: account.role || (account.brandName ? 'PROVIDER' : 'CUSTOMER'), user: account });
+      return sendJson(res, 200, { ok: true, message: 'Review successfully deleted', rating: account.rating, reviewCount: account.reviewCount });
+    } catch (e) {
+      return sendJson(res, 400, { error: e.message });
+    }
+  }
+
   // Admin Provider Shift & Working Hours Control
   if (pathname === '/api/admin/provider/shift' && req.method === 'POST') {
     try {
@@ -5276,8 +5342,9 @@ Return ONLY valid JSON with key: "reply" (string).`;
   if (pathname === '/api/admin/verify-provider' && req.method === 'POST') {
     try {
       const body = await parseBody(req);
-      const provider = db.providers.find((p) => p.id === body.providerId);
-      if (!provider) return sendJson(res, 404, { error: 'Provider not found' });
+      const targetId = body.providerId || body.userId || body.accountId;
+      const provider = (db.providers || []).find((p) => p.id === targetId) || (db.customers || []).find((c) => c.id === targetId);
+      if (!provider) return sendJson(res, 404, { error: 'Account not found' });
 
       if (body.badgeKey && provider.badges[body.badgeKey] !== undefined) {
         provider.badges[body.badgeKey] = !provider.badges[body.badgeKey];
