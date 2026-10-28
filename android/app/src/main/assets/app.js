@@ -2153,8 +2153,57 @@ async function apiPost(url, body, retries = 2) {
   }
 }
 
+function compressDataUrlIfNeeded(dataUrl, maxDim = 500, quality = 0.72) {
+  return new Promise((resolve) => {
+    if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) return resolve(dataUrl);
+    if (dataUrl.startsWith('data:image/svg+xml')) return resolve(dataUrl);
+    if (dataUrl.length < 80000) return resolve(dataUrl);
+    const img = new Image();
+    img.onload = () => {
+      let w = img.width;
+      let h = img.height;
+      if (w > maxDim || h > maxDim) {
+        if (w > h) {
+          h = Math.round((h * maxDim) / w);
+          w = maxDim;
+        } else {
+          w = Math.round((w * maxDim) / h);
+          h = maxDim;
+        }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
+let hasUnlockedAudioSpeech = false;
+function ensureAudioAndSpeechUnlocked() {
+  if (hasUnlockedAudioSpeech) return;
+  hasUnlockedAudioSpeech = true;
+  try {
+    if ('speechSynthesis' in window) {
+      if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+      const silent = new SpeechSynthesisUtterance(' ');
+      silent.volume = 0.01;
+      silent.rate = 2.0;
+      window.speechSynthesis.speak(silent);
+    }
+  } catch (e) {}
+}
+if (typeof document !== 'undefined') {
+  document.addEventListener('click', ensureAudioAndSpeechUnlocked, { once: false, passive: true });
+  document.addEventListener('touchstart', ensureAudioAndSpeechUnlocked, { once: false, passive: true });
+}
+
 function showToast(msg, type = 'info') {
-  if (type !== 'error') return;
+  if (state.activeCall || state.incomingCall) return;
   // Ignore raw transient fetch drops from displaying scary toasts
   if (typeof msg === 'string' && (msg.toLowerCase().includes('failed to fetch') || msg.toLowerCase().includes('networkerror'))) {
     console.warn('Network notice (auto-reconnecting):', msg);
@@ -2383,27 +2432,57 @@ if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
   };
 }
 
+function playNavTurnChime() {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.12);
+    gain.gain.setValueAtTime(0.18, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.26);
+  } catch (e) {}
+}
+
 function speakNavigationDirection(text) {
   if (!liveNavState.voiceEnabled) return;
-  if (!('speechSynthesis' in window)) return;
+  if (!text || typeof text !== 'string') return;
   const now = Date.now();
-  if (liveNavState.lastSpokenText === text && now - liveNavState.lastSpokenMs < 10000) return;
+  if (liveNavState.lastSpokenText === text && now - liveNavState.lastSpokenMs < 8000) return;
   liveNavState.lastSpokenText = text;
   liveNavState.lastSpokenMs = now;
-  try {
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    const voice = cachedNavigationVoice || getGoogleMapsNavigationVoice();
-    if (voice) {
-      utterance.voice = voice;
-      utterance.lang = voice.lang || 'en-US';
-    } else {
-      utterance.lang = 'en-US';
-    }
-    utterance.rate = 1.0;
-    utterance.pitch = 1.0;
-    window.speechSynthesis.speak(utterance);
-  } catch (e) {}
+
+  // 1. Audible Nav Ding
+  playNavTurnChime();
+
+  // 2. High Quality Speech Synthesis
+  if ('speechSynthesis' in window) {
+    try {
+      if (window.speechSynthesis.paused) {
+        window.speechSynthesis.resume();
+      }
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      const voice = cachedNavigationVoice || getGoogleMapsNavigationVoice();
+      if (voice) {
+        utterance.voice = voice;
+        utterance.lang = voice.lang || 'en-US';
+      } else {
+        utterance.lang = 'en-US';
+      }
+      utterance.rate = 1.02;
+      utterance.pitch = 1.0;
+      utterance.volume = 1.0;
+      window.speechSynthesis.speak(utterance);
+    } catch (e) {}
+  }
 }
 
 function toggleNavVoice() {
@@ -4565,6 +4644,7 @@ function renderBookedTrackingOverlay(req) {
           const autoPairRemaining = Math.max(0, 60 - proximitySec);
 
           if (req.status === 'ARRIVED') {
+            speakNavigationDirection(`${prov?.shortName || 'Your specialist'} has arrived outside your location. Share your start PIN to begin.`);
             return `
               <div class="pulsating-arrival-banner" style="background:#FEF2F2; border:1.5px solid #FCA5A5; border-radius:12px; padding:10px 12px; margin-bottom:8px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
                 <div style="flex:1; min-width:0;">
@@ -5261,15 +5341,12 @@ function toggleProviderAuthCategory(catId) {
   renderModalLayer();
 }
 
-function handleAuthIdFileUpload(inputEl) {
+async function handleAuthIdFileUpload(inputEl) {
   const file = inputEl.files && inputEl.files[0];
   if (!file) return;
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    state.authIdPhotoUrl = e.target.result;
-    renderAll();
-  };
-  reader.readAsDataURL(file);
+  const compressed = await compressImageFileToDataUrl(file, 640, 0.72);
+  state.authIdPhotoUrl = compressed || null;
+  renderAll();
 }
 
 async function submitProviderPhoneStep() {
@@ -5533,45 +5610,57 @@ function retakeAuthFaceSelfie() {
   setTimeout(startAuthFaceCamera, 120);
 }
 
-function handleAuthFaceFileUpload(inputEl) {
+async function handleAuthFaceFileUpload(inputEl) {
   const file = inputEl.files && inputEl.files[0];
   if (!file) return;
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    state.authCapturedSelfieUrl = e.target.result;
-    stopFaceCameraStream();
-    renderAll();
-  };
-  reader.readAsDataURL(file);
+  const compressed = await compressImageFileToDataUrl(file, 480, 0.75);
+  state.authCapturedSelfieUrl = compressed || null;
+  state.faceVerifiedSuccess = true;
+  stopFaceCameraStream();
+  renderAll();
 }
 
 async function finishNativeRegistration() {
   const submitBtns = document.querySelectorAll('#pickerModalRoot .btn-primary-blue');
+  const restoreSubmitBtns = () => {
+    submitBtns.forEach((b) => {
+      b.disabled = false;
+      b.style.opacity = '1';
+      b.style.pointerEvents = 'auto';
+      b.innerHTML = `${uiIcon('check', 18)} <span>Finish &amp; Start Receiving Jobs</span>`;
+    });
+  };
+
   submitBtns.forEach((b) => {
     b.disabled = true;
     b.style.opacity = '0.7';
     b.style.pointerEvents = 'none';
-    b.innerHTML = '<span>Creating Account &amp; Loading...</span>';
+    b.innerHTML = '<span>Creating Account...</span>';
   });
 
   const name = (state.authName || '').trim();
   if (!name) {
     showToast('Please enter your full legal name', 'error');
+    restoreSubmitBtns();
     state.authStep = 'PHONE';
     renderAll();
     return;
   }
 
-  // Ensure an avatar is available (captured face logo, or fallback SVG monogram)
+  // Ensure an avatar is available and compressed to < 50KB
   let finalAvatar = state.authCapturedSelfieUrl;
   if (!finalAvatar) {
     const initials = name.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2) || 'FH';
     const svgAvatar = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="22" fill="#0066FF"/><text x="50" y="62" font-size="38" font-weight="bold" fill="#FFFFFF" text-anchor="middle" font-family="Inter, -apple-system, sans-serif">${initials}</text></svg>`;
     finalAvatar = `data:image/svg+xml;utf8,${encodeURIComponent(svgAvatar)}`;
+  } else {
+    finalAvatar = await compressDataUrlIfNeeded(finalAvatar, 400, 0.75);
   }
 
+  let finalIdPhoto = state.authIdPhotoUrl ? await compressDataUrlIfNeeded(state.authIdPhotoUrl, 640, 0.70) : null;
+  let finalPortfolioPhoto = state.authPortfolioPhotoUrl ? await compressDataUrlIfNeeded(state.authPortfolioPhotoUrl, 640, 0.70) : '';
+
   try {
-    showToast('Creating your account...', 'info');
     const res = await apiPost('/api/auth/complete-signup', {
       role: state.authRole,
       name: name,
@@ -5587,11 +5676,11 @@ async function finishNativeRegistration() {
       idDocument: {
         type: state.authIdType || 'National ID',
         number: (state.authIdNumber || state.authNationalId || '').trim() || '63-2948102-F-42',
-        photoUrl: state.authIdPhotoUrl || null
+        photoUrl: finalIdPhoto
       },
       avatarUrl: finalAvatar,
       selfieUrl: finalAvatar,
-      portfolioImageUrl: state.authPortfolioPhotoUrl || ''
+      portfolioImageUrl: finalPortfolioPhoto
     });
 
     stopFaceCameraStream();
@@ -5622,7 +5711,8 @@ async function finishNativeRegistration() {
       renderAll();
     }
   } catch (err) {
-    showToast(err.message, 'error');
+    restoreSubmitBtns();
+    showToast(err.message || 'Failed to complete registration. Please check your connection.', 'error');
   }
 }
 
@@ -9172,153 +9262,198 @@ function renderProviderRequestsFeedTab(prov, openRequests, activeJob) {
         </button>
       </div>
 
-      ${openRequests.length === 0 ? `
-        <div style="text-align:center; padding:28px 14px; color:var(--text-secondary); font-size:13.5px; background:var(--bg-card); border-radius:16px;">
-          No open jobs in your categories right now. New matching requests will appear here instantly.
-        </div>
-      ` : openRequests.map((r) => {
-        const myExistingOffer = (r.offers || []).find((o) => o.providerId === prov.id || (prov.finditId && o.providerFinditId === prov.finditId));
-        const isOfferDeclined = Boolean(myExistingOffer && myExistingOffer.status === 'DECLINED');
-        const commPercent = Number(state.db?.settings?.commissionPercent || 11);
-        const minReserve = Number(state.db?.settings?.minWalletBalanceUsd || 2.0);
-        const isPromo = Boolean(state.db?.settings?.launchPromoActive);
-        const jobBudgetUsd = Number(r.budgetUsd || 0);
-        const requiredCommUsd = Math.round(jobBudgetUsd * (commPercent / 100) * 100) / 100;
-        const walletBalUsd = Number(prov.walletBalanceUsd || 0);
-        const surpassesWallet = !isPromo && (walletBalUsd < requiredCommUsd || walletBalUsd < minReserve || (walletBalUsd - requiredCommUsd) < minReserve);
-        const suggestedTopUpUsd = Math.max(5, Math.ceil(requiredCommUsd));
-        const bid1Usd = Number((jobBudgetUsd + 2).toFixed(2));
-        const bid2Usd = Number((jobBudgetUsd + 3.5).toFixed(2));
-        const bid1CommUsd = Math.round(bid1Usd * (commPercent / 100) * 100) / 100;
-        const bid2CommUsd = Math.round(bid2Usd * (commPercent / 100) * 100) / 100;
-        const bid1Surpasses = !isPromo && (walletBalUsd < bid1CommUsd || (walletBalUsd - bid1CommUsd) < minReserve);
-        const bid2Surpasses = !isPromo && (walletBalUsd < bid2CommUsd || (walletBalUsd - bid2CommUsd) < minReserve);
-
-        let displayLocation = r.exactAddress || r.clientLiveAddress || r.suburbName || 'Harare';
-        displayLocation = displayLocation
-          .replace(/^My Current Live Location \((.*)\)$/i, '$1')
-          .replace(/^My Current Live Location$/i, r.suburbName ? `${r.suburbName}, Harare` : 'Harare');
-
-        let badgeSuburb = r.suburbName;
-        if (!badgeSuburb || badgeSuburb === 'Harare') {
-          const parts = displayLocation.split(',');
-          badgeSuburb = (parts[parts.length > 1 ? 1 : 0] || 'Harare').trim();
+      ${(() => {
+        const visibleRequests = openRequests.filter((r) => !(state.dismissedJobIds || []).includes(r.id));
+        if (visibleRequests.length === 0) {
+          return `
+            <div style="text-align:center; padding:28px 14px; color:var(--text-secondary); font-size:13.5px; background:var(--bg-card); border-radius:16px;">
+              No open jobs in your categories right now. New matching requests will appear here instantly.
+            </div>
+          `;
         }
+        return visibleRequests.map((r) => {
+          const myExistingOffer = (r.offers || []).find((o) => o.providerId === prov.id || (prov.finditId && o.providerFinditId === prov.finditId));
+          const isOfferDeclined = Boolean(myExistingOffer && myExistingOffer.status === 'DECLINED');
+          const isOfferPending = Boolean(myExistingOffer && myExistingOffer.status === 'PROPOSED');
+          const commPercent = Number(state.db?.settings?.commissionPercent || 11);
+          const minReserve = Number(state.db?.settings?.minWalletBalanceUsd || 2.0);
+          const isPromo = Boolean(state.db?.settings?.launchPromoActive);
+          const jobBudgetUsd = Number(r.budgetUsd || 0);
+          const requiredCommUsd = Math.round(jobBudgetUsd * (commPercent / 100) * 100) / 100;
+          const walletBalUsd = Number(prov.walletBalanceUsd || 0);
+          const surpassesWallet = !isPromo && (walletBalUsd < requiredCommUsd || walletBalUsd < minReserve || (walletBalUsd - requiredCommUsd) < minReserve);
+          const suggestedTopUpUsd = Math.max(5, Math.ceil(requiredCommUsd));
+          const bid1Usd = Number((jobBudgetUsd + 2).toFixed(2));
+          const bid2Usd = Number((jobBudgetUsd + 3.5).toFixed(2));
+          const bid1CommUsd = Math.round(bid1Usd * (commPercent / 100) * 100) / 100;
+          const bid2CommUsd = Math.round(bid2Usd * (commPercent / 100) * 100) / 100;
+          const bid1Surpasses = !isPromo && (walletBalUsd < bid1CommUsd || (walletBalUsd - bid1CommUsd) < minReserve);
+          const bid2Surpasses = !isPromo && (walletBalUsd < bid2CommUsd || (walletBalUsd - bid2CommUsd) < minReserve);
 
-        return `
-          <div class="provider-order-card">
-            <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px;">
-              <div>
-                <span style="font-size:23px; font-weight:800; color:var(--blue-primary);">${formatUsdPrice(r.budgetUsd)}</span>
-                <span style="font-size:12px; font-weight:700; color:var(--text-secondary); margin-left:6px;">${r.paymentMethod}</span>
+          let displayLocation = r.exactAddress || r.clientLiveAddress || r.suburbName || 'Harare';
+          displayLocation = displayLocation
+            .replace(/^My Current Live Location \((.*)\)$/i, '$1')
+            .replace(/^My Current Live Location$/i, r.suburbName ? `${r.suburbName}, Harare` : 'Harare');
+
+          let badgeSuburb = r.suburbName;
+          if (!badgeSuburb || badgeSuburb === 'Harare') {
+            const parts = displayLocation.split(',');
+            badgeSuburb = (parts[parts.length > 1 ? 1 : 0] || 'Harare').trim();
+          }
+
+          const declinedPrice = Number(myExistingOffer?.declinedPriceUsd || myExistingOffer?.priceUsd || jobBudgetUsd);
+          let counterMidUsd = null;
+          if (declinedPrice > jobBudgetUsd + 1) {
+            counterMidUsd = Number(((declinedPrice + jobBudgetUsd) / 2).toFixed(1));
+          }
+
+          return `
+            <div class="provider-order-card" id="prov_card_${r.id}">
+              <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px;">
+                <div>
+                  <span style="font-size:23px; font-weight:800; color:var(--blue-primary);">${formatUsdPrice(r.budgetUsd)}</span>
+                  <span style="font-size:12px; font-weight:700; color:var(--text-secondary); margin-left:6px;">${r.paymentMethod}</span>
+                </div>
+                <span style="font-size:11.5px; color:var(--blue-primary); font-weight:800; background:var(--blue-soft); padding:3px 9px; border-radius:99px; display:inline-flex; align-items:center; gap:4px; max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                  ${uiIcon('pin', 12)}
+                  <span>${escapeHtml(badgeSuburb)}</span>
+                </span>
               </div>
-              <span style="font-size:11.5px; color:var(--blue-primary); font-weight:800; background:var(--blue-soft); padding:3px 9px; border-radius:99px; display:inline-flex; align-items:center; gap:4px; max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
-                ${uiIcon('pin', 12)}
-                <span>${escapeHtml(badgeSuburb)}</span>
-              </span>
-            </div>
 
-            <div style="font-size:15px; font-weight:800; color:var(--text-main); margin-bottom:4px;">${escapeHtml(r.title)}</div>
+              <div style="font-size:15px; font-weight:800; color:var(--text-main); margin-bottom:4px;">${escapeHtml(r.title)}</div>
 
-            <!-- Client Real Street Address Card -->
-            <div style="display:flex; align-items:flex-start; gap:6px; font-size:12px; color:#0F172A; font-weight:700; margin-bottom:8px; background:rgba(0,102,255,0.06); border:1px solid rgba(0,102,255,0.14); padding:6px 9px; border-radius:8px;">
-              <span style="color:var(--blue-primary); flex-shrink:0; margin-top:2px;">${uiIcon('pin', 13)}</span>
-              <div style="flex:1; min-width:0; line-height:1.4;">
-                <span style="font-weight:800; color:var(--text-main);">${escapeHtml(displayLocation)}</span>
-              </div>
-            </div>
-
-            <div style="font-size:12px; color:var(--text-secondary); margin-bottom:8px; display:flex; align-items:center; gap:5px; flex-wrap:wrap;">
-              ${uiIcon('user', 13)}
-              <span>${escapeHtml(r.customerName)}</span>
-              <span style="display:inline-flex; align-items:center; gap:2px;">
-                ${(Number(r.customerRating) || 0) > 0 ? `(${uiIcon('star', 11)} ${r.customerRating})` : '(New Client)'}
-              </span>
-            </div>
-
-            ${r.description ? `
-              <div style="font-size:12px; color:var(--text-main); background:rgba(0,0,0,0.03); border-radius:8px; padding:6px 9px; margin-bottom:8px;">
-                <strong>Client note:</strong> ${r.description}
-              </div>
-            ` : ''}
-
-            ${r.photoUrl ? `
-              <div style="display:flex; align-items:center; gap:9px; background:var(--blue-soft); border:1px solid var(--blue-border); border-radius:10px; padding:6px 10px; margin-bottom:8px;">
-                <img src="${resolveMediaUrl(r.photoUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_TASK_PHOTO_FALLBACK}';" style="width:44px; height:44px; border-radius:8px; object-fit:cover; cursor:pointer;" onclick="openImagePreviewModal('${r.photoUrl}', 'Desired Style Photo')" alt="Client Reference Photo" />
-                <div style="flex:1; min-width:0;">
-                  <div style="font-size:12px; font-weight:800; color:var(--blue-primary);">Desired Style Photo Attached</div>
-                  <div style="font-size:11px; color:var(--text-secondary); cursor:pointer;" onclick="openImagePreviewModal('${r.photoUrl}', 'Desired Style Photo')">Tap to inspect style before bidding</div>
+              <!-- Client Real Street Address Card -->
+              <div style="display:flex; align-items:flex-start; gap:6px; font-size:12px; color:#0F172A; font-weight:700; margin-bottom:8px; background:rgba(0,102,255,0.06); border:1px solid rgba(0,102,255,0.14); padding:6px 9px; border-radius:8px;">
+                <span style="color:var(--blue-primary); flex-shrink:0; margin-top:2px;">${uiIcon('pin', 13)}</span>
+                <div style="flex:1; min-width:0; line-height:1.4;">
+                  <span style="font-weight:800; color:var(--text-main);">${escapeHtml(displayLocation)}</span>
                 </div>
               </div>
-            ` : ''}
 
-            ${isOfferDeclined ? `
-              <div style="background:#FEF2F2; border:1px solid #FECACA; border-radius:10px; padding:7px 10px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
-                <span style="font-size:11.5px; font-weight:700; color:#DC2626;">Offer was declined</span>
-                <span style="font-size:10.5px; font-weight:800; color:#B91C1C; background:#FEE2E2; padding:2px 8px; border-radius:99px;">Send New Price</span>
+              <div style="font-size:12px; color:var(--text-secondary); margin-bottom:8px; display:flex; align-items:center; gap:5px; flex-wrap:wrap;">
+                ${uiIcon('user', 13)}
+                <span>${escapeHtml(r.customerName)}</span>
+                <span style="display:inline-flex; align-items:center; gap:2px;">
+                  ${(Number(r.customerRating) || 0) > 0 ? `(${uiIcon('star', 11)} ${r.customerRating})` : '(New Client)'}
+                </span>
               </div>
-            ` : myExistingOffer ? `
-              <div style="background:var(--blue-soft); border:1px solid var(--blue-border); border-radius:10px; padding:7px 10px; display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                <span style="font-size:12px; font-weight:800; color:var(--blue-primary);">Offered ${formatUsdPrice(myExistingOffer.priceUsd)} • Waiting for client</span>
-                <span style="font-size:10.5px; font-weight:700; color:var(--blue-primary); background:rgba(0,102,255,0.12); padding:2px 8px; border-radius:99px;">120s</span>
-              </div>
-            ` : ''}
 
-            ${surpassesWallet ? `
-              <div style="background:#FFFBEB; border:1px solid #FDE68A; border-radius:10px; padding:7px 10px; margin-bottom:8px; display:flex; align-items:center; justify-content:space-between; gap:8px;">
-                <span style="font-size:11.5px; font-weight:700; color:#92400E;">🔒 Requires $${requiredCommUsd.toFixed(2)} USD wallet balance</span>
-                <button
-                  type="button"
-                  onclick="state.walletTopupAmount=${suggestedTopUpUsd}; state.providerTab='WALLET'; renderUiOverlay();"
-                  style="height:28px; padding:0 10px; border-radius:7px; border:none; background:#D97706; color:#FFFFFF; font-size:11px; font-weight:800; cursor:pointer;"
-                >
-                  Top Up +$${suggestedTopUpUsd}
-                </button>
-              </div>
-            ` : ''}
+              ${r.description ? `
+                <div style="font-size:12px; color:var(--text-main); background:rgba(0,0,0,0.03); border-radius:8px; padding:6px 9px; margin-bottom:8px;">
+                  <strong>Client note:</strong> ${r.description}
+                </div>
+              ` : ''}
 
-            ${activeJob ? `
-              <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:8px 12px; display:flex; align-items:center; justify-content:space-between; gap:8px;">
-                <span style="font-size:12px; font-weight:700; color:#64748B;">Complete active visit to bid</span>
-                <button
-                  type="button"
-                  onclick="state.providerTab='ACTIVE_JOB'; renderUiOverlay();"
-                  style="border:none; background:#0F172A; color:#FFFFFF; font-size:11px; font-weight:800; padding:5px 12px; border-radius:99px; cursor:pointer; flex-shrink:0;"
-                >
-                  View Job
-                </button>
-              </div>
-            ` : `
-              <div class="provider-bid-grid">
-                <button
-                  class="btn-primary-blue"
-                  ${surpassesWallet ? 'disabled style="height:38px; font-size:12px; opacity:0.42; cursor:not-allowed; pointer-events:none; filter:grayscale(0.5);"' : `style="height:38px; font-size:12.5px;" onclick="providerSubmitBid('${r.id}', ${r.budgetUsd})"`}
-                >
-                  ${surpassesWallet ? `🔒 Need ${commPercent}% ($${requiredCommUsd.toFixed(2)})` : `Accept ${formatUsdPrice(r.budgetUsd)}`}
-                </button>
-                <button
-                  class="btn-dark-sec"
-                  ${bid1Surpasses ? 'disabled style="padding:7px 6px; font-size:12px; opacity:0.42; cursor:not-allowed; pointer-events:none;"' : `style="padding:7px 6px; font-size:12px;" onclick="providerSubmitBid('${r.id}', ${bid1Usd})"`}
-                >
-                  ${formatUsdPrice(bid1Usd)}
-                </button>
-                <button
-                  class="btn-dark-sec"
-                  ${bid2Surpasses ? 'disabled style="padding:7px 6px; font-size:12px; opacity:0.42; cursor:not-allowed; pointer-events:none;"' : `style="padding:7px 6px; font-size:12px;" onclick="providerSubmitBid('${r.id}', ${bid2Usd})"`}
-                >
-                  ${formatUsdPrice(bid2Usd)}
-                </button>
-                <button
-                  class="btn-dark-sec"
-                  ${surpassesWallet ? 'disabled style="padding:7px 6px; font-size:12px; opacity:0.42; cursor:not-allowed; pointer-events:none;"' : `style="padding:7px 6px; font-size:12px;" onclick="promptProviderCustomBid('${r.id}', ${r.budgetUsd})"`}
-                >
-                  ${isOfferDeclined ? 'Edit Price $' : 'Custom $'}
-                </button>
-              </div>
-            `}
-          </div>
-        `;
-      }).join('')}
+              ${r.photoUrl ? `
+                <div style="display:flex; align-items:center; gap:9px; background:var(--blue-soft); border:1px solid var(--blue-border); border-radius:10px; padding:6px 10px; margin-bottom:8px;">
+                  <img src="${resolveMediaUrl(r.photoUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_TASK_PHOTO_FALLBACK}';" style="width:44px; height:44px; border-radius:8px; object-fit:cover; cursor:pointer;" onclick="openImagePreviewModal('${r.photoUrl}', 'Desired Style Photo')" alt="Client Reference Photo" />
+                  <div style="flex:1; min-width:0;">
+                    <div style="font-size:12px; font-weight:800; color:var(--blue-primary);">Desired Style Photo Attached</div>
+                    <div style="font-size:11px; color:var(--text-secondary); cursor:pointer;" onclick="openImagePreviewModal('${r.photoUrl}', 'Desired Style Photo')">Tap to inspect style before bidding</div>
+                  </div>
+                </div>
+              ` : ''}
+
+              ${isOfferDeclined ? `
+                <!-- inDrive Style Declined & Counter-Bid Box -->
+                <div style="background:#FFF1F2; border:1.5px solid #FDA4AF; border-radius:12px; padding:10px 12px; margin-bottom:10px;">
+                  <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:4px;">
+                    <div style="display:flex; align-items:center; gap:6px;">
+                      <span style="font-size:14px;">❌</span>
+                      <span style="font-size:12.5px; font-weight:800; color:#BE123C;">Offer Declined ($${declinedPrice})</span>
+                    </div>
+                    <button type="button" onclick="providerDismissJob('${r.id}')" style="background:transparent; border:none; color:#9F1239; font-size:11px; font-weight:800; cursor:pointer; text-decoration:underline;">
+                      Dismiss ✕
+                    </button>
+                  </div>
+                  <div style="font-size:11.5px; color:#9F1239; margin-bottom:8px; line-height:1.4;">
+                    Client declined your offer. You can re-bid with a lower rate, accept their budget, or dismiss.
+                  </div>
+                  <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                    <button class="btn-primary-blue" style="height:34px; padding:0 12px; font-size:12px; font-weight:800; flex:1;" onclick="providerSubmitBid('${r.id}', ${r.budgetUsd})">
+                      Accept Budget ${formatUsdPrice(r.budgetUsd)}
+                    </button>
+                    ${counterMidUsd ? `
+                      <button class="btn-dark-sec" style="height:34px; padding:0 10px; font-size:12px; font-weight:800;" onclick="providerSubmitBid('${r.id}', ${counterMidUsd})">
+                        Counter ${formatUsdPrice(counterMidUsd)}
+                      </button>
+                    ` : ''}
+                    <button class="btn-dark-sec" style="height:34px; padding:0 10px; font-size:12px; font-weight:800;" onclick="promptProviderCustomBid('${r.id}', ${r.budgetUsd})">
+                      Custom $
+                    </button>
+                  </div>
+                </div>
+              ` : isOfferPending ? `
+                <div style="background:var(--blue-soft); border:1.5px solid var(--blue-border); border-radius:12px; padding:10px 12px; display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                  <div>
+                    <div style="font-size:12.5px; font-weight:800; color:var(--blue-primary); display:flex; align-items:center; gap:5px;">
+                      <span style="display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--blue-primary); animation:pulse 1.4s infinite;"></span>
+                      <span>Offered ${formatUsdPrice(myExistingOffer.priceUsd)}</span>
+                    </div>
+                    <div style="font-size:11px; color:var(--text-secondary); margin-top:2px;">Waiting for client response...</div>
+                  </div>
+                  <button type="button" class="btn-dark-sec" style="height:32px; padding:0 10px; font-size:11.5px; font-weight:800;" onclick="promptProviderCustomBid('${r.id}', ${r.budgetUsd})">
+                    Change Price
+                  </button>
+                </div>
+              ` : ''}
+
+              ${surpassesWallet ? `
+                <div style="background:#FFFBEB; border:1px solid #FDE68A; border-radius:10px; padding:7px 10px; margin-bottom:8px; display:flex; align-items:center; justify-content:space-between; gap:8px;">
+                  <span style="font-size:11.5px; font-weight:700; color:#92400E;">🔒 Requires $${requiredCommUsd.toFixed(2)} USD wallet balance</span>
+                  <button
+                    type="button"
+                    onclick="state.walletTopupAmount=${suggestedTopUpUsd}; state.providerTab='WALLET'; renderUiOverlay();"
+                    style="height:28px; padding:0 10px; border-radius:7px; border:none; background:#D97706; color:#FFFFFF; font-size:11px; font-weight:800; cursor:pointer;"
+                  >
+                    Top Up +$${suggestedTopUpUsd}
+                  </button>
+                </div>
+              ` : ''}
+
+              ${activeJob ? `
+                <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:8px 12px; display:flex; align-items:center; justify-content:space-between; gap:8px;">
+                  <span style="font-size:12px; font-weight:700; color:#64748B;">Complete active visit to bid</span>
+                  <button
+                    type="button"
+                    onclick="state.providerTab='ACTIVE_JOB'; renderUiOverlay();"
+                    style="border:none; background:#0F172A; color:#FFFFFF; font-size:11px; font-weight:800; padding:5px 12px; border-radius:99px; cursor:pointer; flex-shrink:0;"
+                  >
+                    View Job
+                  </button>
+                </div>
+              ` : isOfferDeclined || isOfferPending ? '' : `
+                <div class="provider-bid-grid">
+                  <button
+                    class="btn-primary-blue"
+                    ${surpassesWallet ? 'disabled style="height:38px; font-size:12px; opacity:0.42; cursor:not-allowed; pointer-events:none; filter:grayscale(0.5);"' : `style="height:38px; font-size:12.5px;" onclick="providerSubmitBid('${r.id}', ${r.budgetUsd})"`}
+                  >
+                    ${surpassesWallet ? `🔒 Need ${commPercent}% ($${requiredCommUsd.toFixed(2)})` : `Accept ${formatUsdPrice(r.budgetUsd)}`}
+                  </button>
+                  <button
+                    class="btn-dark-sec"
+                    ${bid1Surpasses ? 'disabled style="padding:7px 6px; font-size:12px; opacity:0.42; cursor:not-allowed; pointer-events:none;"' : `style="padding:7px 6px; font-size:12px;" onclick="providerSubmitBid('${r.id}', ${bid1Usd})"`}
+                  >
+                    ${formatUsdPrice(bid1Usd)}
+                  </button>
+                  <button
+                    class="btn-dark-sec"
+                    ${bid2Surpasses ? 'disabled style="padding:7px 6px; font-size:12px; opacity:0.42; cursor:not-allowed; pointer-events:none;"' : `style="padding:7px 6px; font-size:12px;" onclick="providerSubmitBid('${r.id}', ${bid2Usd})"`}
+                  >
+                    ${formatUsdPrice(bid2Usd)}
+                  </button>
+                  <button
+                    class="btn-dark-sec"
+                    ${surpassesWallet ? 'disabled style="padding:7px 6px; font-size:12px; opacity:0.42; cursor:not-allowed; pointer-events:none;"' : `style="padding:7px 6px; font-size:12px;" onclick="promptProviderCustomBid('${r.id}', ${r.budgetUsd})"`}
+                  >
+                    Custom $
+                  </button>
+                </div>
+              `}
+            </div>
+          `;
+        }).join('');
+      })()}
     </div>
   `;
 }
@@ -10048,6 +10183,16 @@ async function toggleProviderOnlineStatus() {
   } catch (err) {
     console.warn('Background online sync:', err);
   }
+}
+
+function providerDismissJob(requestId) {
+  if (!Array.isArray(state.dismissedJobIds)) state.dismissedJobIds = [];
+  if (!state.dismissedJobIds.includes(requestId)) {
+    state.dismissedJobIds.push(requestId);
+  }
+  showToast('Job card dismissed', 'info');
+  lastUiOverlaySignature = '';
+  renderAll(true);
 }
 
 async function providerSubmitBid(requestId, priceUsd) {

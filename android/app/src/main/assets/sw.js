@@ -1,5 +1,5 @@
 // Findit Harare — Service Worker (Offline Cache & Map Resiliency)
-const SHELL_CACHE = 'findit-shell-v4.0.0';
+const SHELL_CACHE = 'findit-shell-v4.1.0';
 const TILES_CACHE = 'findit-map-tiles-v4';
 const API_CACHE = 'findit-api-cache-v4';
 
