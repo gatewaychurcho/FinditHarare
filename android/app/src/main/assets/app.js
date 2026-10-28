@@ -334,7 +334,8 @@ function startArrivalVibrationAlert(req) {
   triggerHardwareVibration([800, 250, 800, 250, 1000]);
   arrivalVibrateInterval = setInterval(() => {
     const activeReq = getCustomerActiveRequest();
-    if (!activeReq || activeReq.status !== 'ARRIVED' || activeReq.pinVerifiedByProvider) {
+    const isArrivalAlertActive = activeReq && !activeReq.pinVerifiedByProvider && (activeReq.status === 'ARRIVED' || isBookedStatus(activeReq.status));
+    if (!isArrivalAlertActive) {
       stopArrivalVibrationAlert();
       return;
     }
@@ -1390,8 +1391,19 @@ function handleIncomingRealtimeEvent(data) {
     const { requestId, message } = data.payload;
     const targetReq = (state.db?.requests || []).find((r) => r.id === requestId);
     if (targetReq && message) {
-      const isParty = (state.role === 'CUSTOMER' && targetReq.customerId === state.currentUser?.id) ||
-                      (state.role === 'PROVIDER' && targetReq.acceptedProviderId === state.currentUser?.id);
+      const myId = state.currentUser?.id;
+      const myFinditId = state.currentUser?.finditId;
+      const myPhone = (state.currentUser?.phone || '').replace(/\D/g, '');
+      const isCustomerParty = state.role === 'CUSTOMER' && (
+        targetReq.customerId === myId ||
+        targetReq.customerFinditId === myFinditId ||
+        (myPhone && (targetReq.customerPhone || '').replace(/\D/g, '') === myPhone)
+      );
+      const isProviderParty = state.role === 'PROVIDER' && (
+        targetReq.acceptedProviderId === myId ||
+        (targetReq.offers || []).some((o) => o.providerId === myId || (myFinditId && o.providerFinditId === myFinditId))
+      );
+      const isParty = isCustomerParty || isProviderParty;
       if (!isParty) return;
 
       if (!targetReq.messages) targetReq.messages = [];
@@ -1492,6 +1504,9 @@ function handleIncomingRealtimeEvent(data) {
     const myCats = state.role === 'PROVIDER' ? getProviderCategoryIds(state.currentUser) : [];
     const matchesMe = myCats.length === 0 || myCats.includes(req.categoryId);
     if (state.role === 'PROVIDER' && matchesMe) {
+      if (state.currentUser && state.currentUser.isOnline === false) {
+        showToast(`🔔 New Job in ${req.suburbName || 'Harare'} ($${req.budgetUsd})! You are currently Offline. Switch Online to bid.`, 'info', 6000);
+      }
       triggerSystemNotification(
         `New Job in ${req.suburbName || 'Harare'} ($${req.budgetUsd} USD)`,
         `${req.title} requested by ${req.customerName} at ${req.exactAddress}`,
@@ -7952,8 +7967,16 @@ async function submitServiceRequest() {
     const isLive = !state.isCustomAddressSelected;
     const targetLat = isLive ? (state.userLiveGpsLat || state.pinnedLat) : state.pinnedLat;
     const targetLng = isLive ? (state.userLiveGpsLng || state.pinnedLng) : state.pinnedLng;
-    const suburbClean = (state.customSuburbLabel || 'Harare').split(',')[0].trim();
-    const streetClean = state.customAddress && state.customAddress !== 'Current Live Location' ? state.customAddress : suburbClean;
+    let suburbClean = (state.customSuburbLabel || '').split(',')[0].trim();
+    if (!suburbClean || suburbClean.toLowerCase().includes('live location') || suburbClean.toLowerCase() === 'harare') {
+      const nearest = (state.db?.suburbs || []).reduce((best, s) => {
+        const d = Math.hypot(s.lat - targetLat, s.lng - targetLng);
+        return (!best || d < best.d) ? { s, d } : best;
+      }, null);
+      if (nearest?.s) suburbClean = nearest.s.name;
+      else suburbClean = 'Harare';
+    }
+    const streetClean = state.customAddress && state.customAddress !== 'Current Live Location' && !state.customAddress.toLowerCase().includes('live location') ? state.customAddress : suburbClean;
     const targetAddress = streetClean.toLowerCase().includes(suburbClean.toLowerCase()) ? streetClean : `${streetClean}, ${suburbClean}`;
 
     // 0ms Optimistic Broadcast: Transition immediately to SEARCHING without any delay!
@@ -9107,6 +9130,26 @@ function renderProviderRequestsFeedTab(prov, openRequests, activeJob) {
           >
             <span>Open Job</span>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M9 18l6-6-6-6"/></svg>
+          </button>
+        </div>
+      ` : ''}
+
+      ${prov.isOnline === false ? `
+        <div style="background:#FFFBEB; border:1.5px solid #F59E0B; border-radius:14px; padding:12px 14px; margin-bottom:12px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
+          <div style="display:flex; align-items:center; gap:9px; flex:1; min-width:0;">
+            <div style="width:10px; height:10px; border-radius:50%; background:#F59E0B; box-shadow:0 0 0 3px rgba(245,158,11,0.25); flex-shrink:0;"></div>
+            <div>
+              <div style="font-size:13px; font-weight:800; color:#92400E;">You are currently Offline</div>
+              <div style="font-size:11.5px; color:#B45309; font-weight:600;">You are hidden from clients. Go Online to receive live job posts and bids.</div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onclick="toggleProviderOnlineStatus()"
+            class="btn-primary-blue"
+            style="width:auto; height:34px; padding:0 14px; font-size:12px; white-space:nowrap; cursor:pointer;"
+          >
+            <span>Go Online</span>
           </button>
         </div>
       ` : ''}

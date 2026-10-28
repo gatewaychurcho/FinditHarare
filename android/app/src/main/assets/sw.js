@@ -1,7 +1,7 @@
 // Findit Harare — Service Worker (Offline Cache & Map Resiliency)
-const SHELL_CACHE = 'findit-shell-v2';
-const TILES_CACHE = 'findit-map-tiles-v2';
-const API_CACHE = 'findit-api-cache-v2';
+const SHELL_CACHE = 'findit-shell-v4.0.0';
+const TILES_CACHE = 'findit-map-tiles-v4';
+const API_CACHE = 'findit-api-cache-v4';
 
 const SHELL_ASSETS = [
   '/',
@@ -14,8 +14,9 @@ const SHELL_ASSETS = [
   '/icons/icon-192.png',
   '/icons/icon-512.png',
   '/icons/apple-touch-icon.png',
-  'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
-  'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'
+  '/vendor/leaflet.css',
+  '/vendor/leaflet.js',
+  '/vendor/AgoraRTC_N-4.20.0.js'
 ];
 
 self.addEventListener('install', (evt) => {
@@ -83,12 +84,33 @@ self.addEventListener('fetch', (evt) => {
     return;
   }
 
-  // 3. Static Assets: Cache-first, Network-fallback
+  // 3. App Shell Code (HTML, JS, CSS): Network-First with Cache-Fallback for Instant Code Updates
+  const isCodeAsset = url.pathname.endsWith('.js') || url.pathname.endsWith('.css') || url.pathname === '/' || url.pathname.endsWith('.html') || url.pathname.startsWith('/admin');
+  if (req.method === 'GET' && isCodeAsset) {
+    evt.respondWith(
+      fetch(req).then(async (netRes) => {
+        if (netRes && netRes.status === 200) {
+          const cache = await caches.open(SHELL_CACHE);
+          cache.put(req, netRes.clone());
+        }
+        return netRes;
+      }).catch(async () => {
+        const cached = await caches.match(req);
+        if (cached) return cached;
+        if (req.mode === 'navigate') {
+          return caches.match('/index.html');
+        }
+        return null;
+      })
+    );
+    return;
+  }
+
+  // 4. Other Static Assets (Images, Icons, Fonts): Cache-first with Network-fallback
   if (req.method === 'GET') {
     evt.respondWith(
       caches.match(req).then((cached) => {
         if (cached) {
-          // Revalidate in background
           fetch(req).then(async (netRes) => {
             if (netRes && netRes.status === 200) {
               const cache = await caches.open(SHELL_CACHE);
@@ -98,13 +120,12 @@ self.addEventListener('fetch', (evt) => {
           return cached;
         }
         return fetch(req).then(async (netRes) => {
-          if (netRes && netRes.status === 200 && (url.origin === location.origin || url.hostname.includes('unpkg.com'))) {
+          if (netRes && netRes.status === 200 && url.origin === location.origin) {
             const cache = await caches.open(SHELL_CACHE);
             cache.put(req, netRes.clone());
           }
           return netRes;
         }).catch(async () => {
-          // Fallback to cached index.html for navigation requests
           if (req.mode === 'navigate') {
             return caches.match('/index.html');
           }
