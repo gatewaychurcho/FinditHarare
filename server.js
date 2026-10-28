@@ -2456,6 +2456,7 @@ const server = http.createServer(async (req, res) => {
       requests: db.requests,
       customers: (db.customers || []).map(stripPrivate),
       providers: (db.providers || []).map(stripPrivate),
+      activeCalls: (db.activeCalls || []).filter((c) => Date.now() - (c.startedAt || 0) < 50000 && c.status !== 'ENDED'),
       adminNotifications: db.adminNotifications || [],
       supportChats: isAdminViewer ? (db.supportChats || {}) : {},
       kycVerifications: isAdminViewer ? db.kycVerifications : [],
@@ -4246,10 +4247,15 @@ Return ONLY JSON with keys:
         return c.callerId === userId && (c.status === 'ACCEPTED' || c.status === 'RINGING');
       }) || null;
 
+      const signals = chanId && Array.isArray(db.callSignals)
+        ? db.callSignals.filter((s) => s.channelId === chanId && (!userId || String(s.senderId) !== String(userId)) && (nowMs - (s.timestamp || 0) < 20000))
+        : [];
+
       return sendJson(res, 200, {
         ok: true,
         incomingCall: incoming,
         activeCall: activeOutgoing,
+        signals,
         serverTime: nowMs
       });
     } catch (e) {

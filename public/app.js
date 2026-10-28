@@ -1129,10 +1129,12 @@ async function fetchState(force = false) {
     const fp = computeStateFingerprint(state.db);
     if (force || fp !== lastStateFingerprint) {
       lastStateFingerprint = fp;
+      lastUiOverlaySignature = ''; // ALWAYS invalidate overlay signature when database fingerprint changes!
+      lastOffersSignature = '';
       const activeEl = document.activeElement;
       const isUserTyping = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT');
       if (!isUserTyping || force) {
-        renderAll(force);
+        renderAll(true);
       }
     }
   } catch (err) {
@@ -1216,8 +1218,14 @@ function stopFastLiveOffersPoll() {
 
 function initRealtimeSync() {
   connectWebSocket();
+  if (state.isAuthenticated && state.currentUser) {
+    try { startActiveCallPolling(); } catch (e) {}
+  }
   if (!realtimeSyncInterval) {
     realtimeSyncInterval = setInterval(() => {
+      if (state.isAuthenticated && state.currentUser && !activeCallPollTimer) {
+        try { startActiveCallPolling(); } catch (e) {}
+      }
       // Smooth non-overlapping delta sync when WebSocket is not active
       if (!isWsConnected && !isFetchingState) {
         const activeEl = document.activeElement;
@@ -1231,7 +1239,7 @@ function initRealtimeSync() {
           fetchState(false);
         }
       }
-    }, 1800);
+    }, 1200);
   }
 }
 
@@ -1546,11 +1554,17 @@ function handleIncomingRealtimeEvent(data) {
   }
 
   // 4. BOOKING CONFIRMED (Accepted offer: disappears for other providers, locks in for accepted provider & client)
-  if (data.eventType === 'BOOKING_CONFIRMED' && data.payload?.request) {
+  if ((data.eventType === 'BOOKING_CONFIRMED' || data.eventType === 'OFFER_ACCEPTED') && data.payload) {
     const { requestId, acceptedProviderId, request } = data.payload;
     if (state.db?.requests) {
       const idx = state.db.requests.findIndex((r) => r.id === requestId);
-      if (idx >= 0) state.db.requests[idx] = request;
+      if (idx >= 0) {
+        if (request) state.db.requests[idx] = request;
+        else {
+          state.db.requests[idx].status = 'CONFIRMED';
+          state.db.requests[idx].acceptedProviderId = acceptedProviderId;
+        }
+      }
     }
     lastUiOverlaySignature = ''; // Invalidate signature cache so accepted request card vanishes for all other providers!
     lastOffersSignature = '';
@@ -1558,9 +1572,9 @@ function handleIncomingRealtimeEvent(data) {
       if (state.currentUser?.id === acceptedProviderId) {
         state.providerTab = 'ACTIVE_JOB';
         triggerSystemNotification(
-          `Offer Accepted! ($${request.agreedTotalUsd || request.budgetUsd} USD)`,
-          `${request.customerName} accepted your offer for ${request.title} at ${request.exactAddress}`,
-          `acc_${request.id}`
+          `Offer Accepted! ($${request?.agreedTotalUsd || request?.budgetUsd || ''} USD)`,
+          `${request?.customerName || 'Client'} accepted your offer for ${request?.title || 'Job'}.`,
+          `acc_${requestId}`
         );
         if ('vibrate' in navigator) {
           try { navigator.vibrate([200, 100, 200]); } catch (e) {}
@@ -1573,7 +1587,7 @@ function handleIncomingRealtimeEvent(data) {
     if (state.role === 'CUSTOMER') {
       state.screenStep = 'BOOKED';
     }
-    renderAll();
+    renderAll(true);
     return;
   }
 
@@ -3940,7 +3954,7 @@ function renderMainHubOverlay() {
             ${state.currentUser?.avatarInitials || (state.currentUser?.name ? state.currentUser.name.slice(0, 2).toUpperCase() : 'FH')}
           </button>
         ` : `
-          <button class="btn-primary-blue" style="height:34px; padding:0 12px; font-size:12px; border-radius:99px; width:auto;" onclick="openSignInRoleChoiceModal()">
+          <button class="btn-primary-blue pointer-auto" style="height:34px; padding:0 12px; font-size:12px; border-radius:99px; width:auto; pointer-events:auto;" onclick="openSignInRoleChoiceModal()">
             <span>Sign In</span>
           </button>
         `}
@@ -4011,7 +4025,7 @@ function renderHomeDiscoveryOverlay() {
           ${state.currentUser?.avatarInitials || (state.currentUser?.name ? state.currentUser.name.slice(0, 2).toUpperCase() : 'FH')}
         </button>
       ` : `
-        <button class="btn-primary-blue" style="height:34px; padding:0 12px; font-size:12px; border-radius:99px; width:auto;" onclick="openSignInRoleChoiceModal()">
+        <button class="btn-primary-blue pointer-auto" style="height:34px; padding:0 12px; font-size:12px; border-radius:99px; width:auto; pointer-events:auto;" onclick="openSignInRoleChoiceModal()">
           <span>Sign In</span>
         </button>
       `}
@@ -8879,6 +8893,8 @@ function renderProviderModeOverlay() {
   const myCategoryIds = getProviderCategoryIds(prov);
   const openRequests = (state.db.requests || []).filter((r) => {
     if (r.status !== 'OPEN') return false;
+    if (r.acceptedProviderId && r.acceptedProviderId !== prov.id) return false;
+    if (r.acceptedOfferId) return false;
     const reqCat = normalizeCategoryId(r.categoryId);
     return myCategoryIds.includes(reqCat);
   });
@@ -11375,6 +11391,7 @@ function startActiveCallPolling() {
   if (activeCallPollTimer) return;
   activeCallPollTimer = setInterval(async () => {
     try {
+      if (!state.isAuthenticated || !state.currentUser) return;
       const myId = state.currentUser?.id || '';
       const reqId = state.activeRequestId || state.openChatRequestId || '';
       const chanId = state.activeCall?.channelId || state.incomingCall?.channelId || '';
@@ -11387,15 +11404,21 @@ function startActiveCallPolling() {
         if (calls.length > 0) {
           syncIncomingCallFromList(calls);
         } else if (state.activeCall && state.activeCall.callState === 'OUTGOING' && !res.activeCall) {
-          // If outgoing call was declined or cancelled on server
+          endInAppCall(false);
+        }
+
+        if (Array.isArray(res.signals) && res.signals.length > 0) {
+          for (const s of res.signals) {
+            handleWebRtcSignalMessage(s);
+          }
         }
       }
     } catch (e) {}
-  }, 1500);
+  }, 1200);
 }
 
 function stopActiveCallPolling() {
-  if (activeCallPollTimer) {
+  if (!state.isAuthenticated && activeCallPollTimer) {
     clearInterval(activeCallPollTimer);
     activeCallPollTimer = null;
   }

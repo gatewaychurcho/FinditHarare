@@ -468,6 +468,13 @@ html, body {
   gap: 8px;
 }
 
+.indrive-top-left-row button,
+.indrive-top-left-row a,
+.indrive-top-left-row .btn-primary-blue,
+.indrive-top-left-row .indrive-circle-btn {
+  pointer-events: auto;
+}
+
 .indrive-circle-btn {
   pointer-events: auto;
   width: 36px;
