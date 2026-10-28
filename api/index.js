@@ -2,9 +2,9 @@ const server = require('../server.js');
 
 module.exports = (req, res) => {
   try {
-    // If Vercel rewrote the URL to /api/index.js, restore the original incoming path
+    // If Vercel rewrote the URL or routed via catch-all, restore the original incoming path
     const matchedPath = req.headers['x-matched-path'] || req.headers['x-forwarded-uri'] || req.headers['x-original-url'];
-    if (matchedPath && (req.url === '/api' || req.url === '/api/' || req.url.startsWith('/api/index.js'))) {
+    if (matchedPath && (req.url === '/api' || req.url === '/api/' || req.url.startsWith('/api/index') || req.url.includes('[...'))) {
       const qIdx = req.url.indexOf('?');
       const qs = qIdx >= 0 ? req.url.slice(qIdx) : '';
       req.url = matchedPath + qs;

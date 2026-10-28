@@ -16,7 +16,7 @@
     { "source": "/media/(.*)", "destination": "/api/index.js" }
   ],
   "functions": {
-    "api/index.js": {
+    "api/*.js": {
       "includeFiles": "data/**"
     }
   }
