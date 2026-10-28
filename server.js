@@ -2156,7 +2156,7 @@ function setupWebSocketServer(httpServer) {
   }
 
   // Keep-alive heartbeat every 15 seconds so Render / Cloudflare / proxies never drop idle WebSockets
-  setInterval(() => {
+  const heartbeatTimer = setInterval(() => {
     const pingMsg = JSON.stringify({ eventType: 'PING', timestamp: new Date().toISOString() });
     for (const client of wsClients) {
       try {
@@ -2168,6 +2168,7 @@ function setupWebSocketServer(httpServer) {
       }
     }
   }, 15000);
+  if (heartbeatTimer && heartbeatTimer.unref) heartbeatTimer.unref();
 }
 
 function scheduleStaggeredProviderBids(requestId) {
@@ -2225,7 +2226,9 @@ const MIME_TYPES = {
 };
 
 const server = http.createServer(async (req, res) => {
-  const parsedUrl = new URL(req.url, `http://${req.headers.host}`);
+  const host = req.headers.host || 'localhost';
+  const rawPath = req.headers['x-matched-path'] || req.headers['x-forwarded-uri'] || req.url;
+  const parsedUrl = new URL(rawPath.startsWith('/') ? `http://${host}${rawPath}` : rawPath, `http://${host}`);
   const pathname = parsedUrl.pathname;
 
   if (req.method === 'OPTIONS') {
