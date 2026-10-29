@@ -2259,12 +2259,35 @@ function initLeafletMap() {
 
     leafletMarkersLayer = L.layerGroup().addTo(leafletMap);
 
-    leafletMap.on('movestart', () => {});
+    leafletMap.on('movestart', () => {
+      if (state.role === 'PROVIDER') return;
+      const pin = document.getElementById('centerMapPin');
+      if (pin) pin.classList.add('pin-lifting');
+    });
 
     leafletMap.on('moveend', () => {
-      // User requested: Moving the map must NOT change your position or sitting.
-      // Only dragging the YOU icon changes your position!
       if (!leafletMap) return;
+      const pin = document.getElementById('centerMapPin');
+      if (pin) pin.classList.remove('pin-lifting');
+
+      // Service Provider location is strictly locked to live GPS coordinates — never alter provider position by panning map
+      if (state.role === 'PROVIDER') return;
+
+      const activeReq = getCustomerActiveRequest();
+      if (activeReq && isBookedStatus(activeReq.status)) return;
+
+      const center = leafletMap.getCenter();
+      if (!center) return;
+
+      const dist = Math.hypot(center.lat - (state.pinnedLat || 0), center.lng - (state.pinnedLng || 0));
+      if (dist < 0.0001) return;
+
+      state.pinnedLat = Number(center.lat.toFixed(5));
+      state.pinnedLng = Number(center.lng.toFixed(5));
+      state.userHasManuallyDraggedPin = true;
+      state.isCustomAddressSelected = true;
+
+      reverseGeocodeHararePin(state.pinnedLat, state.pinnedLng);
     });
 
     updateLiveGpsMarker();
@@ -2950,6 +2973,8 @@ window.addEventListener('offline', () => {
 
 function useBrowserGeolocation(silent = false) {
   state.userHasManuallyDraggedPin = false;
+  state.isCustomAddressSelected = false;
+  state.customAddress = 'Current Live Location';
   if (state.role === 'PROVIDER') {
     startProviderLiveLocationWatcher();
   } else {
@@ -2964,6 +2989,8 @@ function useBrowserGeolocation(silent = false) {
 
         state.pinnedLat = state.userLiveGpsLat;
         state.pinnedLng = state.userLiveGpsLng;
+        state.userHasManuallyDraggedPin = false;
+        state.isCustomAddressSelected = false;
         if (state.role !== 'PROVIDER') {
           reverseGeocodeHararePin(state.pinnedLat, state.pinnedLng);
         }
@@ -2981,25 +3008,31 @@ function useBrowserGeolocation(silent = false) {
         updateLiveGpsMarker();
         updateMapMarkers(true);
         if (leafletMap) {
-          leafletMap.flyTo([state.userLiveGpsLat || state.pinnedLat, state.userLiveGpsLng || state.pinnedLng], 15, { duration: 0.7 });
+          leafletMap.flyTo([state.userLiveGpsLat || state.pinnedLat, state.userLiveGpsLng || state.pinnedLng], 16, { duration: 0.7 });
         }
         if (!silent) {
-          showToast('📍 Live location locked: services will come straight to you!');
+          showToast('📍 Centered on your live GPS location');
         }
       },
       () => {
-        state.userLiveGpsLat = state.pinnedLat;
-        state.userLiveGpsLng = state.pinnedLng;
+        state.userHasManuallyDraggedPin = false;
+        state.isCustomAddressSelected = false;
+        if (state.userLiveGpsLat && state.userLiveGpsLng) {
+          state.pinnedLat = state.userLiveGpsLat;
+          state.pinnedLng = state.userLiveGpsLng;
+        }
         updateLiveGpsMarker();
-        if (!silent && leafletMap) {
-          leafletMap.flyTo([state.pinnedLat, state.pinnedLng], 15, { duration: 0.7 });
-          showToast('Centered on Harare location');
+        if (leafletMap) {
+          leafletMap.flyTo([state.pinnedLat, state.pinnedLng], 16, { duration: 0.7 });
+        }
+        if (!silent) {
+          showToast('📍 Centered on Harare location');
         }
       },
       { enableHighAccuracy: true, timeout: 8000 }
     );
   } else if (!silent && leafletMap) {
-    leafletMap.flyTo([state.pinnedLat, state.pinnedLng], 15, { duration: 0.7 });
+    leafletMap.flyTo([state.pinnedLat, state.pinnedLng], 16, { duration: 0.7 });
   }
 }
 
@@ -3071,6 +3104,10 @@ function updateLiveGpsMarker() {
 }
 
 let lastMapSignature = '';
+const activeMapProviderMarkers = new Map();
+const activeMapOfficeMarkers = new Map();
+let activeRouteProviderMarker = null;
+let activeRouteClientMarker = null;
 
 function updateMapMarkers(force = false) {
   const centerPin = document.getElementById('centerMapPin');
@@ -3133,21 +3170,6 @@ function updateMapMarkers(force = false) {
   }
 
   const onlinePros = (state.db.providers || []).filter((p) => p.isOnline !== false);
-  const mapSig = `${state.role}|${state.screenStep}|${state.selectedCategoryId}|${isSearching}|${isBooked}|${activeReq?.id || ''}|${activeReq?.acceptedProviderId || ''}|${onlinePros.length}`;
-  if (!force && mapSig === lastMapSignature) {
-    return;
-  }
-  lastMapSignature = mapSig;
-
-  leafletMarkersLayer.clearLayers();
-  if (leafletRoutePolyline) {
-    leafletMap.removeLayer(leafletRoutePolyline);
-    leafletRoutePolyline = null;
-  }
-  if (leafletRoutePolylineCasing) {
-    leafletMap.removeLayer(leafletRoutePolylineCasing);
-    leafletRoutePolylineCasing = null;
-  }
 
   // In Service Provider Mode: if there is an active accepted booking, show the route to the Client's Home!
   if (state.isAuthenticated && state.role === 'PROVIDER') {
@@ -3170,76 +3192,132 @@ function updateMapMarkers(force = false) {
     }
   }
 
+  // Route markers and polyline clean up when not booked
+  if (activeRouteProviderMarker) {
+    try { leafletMarkersLayer.removeLayer(activeRouteProviderMarker); } catch (e) {}
+    activeRouteProviderMarker = null;
+  }
+  if (activeRouteClientMarker) {
+    try { leafletMarkersLayer.removeLayer(activeRouteClientMarker); } catch (e) {}
+    activeRouteClientMarker = null;
+  }
+  if (leafletRoutePolyline) {
+    try { leafletMap.removeLayer(leafletRoutePolyline); } catch (e) {}
+    leafletRoutePolyline = null;
+  }
+  if (leafletRoutePolylineCasing) {
+    try { leafletMap.removeLayer(leafletRoutePolylineCasing); } catch (e) {}
+    leafletRoutePolylineCasing = null;
+  }
+
   stopNavigationHud();
 
-  if (state.isAuthenticated && state.role === 'CUSTOMER' && state.screenStep === 'CONFIGURE' && !activeReq) {
-    const catPros = state.db.providers.filter((p) => p.categoryId === state.selectedCategoryId && p.isOnline !== false);
-    const nearestPro = catPros[0] || state.db.providers[0];
-    if (nearestPro) {
-      drawRoadRouteOnMap(state.pinnedLat, state.pinnedLng, nearestPro.lat, nearestPro.lng, '#0066FF', 4);
+  // Route preview in CONFIGURE is completely removed per user request:
+  // Routes on client screen MUST ONLY appear when an offer is accepted connecting client and provider.
+
+  // Reconcile and update provider markers without destroying DOM on every tick (prevents marker flicker/glitch)
+  const currentProIds = new Set(onlinePros.map((p) => p.id));
+  for (const [id, marker] of activeMapProviderMarkers.entries()) {
+    if (!currentProIds.has(id)) {
+      try { leafletMarkersLayer.removeLayer(marker); } catch (e) {}
+      activeMapProviderMarkers.delete(id);
     }
   }
 
-  // Draw provider markers with their real avatar + profession icon badge
   onlinePros.forEach((p, idx) => {
-    const showThinkingDots = isSearching && (p.categoryId === activeReq.categoryId || idx < 2);
-    const markerHtml = `
-      <div class="indrive-map-pro-wrap">
-        ${showThinkingDots ? `
-          <div class="pro-thinking-dots-bubble">
-            <span></span><span></span><span></span>
-          </div>
-        ` : ''}
-        <div class="pro-map-marker-pill">
-          ${p.avatarUrl
-            ? `<img src="${resolveMediaUrl(p.avatarUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_AVATAR_FALLBACK}';" alt="${p.shortName || p.name}" />`
-            : `<span style="font-size:11px; font-weight:800; color:#0066FF;">${p.avatarInitials}</span>`
-          }
-          <div class="pro-map-category-dot" title="${p.brandName}">
-            ${getMapMarkerProfessionIconSvg(p.categoryId)}
+    const showThinkingDots = isSearching && (p.categoryId === activeReq?.categoryId || idx < 2);
+    const existingMarker = activeMapProviderMarkers.get(p.id);
+
+    if (existingMarker) {
+      const curPos = existingMarker.getLatLng();
+      if (curPos.lat !== p.lat || curPos.lng !== p.lng) {
+        existingMarker.setLatLng([p.lat, p.lng]);
+      }
+    } else {
+      const markerHtml = `
+        <div class="indrive-map-pro-wrap">
+          ${showThinkingDots ? `
+            <div class="pro-thinking-dots-bubble">
+              <span></span><span></span><span></span>
+            </div>
+          ` : ''}
+          <div class="pro-map-marker-pill">
+            ${p.avatarUrl
+              ? `<img src="${resolveMediaUrl(p.avatarUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_AVATAR_FALLBACK}';" alt="${p.shortName || p.name}" />`
+              : `<span style="font-size:11px; font-weight:800; color:#0066FF;">${p.avatarInitials}</span>`
+            }
+            <div class="pro-map-category-dot" title="${p.brandName}">
+              ${getMapMarkerProfessionIconSvg(p.categoryId)}
+            </div>
           </div>
         </div>
-      </div>
-    `;
+      `;
 
-    const icon = L.divIcon({
-      className: '',
-      html: markerHtml,
-      iconSize: [44, showThinkingDots ? 64 : 42],
-      iconAnchor: [22, showThinkingDots ? 54 : 21]
-    });
+      const icon = L.divIcon({
+        className: '',
+        html: markerHtml,
+        iconSize: [44, showThinkingDots ? 64 : 42],
+        iconAnchor: [22, showThinkingDots ? 54 : 21]
+      });
 
-    const m = L.marker([p.lat, p.lng], { icon }).addTo(leafletMarkersLayer);
-    m.on('click', () => openProviderCatalogueModal(p.id));
+      const m = L.marker([p.lat, p.lng], { icon }).addTo(leafletMarkersLayer);
+      m.on('click', () => openProviderCatalogueModal(p.id));
+      activeMapProviderMarkers.set(p.id, m);
+    }
   });
 
-  // Draw physical office / workshop location pins for verified pros who have an office
-  onlinePros.filter((p) => p.hasOffice && (p.officeAddress || p.officeSuburb)).forEach((p) => {
+  // Reconcile physical office / workshop location pins
+  const officePros = onlinePros.filter((p) => p.hasOffice && (p.officeAddress || p.officeSuburb));
+  const currentOfficeIds = new Set(officePros.map((p) => p.id));
+  for (const [id, om] of activeMapOfficeMarkers.entries()) {
+    if (!currentOfficeIds.has(id)) {
+      try { leafletMarkersLayer.removeLayer(om); } catch (e) {}
+      activeMapOfficeMarkers.delete(id);
+    }
+  }
+
+  officePros.forEach((p) => {
     const oLat = p.officeLat || p.lat;
     const oLng = p.officeLng || p.lng;
-    const officeHtml = `
-      <div style="display:flex; flex-direction:column; align-items:center; cursor:pointer;">
-        <div style="background:#0F172A; color:#FFFFFF; font-size:10px; font-weight:800; padding:2px 7px; border-radius:99px; margin-bottom:3px; white-space:nowrap; box-shadow:0 3px 8px rgba(0,0,0,0.3); display:inline-flex; align-items:center; gap:4px;">
-          <span style="color:#60A5FA;">${uiIcon('buildingOffice', 10)}</span>
-          <span>${escapeHtml(p.brandName || p.shortName)} Shop</span>
+    const existingOm = activeMapOfficeMarkers.get(p.id);
+
+    if (existingOm) {
+      const curPos = existingOm.getLatLng();
+      if (curPos.lat !== oLat || curPos.lng !== oLng) {
+        existingOm.setLatLng([oLat, oLng]);
+      }
+    } else {
+      const officeHtml = `
+        <div style="display:flex; flex-direction:column; align-items:center; cursor:pointer;">
+          <div style="background:#0F172A; color:#FFFFFF; font-size:10px; font-weight:800; padding:2px 7px; border-radius:99px; margin-bottom:3px; white-space:nowrap; box-shadow:0 3px 8px rgba(0,0,0,0.3); display:inline-flex; align-items:center; gap:4px;">
+            <span style="color:#60A5FA;">${uiIcon('buildingOffice', 10)}</span>
+            <span>${escapeHtml(p.brandName || p.shortName)} Shop</span>
+          </div>
+          <div style="width:30px; height:30px; border-radius:9px; background:#1E293B; border:2px solid #60A5FA; display:flex; align-items:center; justify-content:center; color:#60A5FA; box-shadow:0 4px 10px rgba(0,0,0,0.25);">
+            ${uiIcon('buildingOffice', 16)}
+          </div>
         </div>
-        <div style="width:30px; height:30px; border-radius:9px; background:#1E293B; border:2px solid #60A5FA; display:flex; align-items:center; justify-content:center; color:#60A5FA; box-shadow:0 4px 10px rgba(0,0,0,0.25);">
-          ${uiIcon('buildingOffice', 16)}
-        </div>
-      </div>
-    `;
-    const oIcon = L.divIcon({
-      className: '',
-      html: officeHtml,
-      iconSize: [110, 50],
-      iconAnchor: [55, 45]
-    });
-    const om = L.marker([oLat, oLng], { icon: oIcon }).addTo(leafletMarkersLayer);
-    om.on('click', () => openProviderCatalogueModal(p.id));
+      `;
+      const oIcon = L.divIcon({
+        className: '',
+        html: officeHtml,
+        iconSize: [110, 50],
+        iconAnchor: [55, 45]
+      });
+      const om = L.marker([oLat, oLng], { icon: oIcon }).addTo(leafletMarkersLayer);
+      om.on('click', () => openProviderCatalogueModal(p.id));
+      activeMapOfficeMarkers.set(p.id, om);
+    }
   });
 }
 
 function drawProviderAndClientRouteMarkers(prov, req) {
+  // Clear general catalogue pins so only active trip participants show
+  activeMapProviderMarkers.forEach((m) => { try { leafletMarkersLayer.removeLayer(m); } catch (e) {} });
+  activeMapProviderMarkers.clear();
+  activeMapOfficeMarkers.forEach((m) => { try { leafletMarkersLayer.removeLayer(m); } catch (e) {} });
+  activeMapOfficeMarkers.clear();
+
   // 1. Provider Live Marker with moving trade icon & avatar
   const tradeSvg = getMapMarkerProfessionIconSvg(prov.categoryId);
   const statusLabel = req.status === 'IN_PROGRESS' ? 'Working On Site' : req.status === 'ARRIVED' ? 'At Gate' : 'Approaching Client';
@@ -3267,7 +3345,13 @@ function drawProviderAndClientRouteMarkers(prov, req) {
     iconSize: [90, 64],
     iconAnchor: [45, 54]
   });
-  L.marker([prov.lat, prov.lng], { icon: provIcon }).addTo(leafletMarkersLayer);
+
+  if (activeRouteProviderMarker) {
+    activeRouteProviderMarker.setLatLng([prov.lat, prov.lng]);
+    activeRouteProviderMarker.setIcon(provIcon);
+  } else {
+    activeRouteProviderMarker = L.marker([prov.lat, prov.lng], { icon: provIcon }).addTo(leafletMarkersLayer);
+  }
 
   // 2. Client Live Location Destination Marker (Vector SVG Pin with Live GPS Radar Dot)
   const clientFirstName = req.customerName ? req.customerName.split(' ')[0] : 'Client';
@@ -3288,7 +3372,13 @@ function drawProviderAndClientRouteMarkers(prov, req) {
     iconSize: [120, 62],
     iconAnchor: [60, 54]
   });
-  L.marker([req.lat, req.lng], { icon: clientIcon }).addTo(leafletMarkersLayer);
+
+  if (activeRouteClientMarker) {
+    activeRouteClientMarker.setLatLng([req.lat, req.lng]);
+    activeRouteClientMarker.setIcon(clientIcon);
+  } else {
+    activeRouteClientMarker = L.marker([req.lat, req.lng], { icon: clientIcon }).addTo(leafletMarkersLayer);
+  }
 
   // 3. Real Street Route & Live Turn-by-Turn GPS Navigation
   if (state.role === 'PROVIDER') {
@@ -11378,9 +11468,29 @@ let isAudioMuted = false;
 let callRingInterval = null;
 let queuedCandidates = [];
 
+function playCallEndedTone() {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(425, now);
+    osc.frequency.setValueAtTime(425, now + 0.12);
+    gain.gain.setValueAtTime(0.2, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.35);
+  } catch (e) {}
+}
+
 function playOutgoingRingtone() {
   stopCallRingtones();
-  callRingInterval = setInterval(() => {
+  const playTone = () => {
     try {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       if (!AudioCtx) return;
@@ -11396,12 +11506,14 @@ function playOutgoingRingtone() {
       osc.start();
       osc.stop(ctx.currentTime + 1.2);
     } catch (e) {}
-  }, 3000);
+  };
+  playTone(); // 0ms immediate ringback start (zero dead silence delay)
+  callRingInterval = setInterval(playTone, 3000);
 }
 
 function playIncomingRingtone() {
   stopCallRingtones();
-  callRingInterval = setInterval(() => {
+  const playTone = () => {
     try {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       if (!AudioCtx) return;
@@ -11427,7 +11539,9 @@ function playIncomingRingtone() {
     if ('vibrate' in navigator) {
       try { navigator.vibrate([400, 200, 400]); } catch (e) {}
     }
-  }, 2500);
+  };
+  playTone(); // 0ms immediate incoming ring start
+  callRingInterval = setInterval(playTone, 2500);
 }
 
 function stopCallRingtones() {
@@ -11946,6 +12060,7 @@ function showActiveCallPinNotice() {
 }
 
 async function endInAppCall(notify = true) {
+  playCallEndedTone();
   stopCallRingtones();
   stopActiveCallPolling();
   if (callInterval) clearInterval(callInterval);

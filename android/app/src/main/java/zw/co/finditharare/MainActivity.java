@@ -46,6 +46,7 @@ public class MainActivity extends Activity {
     private static final String APP_URL = LOCAL_APP_URL;
     private static final String CHANNEL_ID = "findit_harare_live_channel";
     private static final String CHANNEL_NAME = "Findit Harare Live Alerts";
+    private static final String CALL_CHANNEL_ID = "findit_harare_calls_channel";
     private static final String PREFS_NAME = "findit_native_prefs";
 
     private boolean isAppInBackground = false;
@@ -190,9 +191,26 @@ public class MainActivity extends Activity {
             channel.setShowBadge(true);
             channel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
 
+            NotificationChannel callChannel = new NotificationChannel(
+                CALL_CHANNEL_ID,
+                "Findit Harare VoIP Calls",
+                NotificationManager.IMPORTANCE_HIGH
+            );
+            callChannel.setDescription("High-priority incoming 1-on-1 voice calls from clients and specialists.");
+            callChannel.enableLights(true);
+            callChannel.setLightColor(Color.GREEN);
+            callChannel.enableVibration(true);
+            callChannel.setVibrationPattern(new long[]{0, 800, 400, 800, 400, 800});
+            callChannel.setShowBadge(true);
+            callChannel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                callChannel.setBypassDnd(true);
+            }
+
             NotificationManager manager = getSystemService(NotificationManager.class);
             if (manager != null) {
                 manager.createNotificationChannel(channel);
+                manager.createNotificationChannel(callChannel);
             }
         }
     }
@@ -349,17 +367,50 @@ public class MainActivity extends Activity {
             }
         } catch (Exception ignored) {}
 
-        // 3. Post full screen incoming call alert
-        showSystemNotification(
-            "📞 Incoming " + (callType != null ? callType : "Audio") + " Call",
-            (callerName != null && !callerName.isEmpty() ? callerName : "Findit User") + " is calling you on Findit Harare...",
-            9999
-        );
+        // 3. Post full screen incoming call alert with heads-up overlay (WhatsApp style)
+        try {
+            NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            if (manager != null) {
+                Intent intent = new Intent(this, MainActivity.class);
+                intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                intent.putExtra("action", "INCOMING_CALL");
+                intent.putExtra("channelId", channelId);
+                int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    flags |= PendingIntent.FLAG_IMMUTABLE;
+                }
+                PendingIntent pendingIntent = PendingIntent.getActivity(this, 9999, intent, flags);
 
-        // 4. Bring app activity to front if overlay is permitted
+                Notification.Builder builder;
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    builder = new Notification.Builder(this, CALL_CHANNEL_ID);
+                } else {
+                    builder = new Notification.Builder(this);
+                    builder.setPriority(Notification.PRIORITY_MAX);
+                }
+
+                String title = "📞 Incoming " + (callType != null ? callType : "Audio") + " Call";
+                String message = (callerName != null && !callerName.isEmpty() ? callerName : "Findit User") + " is calling you on Findit Harare...";
+
+                builder.setSmallIcon(R.mipmap.ic_launcher)
+                    .setContentTitle(title)
+                    .setContentText(message)
+                    .setStyle(new Notification.BigTextStyle().bigText(message))
+                    .setContentIntent(pendingIntent)
+                    .setFullScreenIntent(pendingIntent, true)
+                    .setCategory(Notification.CATEGORY_CALL)
+                    .setOngoing(true)
+                    .setAutoCancel(true)
+                    .setVibrate(new long[]{0, 800, 400, 800, 400, 800});
+
+                manager.notify(9999, builder.build());
+            }
+        } catch (Exception ignored) {}
+
+        // 4. Bring app activity to front if overlay is permitted or draw over other apps
         try {
             Intent bringToFront = new Intent(this, MainActivity.class);
-            bringToFront.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
+            bringToFront.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT | Intent.FLAG_ACTIVITY_SINGLE_TOP);
             startActivity(bringToFront);
         } catch (Exception ignored) {}
     }

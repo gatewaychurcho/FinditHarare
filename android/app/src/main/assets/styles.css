@@ -162,9 +162,17 @@ html, body {
   background: radial-gradient(circle at 50% 35%, #EBF3FF 0%, #DBEAFE 65%, #CBD5E1 100%);
 }
 
-/* Center Pin Container - Hidden in favor of Real Draggable Leaflet Marker (Moving map does NOT change location, dragging YOU icon does) */
+/* Center Pin Container (Above Leaflet Panes at z-index 950) */
 .center-map-pin {
-  display: none !important;
+  position: absolute;
+  top: 32%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 950;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
 }
 
 .draggable-you-pin-wrapper {
@@ -194,71 +202,71 @@ html, body {
   background: rgba(0, 102, 255, 0.55);
 }
 
-/* Concentric Electric Blue Radar Pulse Circles when Searching (inDrive Style Realistic Sonar Radar) */
+/* inDrive Grand Radar Sonar Waves (Expansive, Smooth, Multi-Ring) */
 .map-radar-pulses {
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 320px;
-  height: 320px;
+  width: 640px;
+  height: 640px;
+  max-width: 96vw;
+  max-height: 96vw;
   pointer-events: none;
   z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.radar-circle-outer {
+.radar-circle-core {
   position: absolute;
-  inset: 0;
+  width: 80px;
+  height: 80px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(0, 102, 255, 0.08) 40%, rgba(0, 102, 255, 0.22) 100%);
-  border: 1.5px solid rgba(0, 102, 255, 0.35);
-  animation: indriveRadarOuter 2.2s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
+  background: radial-gradient(circle, rgba(0, 102, 255, 0.45) 0%, rgba(0, 102, 255, 0.12) 80%, transparent 100%);
+  box-shadow: 0 0 30px rgba(0, 102, 255, 0.5);
+  animation: indriveRadarCore 2.4s ease-in-out infinite;
 }
 
-.radar-circle-mid {
+.radar-circle-wave {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 210px;
-  height: 210px;
-  transform: translate(-50%, -50%);
+  width: 100%;
+  height: 100%;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(0, 102, 255, 0.12) 30%, rgba(0, 102, 255, 0.28) 100%);
-  border: 1.5px solid rgba(0, 102, 255, 0.45);
-  animation: indriveRadarMid 2.2s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
-  animation-delay: 0.35s;
+  border: 1.5px solid rgba(0, 102, 255, 0.42);
+  background: radial-gradient(circle, rgba(0, 102, 255, 0.05) 25%, rgba(0, 102, 255, 0.16) 75%, transparent 100%);
+  opacity: 0;
+  animation: indriveGrandSonar 2.8s cubic-bezier(0.1, 0.65, 0.3, 1) infinite;
 }
 
-.radar-circle-inner {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 120px;
-  height: 120px;
-  transform: translate(-50%, -50%);
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(0, 102, 255, 0.3) 20%, rgba(0, 102, 255, 0.15) 100%);
-  border: 2px solid rgba(0, 102, 255, 0.6);
-  box-shadow: 0 0 25px rgba(0, 102, 255, 0.35);
-  animation: indriveRadarInner 2.2s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
+.radar-circle-wave.wave-1 { animation-delay: 0s; }
+.radar-circle-wave.wave-2 { animation-delay: 0.7s; }
+.radar-circle-wave.wave-3 { animation-delay: 1.4s; }
+.radar-circle-wave.wave-4 { animation-delay: 2.1s; }
+
+@keyframes indriveGrandSonar {
+  0% {
+    transform: scale(0.12);
+    opacity: 0.95;
+    border-width: 2.5px;
+  }
+  45% {
+    opacity: 0.72;
+  }
+  85% {
+    opacity: 0.22;
+  }
+  100% {
+    transform: scale(1.0);
+    opacity: 0;
+    border-width: 1px;
+  }
 }
 
-@keyframes indriveRadarOuter {
-  0% { transform: scale(0.65); opacity: 0.9; }
-  60% { transform: scale(1.15); opacity: 0.45; }
-  100% { transform: scale(1.35); opacity: 0; }
-}
-
-@keyframes indriveRadarMid {
-  0% { transform: translate(-50%, -50%) scale(0.7); opacity: 0.95; }
-  65% { transform: translate(-50%, -50%) scale(1.15); opacity: 0.5; }
-  100% { transform: translate(-50%, -50%) scale(1.35); opacity: 0; }
-}
-
-@keyframes indriveRadarInner {
-  0% { transform: translate(-50%, -50%) scale(0.85); opacity: 1; }
-  50% { transform: translate(-50%, -50%) scale(1.1); opacity: 0.75; }
-  100% { transform: translate(-50%, -50%) scale(0.85); opacity: 1; }
+@keyframes indriveRadarCore {
+  0%, 100% { transform: scale(0.92); opacity: 0.8; }
+  50% { transform: scale(1.15); opacity: 1; }
 }
 
 /* Home Location Callout Bubble */
