@@ -56,7 +56,7 @@ const WHATSAPP_BUSINESS_ACCOUNT_ID =
   process.env.WHATSAPP_BUSINESS_ACCOUNT_ID ||
   '1422874912704593';
 
-const ADMIN_WHATSAPP_PHONE = process.env.ADMIN_WHATSAPP_PHONE || '263713475131';
+const ADMIN_WHATSAPP_PHONE = process.env.ADMIN_WHATSAPP_PHONE || '';
 
 // Agora Real-Time RTC Voice & Chat Credentials (Encrypted at Rest)
 let AgoraToken = null;
@@ -543,7 +543,7 @@ function getInitialDatabase() {
       launchPromoName: 'First 2 Months 0% Fee Launch Promo',
       launchPromoDaysRemaining: 60,
       minWalletBalanceUsd: 2.0,
-      ecocashMerchantNumber: '0713 475 131',
+      ecocashMerchantNumber: '*151*2*2*84920#',
       ecocashMerchantName: 'FINDIT HARARE OFFICIAL',
       ecocashUssdShortcode: '*151*2*2*84920#',
       supportedPaymentMethods: [
@@ -1044,7 +1044,7 @@ function normalizeDatabase(parsed) {
   if (!Array.isArray(parsed.adminNotifications)) parsed.adminNotifications = [];
   if (!parsed.supportChats || typeof parsed.supportChats !== 'object') parsed.supportChats = {};
   if (!parsed.settings) parsed.settings = init.settings;
-  parsed.settings.ecocashMerchantNumber = '0713 475 131';
+  parsed.settings.ecocashMerchantNumber = '*151*2*2*84920#';
   if (!parsed.settings.ecocashMerchantName) parsed.settings.ecocashMerchantName = 'FINDIT HARARE OFFICIAL';
   if (!parsed.settings.ecocashUssdShortcode) parsed.settings.ecocashUssdShortcode = '*151*2*2*84920#';
 
@@ -3366,7 +3366,7 @@ const server = http.createServer(async (req, res) => {
       (async () => {
         try {
           const smsPrompt = `Verify this Zimbabwe EcoCash USD payment confirmation SMS submitted by a service provider on Findit Harare:
-Official Merchant Number: 0713 475 131 (FINDIT HARARE OFFICIAL / Melinda)
+Official Merchant: EcoCash USD Biller Code: 84920 (FINDIT HARARE OFFICIAL)
 Provider Claimed USD: $${claimedAmountUsd}
 Extracted Ref Code: ${parsedSms.referenceCode}
 Raw SMS Text: "${submission.confirmationSms}"
@@ -3948,7 +3948,7 @@ Return ONLY JSON with keys:
         existingOffer.priceUsd = priceUsd;
         existingOffer.travelFeeUsd = travelFeeUsd;
         existingOffer.bidType = isExactAccept ? 'ACCEPTED_PRICE' : 'COUNTER_BID';
-        existingOffer.status = 'COUNTERED';
+        existingOffer.status = 'PROPOSED';
         existingOffer.declinedAt = null;
         existingOffer.declineReason = null;
         existingOffer.lastCounterBy = 'PROVIDER';
@@ -4828,22 +4828,22 @@ Return ONLY JSON with keys: "matchedCategoryId" (string), "taskSummary" (string)
         /(capital\s+of|president\s+of|who\s+won\s+the\s+world\s+cup|write\s+a\s+poem|solve\s+this\s+math|python\s+code|javascript\s+code|recipe\s+for|bitcoin\s+price|football\s+score|homework|biology|chemistry|physics|weather\s+in\s+london)/i.test(lower) &&
         !/(findit|harare|service|book|provider|client|ecocash|wallet|job|app|plumber|braid|barber|clean|solar|repair)/i.test(lower);
 
-      let fallbackReply = `Hello *${userName}*! 👋 Welcome to *Findit Harare Official* Support (*finditharare.co.zw*).\n\nI can help you with anything related to *Findit Harare*:\n• *Ordering a Home Service* (Move the blue *YOU* pin or search any Harare address, set your USD fare, or schedule for later)\n• *Service Provider Categories & Settings* (View or change up to 3 job categories in *Account Settings*)\n• *Wallet, $5 Welcome Bonus & 11% Commission Rules*\n• *EcoCash USD Top-Ups* (Merchant: *0713 475 131*)\n• *4-Digit Arrival Start PIN & Safety*\n\nWhat can I help you with today?`;
+      let fallbackReply = `Hello *${userName}*! Welcome to *Findit Harare Official Support* (*finditharare.co.zw*).\n\nI can help you with anything related to *Findit Harare*:\n• *Ordering a Home Service* (Move the blue *YOU* pin or search any Harare address, set your USD fare, or schedule for later)\n• *Service Provider Categories & Settings* (View or change up to 3 job categories in *Account Settings*)\n• *Wallet, $5 Welcome Bonus & 11% Commission Rules*\n• *EcoCash USD Top-Ups* (Biller Code: *151*2*2*84920#)\n• *4-Digit Arrival Start PIN & Safety*\n\nWhat can I help you with today?`;
 
       if (isOffTopic) {
-        fallbackReply = `I am the official *Findit Harare Support Assistant* (*finditharare.co.zw*). I can only assist with questions and support related to *Findit Harare*—such as booking home services, provider accounts & job categories, EcoCash USD top-ups (*0713 475 131*), pricing, or safety.\n\nHow can I help you with *Findit Harare* today?`;
+        fallbackReply = `I am the official *Findit Harare Support Assistant* (*finditharare.co.zw*). I can only assist with questions and support related to *Findit Harare*—such as booking home services, provider accounts & job categories, EcoCash USD top-ups (*151*2*2*84920#), pricing, or safety.\n\nHow can I help you with *Findit Harare* today?`;
       } else if (/(website|site|url|web\s*page|link|domain|finditharare\.co\.zw|online)/i.test(lower)) {
-        fallbackReply = `🌐 *Findit Harare Official Website & Contacts:*\n\n• *Official Website:* *https://finditharare.co.zw* (*finditharare.co.zw*)\n• *Official EcoCash & Support Line:* *+263 71 347 5131* (*0713 475 131*)\n• *Instagram:* *@findithahare*\n• *Facebook:* *Findit Harare Official*\n\nLet me know if you need help with a booking or your account!`;
+        fallbackReply = `*Findit Harare Official Website & Contacts:*\n\n• *Official Website:* *https://finditharare.co.zw* (*finditharare.co.zw*)\n• *Official Support:* In-App Live Support Chat (24/7)\n• *EcoCash Biller Code:* *151*2*2*84920#\n• *Instagram:* *@findithahare*\n• *Facebook:* *Findit Harare Official*\n\nLet me know if you need help with a booking or your account!`;
       } else if (/(categor|change\s*job|edit\s*job|switch\s*service|add\s*service|my\s*services|what\s*jobs|choose\s*categor|settings|profile)/i.test(lower)) {
-        fallbackReply = `🛠️ *How to View or Change Your Job Categories & Account Settings:*\n\n1. Open the left side menu (☰) and tap *Account Settings* (or tap the *Categories / Settings* button in Provider Mode).\n2. Under *My Service Categories (Up to 3)*, you can see your active job categories and tap any category to add or switch your specialties (e.g., *Home Repairs & Construction*, *Beauty & Personal Care*, *Cleaning & Domestic*, *Automotive*, *Solar, Electrical Power & Water*, *Gardening & Outdoor*, *General Labour*).\n3. Tap *Save Account & Categories*—your job feed will immediately update to show only requests matching your chosen categories!`;
+        fallbackReply = `*How to View or Change Your Job Categories & Account Settings:*\n\n1. Open the left side menu (☰) and tap *Account Settings* (or tap the *Categories / Settings* button in Provider Mode).\n2. Under *My Service Categories (Up to 3)*, you can see your active job categories and tap any category to add or switch your specialties (e.g., *Home Repairs & Construction*, *Beauty & Personal Care*, *Cleaning & Domestic*, *Automotive*, *Solar, Electrical Power & Water*, *Gardening & Outdoor*, *General Labour*).\n3. Tap *Save Account & Categories*—your job feed will immediately update to show only requests matching your chosen categories!`;
       } else if (/(top\s*up|ecocash|wallet|balance|low\s*account|5\s*dollar|\$5|\$2|commission|11%|pay|fee|deduct)/i.test(lower)) {
-        fallbackReply = `💳 *Findit Harare Wallet & 11% Commission Guide:*\n\n1. *$5 Welcome Bonus:* Every verified Service Provider receives *$5.00* free starter credit upon joining.\n2. *11% Commission & $2 Minimum Floor:* A *11%* platform commission is deducted per confirmed job, and your wallet cannot drop below *$2.00*.\n3. *How Much to Top Up When Bidding:* Check *11%* of the bid amount—if 11% is below $5, top up at least *$5.00*. If 11% is above $5, top up that *11% amount*.\n4. *EcoCash USD Top-Up:* Send USD to *0713 475 131* (*FINDIT HARARE OFFICIAL*), then paste your EcoCash SMS in the *Wallet* tab for instant AI & Admin verification!`;
+        fallbackReply = `*Findit Harare Wallet & 11% Commission Guide:*\n\n1. *$5 Welcome Bonus:* Every verified Service Provider receives *$5.00* free starter credit upon joining.\n2. *11% Commission & $2 Minimum Floor:* A *11%* platform commission is deducted per confirmed job, and your wallet cannot drop below *$2.00*.\n3. *How Much to Top Up When Bidding:* Check *11%* of the bid amount—if 11% is below $5, top up at least *$5.00*. If 11% is above $5, top up that *11% amount*.\n4. *EcoCash USD Top-Up:* Dial *151*2*2*84920# (*FINDIT HARARE OFFICIAL*), then paste your EcoCash SMS in the *Wallet* tab for instant verification!`;
       } else if (/(pin|start\s*pin|4-digit|arrive|verify|code|outside|gate)/i.test(lower)) {
-        fallbackReply = `🔐 *4-Digit Arrival Start PIN:*\n\nWhen your accepted Service Provider arrives at your location (within 20m), your phone alerts you with your *4-digit Start PIN*. Share this PIN with your provider at the gate so they can enter it to start the job. (If the provider waits within 20m for 3 minutes, the system also auto-verifies arrival to protect both parties.)`;
+        fallbackReply = `*4-Digit Arrival Start PIN:*\n\nWhen your accepted Service Provider arrives at your location (within 20m), your phone alerts you with your *4-digit Start PIN*. Share this PIN with your provider at the gate so they can enter it to start the job. (If the provider waits within 20m for 3 minutes, the system also auto-verifies arrival to protect both parties.)`;
       } else if (/(schedule|later|book|order|map|location|navigate|address|how\s*does\s*it\s*work|hire|find\s*a\s*pro)/i.test(lower)) {
-        fallbackReply = `📍 *How to Book a Service on Findit Harare:*\n\n1. On the map, drag the blue *YOU* pin to your location or tap *Your Home Visit Location* to search any real Harare street, landmark, or suburb.\n2. Pick your service category—the *Most Used Services* list automatically updates to match your chosen category.\n3. Choose *⚡ Now (Immediate)* or *Schedule for Later* (pick date & time).\n4. Set your USD offer fare and tap *Find offers* to see real-time bids from verified pros viewing your request!`;
+        fallbackReply = `*How to Book a Service on Findit Harare:*\n\n1. On the map, drag the blue *YOU* pin to your location or tap *Your Home Visit Location* to search any real Harare street, landmark, or suburb.\n2. Pick your service category—the *Most Used Services* list automatically updates to match your chosen category.\n3. Choose *Now (Immediate)* or *Schedule for Later* (pick date & time).\n4. Set your USD offer fare and tap *Find offers* to see real-time bids from verified pros viewing your request!`;
       } else if (/(ban|suspend|warning|rule|instagram|facebook|photo|flyer|number|contact|block)/i.test(lower)) {
-        fallbackReply = `🛡️ *Findit Harare Safety & Anti-Bypass Rules:*\n\n• Phone numbers, WhatsApp links, *instagram.com*, and *facebook.com* links are blocked in chat to keep all bookings safe and insured in-app.\n• Service Providers cannot upload images, logos, or flyers in chat (upload work photos in your *Catalogue* tab for Admin review).\n• If you need help with an account warning or verification, share your *Findit App ID* here and we will assist you right away.`;
+        fallbackReply = `*Findit Harare Safety & Anti-Bypass Rules:*\n\n• Phone numbers, WhatsApp links, *instagram.com*, and *facebook.com* links are blocked in chat to keep all bookings safe and insured in-app.\n• Service Providers cannot upload images, logos, or flyers in chat (upload work photos in your *Catalogue* tab for Admin review).\n• If you need help with an account warning or verification, share your *Findit App ID* here and we will assist you right away.`;
       }
 
       const categoriesSummary = (db.categories || [])
@@ -4856,7 +4856,8 @@ Current User: ${userName} (Role: ${userRole}, UserKey: ${userKey})
 Official Business Identity & Links:
 - Official Website: https://finditharare.co.zw (finditharare.co.zw)
 - Business Name: Findit Harare Official (Verified Business Account)
-- Official Support & EcoCash Merchant Number: +263 71 347 5131 (0713 475 131)
+- Official Support: In-App Support Chat (24/7)
+- Official EcoCash Biller Code: *151*2*2*84920# (Findit Harare)
 - Official Instagram: @findithahare (https://www.instagram.com/findithahare/)
 - Official Facebook: Findit Harare Official (https://www.facebook.com/profile.php?id=61595501858201)
 - Headquarters: Samora Machel Ave / First St, Harare CBD (Open 24/7)
@@ -4865,7 +4866,7 @@ Complete Findit Harare Platform Knowledge (Understand any user phrasing, indirec
 1. Booking & Real Location Navigation: Clients can drag the blue "YOU" pin anywhere on the Harare map OR tap "Your Home Visit Location" to search any real Harare street, landmark, or suburb and navigate the map there. When a client selects a category tile, the "Most Used Services" list updates to match that category's services. Clients can book for "Now (Immediate)" or "Schedule for Later", attach a style/task reference photo, set their USD offer fare, and see in real time the exact count of pros viewing their request.
 2. Service Categories & Catalogue: ${categoriesSummary}
 3. Provider Job Categories & Account Settings: Service Providers can view, edit, or change their chosen job categories (up to 3 categories) anytime in "Account Settings" (from the side menu ☰ or provider header). Providers only see open job request cards that match their chosen categories. They can also update their Brand Name, Starting Price (USD), Suburb, Physical Workshop/Office address, and Work Catalogue photos in the app.
-4. Provider Wallet, $5 Welcome Bonus & 11% Commission: Every new Service Provider gets $5.00 free starter credit. Platform commission is 11% per job, and a provider's wallet balance cannot drop below $2.00. If a provider's balance is too low to bid on a job, they check 11% of the bid amount: if 11% is under $5, they must top up at least $5.00; if 11% is $5 or more, they top up at least that 11% amount via EcoCash USD to 0713 475 131 and paste the confirmation SMS in the Wallet tab.
+4. Provider Wallet, $5 Welcome Bonus & 11% Commission: Every new Service Provider gets $5.00 free starter credit. Platform commission is 11% per job, and a provider's wallet balance cannot drop below $2.00. If a provider's balance is too low to bid on a job, they check 11% of the bid amount: if 11% is under $5, they must top up at least $5.00; if 11% is $5 or more, they top up at least that 11% amount via EcoCash USD *151*2*2*84920# and paste the confirmation SMS in the Wallet tab.
 5. Arrival Start PIN & Safety: When a provider arrives within 20m of the client, the client shares their 4-digit Start PIN so the provider can verify arrival and begin work. (If the provider is at the pin within 20m for 3 minutes, auto-pair verifies the start.) Phone numbers, instagram.com, facebook.com, and external links are blocked in chat, and providers cannot upload images/flyers in chat.
 6. Multi-Service Hub: Includes the active Job Marketplace plus upcoming Online Shopping and Transport & Carriers hubs.
 
@@ -4906,7 +4907,7 @@ Return ONLY valid JSON with key: "reply" (string).`;
       });
     } catch (e) {
       return sendJson(res, 200, {
-        reply: 'Welcome to *Findit Harare Official Support* (*finditharare.co.zw*)! How can we assist you with your booking, provider job categories, EcoCash wallet (*0713 475 131*), or account today?',
+        reply: 'Welcome to *Findit Harare Official Support* (*finditharare.co.zw*)! How can we assist you with your booking, provider job categories, EcoCash wallet (*151*2*2*84920#), or account today?',
         timestamp: new Date().toISOString()
       });
     }

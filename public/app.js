@@ -189,7 +189,16 @@ function uiIcon(name, size = 16) {
     dotOnline: `<span style="width:8px; height:8px; border-radius:50%; background:#10B981; box-shadow:0 0 0 2.5px rgba(16,185,129,0.28); display:inline-block; flex-shrink:0;"></span>`,
     dotOffline: `<span style="width:8px; height:8px; border-radius:50%; background:#94A3B8; display:inline-block; flex-shrink:0;"></span>`,
     refresh: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>`,
-    zwFlag: `<svg width="${s}" height="${Math.round(s * 0.72)}" viewBox="0 0 28 20" fill="none" style="border-radius:3px; flex-shrink:0;"><rect width="28" height="20" fill="#006400"/><rect y="3" width="28" height="14" fill="#FFD200"/><rect y="6" width="28" height="8" fill="#D40000"/><rect y="8.5" width="28" height="3" fill="#000000"/><polygon points="0,0 11,10 0,20" fill="#FFFFFF"/></svg>`
+    zwFlag: `<svg width="${s}" height="${Math.round(s * 0.72)}" viewBox="0 0 28 20" fill="none" style="border-radius:3px; flex-shrink:0;"><rect width="28" height="20" fill="#006400"/><rect y="3" width="28" height="14" fill="#FFD200"/><rect y="6" width="28" height="8" fill="#D40000"/><rect y="8.5" width="28" height="3" fill="#000000"/><polygon points="0,0 11,10 0,20" fill="#FFFFFF"/></svg>`,
+    bolt: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`,
+    users: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
+    calendar: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`,
+    toolbox: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M22 7H2v11a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7z"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="12.01"/></svg>`,
+    chart: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>`,
+    mic: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>`,
+    micOff: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>`,
+    globe: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`,
+    wifiOff: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/><path d="M10.71 5.05A16 16 0 0 1 22.58 9"/><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>`
   };
   return icons[name] || icons.sparkle;
 }
@@ -675,7 +684,7 @@ function renderOnboardingLayer() {
             <div class="onboarding-pin-bubble" style="top:40px; right:20px;">${uiIcon('pin', 12)}</div>
 
             <div class="onboarding-bid-card" style="top:42px; left:14px;">
-              <span style="color:#0066FF; font-weight:800;">★ 4.9</span>
+              <span style="color:#0066FF; font-weight:800;">${uiIcon('star', 12)} 4.9</span>
               <span style="font-weight:800;">$25 USD</span>
             </div>
 
@@ -804,7 +813,7 @@ function renderOnboardingLayer() {
                   <path d="M24 16 C21 16 19 18 19 21 L19 26 L17 28 L31 28 L29 26 L29 21 C29 18 27 16 24 16 Z M22 29 C22 30 23 31 24 31 C25 31 26 30 26 29 Z" fill="#0066FF"/>
                   <circle cx="31" cy="16" r="4" fill="#EF4444"/>
                   
-                  <text x="44" y="22" fill="#0F172A" font-size="12" font-weight="800" font-family="-apple-system, sans-serif">⚡ New Task Alert</text>
+                  <text x="44" y="22" fill="#0F172A" font-size="12" font-weight="800" font-family="-apple-system, sans-serif">New Task Alert</text>
                   <text x="44" y="36" fill="#64748B" font-size="10" font-weight="600" font-family="-apple-system, sans-serif">Borrowdale • Plumbing</text>
                   
                   <rect x="10" y="44" width="65" height="16" rx="8" fill="#ECFDF5"/>
@@ -1295,7 +1304,7 @@ function playIncomingMessageSoundAndVibrate(message) {
     if (window.FinditNative && typeof window.FinditNative.triggerNotification === 'function') {
       const sender = message?.senderName || 'Findit User';
       const text = message?.text || 'Sent you a message';
-      window.FinditNative.triggerNotification(`💬 ${sender}`, text, 7777);
+      window.FinditNative.triggerNotification(`${sender}`, text, 7777);
     }
   } catch (nativeErr) {}
 }
@@ -1316,7 +1325,7 @@ function handleIncomingRealtimeEvent(data) {
       (notif.recipientType === 'SPECIFIC_USER' && (notif.recipientId === myId || notif.recipientId === state.currentUser?.finditId));
     if (isTarget) {
       triggerHardwareVibration([180, 80, 180]);
-      showToast(`📢 ${notif.title}: ${notif.message}`, notif.type === 'WARNING' ? 'error' : 'info', 6000);
+      showToast(`${notif.title}: ${notif.message}`, notif.type === 'WARNING' ? 'error' : 'info', 6000);
       triggerSystemNotification(notif.title, notif.message, notif.id);
       renderAll();
     }
@@ -1336,7 +1345,7 @@ function handleIncomingRealtimeEvent(data) {
           renderModalLayer();
         }
       } else {
-        showToast(`💬 Findit Support Admin: ${message.text}`, 'info', 6000);
+        showToast(`Findit Support: ${message.text}`, 'info', 6000);
       }
     }
     return;
@@ -1436,7 +1445,7 @@ function handleIncomingRealtimeEvent(data) {
         if (state.chatDrawerOpen) {
           markRequestMessagesRead(targetReq.id);
         } else {
-          showToast(`💬 ${message.senderName || 'Findit User'}: ${message.text || 'Photo attached'}`, 'info', 4500);
+          showToast(`${message.senderName || 'Findit User'}: ${message.text || 'Photo attached'}`, 'info', 4500);
           triggerSystemNotification(
             `New Message from ${message.senderName || 'Findit User'}`,
             message.text,
@@ -1513,7 +1522,7 @@ function handleIncomingRealtimeEvent(data) {
     const matchesMe = myCats.length === 0 || myCats.includes(req.categoryId);
     if (state.role === 'PROVIDER' && matchesMe) {
       if (state.currentUser && state.currentUser.isOnline === false) {
-        showToast(`🔔 New Job in ${req.suburbName || 'Harare'} ($${req.budgetUsd})! You are currently Offline. Switch Online to bid.`, 'info', 6000);
+        showToast(`New Job in ${req.suburbName || 'Harare'} ($${req.budgetUsd})! You are currently Offline. Switch Online to bid.`, 'info', 6000);
       }
       triggerSystemNotification(
         `New Job in ${req.suburbName || 'Harare'} ($${req.budgetUsd} USD)`,
@@ -1703,7 +1712,7 @@ function handleIncomingRealtimeEvent(data) {
       };
       playIncomingRingtone();
       renderCallModal();
-      triggerSystemNotification('📞 Incoming Call from ' + (c.callerName || 'User'), c.contextTitle || 'Tap to answer', 'call_' + c.requestId);
+      triggerSystemNotification('Incoming Call from ' + (c.callerName || 'User'), c.contextTitle || 'Tap to answer', 'call_' + c.requestId);
       try {
         if (window.FinditNative && typeof window.FinditNative.triggerIncomingCall === 'function') {
           window.FinditNative.triggerIncomingCall(c.callerName || 'Findit User', 'Voice', c.channelId);
@@ -2278,7 +2287,7 @@ function initLeafletMap() {
 function syncPinDomLabels() {
   const pinLabel = document.getElementById('centerPinLabel');
   if (pinLabel) {
-    pinLabel.textContent = `📍 Deliver to: ${state.customAddress} (Live Location)`;
+    pinLabel.textContent = `Deliver to: ${state.customAddress} (Live Location)`;
   }
   const routeAddrEl = document.querySelector('.indrive-top-route-card .top-route-row .top-route-text');
   if (routeAddrEl) {
@@ -2992,7 +3001,7 @@ function useBrowserGeolocation(silent = false) {
           leafletMap.flyTo([state.userLiveGpsLat || state.pinnedLat, state.userLiveGpsLng || state.pinnedLng], 17, { animate: true, duration: 0.8 });
         }
         if (!silent) {
-          showToast(`📍 Centered exactly on your live GPS location: ${state.customAddress || 'Harare'}`);
+          showToast(`Centered on live GPS: ${state.customAddress || 'Harare'}`);
         }
       },
       () => {
@@ -3007,7 +3016,7 @@ function useBrowserGeolocation(silent = false) {
           leafletMap.flyTo([state.pinnedLat, state.pinnedLng], 17, { animate: true, duration: 0.8 });
         }
         if (!silent) {
-          showToast('📍 Centered on Harare location');
+          showToast('Centered on Harare location');
         }
       },
       { enableHighAccuracy: true, timeout: 8000 }
@@ -3033,11 +3042,11 @@ function updateLiveGpsMarker() {
   const lng = state.pinnedLng || state.userLiveGpsLng || 31.0365;
   if (!lat || !lng) return;
 
-  // Authentic inDrive passenger client icon: pure vector icon (exactly 1 on map, no profile photos)
+  // Authentic inDrive passenger client icon: pure vector icon (exactly 1 on map, draggable to choose pickup/visit location)
   const gpsIcon = L.divIcon({
     className: 'indrive-client-map-marker-wrap',
     html: `
-      <div style="position:relative; display:flex; flex-direction:column; align-items:center; pointer-events:auto;">
+      <div style="position:relative; display:flex; flex-direction:column; align-items:center; pointer-events:auto; cursor:grab;" title="Drag to choose location">
         <div style="background:#0F172A; color:#FFFFFF; font-size:10px; font-weight:800; padding:2px 8px; border-radius:99px; margin-bottom:3px; white-space:nowrap; box-shadow:0 3px 10px rgba(15,23,42,0.3); display:inline-flex; align-items:center; gap:4px;">
           <span style="display:inline-block; width:5px; height:5px; border-radius:50%; background:#10B981;"></span>
           <span>${escapeHtml(state.customAddress || 'Harare')}</span>
@@ -3059,11 +3068,46 @@ function updateLiveGpsMarker() {
   if (userLiveGpsMarker) {
     userLiveGpsMarker.setLatLng([lat, lng]);
     userLiveGpsMarker.setIcon(gpsIcon);
+    if (!userLiveGpsMarker.dragging.enabled()) {
+      userLiveGpsMarker.dragging.enable();
+    }
   } else {
     userLiveGpsMarker = L.marker([lat, lng], {
       icon: gpsIcon,
-      zIndexOffset: 1200
+      zIndexOffset: 1200,
+      draggable: true
     }).addTo(leafletMap);
+
+    userLiveGpsMarker.on('dragend', function(e) {
+      const pos = e.target.getLatLng();
+      const newLat = Number(pos.lat.toFixed(5));
+      const newLng = Number(pos.lng.toFixed(5));
+      state.pinnedLat = newLat;
+      state.pinnedLng = newLng;
+      state.userLiveGpsLat = newLat;
+      state.userLiveGpsLng = newLng;
+      state.userHasManuallyDraggedPin = true;
+      state.isCustomAddressSelected = true;
+      reverseGeocodeHararePin(newLat, newLng);
+      updateLiveGpsMarker();
+      renderUiOverlay(false);
+      showToast(`Location set to: ${state.customAddress || 'Harare'}`);
+
+      const activeReq = getCustomerActiveRequest();
+      if (activeReq && (activeReq.status === 'OPEN' || activeReq.status === 'SEARCHING')) {
+        activeReq.lat = newLat;
+        activeReq.lng = newLng;
+        activeReq.clientLiveLat = newLat;
+        activeReq.clientLiveLng = newLng;
+        activeReq.exactAddress = state.customAddress;
+        apiPost('/api/requests/client-location', {
+          requestId: activeReq.id,
+          lat: newLat,
+          lng: newLng,
+          address: state.customAddress
+        }).catch(() => {});
+      }
+    });
   }
 }
 
@@ -3183,13 +3227,10 @@ function updateMapMarkers(force = false) {
               <span></span><span></span><span></span>
             </div>
           ` : ''}
-          <div class="pro-map-marker-pill" style="background:#0F172A; border:2px solid #0066FF; border-radius:99px; padding:3px 9px 3px 4px; display:inline-flex; align-items:center; gap:6px; box-shadow:0 4px 14px rgba(0,102,255,0.35); cursor:pointer;">
-            <div style="width:26px; height:26px; border-radius:50%; background:#0066FF; display:flex; align-items:center; justify-content:center; color:#FFFFFF; flex-shrink:0;">
+          <div style="width:34px; height:34px; border-radius:10px; background:#0F172A; border:2px solid #0066FF; display:flex; align-items:center; justify-content:center; color:#FFFFFF; box-shadow:0 4px 12px rgba(0,102,255,0.38); cursor:pointer;" title="${escapeHtml(p.shortName || 'Pro')}">
+            <div style="width:22px; height:22px; display:flex; align-items:center; justify-content:center;">
               ${tradeSvg}
             </div>
-            <span style="font-size:11px; font-weight:800; color:#FFFFFF; white-space:nowrap;">
-              ${escapeHtml(p.shortName || p.name.split(' ')[0])}
-            </span>
           </div>
         </div>
       `;
@@ -3197,8 +3238,8 @@ function updateMapMarkers(force = false) {
       const icon = L.divIcon({
         className: '',
         html: markerHtml,
-        iconSize: [110, showThinkingDots ? 64 : 40],
-        iconAnchor: [55, showThinkingDots ? 54 : 20]
+        iconSize: [38, showThinkingDots ? 58 : 38],
+        iconAnchor: [19, showThinkingDots ? 48 : 19]
       });
 
       const m = L.marker([p.lat, p.lng], { icon }).addTo(leafletMarkersLayer);
@@ -3259,18 +3300,12 @@ function drawProviderAndClientRouteMarkers(prov, req) {
   activeMapOfficeMarkers.forEach((m) => { try { leafletMarkersLayer.removeLayer(m); } catch (e) {} });
   activeMapOfficeMarkers.clear();
 
-  // 1. Provider Live Marker with moving trade icon (NO photos on map)
+  // 1. Provider Live Marker with moving trade icon (NO name banner, NO circular pulse)
   const tradeSvg = getMapMarkerProfessionIconSvg(prov.categoryId);
-  const statusLabel = req.status === 'IN_PROGRESS' ? 'Working On Site' : req.status === 'ARRIVED' ? 'At Gate' : 'Approaching Client';
   const provHtml = `
     <div class="indrive-map-pro-wrap">
-      <div style="background:#0066FF; color:#FFFFFF; font-size:10.5px; font-weight:800; padding:3px 9px; border-radius:99px; margin-bottom:4px; white-space:nowrap; box-shadow:0 4px 12px rgba(0,102,255,0.35); display:inline-flex; align-items:center; gap:5px;">
-        <span style="display:inline-flex; width:13px; height:13px; align-items:center; justify-content:center;">${tradeSvg}</span>
-        <span>${escapeHtml(prov.shortName || prov.name.split(' ')[0])} • ${statusLabel}</span>
-      </div>
-      <div class="pro-map-marker-pill" style="border-color:#0066FF; border-width:3px; position:relative; background:#0F172A; width:44px; height:44px; border-radius:50%; display:flex; align-items:center; justify-content:center; box-shadow:0 6px 18px rgba(0,102,255,0.45);">
-        <div class="pro-heading-arrow" id="proHeadingArrow" style="transform:translateX(-50%) rotate(${liveNavState.bearingDeg || 0}deg);"></div>
-        <div style="width:26px; height:26px; border-radius:50%; background:#0066FF; display:flex; align-items:center; justify-content:center; color:#FFFFFF;">
+      <div style="width:36px; height:36px; border-radius:10px; background:#0F172A; border:2.5px solid #0066FF; display:flex; align-items:center; justify-content:center; color:#FFFFFF; box-shadow:0 4px 14px rgba(0,102,255,0.4);">
+        <div style="width:22px; height:22px; display:flex; align-items:center; justify-content:center;">
           ${tradeSvg}
         </div>
       </div>
@@ -3279,8 +3314,8 @@ function drawProviderAndClientRouteMarkers(prov, req) {
   const provIcon = L.divIcon({
     className: '',
     html: provHtml,
-    iconSize: [90, 64],
-    iconAnchor: [45, 54]
+    iconSize: [38, 38],
+    iconAnchor: [19, 19]
   });
 
   if (activeRouteProviderMarker) {
@@ -4333,7 +4368,7 @@ function renderConfigureFareOverlay() {
           <!-- Findit Dispatch: Need It Now vs Schedule for Later -->
           <div style="display:flex; background:rgba(0,0,0,0.04); border-radius:12px; padding:3px; margin-bottom:10px;">
             <button type="button" style="flex:1; border:none; padding:7px 10px; border-radius:9px; font-size:12px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; ${state.timingType !== 'SCHEDULED' ? 'background:#FFFFFF; color:var(--blue-primary); box-shadow:0 1px 3px rgba(0,0,0,0.08);' : 'background:transparent; color:var(--text-secondary);'}" onclick="setDispatchTimingType('IMMEDIATE')">
-              <span>⚡ Now (Immediate)</span>
+              <span>${uiIcon('bolt', 13)} Now (Immediate)</span>
             </button>
             <button type="button" style="flex:1; border:none; padding:7px 10px; border-radius:9px; font-size:12px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; ${state.timingType === 'SCHEDULED' ? 'background:#FFFFFF; color:var(--blue-primary); box-shadow:0 1px 3px rgba(0,0,0,0.08);' : 'background:transparent; color:var(--text-secondary);'}" onclick="setDispatchTimingType('SCHEDULED')">
               ${uiIcon('clock', 13)}
@@ -4659,6 +4694,8 @@ function renderBookedTrackingOverlay(req) {
   const prov = resolveProviderByIdOrOffer(provId, req, acceptedOffer);
   const avatarUrl = prov?.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=240&q=80';
   const agreedPrice = acceptedOffer?.priceUsd || req.agreedTotalUsd || req.budgetUsd;
+  const isArrived = req.status === 'ARRIVED';
+  const isInProgress = req.status === 'IN_PROGRESS' || Boolean(req.pinVerifiedByProvider);
 
   let statusIcon = uiIcon('routeCar', 18);
   let statusHeadline = `${prov?.shortName || prov?.name || 'Pro'} is arriving in ~${acceptedOffer?.etaMinutes || 4} min`;
@@ -4845,7 +4882,7 @@ function renderBookedTrackingOverlay(req) {
 
         ${req.bookingFor === 'SOMEONE_ELSE' ? `
           <div style="font-size:11.5px; font-weight:700; color:#1E40AF; background:#DBEAFE; padding:6px 10px; border-radius:8px; margin-bottom:8px;">
-            👥 Ordered for: <strong>${escapeHtml(req.recipientName || 'Recipient')}</strong> ${req.recipientPhone ? `(${escapeHtml(req.recipientPhone)})` : ''}
+            ${uiIcon('users', 14)} Ordered for: <strong>${escapeHtml(req.recipientName || 'Recipient')}</strong> ${req.recipientPhone ? `(${escapeHtml(req.recipientPhone)})` : ''}
           </div>
         ` : ''}
 
@@ -4878,7 +4915,7 @@ function renderBookedTrackingOverlay(req) {
               </div>
               <div style="margin-top:8px; background:#EFF6FF; border:1.5px dashed #3B82F6; border-radius:12px; padding:8px 12px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
                 <div style="display:flex; align-items:center; gap:8px; min-width:0;">
-                  <span style="font-size:16px; flex-shrink:0;">🔑</span>
+                  <span style="display:inline-flex; flex-shrink:0;">${uiIcon('key', 16)}</span>
                   <div style="min-width:0;">
                     <div style="font-size:12px; font-weight:800; color:#1E40AF;">Share Start PIN with Specialist</div>
                     <div style="font-size:10.5px; color:#3B82F6;">Complete button unlocks once code is verified</div>
@@ -4905,7 +4942,7 @@ function renderBookedTrackingOverlay(req) {
             </div>
             <button class="btn-primary-blue" style="width:100%; height:44px; font-size:14px; font-weight:800; background:#10B981; box-shadow:0 4px 14px rgba(16,185,129,0.35);" onclick="openRateBookingModal('${req.id}')">
               ${uiIcon('check', 16)}
-              <span>✓ Mark Service Completed &amp; Rate</span>
+              <span>Mark Service Completed &amp; Rate</span>
             </button>
           `;
         })()}
@@ -5079,7 +5116,7 @@ function renderSignUpWizardInnerHtml(isFullScreen = false) {
           ${state.faceVerifiedSuccess ? `
             <div style="background:#ECFDF5; border:1.5px solid #10B981; color:#065F46; padding:8px 16px; border-radius:99px; font-weight:800; font-size:13px; display:inline-flex; align-items:center; gap:6px; margin-top:14px;">
               ${uiIcon('check', 16)}
-              <span>Face ID Verified ✓</span>
+              <span>Face ID Verified</span>
             </div>
           ` : state.authCapturedSelfieUrl ? `
             <div style="background:#ECFDF5; border:1px solid #10B981; color:#065F46; padding:7px 14px; border-radius:99px; font-weight:800; font-size:12px; display:inline-flex; align-items:center; gap:6px; margin-top:12px;">
@@ -5327,7 +5364,7 @@ function renderSignUpWizardInnerHtml(isFullScreen = false) {
           ${state.faceVerifiedSuccess ? `
             <div style="background:#ECFDF5; border:1.5px solid #10B981; color:#065F46; padding:8px 16px; border-radius:99px; font-weight:800; font-size:13px; display:inline-flex; align-items:center; gap:6px; margin-top:14px;">
               ${uiIcon('check', 16)}
-              <span>Face Matches ID Document ✓</span>
+              <span>Face Matches ID Document</span>
             </div>
           ` : `
             <div id="authCameraHint" style="font-size:12px; color:var(--text-secondary); margin-top:12px; font-weight:600; text-align:center;">
@@ -6070,7 +6107,7 @@ function renderModalLayer() {
       <!-- Quick Test Accounts 1-Tap Fill -->
       <div style="margin-top:14px; padding:10px 12px; background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px; text-align:left;">
         <div style="font-size:11px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:8px;">
-          ⚡ Quick Test Logins (Tap to Autofill)
+          Quick Test Logins (Tap to Autofill)
         </div>
         <div style="display:flex; flex-direction:column; gap:6px;">
           <div style="font-size:10.5px; font-weight:700; color:#2563EB;">Clients (Password: test1234):</div>
@@ -6353,11 +6390,11 @@ function renderModalLayer() {
       : ['Punctual Arrival', 'Clean Mobile Kit', 'Professional Work', 'Fair USD Price', 'Friendly & Respectful', 'Delayed Arrival'];
 
     const ratingDescriptions = {
-      1: '★☆☆☆☆ Needs Major Improvement',
-      2: '★★☆☆☆ Below Expectations',
-      3: '★★★☆☆ Satisfactory Service',
-      4: '★★★★☆ Very Good Service',
-      5: '★★★★★ Outstanding & Highly Recommended'
+      1: '1 Star — Needs Major Improvement',
+      2: '2 Stars — Below Expectations',
+      3: '3 Stars — Satisfactory Service',
+      4: '4 Stars — Very Good Service',
+      5: '5 Stars — Outstanding & Highly Recommended'
     };
 
     root.innerHTML = `
@@ -6531,7 +6568,7 @@ function renderModalLayer() {
 
             ${(isAuth && isProvider) ? `
               <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:14px; padding:12px; margin-bottom:12px;">
-                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+                <div style="display:flex; align-items:center; justify-content:space-between;">
                   <div>
                     <div style="font-size:12.5px; font-weight:800; color:#0F172A; display:flex; align-items:center; gap:6px;">
                       <span style="width:7px; height:7px; border-radius:50%; background:${user.isOnline !== false ? '#10B981' : '#64748B'};"></span>
@@ -6549,40 +6586,20 @@ function renderModalLayer() {
                     ${user.isOnline !== false ? 'Go Offline' : 'Go Online'}
                   </button>
                 </div>
-                <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:10px; padding:9px 11px; display:flex; align-items:center; justify-content:space-between; gap:8px;">
-                  <div>
-                    <div style="font-size:10px; font-weight:700; color:#64748B; text-transform:uppercase;">Prepaid USD Wallet</div>
-                    <div style="font-size:16px; font-weight:900; color:#0066FF; margin-top:1px;">$${(user.walletBalanceUsd || 0).toFixed(2)}</div>
-                  </div>
-                  <button
-                    type="button"
-                    onclick="closeModal(); state.hubView='MARKETPLACE'; state.providerTab='WALLET'; state.isSheetMinimized=false; lastUiOverlaySignature=''; renderAll();"
-                    style="background:#0066FF; color:#FFFFFF; border:none; padding:6px 12px; border-radius:8px; font-size:11.5px; font-weight:800; cursor:pointer;"
-                  >
-                    + Top Up
-                  </button>
-                </div>
               </div>
             ` : ''}
 
             <div class="drawer-menu-list">
               <!-- Multi-Service Hub Pinned to Side Panel (Works in both Client & Provider Mode) -->
               <div class="drawer-menu-item ${state.hubView === 'HUB' ? 'active' : ''}" style="background:#EFF6FF; border:1.5px solid #BFDBFE; border-radius:12px; margin-bottom:8px; font-weight:800; color:#1E40AF;" onclick="closeModal(); returnToMainHub();">
-                <span style="font-size:18px;">🏠</span>
+                ${uiIcon('home', 18)}
                 <span style="color:#1E40AF;">Multi-Service Hub</span>
               </div>
 
               <div class="drawer-menu-item ${state.hubView !== 'HUB' ? 'active' : ''}" onclick="closeModal(); openJobMarketplaceView();">
-                ${uiIcon('home', 18)}
+                ${uiIcon('map', 18)}
                 <span>${isProvider ? 'Provider Workspace' : 'Job Marketplace Map'}</span>
               </div>
-
-              ${isProvider ? `
-                <div class="drawer-menu-item" onclick="closeModal(); state.hubView='MARKETPLACE'; state.providerTab='WALLET'; state.isSheetMinimized=false; lastUiOverlaySignature=''; renderAll();">
-                  ${uiIcon('wallet', 18)}
-                  <span>Prepaid USD Wallet ($${(user.walletBalanceUsd || 0).toFixed(2)})</span>
-                </div>
-              ` : ''}
 
               <div class="drawer-menu-item" onclick="state.activeModal='HISTORY'; renderModalLayer();">
                 ${uiIcon('clock', 18)}
@@ -6616,7 +6633,7 @@ function renderModalLayer() {
               </div>
 
               <a href="/FinditHarare.apk" download="FinditHarare.apk" class="drawer-menu-item" style="text-decoration:none; color:inherit; background:#EFF6FF; border:1px solid #BFDBFE; border-radius:12px; margin:6px 0; font-weight:700;">
-                <span style="font-size:18px;">📱</span>
+                ${uiIcon('phone', 18)}
                 <span style="color:#1D4ED8;">Download Android APK</span>
               </a>
             </div>
@@ -7289,7 +7306,7 @@ function renderModalLayer() {
           <div id="waSupportChatFeed" style="flex:1; overflow-y:auto; padding:12px 14px; display:flex; flex-direction:column; gap:8px; background-color:#EFEAE2; background-image:radial-gradient(rgba(0,0,0,0.035) 1px, transparent 0); background-size:20px 20px;">
             <!-- WhatsApp Centered Encryption Pill -->
             <div style="background:#FFF5C4; color:#54656F; font-size:11px; text-align:center; padding:7px 14px; border-radius:10px; margin:2px auto 4px auto; max-width:92%; line-height:1.4; box-shadow:0 1px 2px rgba(0,0,0,0.05); border:1px solid #FFE58F;">
-              🔒 Messages and calls are end-to-end encrypted. Only people in this chat can read, listen to, or share them.
+              ${uiIcon('lock', 13)} Messages and calls are end-to-end encrypted. Only people in this chat can read, listen to, or share them.
             </div>
 
             <!-- Meta Business Security Notice -->
@@ -7362,16 +7379,16 @@ function renderModalLayer() {
           <!-- Quick FAQ Chips (Light WhatsApp Style) -->
           <div style="background:#F0F2F5; padding:6px 10px 2px 10px; display:flex; gap:6px; overflow-x:auto; border-top:1px solid #D1D7DB; flex-shrink:0;">
             <button type="button" class="chat-preset-chip" style="background:#FFFFFF; border:1px solid #D1D7DB; color:#008069; font-size:11.5px; white-space:nowrap;" onclick="sendSupportAiMessage('How does the $5 welcome bonus and 11% commission work?')">
-              💳 $5 Bonus &amp; 11% Rule
+              $5 Bonus &amp; 11% Rule
             </button>
             <button type="button" class="chat-preset-chip" style="background:#FFFFFF; border:1px solid #D1D7DB; color:#008069; font-size:11.5px; white-space:nowrap;" onclick="sendSupportAiMessage('How do I top up my provider wallet with EcoCash USD?')">
-              💵 EcoCash Top-Up
+              EcoCash Top-Up
             </button>
             <button type="button" class="chat-preset-chip" style="background:#FFFFFF; border:1px solid #D1D7DB; color:#008069; font-size:11.5px; white-space:nowrap;" onclick="sendSupportAiMessage('How do I view or change my service categories in Settings?')">
-              🛠️ Job Categories
+              Job Categories
             </button>
             <button type="button" class="chat-preset-chip" style="background:#FFFFFF; border:1px solid #D1D7DB; color:#008069; font-size:11.5px; white-space:nowrap;" onclick="sendSupportAiMessage('What is your official website and phone number?')">
-              🌐 Website &amp; Line
+              Website &amp; Contacts
             </button>
           </div>
 
@@ -7893,7 +7910,7 @@ function renderModalLayer() {
               onclick="setProviderWorkplaceType(true)"
             >
               ${uiIcon('buildingOffice', 15)}
-              <span>🏢 Shop / Office</span>
+              <span>${uiIcon('buildingOffice', 13)} Shop / Office</span>
             </button>
             <button
               type="button"
@@ -7902,7 +7919,7 @@ function renderModalLayer() {
               onclick="setProviderWorkplaceType(false)"
             >
               ${uiIcon('briefcase', 15)}
-              <span>🧰 Mobile Freelancer</span>
+              <span>${uiIcon('toolbox', 13)} Mobile Freelancer</span>
             </button>
           </div>
 
@@ -8901,7 +8918,7 @@ function selectLiveLocationDefault() {
   closeModal();
   useBrowserGeolocation(false);
   renderAll(true);
-  showToast('📍 Using your Live GPS Location');
+  showToast('Using your Live GPS Location');
 }
 
 function selectGeocodedLocation(idx) {
@@ -8928,7 +8945,7 @@ function selectGeocodedLocation(idx) {
   if (leafletMap) {
     leafletMap.flyTo([state.pinnedLat, state.pinnedLng], 16, { animate: true, duration: 0.85 });
   }
-  showToast(`📍 Set to: ${state.customAddress}`);
+  showToast(`Set to: ${state.customAddress}`);
 }
 
 function startMapPinPickMode() {
@@ -8939,7 +8956,7 @@ function startMapPinPickMode() {
   if (leafletMap && state.pinnedLat && state.pinnedLng) {
     leafletMap.flyTo([state.pinnedLat, state.pinnedLng], 16, { animate: true, duration: 0.6 });
   }
-  showToast('📍 Drag the blue YOU pin to set your custom location');
+  showToast('Drag the blue YOU pin to set your custom location');
 }
 
 function selectSuburbLocation(suburbId) {
@@ -8959,7 +8976,7 @@ function selectSuburbLocation(suburbId) {
   if (leafletMap) {
     leafletMap.flyTo([s.lat, s.lng], 15, { animate: true, duration: 0.75 });
   }
-  showToast(`📍 Navigated to ${state.customAddress}, ${s.name}`);
+  showToast(`Navigated to ${state.customAddress}, ${s.name}`);
 }
 
 function openServicePickerModal() {
@@ -9253,7 +9270,7 @@ function renderProviderActiveVisitTab(prov, activeJob) {
         ${activeJob.timingType === 'SCHEDULED' ? `
           <div style="font-size:11.5px; font-weight:700; color:#854D0E; background:#FEF9C3; padding:7px 11px; border-radius:9px; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
             ${uiIcon('clock', 12)}
-            <span>📅 Scheduled Visit: <strong>${escapeHtml(activeJob.scheduledDate)} at ${escapeHtml(activeJob.scheduledTime)}</strong></span>
+            <span>${uiIcon('calendar', 13)} Scheduled Visit: <strong>${escapeHtml(activeJob.scheduledDate)} at ${escapeHtml(activeJob.scheduledTime)}</strong></span>
           </div>
         ` : ''}
 
@@ -9471,7 +9488,7 @@ function renderProviderRequestsFeedTab(prov, openRequests, activeJob) {
         return visibleRequests.map((r) => {
           const myExistingOffer = (r.offers || []).find((o) => o.providerId === prov.id || (prov.finditId && o.providerFinditId === prov.finditId));
           const isOfferDeclined = Boolean(myExistingOffer && myExistingOffer.status === 'DECLINED');
-          const isOfferPending = Boolean(myExistingOffer && myExistingOffer.status === 'PROPOSED');
+          const isOfferPending = Boolean(myExistingOffer && (myExistingOffer.status === 'PROPOSED' || myExistingOffer.status === 'COUNTERED'));
           const commPercent = Number(state.db?.settings?.commissionPercent || 11);
           const minReserve = Number(state.db?.settings?.minWalletBalanceUsd || 2.0);
           const isPromo = Boolean(state.db?.settings?.launchPromoActive);
@@ -9556,11 +9573,11 @@ function renderProviderRequestsFeedTab(prov, openRequests, activeJob) {
                 <div style="background:#FFF1F2; border:1.5px solid #FDA4AF; border-radius:12px; padding:10px 12px; margin-bottom:10px;">
                   <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:4px;">
                     <div style="display:flex; align-items:center; gap:6px;">
-                      <span style="font-size:14px;">❌</span>
+                      <span style="display:inline-flex;">${uiIcon('close', 14)}</span>
                       <span style="font-size:12.5px; font-weight:800; color:#BE123C;">Offer Declined ($${declinedPrice})</span>
                     </div>
                     <button type="button" onclick="providerDismissJob('${r.id}')" style="background:transparent; border:none; color:#9F1239; font-size:11px; font-weight:800; cursor:pointer; text-decoration:underline;">
-                      Dismiss ✕
+                      Dismiss
                     </button>
                   </div>
                   <div style="font-size:11.5px; color:#9F1239; margin-bottom:8px; line-height:1.4;">
@@ -9597,7 +9614,7 @@ function renderProviderRequestsFeedTab(prov, openRequests, activeJob) {
 
               ${surpassesWallet ? `
                 <div style="background:#FFFBEB; border:1px solid #FDE68A; border-radius:10px; padding:7px 10px; margin-bottom:8px; display:flex; align-items:center; justify-content:space-between; gap:8px;">
-                  <span style="font-size:11.5px; font-weight:700; color:#92400E;">🔒 Requires $${requiredCommUsd.toFixed(2)} USD wallet balance</span>
+                  <span style="font-size:11.5px; font-weight:700; color:#92400E;">Requires $${requiredCommUsd.toFixed(2)} USD wallet balance</span>
                   <button
                     type="button"
                     onclick="state.walletTopupAmount=${suggestedTopUpUsd}; state.providerTab='WALLET'; renderUiOverlay();"
@@ -9625,7 +9642,7 @@ function renderProviderRequestsFeedTab(prov, openRequests, activeJob) {
                     class="btn-primary-blue"
                     ${surpassesWallet ? 'disabled style="height:38px; font-size:12px; opacity:0.42; cursor:not-allowed; pointer-events:none; filter:grayscale(0.5);"' : `style="height:38px; font-size:12.5px;" onclick="providerSubmitBid('${r.id}', ${r.budgetUsd})"`}
                   >
-                    ${surpassesWallet ? `🔒 Need ${commPercent}% ($${requiredCommUsd.toFixed(2)})` : `Accept ${formatUsdPrice(r.budgetUsd)}`}
+                    ${surpassesWallet ? `Need ${commPercent}% ($${requiredCommUsd.toFixed(2)})` : `Accept ${formatUsdPrice(r.budgetUsd)}`}
                   </button>
                   <button
                     class="btn-dark-sec"
@@ -9686,7 +9703,7 @@ function renderProviderWalletTab(prov) {
       <div style="background:linear-gradient(135deg, #0F172A 0%, #1E293B 100%); border:1px solid #334155; border-radius:16px; padding:16px; margin-bottom:12px; color:#FFFFFF; box-shadow:0 10px 25px -5px rgba(0,0,0,0.25);">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
           <div style="display:flex; align-items:center; gap:8px;">
-            <span style="font-size:18px;">📊</span>
+            <span style="display:inline-flex;">${uiIcon('chart', 18)}</span>
             <div>
               <div style="font-size:13px; font-weight:800; color:#F8FAFC;">Earnings &amp; Job Analytics</div>
               <div style="font-size:10.5px; color:#94A3B8;">Your completed home-visit payouts</div>
@@ -9796,7 +9813,7 @@ function renderProviderWalletTab(prov) {
           onclick="topUpProviderWallet(Number(state.walletTopupAmount || 5), 'Instant Top-Up')"
         >
           ${uiIcon('wallet', 15)}
-          <span>⚡ Top Up $${Number(state.walletTopupAmount || 5).toFixed(2)} USD Now</span>
+          <span>Top Up $${Number(state.walletTopupAmount || 5).toFixed(2)} USD Now</span>
         </button>
       </div>
 
@@ -9808,8 +9825,8 @@ function renderProviderWalletTab(prov) {
         </div>
 
         <div style="background:#F8FAFC; border:1px solid var(--border-light); border-radius:10px; padding:8px 10px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
-          <span style="font-size:12px; color:var(--text-secondary); font-weight:600;">EcoCash: <strong style="color:var(--blue-primary); font-size:13px;">0713 475 131</strong></span>
-          <button class="btn-dark-sec" style="padding:4px 9px; font-size:11px;" onclick="navigator.clipboard?.writeText('0713475131'); showToast('EcoCash number copied!');">
+          <span style="font-size:12px; color:var(--text-secondary); font-weight:600;">EcoCash Biller Code: <strong style="color:var(--blue-primary); font-size:13px;">*151*2*2*84920#</strong></span>
+          <button class="btn-dark-sec" style="padding:4px 9px; font-size:11px;" onclick="navigator.clipboard?.writeText('*151*2*2*84920#'); showToast('EcoCash shortcode copied!');">
             Copy
           </button>
         </div>
@@ -9925,7 +9942,7 @@ function renderProviderCatalogueTab(prov, myPendingApprovals) {
             <span style="color:var(--blue-primary);">${uiIcon('buildingOffice', 18)}</span>
             <div>
               <div style="font-size:13px; font-weight:800; color:var(--text-main);">
-                ${prov.hasOffice ? '🏢 Physical Shop / Office' : '🧰 Mobile Freelancer'}
+                ${prov.hasOffice ? 'Physical Shop / Office' : 'Mobile Freelancer'}
               </div>
               <div style="font-size:11.5px; color:var(--text-secondary); margin-top:2px;">
                 ${prov.hasOffice ? `${prov.officeAddress || 'Harare Workshop'}, ${prov.officeSuburb || 'Harare'}` : 'Mobile home visits across Harare (No shop base)'}
@@ -10153,7 +10170,7 @@ async function saveNewCatalogueService() {
 
     state.newServicePhotoDataUrl = null;
     closeModal();
-    showToast('🎉 Service submitted! Findit Admins will verify the photo before it appears publicly.');
+    showToast('Service submitted! Findit Admins will verify the photo before it appears publicly.');
     await fetchState();
     state.providerTab = 'CATALOGUE';
     renderAll(true);
@@ -10437,7 +10454,7 @@ async function toggleProviderOnlineStatus() {
   updateMapMarkers(true);
 
   if (newOnline) {
-    showToast('⚠️ Online & Ready: Inactive providers remaining idle without taking jobs may be removed from the platform.', 'info');
+    showToast('Online & Ready: Inactive providers remaining idle without taking jobs may be removed from the platform.', 'info');
   } else {
     showToast('You are now Offline. You are hidden from the map and will not receive job alerts.', 'info');
   }
@@ -10474,7 +10491,7 @@ async function providerSubmitBid(requestId, priceUsd) {
   const prov = state.currentUser || state.db.providers[0];
   const activeJob = getProviderActiveBooking(prov?.id);
   if (activeJob) {
-    showToast(`⚠️ You have an active job in progress (${activeJob.customerName || 'Client'}). You can only do 1 job at a time to prevent clients waiting. Please complete this job first.`, 'warning', 6000);
+    showToast(`You have an active job in progress (${activeJob.customerName || 'Client'}). You can only do 1 job at a time to prevent clients waiting. Please complete this job first.`, 'warning', 6000);
     return;
   }
   const currentBalance = Number(prov.walletBalanceUsd || 0);
@@ -10752,7 +10769,7 @@ function renderChatDrawer() {
     if (prov) {
       peerName = prov.name;
       peerAvatar = prov.avatarUrl;
-      peerSubtitle = `${prov.skillTier || 'Platinum Pro'} • ${prov.rating || '4.9'} ★`;
+      peerSubtitle = `${prov.skillTier || 'Platinum Pro'} • Rating: ${prov.rating || '4.9'}`;
       peerId = prov.id;
     } else {
       peerId = provId || '';
@@ -10931,7 +10948,7 @@ function renderChatMessagesHtml(messages) {
       </div>
     ` : '';
 
-    const hasCaption = m.text && m.text !== '📷 Photo attached';
+    const hasCaption = m.text && m.text !== 'Photo attached';
     const textHtml = hasCaption ? `<span>${escapeHtml(m.text)}</span>` : (!m.photoUrl ? `<span>${escapeHtml(m.text || '')}</span>` : '');
 
     return `
@@ -10981,7 +10998,7 @@ function loadUserSupportHistory() {
     {
       id: 'sup_welcome',
       sender: 'BUSINESS',
-      text: `Hello *${state.currentUser?.name || 'there'}*! 👋 Welcome to *Findit Harare Official* Support (*finditharare.co.zw*).\n\nHow can we help you with your Findit Harare booking, provider job categories, EcoCash USD top-up (*0713 475 131*), or account today?`,
+      text: `Hello *${state.currentUser?.name || 'there'}*! Welcome to *Findit Harare Official Support* (*finditharare.co.zw*).\n\nHow can we help you with your Findit Harare booking, provider job categories, EcoCash USD wallet (*151*2*2*84920#), or account today?`,
       time: formatChatTime(new Date().toISOString())
     }
   ];
@@ -11288,7 +11305,7 @@ async function sendSupportAiMessage(presetText = null) {
     state.supportChatMessages.push({
       id: 'sup_b_' + Date.now(),
       sender: 'BUSINESS',
-      text: 'Welcome to *Findit Harare Official Support* (*finditharare.co.zw*)! Please let us know if you need help with a booking, provider job categories, EcoCash top-up (*0713 475 131*), or your account.',
+      text: 'Welcome to *Findit Harare Official Support* (*finditharare.co.zw*)! Please let us know if you need help with a booking, provider job categories, EcoCash wallet (*151*2*2*84920#), or your account.',
       time: formatChatTime(new Date().toISOString())
     });
     saveUserSupportHistory();
@@ -11375,7 +11392,7 @@ function sendChatMessage(text, requestId = null, photoUrl = null) {
     clientMsgId: tempMsgId,
     senderRole: state.role,
     senderName: senderName,
-    text: cleanText || (photoUrl ? '📷 Photo attached' : ''),
+    text: cleanText || (photoUrl ? 'Photo attached' : ''),
     photoUrl: photoUrl || undefined,
     status: 'DELIVERED',
     read: false,
@@ -11396,7 +11413,7 @@ function sendChatMessage(text, requestId = null, photoUrl = null) {
     clientMsgId: tempMsgId,
     senderRole: state.role,
     senderName: senderName,
-    text: cleanText || (photoUrl ? '📷 Photo attached' : ''),
+    text: cleanText || (photoUrl ? 'Photo attached' : ''),
     photoUrl: photoUrl || undefined,
     requestSnapshot: targetReq
   }).then((res) => {
@@ -11623,7 +11640,7 @@ function syncIncomingCallFromList(calls) {
       };
       playIncomingRingtone();
       renderCallModal();
-      triggerSystemNotification('📞 Incoming Call from ' + (ringingCall.callerName || 'User'), ringingCall.contextTitle || 'Tap to answer', 'call_' + ringingCall.requestId);
+      triggerSystemNotification('Incoming Call from ' + (ringingCall.callerName || 'User'), ringingCall.contextTitle || 'Tap to answer', 'call_' + ringingCall.requestId);
       try {
         if (window.FinditNative && typeof window.FinditNative.triggerIncomingCall === 'function') {
           window.FinditNative.triggerIncomingCall(ringingCall.callerName || 'Findit User', 'Voice', ringingCall.channelId);
@@ -12161,7 +12178,7 @@ function renderCallModal() {
         <div class="ios-call-grid">
           <div class="ios-grid-btn-wrap">
             <button type="button" class="ios-frosted-circle-btn ${state.activeCall.isMuted ? 'active' : ''}" onclick="toggleCallMute()">
-              <span style="font-size:24px;">${state.activeCall.isMuted ? '🔇' : '🎙️'}</span>
+              <span style="display:inline-flex;">${state.activeCall.isMuted ? uiIcon('micOff', 24) : uiIcon('mic', 24)}</span>
             </button>
             <span class="ios-grid-label">mute</span>
           </div>
