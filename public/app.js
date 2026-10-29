@@ -2476,7 +2476,7 @@ function speakNavigationDirection(text) {
   // 1. Audible Nav Ding
   playNavTurnChime();
 
-  // 2. High Quality Speech Synthesis
+  // 2. High Quality Speech Synthesis (Google Maps & inDrive Voice Guidance)
   if ('speechSynthesis' in window) {
     try {
       if (window.speechSynthesis.paused) {
@@ -2497,6 +2497,13 @@ function speakNavigationDirection(text) {
       window.speechSynthesis.speak(utterance);
     } catch (e) {}
   }
+
+  // 3. Android Native Text-to-Speech Engine (Plays aloud on mobile device regardless of webview mute)
+  try {
+    if (window.FinditNative && typeof window.FinditNative.speak === 'function') {
+      window.FinditNative.speak(text);
+    }
+  } catch (nativeErr) {}
 }
 
 function toggleNavVoice() {
@@ -2506,6 +2513,11 @@ function toggleNavVoice() {
     showToast('Voice directions unmuted', 'info');
   } else {
     try { window.speechSynthesis.cancel(); } catch (e) {}
+    try {
+      if (window.FinditNative && typeof window.FinditNative.stopSpeech === 'function') {
+        window.FinditNative.stopSpeech();
+      }
+    } catch (e) {}
     showToast('Voice directions muted', 'info');
   }
   renderNavigationHud();
@@ -2624,6 +2636,20 @@ function advanceNavigationStep(curLat, curLng) {
 
 async function drawRoadRouteOnMap(lat1, lng1, lat2, lng2, color = '#0066FF', weight = 5, isNav = false, reqContext = null) {
   if (!leafletMap) return;
+
+  // inDrive rule: When looking for providers, never show route polylines; show only concentric radar pulse
+  const activeCustomerReq = getCustomerActiveRequest();
+  if (state.role === 'CUSTOMER' && (state.screenStep === 'SEARCHING' || (activeCustomerReq && activeCustomerReq.status === 'OPEN'))) {
+    if (leafletRoutePolyline) {
+      try { leafletMap.removeLayer(leafletRoutePolyline); } catch (e) {}
+      leafletRoutePolyline = null;
+    }
+    if (leafletRoutePolylineCasing) {
+      try { leafletMap.removeLayer(leafletRoutePolylineCasing); } catch (e) {}
+      leafletRoutePolylineCasing = null;
+    }
+    return;
+  }
   const key = `${lat1.toFixed(4)},${lng1.toFixed(4)}->${lat2.toFixed(4)},${lng2.toFixed(4)}`;
 
   let coords = osrmRouteCache.get(key);
@@ -3093,6 +3119,18 @@ function updateMapMarkers(force = false) {
   }
 
   if (!leafletMap || !leafletMarkersLayer || !state.db) return;
+
+  // Never keep or display routes while looking for providers
+  if (isSearching) {
+    if (leafletRoutePolyline) {
+      try { leafletMap.removeLayer(leafletRoutePolyline); } catch (e) {}
+      leafletRoutePolyline = null;
+    }
+    if (leafletRoutePolylineCasing) {
+      try { leafletMap.removeLayer(leafletRoutePolylineCasing); } catch (e) {}
+      leafletRoutePolylineCasing = null;
+    }
+  }
 
   const onlinePros = (state.db.providers || []).filter((p) => p.isOnline !== false);
   const mapSig = `${state.role}|${state.screenStep}|${state.selectedCategoryId}|${isSearching}|${isBooked}|${activeReq?.id || ''}|${activeReq?.acceptedProviderId || ''}|${onlinePros.length}`;
@@ -4816,10 +4854,14 @@ function renderBookedTrackingOverlay(req) {
                 </div>
                 <span style="background:#2563EB; color:#FFFFFF; font-size:13.5px; font-weight:900; letter-spacing:1.5px; padding:3px 9px; border-radius:8px; flex-shrink:0;">#${req.startPinCode || '4829'}</span>
               </div>
+              <button class="btn-dark-sec" style="margin-top:8px; width:100%; height:36px; font-size:12px; font-weight:700; color:#059669; border:1px solid #A7F3D0; background:#ECFDF5; justify-content:center;" onclick="openRateBookingModal('${req.id}')">
+                ${uiIcon('check', 14)}
+                <span>Mark Service Completed</span>
+              </button>
             `;
           }
           return `
-            <div style="display:grid; grid-template-columns:1fr 1fr 1.35fr; gap:8px;">
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px;">
               <button class="btn-dark-sec" onclick="startInAppCall('${(prov?.name || 'Pro').replace(/'/g, "\\'")}', '${escapeHtml(req.title)}', 'call_${req.id}', '${prov?.id || ''}')">
                 ${uiIcon('phone', 14)}
                 <span>Call</span>
@@ -4828,11 +4870,11 @@ function renderBookedTrackingOverlay(req) {
                 ${uiIcon('chat', 14)}
                 <span>Chat ${(req.messages && req.messages.length > 0) ? `(${req.messages.length})` : ''}</span>
               </button>
-              <button class="btn-primary-blue" style="height:42px; font-size:13px; background:#10B981;" onclick="openRateBookingModal('${req.id}')">
-                ${uiIcon('check', 15)}
-                <span>Complete</span>
-              </button>
             </div>
+            <button class="btn-primary-blue" style="width:100%; height:44px; font-size:14px; font-weight:800; background:#10B981; box-shadow:0 4px 14px rgba(16,185,129,0.35);" onclick="openRateBookingModal('${req.id}')">
+              ${uiIcon('check', 16)}
+              <span>✓ Mark Service Completed &amp; Rate</span>
+            </button>
           `;
         })()}
       </div>
@@ -6276,6 +6318,14 @@ function renderModalLayer() {
       ? ['Paid Promptly in USD', 'Respectful & Welcoming', 'Home & Power Ready', 'Clear Gate Directions', 'Delayed at Gate', 'Haggled Agreed Price']
       : ['Punctual Arrival', 'Clean Mobile Kit', 'Professional Work', 'Fair USD Price', 'Friendly & Respectful', 'Delayed Arrival'];
 
+    const ratingDescriptions = {
+      1: '★☆☆☆☆ Needs Major Improvement',
+      2: '★★☆☆☆ Below Expectations',
+      3: '★★★☆☆ Satisfactory Service',
+      4: '★★★★☆ Very Good Service',
+      5: '★★★★★ Outstanding & Highly Recommended'
+    };
+
     root.innerHTML = `
       <div class="modal-backdrop" onclick="closeModal()">
         <div class="indrive-modal-sheet" onclick="event.stopPropagation()">
@@ -6285,25 +6335,35 @@ function renderModalLayer() {
           </div>
 
           <div style="text-align:center; padding:8px 0 14px;">
-            <div style="font-size:14px; font-weight:700; color:var(--text-secondary); margin-bottom:10px;">
+            <div style="font-size:14px; font-weight:700; color:var(--text-secondary); margin-bottom:12px;">
               ${isProvider ? `How was your visit serving <strong>${req.customerName || 'the client'}</strong>?` : `How was your <strong>${req.title || 'Home Service'}</strong> experience?`}
             </div>
-            <div style="display:flex; justify-content:center; gap:10px; margin-bottom:14px;">
+
+            <!-- Clickable 1 to 5 Stars Component -->
+            <div style="display:flex; justify-content:center; gap:8px; margin-bottom:8px;">
               ${[1, 2, 3, 4, 5].map((star) => `
                 <button
-                  style="background:var(--bg-card); border:1.5px solid ${star <= state.ratingStars ? '#F59E0B' : 'var(--border-light)'}; width:46px; height:46px; border-radius:13px; display:inline-flex; align-items:center; justify-content:center; cursor:pointer;"
-                  onclick="state.ratingStars=${star}; renderModalLayer();"
+                  type="button"
+                  style="background:var(--bg-card); border:1.8px solid ${star <= state.ratingStars ? '#F59E0B' : 'var(--border-light)'}; width:48px; height:48px; border-radius:14px; display:inline-flex; align-items:center; justify-content:center; cursor:pointer; transition:transform 0.12s, border-color 0.15s;"
+                  onclick="selectRatingStars(${star})"
+                  title="${star} Star${star > 1 ? 's' : ''}"
                 >
-                  ${star <= state.ratingStars ? uiIcon('star', 22) : uiIcon('starOutline', 22)}
+                  ${star <= state.ratingStars ? uiIcon('star', 24) : uiIcon('starOutline', 24)}
                 </button>
               `).join('')}
             </div>
 
+            <div style="font-size:12px; font-weight:800; color:${state.ratingStars >= 4 ? '#059669' : state.ratingStars === 3 ? '#D97706' : '#DC2626'}; margin-bottom:14px;">
+              ${ratingDescriptions[state.ratingStars] || `${state.ratingStars} Stars`}
+            </div>
+
+            <!-- Quick Compliment Tags -->
             <div style="display:flex; flex-wrap:wrap; justify-content:center; gap:7px; margin-bottom:14px;">
               ${allTags.map((tag) => {
                 const active = state.ratingTags.includes(tag);
                 return `
                   <button
+                    type="button"
                     class="chat-preset-chip"
                     style="background:${active ? 'var(--blue-primary)' : 'var(--bg-card)'}; color:${active ? '#FFFFFF' : 'var(--text-main)'}; border-color:${active ? 'var(--blue-primary)' : 'var(--border-light)'}; padding:7px 12px;"
                     onclick="toggleRatingComplimentTag('${tag}')"
@@ -6313,6 +6373,21 @@ function renderModalLayer() {
                   </button>
                 `;
               }).join('')}
+            </div>
+
+            <!-- Custom Written Feedback Comment Box (User Requested Free-Form Input) -->
+            <div style="margin:12px 0 16px; text-align:left;">
+              <label style="font-size:11.5px; font-weight:800; color:var(--text-secondary); display:block; margin-bottom:5px; text-transform:uppercase; letter-spacing:0.04em;">
+                Write Custom Feedback (Optional)
+              </label>
+              <textarea
+                id="customRatingCommentBox"
+                class="dark-input"
+                rows="3"
+                style="width:100%; border-radius:12px; font-size:13px; line-height:1.45; padding:10px 12px; resize:none;"
+                placeholder="${isProvider ? 'Write notes about the client gate, payment, or home instructions...' : 'Share what made the specialist stand out, punctuality, neatness, etc...'}"
+                oninput="state.customReviewComment = this.value"
+              >${escapeHtml(state.customReviewComment || '')}</textarea>
             </div>
           </div>
 
@@ -8421,6 +8496,7 @@ async function submitCancelTaskWithReason(reason) {
 
 function openRateBookingModal(requestId) {
   state.ratingStars = 5;
+  state.customReviewComment = '';
   state.activeModal = 'RATE_BOOKING_MODAL';
   state.modalData = { requestId };
   if (state.role === 'PROVIDER') {
@@ -8428,6 +8504,11 @@ function openRateBookingModal(requestId) {
   } else {
     state.ratingTags = ['Punctual Arrival', 'Clean Mobile Kit', 'Professional Work'];
   }
+  renderModalLayer();
+}
+
+function selectRatingStars(num) {
+  state.ratingStars = Math.max(1, Math.min(5, Number(num)));
   renderModalLayer();
 }
 
@@ -8457,7 +8538,10 @@ async function completeBooking(requestId) {
 
   const role = state.role || 'CUSTOMER';
   const rating = state.ratingStars || 5;
-  const reviewText = (state.ratingTags || []).join(', ');
+  const customComment = (state.customReviewComment || '').trim();
+  const reviewText = customComment
+    ? (state.ratingTags && state.ratingTags.length ? `${state.ratingTags.join(', ')} — ${customComment}` : customComment)
+    : (state.ratingTags || []).join(', ');
 
   // 2. Optimistically update local booking status to COMPLETED so UI never bounces
   if (state.db && Array.isArray(state.db.requests)) {
@@ -8465,9 +8549,9 @@ async function completeBooking(requestId) {
     if (localReq) {
       localReq.status = 'COMPLETED';
       if (role === 'PROVIDER') {
-        localReq.clientRatedByProvider = { rating, comment: reviewText };
+        localReq.clientRatedByProvider = { rating, comment: reviewText, customComment, tags: state.ratingTags };
       } else {
-        localReq.providerRatedByClient = { rating, comment: reviewText };
+        localReq.providerRatedByClient = { rating, comment: reviewText, customComment, tags: state.ratingTags };
       }
     }
   }
@@ -8475,6 +8559,7 @@ async function completeBooking(requestId) {
   // 3. Immediately close modal and reset step in 0ms
   state.activeModal = null;
   state.modalData = null;
+  state.customReviewComment = '';
   lastRenderedModalKey = '';
   state.activeRequestId = null;
   state.isSheetMinimized = false;
@@ -8485,7 +8570,7 @@ async function completeBooking(requestId) {
 
   showToast(
     role === 'PROVIDER'
-      ? 'Client rated successfully! Great job.'
+      ? 'Client review submitted successfully! Great job.'
       : 'Service rated! Thank you for supporting Harare pros.',
     'success'
   );
@@ -8496,7 +8581,9 @@ async function completeBooking(requestId) {
       status: 'COMPLETED',
       ratedByRole: role,
       rating,
-      reviewText
+      reviewText,
+      customComment,
+      tags: state.ratingTags
     });
     await fetchState(true);
   } catch (err) {
@@ -9518,8 +9605,85 @@ function renderProviderWalletTab(prov) {
   const quickAmounts = [5, 10, 20, 50];
   const myEcoSubmissions = (state.db.ecocashTopups || []).filter((t) => t.providerId === prov.id).slice(0, 5);
 
+  // Calculate Provider Completed Visits & Earnings Analytics Float
+  const allReqs = state.db?.requests || [];
+  const completedJobs = allReqs.filter((r) => {
+    if (r.status !== 'COMPLETED') return false;
+    if (r.acceptedProviderId === prov.id) return true;
+    return (r.offers || []).some((o) => o.providerId === prov.id && (o.id === r.acceptedOfferId || r.pinVerifiedByProvider));
+  });
+
+  const totalGrossEarned = completedJobs.reduce((sum, r) => sum + Number(r.agreedTotalUsd || r.budgetUsd || 0), 0);
+  const totalNetEarned = totalGrossEarned * (1 - commRate / 100);
+  const completedCount = completedJobs.length;
+  const avgFare = completedCount > 0 ? (totalGrossEarned / completedCount) : 0;
+
   return `
     <div>
+      <!-- inDrive Provider Lifetime Earnings & Performance Float -->
+      <div style="background:linear-gradient(135deg, #0F172A 0%, #1E293B 100%); border:1px solid #334155; border-radius:16px; padding:16px; margin-bottom:12px; color:#FFFFFF; box-shadow:0 10px 25px -5px rgba(0,0,0,0.25);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="font-size:18px;">📊</span>
+            <div>
+              <div style="font-size:13px; font-weight:800; color:#F8FAFC;">Earnings &amp; Job Analytics</div>
+              <div style="font-size:10.5px; color:#94A3B8;">Your completed home-visit payouts</div>
+            </div>
+          </div>
+          <span style="background:rgba(16,185,129,0.18); border:1px solid rgba(16,185,129,0.4); color:#34D399; font-size:10.5px; font-weight:800; padding:2px 8px; border-radius:99px;">
+            ${(100 - commRate)}% Take-Home
+          </span>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px;">
+          <div style="background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:10px 12px;">
+            <div style="font-size:10.5px; font-weight:700; color:#94A3B8; text-transform:uppercase;">Net Earnings</div>
+            <div style="font-size:22px; font-weight:900; color:#10B981; margin-top:2px;">$${totalNetEarned.toFixed(2)} <span style="font-size:11px; font-weight:700; color:#94A3B8;">USD</span></div>
+            <div style="font-size:10px; color:#64748B;">Gross: $${totalGrossEarned.toFixed(2)}</div>
+          </div>
+          <div style="background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:10px 12px;">
+            <div style="font-size:10.5px; font-weight:700; color:#94A3B8; text-transform:uppercase;">Average Job Pay</div>
+            <div style="font-size:22px; font-weight:900; color:#60A5FA; margin-top:2px;">$${avgFare.toFixed(2)} <span style="font-size:11px; font-weight:700; color:#94A3B8;">/job</span></div>
+            <div style="font-size:10px; color:#64748B;">${completedCount} completed visit${completedCount === 1 ? '' : 's'}</div>
+          </div>
+        </div>
+
+        <!-- Recent Completed Jobs Pay Breakdown -->
+        ${completedJobs.length > 0 ? `
+          <div style="border-top:1px solid rgba(255,255,255,0.1); padding-top:10px;">
+            <div style="font-size:10.5px; font-weight:800; color:#94A3B8; text-transform:uppercase; margin-bottom:6px;">
+              Recent Completed Jobs (${completedJobs.length})
+            </div>
+            <div style="display:flex; flex-direction:column; gap:6px; max-height:160px; overflow-y:auto;">
+              ${completedJobs.slice(0, 5).map((j) => {
+                const fare = Number(j.agreedTotalUsd || j.budgetUsd || 0);
+                const net = fare * (1 - commRate / 100);
+                return `
+                  <div style="background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.06); border-radius:8px; padding:7px 10px; display:flex; justify-content:space-between; align-items:center;">
+                    <div style="min-width:0; flex:1;">
+                      <div style="font-size:12px; font-weight:800; color:#F1F5F9; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                        ${escapeHtml(j.title || 'Home Visit')}
+                      </div>
+                      <div style="font-size:10px; color:#94A3B8;">
+                        ${escapeHtml(j.suburbName || 'Harare')} • ${j.customerName || 'Client'}
+                      </div>
+                    </div>
+                    <div style="text-align:right; flex-shrink:0;">
+                      <div style="font-size:13px; font-weight:900; color:#34D399;">+$${net.toFixed(2)}</div>
+                      <div style="font-size:9.5px; color:#64748B;">Gross $${fare.toFixed(2)}</div>
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        ` : `
+          <div style="font-size:11px; color:#64748B; text-align:center; padding:4px 0;">
+            No completed visits yet. Accept open requests on the map to start earning!
+          </div>
+        `}
+      </div>
+
       <!-- Clean Sleek Wallet Balance Card -->
       <div class="wallet-hero-card" style="padding:16px 18px; border-radius:16px; margin-bottom:12px;">
         <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -11280,32 +11444,28 @@ function isCallForCurrentUser(c) {
   const myFinditId = String(state.currentUser?.finditId || '');
   const callerId = String(c.callerId || '');
 
-  // Never ring caller themselves
+  // 1. Never ring caller themselves
   if (myId && callerId === myId) return false;
   if (myPhone && callerId.replace(/\D/g, '') === myPhone) return false;
 
-  // Direct recipient match (by ID, phone digits, or Findit ID)
+  // 2. Strict 1-on-1 recipient isolation (Never leak calls to third parties or other providers!)
   const recId = String(c.recipientId || '');
-  if (myId && recId === myId) return true;
-  if (myPhone && recId.replace(/\D/g, '') && recId.replace(/\D/g, '') === myPhone) return true;
-  if (myFinditId && recId === myFinditId) return true;
+  if (recId) {
+    if (myId && recId === myId) return true;
+    if (myPhone && recId.replace(/\D/g, '') && recId.replace(/\D/g, '') === myPhone) return true;
+    if (myFinditId && recId === myFinditId) return true;
+    return false; // strictly isolated to recipient!
+  }
 
-  // Request context match (active request, open chat, or booking match)
-  if (c.requestId) {
-    if (state.activeRequestId === c.requestId) return true;
-    if (state.openChatRequestId === c.requestId) return true;
-    const activeBooking = state.role === 'PROVIDER' ? getProviderActiveBooking(myId) : getCustomerActiveRequest();
-    if (activeBooking && activeBooking.id === c.requestId) return true;
-
-    if (state.db && Array.isArray(state.db.requests)) {
-      const matchReq = state.db.requests.find((r) => r.id === c.requestId);
-      if (matchReq) {
-        if (state.role === 'CUSTOMER' && (matchReq.customerId === myId || (matchReq.customerPhone && matchReq.customerPhone.replace(/\D/g, '') === myPhone))) {
-          return true;
-        }
-        if (state.role === 'PROVIDER' && (matchReq.acceptedProviderId === myId || (matchReq.offers || []).some((o) => o.providerId === myId))) {
-          return true;
-        }
+  // 3. Fallback only if recipientId wasn't specified: strictly match the accepted provider or the customer of this request
+  if (c.requestId && state.db && Array.isArray(state.db.requests)) {
+    const matchReq = state.db.requests.find((r) => r.id === c.requestId);
+    if (matchReq) {
+      if (state.role === 'CUSTOMER' && (matchReq.customerId === myId || (matchReq.customerPhone && matchReq.customerPhone.replace(/\D/g, '') === myPhone))) {
+        return true;
+      }
+      if (state.role === 'PROVIDER' && matchReq.acceptedProviderId === myId) {
+        return true;
       }
     }
   }
@@ -11348,7 +11508,7 @@ function syncIncomingCallFromList(calls) {
     }
   }
 
-  // 2. If we have an incoming call or active call, and it is marked ENDED or removed from list
+  // 2. If we have an incoming call or active call, and it is marked ENDED or removed from list: instant dual drop!
   if (state.incomingCall || state.activeCall) {
     const currentChan = (state.incomingCall || state.activeCall).channelId;
     const currentReq = (state.incomingCall || state.activeCall).requestId;
@@ -11356,7 +11516,7 @@ function syncIncomingCallFromList(calls) {
       ((c.channelId && c.channelId === currentChan) || (c.requestId && c.requestId === currentReq)) &&
       c.status !== 'ENDED'
     );
-    if (!callStillActive && state.incomingCall) {
+    if (!callStillActive) {
       endInAppCall(false);
       return;
     }
@@ -11532,8 +11692,19 @@ async function declineIncomingCall() {
 }
 
 async function joinDualEngineCall(channelId, isCaller) {
-  joinAgoraVoiceChannel(channelId);
-  setupWebRtcPeerAudio(channelId, isCaller);
+  let agoraConnected = false;
+  if (window.AgoraRTC) {
+    try {
+      await joinAgoraVoiceChannel(channelId);
+      agoraConnected = true;
+    } catch (agoraErr) {
+      console.warn('Agora Voice notice, using WebRTC fallback:', agoraErr.message);
+    }
+  }
+  // Only activate WebRTC P2P direct audio if Agora is not connected, preventing audio doubling and echoes
+  if (!agoraConnected) {
+    setupWebRtcPeerAudio(channelId, isCaller);
+  }
 }
 
 async function setupWebRtcPeerAudio(channelId, isCaller) {

@@ -52,6 +52,7 @@
         <!-- Concentric Blue Radar Circles when Searching -->
         <div id="mapRadarPulses" class="map-radar-pulses" style="display:none;">
           <div class="radar-circle-outer"></div>
+          <div class="radar-circle-mid"></div>
           <div class="radar-circle-inner"></div>
         </div>
 
@@ -69,7 +70,7 @@
         </div>
 
         <!-- Electric Blue & White User Hailing Pin on Stem -->
-        <div class="indrive-waving-pin-box" id="centerUserPinBox" onclick="orderFromCurrentMapPin()">
+        <div class="indrive-waving-pin-box" id="centerUserPinBox" onclick="handleCenterPinBubbleClick()">
           <div class="user-pin-pulse-ring"></div>
           <img id="centerPinUserAvatar" src="" alt="You" style="display:none; width:100%; height:100%; object-fit:cover; border-radius:11px;" />
           <svg id="centerPinDefaultSvg" width="24" height="24" viewBox="0 0 24 24" fill="none">

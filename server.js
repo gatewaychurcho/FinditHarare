@@ -4221,8 +4221,8 @@ Return ONLY JSON with keys:
       }
 
       broadcastUpdate('CALL_RESPONSE', {
-        requestId,
-        channelId,
+        requestId: match?.requestId || requestId,
+        channelId: match?.channelId || channelId,
         action
       });
       return sendJson(res, 200, { ok: true });
@@ -4231,7 +4231,7 @@ Return ONLY JSON with keys:
     }
   }
 
-  // Polling Fallback for In-App Calling (Guarantees delivery even across separate serverless instances or firewalled networks)
+  // Polling Fallback for In-App Calling (Strict 1-on-1 isolation: rings ONLY caller & recipient)
   if (pathname === '/api/calls/check' && req.method === 'GET') {
     try {
       const userId = String(parsedUrl.searchParams.get('userId') || '');
@@ -4245,10 +4245,23 @@ Return ONLY JSON with keys:
       const incoming = db.activeCalls.find((c) => {
         if (c.status !== 'RINGING') return false;
         const userPhoneDigits = userId.replace(/\D/g, '');
-        if (userId && (c.callerId === userId || (userPhoneDigits && c.callerId.replace(/\D/g, '') === userPhoneDigits))) return false; // don't ring caller
-        if (userId && c.recipientId && (c.recipientId === userId || (userPhoneDigits && c.recipientId.replace(/\D/g, '') === userPhoneDigits))) return true;
-        if (reqId && c.requestId && c.requestId === reqId) return true;
-        if (chanId && c.channelId === chanId) return true;
+        // 1. Caller never rings themselves
+        if (userId && (c.callerId === userId || (userPhoneDigits && c.callerId.replace(/\D/g, '') === userPhoneDigits))) return false;
+        // 2. Strict recipient matching (by user id or phone digits)
+        if (userId && c.recipientId) {
+          if (c.recipientId === userId) return true;
+          if (userPhoneDigits && c.recipientId.replace(/\D/g, '') === userPhoneDigits) return true;
+          return false; // If recipientId is specified and doesn't match this user, NEVER ring them!
+        }
+        // 3. Fallback only if recipientId wasn't known: ring only the specific client or accepted provider of the request
+        if (reqId && c.requestId === reqId && userId && Array.isArray(db.requests)) {
+          const matchReq = db.requests.find((r) => r.id === reqId);
+          if (matchReq) {
+            const isCust = matchReq.customerId === userId || (userPhoneDigits && matchReq.customerPhone && matchReq.customerPhone.replace(/\D/g, '') === userPhoneDigits);
+            const isAcceptedPro = matchReq.acceptedProviderId === userId;
+            if (isCust || isAcceptedPro) return true;
+          }
+        }
         return false;
       }) || null;
 
@@ -4435,7 +4448,9 @@ Return ONLY JSON with keys:
         const ratedByRole = body.ratedByRole || 'CUSTOMER'; // 'CUSTOMER' | 'PROVIDER'
         const newRating = Math.max(1, Math.min(5, Number(body.rating || 5)));
         const tags = Array.isArray(body.tags) ? body.tags : [];
-        const comment = (body.reviewComment || tags.join(', ') || 'Completed home service on Findit Harare').trim();
+        const customComment = (body.customComment || '').trim();
+        const rawComment = body.reviewComment || body.reviewText || '';
+        const comment = (customComment || rawComment || tags.join(', ') || 'Completed home service on Findit Harare').trim();
 
         const offer = reqItem.offers.find((o) => o.id === reqItem.acceptedOfferId);
         const provider = offer

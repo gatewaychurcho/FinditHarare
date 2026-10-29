@@ -26,6 +26,8 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Toast;
+import android.speech.tts.TextToSpeech;
+import java.util.Locale;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -50,6 +52,7 @@ public class MainActivity extends Activity {
     private long lastBackgroundPollMs = System.currentTimeMillis();
     private Handler backgroundHandler;
     private Runnable backgroundRunnable;
+    private TextToSpeech tts;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -69,6 +72,15 @@ public class MainActivity extends Activity {
 
         createNotificationChannel();
         requestAppPermissions();
+
+        try {
+            tts = new TextToSpeech(this, status -> {
+                if (status == TextToSpeech.SUCCESS && tts != null) {
+                    tts.setLanguage(Locale.US);
+                    tts.setSpeechRate(1.05f);
+                }
+            });
+        } catch (Exception ignored) {}
 
         webView = new WebView(this);
         setContentView(webView);
@@ -290,6 +302,28 @@ public class MainActivity extends Activity {
                     .apply();
             } catch (Exception e) {}
         }
+
+        @JavascriptInterface
+        public void speak(String text) {
+            try {
+                if (tts != null && text != null && !text.trim().isEmpty()) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                        tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "findit_nav_" + System.currentTimeMillis());
+                    } else {
+                        tts.speak(text, TextToSpeech.QUEUE_FLUSH, null);
+                    }
+                }
+            } catch (Exception ignored) {}
+        }
+
+        @JavascriptInterface
+        public void stopSpeech() {
+            try {
+                if (tts != null) {
+                    tts.stop();
+                }
+            } catch (Exception ignored) {}
+        }
     }
 
     public void triggerIncomingCallAlert(String callerName, String callType, String channelId) {
@@ -498,6 +532,12 @@ public class MainActivity extends Activity {
     protected void onDestroy() {
         if (backgroundHandler != null && backgroundRunnable != null) {
             backgroundHandler.removeCallbacks(backgroundRunnable);
+        }
+        if (tts != null) {
+            try {
+                tts.stop();
+                tts.shutdown();
+            } catch (Exception ignored) {}
         }
         super.onDestroy();
     }
