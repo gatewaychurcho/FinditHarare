@@ -2259,35 +2259,11 @@ function initLeafletMap() {
 
     leafletMarkersLayer = L.layerGroup().addTo(leafletMap);
 
-    leafletMap.on('movestart', () => {
-      if (state.role === 'PROVIDER') return;
-      const pin = document.getElementById('centerMapPin');
-      if (pin) pin.classList.add('pin-lifting');
-    });
+    leafletMap.on('movestart', () => {});
 
     leafletMap.on('moveend', () => {
       if (!leafletMap) return;
-      const pin = document.getElementById('centerMapPin');
-      if (pin) pin.classList.remove('pin-lifting');
-
-      // Service Provider location is strictly locked to live GPS coordinates — never alter provider position by panning map
-      if (state.role === 'PROVIDER') return;
-
-      const activeReq = getCustomerActiveRequest();
-      if (activeReq && isBookedStatus(activeReq.status)) return;
-
-      const center = leafletMap.getCenter();
-      if (!center) return;
-
-      const dist = Math.hypot(center.lat - (state.pinnedLat || 0), center.lng - (state.pinnedLng || 0));
-      if (dist < 0.0001) return;
-
-      state.pinnedLat = Number(center.lat.toFixed(5));
-      state.pinnedLng = Number(center.lng.toFixed(5));
-      state.userHasManuallyDraggedPin = true;
-      state.isCustomAddressSelected = true;
-
-      reverseGeocodeHararePin(state.pinnedLat, state.pinnedLng);
+      // Moving the map does NOT change your location (only pans map view across Harare)
     });
 
     updateLiveGpsMarker();
@@ -3003,15 +2979,20 @@ function useBrowserGeolocation(silent = false) {
             pMatch.lat = state.userLiveGpsLat;
             pMatch.lng = state.userLiveGpsLng;
           }
+          apiPost('/api/providers/location', {
+            providerId: state.currentUser.id,
+            lat: state.userLiveGpsLat,
+            lng: state.userLiveGpsLng
+          }).catch(() => {});
         }
 
         updateLiveGpsMarker();
         updateMapMarkers(true);
         if (leafletMap) {
-          leafletMap.flyTo([state.userLiveGpsLat || state.pinnedLat, state.userLiveGpsLng || state.pinnedLng], 16, { duration: 0.7 });
+          leafletMap.flyTo([state.userLiveGpsLat || state.pinnedLat, state.userLiveGpsLng || state.pinnedLng], 17, { animate: true, duration: 0.8 });
         }
         if (!silent) {
-          showToast('📍 Centered on your live GPS location');
+          showToast(`📍 Centered exactly on your live GPS location: ${state.customAddress || 'Harare'}`);
         }
       },
       () => {
@@ -3023,7 +3004,7 @@ function useBrowserGeolocation(silent = false) {
         }
         updateLiveGpsMarker();
         if (leafletMap) {
-          leafletMap.flyTo([state.pinnedLat, state.pinnedLng], 16, { duration: 0.7 });
+          leafletMap.flyTo([state.pinnedLat, state.pinnedLng], 17, { animate: true, duration: 0.8 });
         }
         if (!silent) {
           showToast('📍 Centered on Harare location');
@@ -3032,14 +3013,14 @@ function useBrowserGeolocation(silent = false) {
       { enableHighAccuracy: true, timeout: 8000 }
     );
   } else if (!silent && leafletMap) {
-    leafletMap.flyTo([state.pinnedLat, state.pinnedLng], 16, { duration: 0.7 });
+    leafletMap.flyTo([state.pinnedLat, state.pinnedLng], 17, { animate: true, duration: 0.8 });
   }
 }
 
 function updateLiveGpsMarker() {
   if (!leafletMap) return;
 
-  // In provider mode, provider's own position is rendered with their trade avatar icon
+  // In provider mode, provider's own position is rendered with their trade icon
   if (state.role === 'PROVIDER') {
     if (userLiveGpsMarker) {
       leafletMap.removeLayer(userLiveGpsMarker);
@@ -3052,31 +3033,27 @@ function updateLiveGpsMarker() {
   const lng = state.pinnedLng || state.userLiveGpsLng || 31.0365;
   if (!lat || !lng) return;
 
-  const userAvatar = state.isAuthenticated && state.currentUser?.avatarUrl ? state.currentUser.avatarUrl : '';
+  // Authentic inDrive passenger client icon: pure vector icon (exactly 1 on map, no profile photos)
   const gpsIcon = L.divIcon({
-    className: 'draggable-you-pin-wrapper',
+    className: 'indrive-client-map-marker-wrap',
     html: `
-      <div style="position:relative; display:flex; flex-direction:column; align-items:center; cursor:grab; pointer-events:auto;" title="Drag me to change service location">
-        <div style="background:#0F172A; color:#FFFFFF; font-size:10.5px; font-weight:800; padding:3px 9px; border-radius:99px; margin-bottom:4px; white-space:nowrap; box-shadow:0 4px 12px rgba(15,23,42,0.35); display:inline-flex; align-items:center; gap:5px;">
-          <span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:#10B981; box-shadow:0 0 0 2px rgba(16,185,129,0.35);"></span>
-          <span>${state.customAddress || 'Harare'}</span>
+      <div style="position:relative; display:flex; flex-direction:column; align-items:center; pointer-events:auto;">
+        <div style="background:#0F172A; color:#FFFFFF; font-size:10px; font-weight:800; padding:2px 8px; border-radius:99px; margin-bottom:3px; white-space:nowrap; box-shadow:0 3px 10px rgba(15,23,42,0.3); display:inline-flex; align-items:center; gap:4px;">
+          <span style="display:inline-block; width:5px; height:5px; border-radius:50%; background:#10B981;"></span>
+          <span>${escapeHtml(state.customAddress || 'Harare')}</span>
         </div>
-        <div class="indrive-waving-pin-box" style="position:relative; width:44px; height:44px; box-shadow:0 8px 24px rgba(0,102,255,0.45);">
-          <div class="user-pin-pulse-ring"></div>
-          ${userAvatar ? `<img src="${userAvatar}" onerror="this.style.display='none';" style="width:100%; height:100%; object-fit:cover; border-radius:11px;" alt="You" />` : `
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-              <circle cx="12" cy="5" r="2.6" fill="#FFFFFF"/>
-              <path d="M6.5 4.5C6.5 8.5 9 11 12 11.5L14.5 19.5M9.5 11.2L7.5 19.5M12 11.5L17.5 13.5" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          `}
-          <div class="user-pin-you-badge" style="font-weight:900;">YOU</div>
+        <div style="position:relative; width:40px; height:40px; border-radius:50%; background:#0066FF; border:3px solid #FFFFFF; box-shadow:0 6px 18px rgba(0,102,255,0.45); display:flex; align-items:center; justify-content:center;">
+          <div class="user-pin-pulse-ring" style="border-radius:50%;"></div>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round"/>
+            <circle cx="9" cy="7" r="4" stroke="#FFFFFF" stroke-width="2.5"/>
+          </svg>
+          <div style="position:absolute; bottom:-6px; background:#0F172A; color:#FFFFFF; font-size:8px; font-weight:900; letter-spacing:0.04em; padding:1px 5px; border-radius:99px; border:1px solid #FFFFFF;">YOU</div>
         </div>
-        <div class="indrive-pin-stem" style="height:12px; width:3px; background:#0066FF;"></div>
-        <div class="indrive-pin-anchor-dot" style="width:8px; height:8px; background:#0066FF; border-radius:50%;"></div>
       </div>
     `,
-    iconSize: [120, 90],
-    iconAnchor: [60, 90]
+    iconSize: [110, 68],
+    iconAnchor: [55, 58]
   });
 
   if (userLiveGpsMarker) {
@@ -3085,21 +3062,8 @@ function updateLiveGpsMarker() {
   } else {
     userLiveGpsMarker = L.marker([lat, lng], {
       icon: gpsIcon,
-      zIndexOffset: 1200,
-      draggable: state.role !== 'PROVIDER'
+      zIndexOffset: 1200
     }).addTo(leafletMap);
-
-    userLiveGpsMarker.on('dragend', (evt) => {
-      if (state.role === 'PROVIDER') return;
-      state.userHasManuallyDraggedPin = true;
-      state.isCustomAddressSelected = true;
-      const pos = evt.target.getLatLng();
-      state.pinnedLat = Number(pos.lat.toFixed(5));
-      state.pinnedLng = Number(pos.lng.toFixed(5));
-      reverseGeocodeHararePin(state.pinnedLat, state.pinnedLng);
-      showToast(`📍 Position updated: ${state.customAddress}`);
-      updateLiveGpsMarker();
-    });
   }
 }
 
@@ -3114,43 +3078,23 @@ function updateMapMarkers(force = false) {
   const whereFromBubble = document.getElementById('whereFromBubble');
   const whereFromOrderAction = document.getElementById('whereFromOrderAction');
   const radarPulses = document.getElementById('mapRadarPulses');
-  const pinLabel = document.getElementById('centerPinLabel');
-  const pinAvatarImg = document.getElementById('centerPinUserAvatar');
-  const pinDefaultSvg = document.getElementById('centerPinDefaultSvg');
+  const centerUserPinBox = document.getElementById('centerUserPinBox');
 
   const activeReq = getCustomerActiveRequest();
   const isSearching = Boolean(activeReq && activeReq.status === 'OPEN');
   const isBooked = Boolean(activeReq && isBookedStatus(activeReq.status));
 
+  // Hide duplicate screen-center pin elements: strictly 1 client icon on the Leaflet map!
+  if (centerUserPinBox) centerUserPinBox.style.display = 'none';
+  if (whereFromBubble) whereFromBubble.style.display = 'none';
+  if (whereFromOrderAction) whereFromOrderAction.style.display = 'none';
+
   if (centerPin) {
-    if (state.role !== 'PROVIDER' && !isBooked) {
+    if (state.role !== 'PROVIDER' && !isBooked && isSearching) {
       centerPin.style.display = 'flex';
-      centerPin.classList.toggle('searching-mode', isSearching);
-      if (pinLabel) {
-        pinLabel.textContent = `${state.customAddress}, ${(state.customSuburbLabel || 'Harare').split(',')[0]}`;
-      }
-      if (whereFromBubble) {
-        whereFromBubble.style.display = !isSearching ? 'block' : 'none';
-      }
-      if (whereFromOrderAction) {
-        whereFromOrderAction.style.display = state.screenStep === 'HOME' && !isSearching ? 'flex' : 'none';
-      }
-      if (radarPulses) {
-        radarPulses.style.display = isSearching ? 'block' : 'none';
-      }
-      // Show user's verified avatar photo inside the map pin when signed in
-      const userAvatar = state.isAuthenticated && state.currentUser?.avatarUrl ? state.currentUser.avatarUrl : '';
-      if (pinAvatarImg && pinDefaultSvg) {
-        if (userAvatar) {
-          pinAvatarImg.src = userAvatar;
-          pinAvatarImg.style.display = 'block';
-          pinDefaultSvg.style.display = 'none';
-        } else {
-          pinAvatarImg.style.display = 'none';
-          pinDefaultSvg.style.display = 'block';
-        }
-      }
+      if (radarPulses) radarPulses.style.display = 'block';
     } else {
+      if (radarPulses) radarPulses.style.display = 'none';
       centerPin.style.display = 'none';
     }
   }
@@ -3212,10 +3156,7 @@ function updateMapMarkers(force = false) {
 
   stopNavigationHud();
 
-  // Route preview in CONFIGURE is completely removed per user request:
-  // Routes on client screen MUST ONLY appear when an offer is accepted connecting client and provider.
-
-  // Reconcile and update provider markers without destroying DOM on every tick (prevents marker flicker/glitch)
+  // Reconcile and update provider markers with clean vector trade icons (NO profile photos on map)
   const currentProIds = new Set(onlinePros.map((p) => p.id));
   for (const [id, marker] of activeMapProviderMarkers.entries()) {
     if (!currentProIds.has(id)) {
@@ -3234,6 +3175,7 @@ function updateMapMarkers(force = false) {
         existingMarker.setLatLng([p.lat, p.lng]);
       }
     } else {
+      const tradeSvg = getMapMarkerProfessionIconSvg(p.categoryId);
       const markerHtml = `
         <div class="indrive-map-pro-wrap">
           ${showThinkingDots ? `
@@ -3241,14 +3183,13 @@ function updateMapMarkers(force = false) {
               <span></span><span></span><span></span>
             </div>
           ` : ''}
-          <div class="pro-map-marker-pill">
-            ${p.avatarUrl
-              ? `<img src="${resolveMediaUrl(p.avatarUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_AVATAR_FALLBACK}';" alt="${p.shortName || p.name}" />`
-              : `<span style="font-size:11px; font-weight:800; color:#0066FF;">${p.avatarInitials}</span>`
-            }
-            <div class="pro-map-category-dot" title="${p.brandName}">
-              ${getMapMarkerProfessionIconSvg(p.categoryId)}
+          <div class="pro-map-marker-pill" style="background:#0F172A; border:2px solid #0066FF; border-radius:99px; padding:3px 9px 3px 4px; display:inline-flex; align-items:center; gap:6px; box-shadow:0 4px 14px rgba(0,102,255,0.35); cursor:pointer;">
+            <div style="width:26px; height:26px; border-radius:50%; background:#0066FF; display:flex; align-items:center; justify-content:center; color:#FFFFFF; flex-shrink:0;">
+              ${tradeSvg}
             </div>
+            <span style="font-size:11px; font-weight:800; color:#FFFFFF; white-space:nowrap;">
+              ${escapeHtml(p.shortName || p.name.split(' ')[0])}
+            </span>
           </div>
         </div>
       `;
@@ -3256,8 +3197,8 @@ function updateMapMarkers(force = false) {
       const icon = L.divIcon({
         className: '',
         html: markerHtml,
-        iconSize: [44, showThinkingDots ? 64 : 42],
-        iconAnchor: [22, showThinkingDots ? 54 : 21]
+        iconSize: [110, showThinkingDots ? 64 : 40],
+        iconAnchor: [55, showThinkingDots ? 54 : 20]
       });
 
       const m = L.marker([p.lat, p.lng], { icon }).addTo(leafletMarkersLayer);
@@ -3318,7 +3259,7 @@ function drawProviderAndClientRouteMarkers(prov, req) {
   activeMapOfficeMarkers.forEach((m) => { try { leafletMarkersLayer.removeLayer(m); } catch (e) {} });
   activeMapOfficeMarkers.clear();
 
-  // 1. Provider Live Marker with moving trade icon & avatar
+  // 1. Provider Live Marker with moving trade icon (NO photos on map)
   const tradeSvg = getMapMarkerProfessionIconSvg(prov.categoryId);
   const statusLabel = req.status === 'IN_PROGRESS' ? 'Working On Site' : req.status === 'ARRIVED' ? 'At Gate' : 'Approaching Client';
   const provHtml = `
@@ -3327,13 +3268,9 @@ function drawProviderAndClientRouteMarkers(prov, req) {
         <span style="display:inline-flex; width:13px; height:13px; align-items:center; justify-content:center;">${tradeSvg}</span>
         <span>${escapeHtml(prov.shortName || prov.name.split(' ')[0])} • ${statusLabel}</span>
       </div>
-      <div class="pro-map-marker-pill" style="border-color:#0066FF; border-width:3px; position:relative;">
+      <div class="pro-map-marker-pill" style="border-color:#0066FF; border-width:3px; position:relative; background:#0F172A; width:44px; height:44px; border-radius:50%; display:flex; align-items:center; justify-content:center; box-shadow:0 6px 18px rgba(0,102,255,0.45);">
         <div class="pro-heading-arrow" id="proHeadingArrow" style="transform:translateX(-50%) rotate(${liveNavState.bearingDeg || 0}deg);"></div>
-        ${prov.avatarUrl
-          ? `<img src="${resolveMediaUrl(prov.avatarUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_AVATAR_FALLBACK}';" alt="${escapeHtml(prov.name)}" />`
-          : `<span style="font-size:11px; font-weight:800; color:#0066FF;">${prov.avatarInitials}</span>`
-        }
-        <div class="pro-map-category-dot" title="${escapeHtml(prov.brandName || 'Specialist')}">
+        <div style="width:26px; height:26px; border-radius:50%; background:#0066FF; display:flex; align-items:center; justify-content:center; color:#FFFFFF;">
           ${tradeSvg}
         </div>
       </div>
@@ -3353,24 +3290,27 @@ function drawProviderAndClientRouteMarkers(prov, req) {
     activeRouteProviderMarker = L.marker([prov.lat, prov.lng], { icon: provIcon }).addTo(leafletMarkersLayer);
   }
 
-  // 2. Client Live Location Destination Marker (Vector SVG Pin with Live GPS Radar Dot)
+  // 2. Client Live Location Destination Marker (Vector SVG Pin with Live GPS Dot — NO photos)
   const clientFirstName = req.customerName ? req.customerName.split(' ')[0] : 'Client';
   const clientHtml = `
     <div style="display:flex; flex-direction:column; align-items:center;">
-      <div style="background:#0F172A; color:#FFFFFF; font-size:10.5px; font-weight:800; padding:3px 9px; border-radius:99px; margin-bottom:4px; white-space:nowrap; box-shadow:0 4px 12px rgba(15,23,42,0.35); display:inline-flex; align-items:center; gap:5px;">
-        <span style="display:inline-block; width:7px; height:7px; border-radius:50%; background:#10B981; box-shadow:0 0 0 2px rgba(16,185,129,0.35);"></span>
-        <span>${escapeHtml(clientFirstName)}'s Live Location</span>
+      <div style="background:#0F172A; color:#FFFFFF; font-size:10px; font-weight:800; padding:2px 8px; border-radius:99px; margin-bottom:3px; white-space:nowrap; box-shadow:0 3px 10px rgba(15,23,42,0.3); display:inline-flex; align-items:center; gap:4px;">
+        <span style="display:inline-block; width:5px; height:5px; border-radius:50%; background:#10B981;"></span>
+        <span>${escapeHtml(clientFirstName)}'s Location</span>
       </div>
-      <div style="position:relative; width:36px; height:36px; border-radius:12px; background:#0066FF; border:2.5px solid #FFFFFF; display:flex; align-items:center; justify-content:center; color:#FFFFFF; box-shadow:0 6px 16px rgba(0,102,255,0.45);">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+      <div style="position:relative; width:40px; height:40px; border-radius:50%; background:#0066FF; border:3px solid #FFFFFF; display:flex; align-items:center; justify-content:center; color:#FFFFFF; box-shadow:0 6px 16px rgba(0,102,255,0.45);">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round"/>
+          <circle cx="9" cy="7" r="4" stroke="#FFFFFF" stroke-width="2.5"/>
+        </svg>
       </div>
     </div>
   `;
   const clientIcon = L.divIcon({
     className: '',
     html: clientHtml,
-    iconSize: [120, 62],
-    iconAnchor: [60, 54]
+    iconSize: [110, 64],
+    iconAnchor: [55, 54]
   });
 
   if (activeRouteClientMarker) {
@@ -4736,12 +4676,14 @@ function renderBookedTrackingOverlay(req) {
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
       </button>
 
-      <div style="display:flex; align-items:center; gap:8px;">
-        <button class="cancel-request-red-pill pointer-auto" onclick="openCancelTaskModal('${req.id}')">
-          ${uiIcon('close', 14)}
-          <span>Cancel</span>
-        </button>
-      </div>
+      ${(!isArrived && !isInProgress) ? `
+        <div style="display:flex; align-items:center; gap:8px;">
+          <button class="cancel-request-red-pill pointer-auto" onclick="openCancelTaskModal('${req.id}')">
+            ${uiIcon('close', 14)}
+            <span>Cancel</span>
+          </button>
+        </div>
+      ` : ''}
     </div>
 
     <div class="sheet-floating-controls" style="justify-content:flex-end;">
@@ -4944,10 +4886,10 @@ function renderBookedTrackingOverlay(req) {
                 </div>
                 <span style="background:#2563EB; color:#FFFFFF; font-size:13.5px; font-weight:900; letter-spacing:1.5px; padding:3px 9px; border-radius:8px; flex-shrink:0;">#${req.startPinCode || '4829'}</span>
               </div>
-              <button class="btn-dark-sec" style="margin-top:8px; width:100%; height:36px; font-size:12px; font-weight:700; color:#059669; border:1px solid #A7F3D0; background:#ECFDF5; justify-content:center;" onclick="openRateBookingModal('${req.id}')">
-                ${uiIcon('check', 14)}
-                <span>Mark Service Completed</span>
-              </button>
+              <div style="margin-top:8px; background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:9px 12px; display:flex; align-items:center; justify-content:center; gap:6px; color:#64748B; font-size:11.5px; font-weight:700;">
+                <span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:#F59E0B; animation:waTypingWave 1.4s infinite;"></span>
+                <span>Enter PIN with specialist to unlock completion</span>
+              </div>
             `;
           }
           return `
@@ -6050,7 +5992,9 @@ function renderModalLayer() {
                 ? `EDIT_SERVICE_${state.modalData?.item?.id}_${state.editServicePhotoDataUrl ? 1 : 0}`
                 : state.activeModal === 'NOTIFICATIONS'
                   ? `NOTIFICATIONS_${(getRelevantNotifications() || []).length}_${getUnreadNotificationsCount()}`
-                  : `${state.activeModal}_${JSON.stringify(state.modalData || {})}`;
+                  : state.activeModal === 'RATE_BOOKING_MODAL'
+                    ? `RATE_BOOKING_${state.modalData?.requestId}_${state.ratingStars}_${(state.ratingTags || []).join(',')}`
+                    : `${state.activeModal}_${JSON.stringify(state.modalData || {})}`;
 
   if (modalKey === lastRenderedModalKey && root.firstElementChild) {
     return;
@@ -6584,6 +6528,42 @@ function renderModalLayer() {
                 <span style="color:var(--text-secondary); display:inline-flex;">${uiIcon('chevronRight', 14)}</span>
               </div>
             `}
+
+            ${(isAuth && isProvider) ? `
+              <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:14px; padding:12px; margin-bottom:12px;">
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+                  <div>
+                    <div style="font-size:12.5px; font-weight:800; color:#0F172A; display:flex; align-items:center; gap:6px;">
+                      <span style="width:7px; height:7px; border-radius:50%; background:${user.isOnline !== false ? '#10B981' : '#64748B'};"></span>
+                      <span>${user.isOnline !== false ? 'Online & Ready for Jobs' : 'Offline'}</span>
+                    </div>
+                    <div style="font-size:10.5px; color:#64748B; margin-top:2px;">
+                      ${user.isOnline !== false ? 'Clients in Harare can see & book you' : 'Turn on to receive live requests'}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onclick="toggleProviderOnlineStatus()"
+                    style="background:${user.isOnline !== false ? '#10B981' : '#475569'}; color:#FFFFFF; border:none; padding:6px 12px; border-radius:99px; font-size:11.5px; font-weight:800; cursor:pointer;"
+                  >
+                    ${user.isOnline !== false ? 'Go Offline' : 'Go Online'}
+                  </button>
+                </div>
+                <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:10px; padding:9px 11px; display:flex; align-items:center; justify-content:space-between; gap:8px;">
+                  <div>
+                    <div style="font-size:10px; font-weight:700; color:#64748B; text-transform:uppercase;">Prepaid USD Wallet</div>
+                    <div style="font-size:16px; font-weight:900; color:#0066FF; margin-top:1px;">$${(user.walletBalanceUsd || 0).toFixed(2)}</div>
+                  </div>
+                  <button
+                    type="button"
+                    onclick="closeModal(); state.hubView='MARKETPLACE'; state.providerTab='WALLET'; state.isSheetMinimized=false; lastUiOverlaySignature=''; renderAll();"
+                    style="background:#0066FF; color:#FFFFFF; border:none; padding:6px 12px; border-radius:8px; font-size:11.5px; font-weight:800; cursor:pointer;"
+                  >
+                    + Top Up
+                  </button>
+                </div>
+              </div>
+            ` : ''}
 
             <div class="drawer-menu-list">
               <!-- Multi-Service Hub Pinned to Side Panel (Works in both Client & Provider Mode) -->
@@ -7298,8 +7278,8 @@ function renderModalLayer() {
                   <!-- Meta Verified Blue/Green Badge -->
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="#00A884" style="flex-shrink:0;"><path d="M12 2l2.4 2.1 3.1-.4.9 3 2.8 1.5-.8 3 1.6 2.7-2.2 2.2.4 3.1-3 .9-1.5 2.8-3-.8-2.7 1.6-2.2-2.2-3.1.4-.9-3-2.8-1.5.8-3-1.6-2.7 2.2-2.2-.4-3.1 3-.9 1.5-2.8 3 .8 2.7-1.6z"/><path d="M9.5 12.5l2 2 4-4.5" stroke="#FFFFFF" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 </div>
-                <div style="font-size:11.5px; color:#667781; font-weight:400;">
-                  Business account
+                <div style="font-size:11.5px; color:${state.supportAiTyping ? '#00A884' : '#667781'}; font-weight:${state.supportAiTyping ? '600' : '400'};">
+                  ${state.supportAiTyping ? 'typing…' : 'Official Support Desk • Harare'}
                 </div>
               </div>
             </div>
@@ -7327,13 +7307,13 @@ function renderModalLayer() {
                 <!-- WhatsApp Verified Badge -->
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="#00A884"><path d="M12 2l2.4 2.1 3.1-.4.9 3 2.8 1.5-.8 3 1.6 2.7-2.2 2.2.4 3.1-3 .9-1.5 2.8-3-.8-2.7 1.6-2.2-2.2-3.1.4-.9-3-2.8-1.5.8-3-1.6-2.7 2.2-2.2-.4-3.1 3-.9 1.5-2.8 3 .8 2.7-1.6z"/><path d="M9.5 12.5l2 2 4-4.5" stroke="#FFFFFF" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
               </div>
-              <div style="font-size:13px; font-weight:600; color:#54656F; margin-top:3px;">
-                +263 71 347 5131
+              <div style="font-size:12.5px; font-weight:600; color:#54656F; margin-top:3px;">
+                Customer Support &amp; Verification Desk
               </div>
 
               <!-- Official Social Followers Line Matching User Screenshot -->
               <div style="font-size:11.5px; color:#54656F; margin-top:6px; line-height:1.5;">
-                Phone number from Zimbabwe • Business account •
+                Official Business Account • Harare, Zimbabwe •
                 <a href="https://www.facebook.com/profile.php?id=61595501858201" target="_blank" rel="noopener" title="Findit Harare Facebook (175 followers)" style="color:#111B21; text-decoration:none; display:inline-flex; align-items:center; gap:3px; font-weight:700;">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="#1877F2"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
                   <span>175</span>
@@ -7369,9 +7349,11 @@ function renderModalLayer() {
             }).join('')}
 
             ${state.supportAiTyping ? `
-              <div style="display:flex; justify-content:flex-start;">
-                <div style="background:#FFFFFF; color:#667781; padding:8px 14px; border-radius:14px 14px 14px 3px; font-size:12.5px; font-style:italic; box-shadow:0 1px 1px rgba(0,0,0,0.06);">
-                  Findit Harare Official is typing…
+              <div style="display:flex; justify-content:flex-start; margin:4px 0;">
+                <div style="background:#FFFFFF; padding:10px 14px; border-radius:14px 14px 14px 3px; box-shadow:0 1px 2px rgba(0,0,0,0.06); display:inline-flex; align-items:center; gap:4px;">
+                  <span class="wa-typing-dot" style="width:7px; height:7px; border-radius:50%; background:#8696A0; display:inline-block; animation:waTypingWave 1.4s ease-in-out infinite;"></span>
+                  <span class="wa-typing-dot" style="width:7px; height:7px; border-radius:50%; background:#8696A0; display:inline-block; animation:waTypingWave 1.4s ease-in-out infinite; animation-delay:0.2s;"></span>
+                  <span class="wa-typing-dot" style="width:7px; height:7px; border-radius:50%; background:#8696A0; display:inline-block; animation:waTypingWave 1.4s ease-in-out infinite; animation-delay:0.4s;"></span>
                 </div>
               </div>
             ` : ''}
@@ -7413,11 +7395,6 @@ function renderModalLayer() {
             <button
               type="submit"
               style="width:42px; height:42px; border-radius:50%; border:none; background:#00A884; color:#FFFFFF; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; box-shadow:0 2px 6px rgba(0,168,132,0.3);"
-            >
-              ${uiIcon('send', 16)}
-            </button>
-          </form>
-        </div>
             >
               ${uiIcon('send', 16)}
             </button>
@@ -8599,6 +8576,7 @@ function openRateBookingModal(requestId) {
 
 function selectRatingStars(num) {
   state.ratingStars = Math.max(1, Math.min(5, Number(num)));
+  lastRenderedModalKey = '';
   renderModalLayer();
 }
 
@@ -8608,6 +8586,7 @@ function toggleRatingComplimentTag(tag) {
   } else {
     state.ratingTags.push(tag);
   }
+  lastRenderedModalKey = '';
   renderModalLayer();
 }
 
@@ -9085,12 +9064,18 @@ function renderProviderModeOverlay() {
   const currentTab = state.providerTab || (activeJob ? 'ACTIVE_JOB' : 'FEED');
 
   return `
-    <div class="provider-top-bar">
-      <div style="display:flex; align-items:center; gap:6px;">
-        <button class="indrive-circle-btn" onclick="openSideDrawerModal()" title="Menu">
+    <div class="provider-top-bar" style="justify-content:space-between;">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <button class="indrive-circle-btn" onclick="openSideDrawerModal()" title="Side Panel Menu">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
         </button>
+        <span style="font-size:12.5px; font-weight:800; color:#0F172A; background:#FFFFFF; padding:6px 12px; border-radius:12px; border:1px solid #E2E8F0; box-shadow:0 2px 6px rgba(0,0,0,0.06); display:inline-flex; align-items:center; gap:6px;">
+          <span style="width:7px; height:7px; border-radius:50%; background:${prov.isOnline !== false ? '#10B981' : '#64748B'};"></span>
+          <span>${prov.isOnline !== false ? 'Online' : 'Offline'}</span>
+        </span>
+      </div>
 
+      <div style="display:flex; align-items:center; gap:8px;">
         <button class="indrive-circle-btn" style="position:relative;" onclick="openNotificationCenterModal()" title="Notification Center &amp; Admin Notices">
           ${uiIcon('bell', 18)}
           ${getUnreadNotificationsCount() > 0 ? `
@@ -9098,21 +9083,6 @@ function renderProviderModeOverlay() {
               ${getUnreadNotificationsCount()}
             </span>
           ` : ''}
-        </button>
-      </div>
-
-      <button
-        class="provider-online-slider ${prov.isOnline !== false ? 'online' : 'offline'}"
-        onclick="toggleProviderOnlineStatus()"
-      >
-        ${prov.isOnline !== false ? uiIcon('dotOnline', 14) : uiIcon('dotOffline', 14)}
-        <span>${prov.isOnline !== false ? 'Online' : 'Offline'}</span>
-      </button>
-
-      <div style="display:flex; align-items:center; gap:6px;">
-        <button class="provider-wallet-pill" onclick="state.providerTab='WALLET'; state.isSheetMinimized=false; renderUiOverlay();" title="Open Prepaid USD Wallet">
-          <span style="color:var(--blue-primary); display:inline-flex;">${uiIcon('wallet', 15)}</span>
-          <span>$${(prov.walletBalanceUsd || 0).toFixed(2)}</span>
         </button>
       </div>
     </div>
@@ -9390,12 +9360,14 @@ function renderProviderActiveVisitTab(prov, activeJob) {
           <span>Chat ${(activeJob.messages && activeJob.messages.length > 0) ? `(${activeJob.messages.length})` : ''}</span>
         </button>
       </div>
-      <div style="margin-top:8px;">
-        <button class="cancel-request-red-pill" style="justify-content:center; width:100%;" onclick="openCancelTaskModal('${activeJob.id}')">
-          ${uiIcon('close', 14)}
-          <span>Cancel Job</span>
-        </button>
-      </div>
+      ${(!isArrived && !isInProgress) ? `
+        <div style="margin-top:8px;">
+          <button class="cancel-request-red-pill" style="justify-content:center; width:100%;" onclick="openCancelTaskModal('${activeJob.id}')">
+            ${uiIcon('close', 14)}
+            <span>Cancel Job</span>
+          </button>
+        </div>
+      ` : ''}
     </div>
   `;
 }
@@ -10303,23 +10275,24 @@ async function submitProviderBioUpdate() {
 
 async function providerMarkArrived(requestId) {
   try {
-    // 1. Google Maps voice arrival announcement
-    speakNavigationDirection("You have arrived at your destination, thanks for using Findit");
-
-    // 2. Allow voice directions to finish speaking, then dismiss turn-by-turn navigation HUD and clear route
-    setTimeout(() => {
-      stopNavigationHud();
-      if (leafletRoutePolyline) {
-        try { leafletRoutePolyline.remove(); } catch (e) {}
-        leafletRoutePolyline = null;
-      }
-      if (leafletRoutePolylineCasing) {
-        try { leafletRoutePolylineCasing.remove(); } catch (e) {}
-        leafletRoutePolylineCasing = null;
-      }
-      liveNavState.isActive = false;
-      liveNavState.active = false;
-    }, 3200);
+    // 1. Immediately dismiss turn-by-turn navigation HUD and clear voice directions
+    stopNavigationHud();
+    if (window.speechSynthesis) {
+      try { window.speechSynthesis.cancel(); } catch (e) {}
+    }
+    if (window.FinditNative && typeof window.FinditNative.stopSpeech === 'function') {
+      try { window.FinditNative.stopSpeech(); } catch (e) {}
+    }
+    if (leafletRoutePolyline) {
+      try { leafletMap.removeLayer(leafletRoutePolyline); } catch (e) {}
+      leafletRoutePolyline = null;
+    }
+    if (leafletRoutePolylineCasing) {
+      try { leafletMap.removeLayer(leafletRoutePolylineCasing); } catch (e) {}
+      leafletRoutePolylineCasing = null;
+    }
+    liveNavState.isActive = false;
+    liveNavState.active = false;
 
     markLocalStateMutation();
     const reqSnap = (state.db?.requests || []).find((r) => r.id === requestId) || null;

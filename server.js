@@ -1118,25 +1118,32 @@ function deductBookingCommissionIfNeeded(reqItem, triggerSource = 'PIN_VERIFIED'
 
   const totalAgreedUsd = Number(reqItem.agreedTotalUsd || reqItem.budgetUsd || 20);
   const categoryRate = db.settings?.categoryCommissions?.[reqItem.categoryId] ?? (db.settings?.commissionPercent || 11);
-  const standardFeeUsd = Math.round(totalAgreedUsd * (categoryRate / 100) * 100) / 100;
-  const isPromo = Boolean(db.settings?.launchPromoActive);
-  const chargedFeeUsd = isPromo ? 0 : standardFeeUsd;
+  const feeUsd = Math.max(1, Math.round(totalAgreedUsd * (categoryRate / 100) * 100) / 100);
 
   reqItem.commissionDeducted = true;
   reqItem.commissionDeductedSource = triggerSource;
+  reqItem.commissionFeeUsd = feeUsd;
 
-  if (!isPromo && chargedFeeUsd > 0) {
-    provider.walletBalanceUsd = Math.round((Number(provider.walletBalanceUsd || 0) - chargedFeeUsd) * 100) / 100;
-    if (!Array.isArray(provider.walletTransactions)) provider.walletTransactions = [];
-    provider.walletTransactions.unshift({
-      id: 'tx_' + Date.now(),
-      date: new Date().toISOString(),
-      type: 'COMMISSION_DEDUCTION',
-      method: `Findit Wallet (${triggerSource})`,
-      amountUsd: -chargedFeeUsd,
-      note: `${categoryRate}% commission (-$${chargedFeeUsd.toFixed(2)}) on $${totalAgreedUsd.toFixed(2)} job (${reqItem.title}) [${triggerSource}]`
-    });
-  }
+  provider.walletBalanceUsd = Math.round((Number(provider.walletBalanceUsd || 0) - feeUsd) * 100) / 100;
+  if (!Array.isArray(provider.walletTransactions)) provider.walletTransactions = [];
+  provider.walletTransactions.unshift({
+    id: 'tx_' + Date.now(),
+    date: new Date().toISOString(),
+    type: 'COMMISSION_DEDUCTION',
+    method: `Findit Provider Wallet (${triggerSource})`,
+    amountUsd: -feeUsd,
+    previousBalanceUsd: Math.round((Number(provider.walletBalanceUsd) + feeUsd) * 100) / 100,
+    newBalanceUsd: provider.walletBalanceUsd,
+    note: `${categoryRate}% Commission (-$${feeUsd.toFixed(2)}) on $${totalAgreedUsd.toFixed(2)} job (${reqItem.title || 'Home Service'}) [${triggerSource}]`
+  });
+
+  saveDb(db);
+  broadcastUpdate('PROVIDER_WALLET_UPDATED', {
+    providerId: provider.id,
+    walletBalanceUsd: provider.walletBalanceUsd,
+    deductedUsd: feeUsd,
+    requestId: reqItem.id
+  });
 
   ensureAiEngineStore(db);
   const protectionEntry = {
@@ -1149,7 +1156,7 @@ function deductBookingCommissionIfNeeded(reqItem, triggerSource = 'PIN_VERIFIED'
     customerName: reqItem.customerName,
     agreedUsd: totalAgreedUsd,
     commissionPercent: categoryRate,
-    commissionUsd: chargedFeeUsd,
+    commissionUsd: feeUsd,
     triggerSource,
     providerWalletAfterUsd: provider.walletBalanceUsd
   };
@@ -4444,6 +4451,9 @@ Return ONLY JSON with keys:
       }
 
       if (body.status === 'COMPLETED') {
+        if (!reqItem.pinVerifiedByProvider && !body.pinCode && !reqItem.autoStarted) {
+          return sendJson(res, 400, { error: 'Start PIN must be entered and verified before service can be marked as completed.' });
+        }
         deductBookingCommissionIfNeeded(reqItem, 'Job Marked Completed');
         const ratedByRole = body.ratedByRole || 'CUSTOMER'; // 'CUSTOMER' | 'PROVIDER'
         const newRating = Math.max(1, Math.min(5, Number(body.rating || 5)));
