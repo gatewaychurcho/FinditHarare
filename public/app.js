@@ -182,7 +182,7 @@ function uiIcon(name, size = 16) {
     sparkle: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z"/></svg>`,
     notes: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`,
     edit: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`,
-    hailingPerson: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="8.5" cy="5" r="2.5"/><path d="M5 21v-6a3 3 0 0 1 3-3h2a3 3 0 0 1 3 3v6"/><path d="M12 11l5-4 2 1.5"/><path d="M6 12l-2 4"/></svg>`,
+    hailingPerson: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="#0F172A" style="flex-shrink:0;"><circle cx="9.5" cy="4.5" r="2.5"/><path d="M7 8.5C6.7 8.5 6.5 8.7 6.5 9V15C6.5 15.3 6.7 15.5 7 15.5H8V21.5C8 21.8 8.2 22 8.5 22H10.5C10.8 22 11 21.8 11 21.5V16H12V21.5C12 21.8 12.2 22 12.5 22H14.5C14.8 22 15 21.8 15 21.5V15.5H15.5C15.8 15.5 16 15.3 16 15V13L18.8 8.8C19.1 8.4 19 7.8 18.6 7.5C18.2 7.2 17.6 7.3 17.3 7.7L15 11.2V9C15 8.7 14.8 8.5 14.5 8.5H7Z"/><path d="M6.5 9.5L4.8 13.8C4.6 14.2 4.8 14.7 5.2 14.9C5.6 15.1 6.1 14.9 6.3 14.5L7.5 11.5V9.5H6.5Z"/></svg>`,
     buildingOffice: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="10" y2="6"/><line x1="14" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="10" y2="10"/><line x1="14" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="10" y2="14"/><line x1="14" y1="14" x2="16" y2="14"/><path d="M10 22v-4h4v4"/></svg>`,
     trash: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>`,
     plus: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
@@ -1666,6 +1666,11 @@ function handleIncomingRealtimeEvent(data) {
       if (state.role === 'CUSTOMER') {
         state.screenStep = 'HOME';
         state.pendingSearchFareUsd = null;
+        if (newStatus === 'COMPLETED' && reqId) {
+          openRateBookingModal(reqId);
+          renderAll(true);
+          return;
+        }
       }
       if (state.role === 'PROVIDER') {
         state.providerTab = 'FEED';
@@ -1723,8 +1728,8 @@ function handleIncomingRealtimeEvent(data) {
     return;
   }
 
-  // 9. REAL-TIME CALL RESPONSE (Signaling to caller)
-  if (data.eventType === 'CALL_RESPONSE' && data.payload) {
+  // 9. REAL-TIME CALL RESPONSE (Signaling to caller & callee)
+  if ((data.eventType === 'CALL_RESPONSE' || data.eventType === 'CALL_RESPONDED') && data.payload) {
     const { channelId, action } = data.payload;
     if (action === 'ACCEPT' && state.activeCall && state.activeCall.channelId === channelId) {
       stopCallRingtones();
@@ -1743,8 +1748,35 @@ function handleIncomingRealtimeEvent(data) {
       renderCallModal();
       // Caller initiates dual-engine audio streams now that callee has accepted!
       joinDualEngineCall(channelId, true);
-    } else if ((action === 'DECLINE' || action === 'END') && (state.activeCall || state.incomingCall)) {
+    } else if ((action === 'DECLINE' || action === 'END' || action === 'HANGUP') && (state.activeCall || state.incomingCall)) {
       endInAppCall(false);
+    }
+    return;
+  }
+
+  // 9B. REAL-TIME WALLET DEDUCTION & TOP-UP SYNC
+  if (data.eventType === 'PROVIDER_WALLET_UPDATED' || data.eventType === 'WALLET_UPDATED') {
+    const { providerId, walletBalanceUsd, deductedUsd, provider } = data.payload || {};
+    if (state.db?.providers && providerId) {
+      const p = state.db.providers.find((x) => x.id === providerId);
+      if (p) {
+        if (provider) Object.assign(p, provider);
+        else if (walletBalanceUsd !== undefined) p.walletBalanceUsd = walletBalanceUsd;
+      }
+    }
+    if (state.role === 'PROVIDER' && state.currentUser && (state.currentUser.id === providerId || !providerId)) {
+      if (walletBalanceUsd !== undefined) {
+        state.currentUser.walletBalanceUsd = walletBalanceUsd;
+      }
+      if (provider) {
+        Object.assign(state.currentUser, provider);
+      }
+      saveSession(state.role, state.currentUser, false);
+      if (deductedUsd) {
+        showToast(`Commission deducted: -$${Number(deductedUsd).toFixed(2)} USD. New balance: $${Number(state.currentUser.walletBalanceUsd).toFixed(2)}`, 'info');
+      }
+      lastUiOverlaySignature = '';
+      renderAll(true);
     }
     return;
   }
@@ -3043,26 +3075,40 @@ function updateLiveGpsMarker() {
   if (!lat || !lng) return;
 
   // Authentic inDrive passenger client icon: pure vector icon (exactly 1 on map, draggable to choose pickup/visit location)
+  const activeReq = getCustomerActiveRequest();
+  const isSearching = Boolean((activeReq && (activeReq.status === 'OPEN' || activeReq.status === 'SEARCHING')) || state.screenStep === 'SEARCHING');
+
   const gpsIcon = L.divIcon({
     className: 'indrive-client-map-marker-wrap',
     html: `
-      <div style="position:relative; display:flex; flex-direction:column; align-items:center; pointer-events:auto; cursor:grab;" title="Drag to choose location">
-        <div style="background:#0F172A; color:#FFFFFF; font-size:10px; font-weight:800; padding:2px 8px; border-radius:99px; margin-bottom:3px; white-space:nowrap; box-shadow:0 3px 10px rgba(15,23,42,0.3); display:inline-flex; align-items:center; gap:4px;">
-          <span style="display:inline-block; width:5px; height:5px; border-radius:50%; background:#10B981;"></span>
-          <span>${escapeHtml(state.customAddress || 'Harare')}</span>
+      <div class="indrive-client-marker-root" title="Drag to choose location">
+        <!-- 1. "Where from" inDrive Bubble (Tapping opens Address Modal) -->
+        <div class="indrive-where-from-bubble" onclick="openSuburbPickerModal()" title="Tap to enter route / address">
+          <div class="where-from-sub">Where from</div>
+          <div class="where-from-row">
+            <span class="where-from-text">${escapeHtml(state.customAddress || 'Harare')}</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+          <div class="where-from-tail"></div>
         </div>
-        <div style="position:relative; width:40px; height:40px; border-radius:50%; background:#0066FF; border:3px solid #FFFFFF; box-shadow:0 6px 18px rgba(0,102,255,0.45); display:flex; align-items:center; justify-content:center;">
-          <div class="user-pin-pulse-ring" style="border-radius:50%;"></div>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round"/>
-            <circle cx="9" cy="7" r="4" stroke="#FFFFFF" stroke-width="2.5"/>
-          </svg>
-          <div style="position:absolute; bottom:-6px; background:#0F172A; color:#FFFFFF; font-size:8px; font-weight:900; letter-spacing:0.04em; padding:1px 5px; border-radius:99px; border:1px solid #FFFFFF;">YOU</div>
+
+        <!-- 2. Hailing Badge with Pin Stem & Map Anchor (Exact match to inDrive screenshot) -->
+        <div class="indrive-waving-pin-box">
+          <div class="hailing-badge">
+            ${uiIcon('hailingPerson', 24)}
+          </div>
+          <div class="indrive-pin-stem"></div>
+          <div class="indrive-pin-anchor-dot"></div>
+          ${isSearching ? `
+            <div class="indrive-sonar-ring ring-1"></div>
+            <div class="indrive-sonar-ring ring-2"></div>
+            <div class="indrive-sonar-ring ring-3"></div>
+          ` : ''}
         </div>
       </div>
     `,
-    iconSize: [110, 68],
-    iconAnchor: [55, 58]
+    iconSize: [160, 110],
+    iconAnchor: [80, 105]
   });
 
   if (userLiveGpsMarker) {
@@ -3132,16 +3178,8 @@ function updateMapMarkers(force = false) {
   if (centerUserPinBox) centerUserPinBox.style.display = 'none';
   if (whereFromBubble) whereFromBubble.style.display = 'none';
   if (whereFromOrderAction) whereFromOrderAction.style.display = 'none';
-
-  if (centerPin) {
-    if (state.role !== 'PROVIDER' && !isBooked && isSearching) {
-      centerPin.style.display = 'flex';
-      if (radarPulses) radarPulses.style.display = 'block';
-    } else {
-      if (radarPulses) radarPulses.style.display = 'none';
-      centerPin.style.display = 'none';
-    }
-  }
+  if (centerPin) centerPin.style.display = 'none';
+  if (radarPulses) radarPulses.style.display = 'none';
 
   if (!leafletMap || !leafletMarkersLayer || !state.db) return;
 
@@ -6415,11 +6453,13 @@ function renderModalLayer() {
               ${[1, 2, 3, 4, 5].map((star) => `
                 <button
                   type="button"
-                  style="background:var(--bg-card); border:1.8px solid ${star <= state.ratingStars ? '#F59E0B' : 'var(--border-light)'}; width:48px; height:48px; border-radius:14px; display:inline-flex; align-items:center; justify-content:center; cursor:pointer; transition:transform 0.12s, border-color 0.15s;"
+                  style="background:var(--bg-card); border:2px solid ${star <= state.ratingStars ? '#F59E0B' : 'var(--border-light)'}; width:50px; height:50px; border-radius:14px; display:inline-flex; align-items:center; justify-content:center; cursor:pointer; transition:transform 0.12s, border-color 0.15s; touch-action:manipulation; pointer-events:auto;"
                   onclick="selectRatingStars(${star})"
                   title="${star} Star${star > 1 ? 's' : ''}"
                 >
-                  ${star <= state.ratingStars ? uiIcon('star', 24) : uiIcon('starOutline', 24)}
+                  <span style="pointer-events:none; display:inline-flex;">
+                    ${star <= state.ratingStars ? uiIcon('star', 26) : uiIcon('starOutline', 26)}
+                  </span>
                 </button>
               `).join('')}
             </div>
@@ -6605,6 +6645,24 @@ function renderModalLayer() {
                 ${uiIcon('clock', 18)}
                 <span>${isProvider ? 'Service History' : 'Request history'}</span>
               </div>
+
+              ${(isAuth && isProvider) ? `
+                <div class="drawer-menu-item" onclick="openProviderWalletModal()">
+                  ${uiIcon('wallet', 18)}
+                  <span>Prepaid USD Wallet</span>
+                  <span style="margin-left:auto; font-size:12px; font-weight:900; color:#10B981; background:#ECFDF5; padding:2px 8px; border-radius:99px;">
+                    $${Number(user.walletBalanceUsd || 0).toFixed(2)}
+                  </span>
+                </div>
+
+                <div class="drawer-menu-item" onclick="openProviderCatalogueModal()">
+                  ${uiIcon('image', 18)}
+                  <span>Work Catalogue</span>
+                  <span style="margin-left:auto; font-size:11px; font-weight:800; color:#64748B;">
+                    ${(user.cataloguePhotos || []).length} photos
+                  </span>
+                </div>
+              ` : ''}
 
               <div class="drawer-menu-item" onclick="state.activeModal='NOTIFICATIONS'; renderModalLayer();">
                 ${uiIcon('bell', 18)}
@@ -7426,62 +7484,103 @@ function renderModalLayer() {
     return;
   }
 
-  // SUBURB & REAL LOCATION PICKER MODAL (inDrive-style Real Address Search + Pin Navigation)
+  // PROVIDER USD WALLET MODAL (Opened from Side Panel Drawer)
+  if (state.activeModal === 'WALLET_MODAL') {
+    const prov = state.currentUser || (state.db?.providers ? state.db.providers[0] : {});
+    root.innerHTML = `
+      <div class="modal-backdrop" onclick="closeModal()">
+        <div class="indrive-modal-sheet" onclick="event.stopPropagation()" style="max-height:88vh; overflow-y:auto;">
+          <div class="cancel-sheet-header">
+            <div class="cancel-sheet-title">Prepaid USD Wallet</div>
+            <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
+          </div>
+          ${renderProviderWalletTab(prov)}
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // PROVIDER WORK CATALOGUE MODAL (Opened from Side Panel Drawer)
+  if (state.activeModal === 'PROVIDER_CATALOGUE_MODAL') {
+    const prov = state.currentUser || (state.db?.providers ? state.db.providers[0] : {});
+    const myPendingApprovals = (state.db?.approvalQueue || []).filter((a) => a.providerId === prov.id && a.status === 'PENDING');
+    root.innerHTML = `
+      <div class="modal-backdrop" onclick="closeModal()">
+        <div class="indrive-modal-sheet" onclick="event.stopPropagation()" style="max-height:88vh; overflow-y:auto;">
+          <div class="cancel-sheet-header">
+            <div class="cancel-sheet-title">Work Portfolio &amp; Catalogue</div>
+            <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
+          </div>
+          ${renderProviderCatalogueTab(prov, myPendingApprovals)}
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // SUBURB & REAL LOCATION PICKER MODAL (inDrive-style Real Address Search matching Image 1)
   if (state.activeModal === 'SUBURB_PICKER') {
-    const suburbs = state.db.suburbs || [];
-    const searchQuery = state.locationSearchQuery || '';
-    const filteredSuburbs = searchQuery.trim()
-      ? suburbs.filter((s) => `${s.name} ${s.zone}`.toLowerCase().includes(searchQuery.trim().toLowerCase()))
-      : suburbs;
     const geoResults = Array.isArray(state.locationSearchResults) ? state.locationSearchResults : [];
 
     root.innerHTML = `
       <div class="modal-backdrop" onclick="closeModal()">
-        <div class="indrive-modal-sheet" onclick="event.stopPropagation()">
+        <div class="indrive-modal-sheet" onclick="event.stopPropagation()" style="max-height:85vh; display:flex; flex-direction:column;">
           <div class="cancel-sheet-header">
-            <div class="cancel-sheet-title">Your Home Visit Location</div>
-            <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
+            <button class="cancel-close-x" onclick="closeModal()" title="Back" style="margin-left:0; margin-right:auto; padding:4px;">
+              ${uiIcon('chevronLeft', 20)}
+            </button>
+            <div class="cancel-sheet-title" style="flex:1; text-align:center; padding-right:28px;">Enter your route</div>
           </div>
 
-          <!-- Search any real street, landmark, or address in Harare / Zimbabwe -->
-          <form onsubmit="event.preventDefault(); searchRealLocationAddress(); return false;" style="display:flex; gap:8px; margin-bottom:10px;">
-            <input
-              id="liveLocationSearchInput"
-              type="text"
-              class="dark-input"
-              style="flex:1; margin:0;"
-              value="${escapeHtml(state.locationSearchQuery !== undefined ? state.locationSearchQuery : state.customAddress)}"
-              placeholder="Type street, house #, landmark or suburb..."
-              oninput="handleLiveLocationQueryInput(this.value)"
-            />
-            <button type="submit" class="btn-primary-blue" style="width:auto; padding:0 14px; height:44px; font-size:12.5px; flex-shrink:0;">
-              ${state.locationSearching ? '...' : 'Search'}
-            </button>
+          <!-- inDrive Route Input Card (Exact reproduction of Image 1) -->
+          <form onsubmit="submitCustomRouteAddress(event); return false;" style="margin-bottom:8px;">
+            <div style="background:#F1F5F9; border:1.5px solid #E2E8F0; border-radius:16px; padding:6px 12px; display:flex; align-items:center; gap:8px;">
+              <span style="color:#64748B; display:inline-flex;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              </span>
+              <span style="background:#D1FAE5; color:#065F46; font-size:11.5px; font-weight:800; padding:2px 8px; border-radius:6px; flex-shrink:0;">
+                From
+              </span>
+              <input
+                id="liveLocationSearchInput"
+                type="text"
+                autocomplete="off"
+                style="flex:1; border:none; background:transparent; font-size:14px; font-weight:700; color:#0F172A; outline:none; height:38px; padding:0;"
+                value="${escapeHtml(state.locationSearchQuery !== undefined ? state.locationSearchQuery : (state.customAddress || ''))}"
+                placeholder="Enter address or landmark"
+                oninput="handleLiveLocationQueryInput(this.value)"
+              />
+              <button
+                type="button"
+                onclick="clearAddressInput()"
+                style="background:none; border:none; color:#94A3B8; padding:4px; cursor:pointer; display:flex; align-items:center;"
+                title="Clear address"
+              >
+                ${uiIcon('close', 16)}
+              </button>
+              <button
+                type="submit"
+                class="btn-primary-blue"
+                style="width:auto; height:32px; padding:0 12px; font-size:12px; border-radius:8px; flex-shrink:0;"
+              >
+                Done
+              </button>
+            </div>
           </form>
 
-          <!-- inDrive Quick Map Actions: Move Pin on Map OR Use Live GPS -->
-          <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:12px;">
-            <button type="button" class="btn-dark-sec" style="height:38px; font-size:12px; font-weight:800; justify-content:center; gap:6px; border:1.5px solid var(--blue-border); background:var(--blue-soft); color:var(--blue-primary);" onclick="startMapPinPickMode()">
-              ${uiIcon('pin', 14)}
-              <span>Choose on Map</span>
-            </button>
-            <button type="button" class="btn-dark-sec" style="height:38px; font-size:12px; font-weight:800; justify-content:center; gap:6px; background:#ECFDF5; color:#059669; border:1.5px solid #A7F3D0;" onclick="selectLiveLocationDefault()">
-              ${uiIcon('crosshair', 14)}
-              <span>Live Location</span>
-            </button>
-          </div>
-
-          <div style="max-height:290px; overflow-y:auto;">
+          <!-- Autocomplete Search Results (Clean & blank by default as requested; shows suggestions only when typing) -->
+          <div style="flex:1; overflow-y:auto;">
             ${geoResults.length > 0 ? `
-              <div style="font-size:11px; font-weight:800; color:var(--blue-primary); text-transform:uppercase; padding:4px 4px 6px;">
-                Live Map Search Results (Tap to Navigate)
+              <div style="font-size:11px; font-weight:800; color:var(--blue-primary); text-transform:uppercase; padding:6px 4px 6px;">
+                Suggestions
               </div>
               ${geoResults.map((g, gIdx) => `
-                <div class="indrive-cancel-row" onclick="selectGeocodedLocation(${gIdx})" style="background:#F0F7FF; border-radius:10px; margin-bottom:4px; padding:10px;">
+                <div class="indrive-cancel-row" onclick="selectGeocodedLocation(${gIdx})" style="background:#F8FAFC; border-radius:12px; margin-bottom:6px; padding:12px 14px; cursor:pointer; border:1px solid #E2E8F0;">
                   <div class="cancel-row-left">
                     <span style="color:var(--blue-primary);">${uiIcon('navigation', 17)}</span>
                     <div>
-                      <div style="font-weight:800; color:#0F172A;">${escapeHtml(g.shortTitle)}</div>
+                      <div style="font-weight:800; color:#0F172A; font-size:13.5px;">${escapeHtml(g.shortTitle)}</div>
                       <div style="font-size:11.5px; color:var(--text-secondary);">${escapeHtml(g.fullLabel)}</div>
                     </div>
                   </div>
@@ -7489,22 +7588,6 @@ function renderModalLayer() {
                 </div>
               `).join('')}
             ` : ''}
-
-            <div style="font-size:11px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; padding:6px 4px 4px;">
-              Harare Suburbs &amp; Zones
-            </div>
-            ${filteredSuburbs.map((s) => `
-              <div class="indrive-cancel-row" onclick="selectSuburbLocation('${s.id}')">
-                <div class="cancel-row-left">
-                  <span style="color:var(--blue-primary);">${uiIcon('pin', 17)}</span>
-                  <div>
-                    <div style="font-weight:700;">${s.name}, Harare</div>
-                    <div style="font-size:12px; color:var(--text-secondary);">${s.zone}</div>
-                  </div>
-                </div>
-                ${uiIcon('chevronRight', 16)}
-              </div>
-            `).join('')}
           </div>
         </div>
       </div>
@@ -8592,12 +8675,16 @@ function openRateBookingModal(requestId) {
 }
 
 function selectRatingStars(num) {
+  const commentEl = document.getElementById('customRatingCommentBox');
+  if (commentEl) state.customReviewComment = commentEl.value;
   state.ratingStars = Math.max(1, Math.min(5, Number(num)));
   lastRenderedModalKey = '';
   renderModalLayer();
 }
 
 function toggleRatingComplimentTag(tag) {
+  const commentEl = document.getElementById('customRatingCommentBox');
+  if (commentEl) state.customReviewComment = commentEl.value;
   if (state.ratingTags.includes(tag)) {
     state.ratingTags = state.ratingTags.filter((t) => t !== tag);
   } else {
@@ -8807,10 +8894,56 @@ async function promptDeleteAccount() {
   }
 }
 
-function openProviderCatalogueModal(providerId, requestId = null, offerId = null) {
-  state.activeModal = 'CATALOGUE_VIEW';
-  state.modalData = { providerId, requestId, offerId };
+function openProviderWalletModal() {
+  state.activeModal = 'WALLET_MODAL';
+  lastRenderedModalKey = '';
   renderModalLayer();
+}
+
+function openProviderCatalogueModal(providerId = null, requestId = null, offerId = null) {
+  const targetId = providerId || state.currentUser?.id || state.db?.providers?.[0]?.id;
+  if (!providerId && state.role === 'PROVIDER') {
+    state.activeModal = 'PROVIDER_CATALOGUE_MODAL';
+  } else {
+    state.activeModal = 'CATALOGUE_VIEW';
+    state.modalData = { providerId: targetId, requestId, offerId };
+  }
+  lastRenderedModalKey = '';
+  renderModalLayer();
+}
+
+function clearAddressInput() {
+  const inp = document.getElementById('liveLocationSearchInput');
+  if (inp) {
+    inp.value = '';
+    inp.focus();
+  }
+  state.locationSearchQuery = '';
+  state.locationSearchResults = [];
+  lastRenderedModalKey = '';
+  renderModalLayer();
+}
+
+async function submitCustomRouteAddress(e) {
+  if (e && e.preventDefault) e.preventDefault();
+  const inp = document.getElementById('liveLocationSearchInput');
+  const val = (inp ? inp.value : state.locationSearchQuery || state.customAddress || '').trim();
+  if (!val) return;
+  state.customAddress = val;
+  state.isCustomAddressSelected = true;
+  state.userHasManuallyDraggedPin = true;
+
+  await searchRealLocationAddress(true);
+  if (state.locationSearchResults && state.locationSearchResults.length > 0) {
+    selectGeocodedLocation(0);
+  } else {
+    closeModal();
+    renderAll();
+    if (leafletMap && state.pinnedLat && state.pinnedLng) {
+      leafletMap.flyTo([state.pinnedLat, state.pinnedLng], 16, { animate: true, duration: 0.85 });
+    }
+    showToast(`Address set to: ${state.customAddress}`);
+  }
 }
 
 function openSuburbPickerModal() {
@@ -9086,10 +9219,6 @@ function renderProviderModeOverlay() {
         <button class="indrive-circle-btn" onclick="openSideDrawerModal()" title="Side Panel Menu">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
         </button>
-        <span style="font-size:12.5px; font-weight:800; color:#0F172A; background:#FFFFFF; padding:6px 12px; border-radius:12px; border:1px solid #E2E8F0; box-shadow:0 2px 6px rgba(0,0,0,0.06); display:inline-flex; align-items:center; gap:6px;">
-          <span style="width:7px; height:7px; border-radius:50%; background:${prov.isOnline !== false ? '#10B981' : '#64748B'};"></span>
-          <span>${prov.isOnline !== false ? 'Online' : 'Offline'}</span>
-        </span>
       </div>
 
       <div style="display:flex; align-items:center; gap:8px;">
@@ -9140,8 +9269,8 @@ function renderProviderModeOverlay() {
           </button>
         </div>
 
-        <!-- 4 Dedicated inDrive-Style Service Provider Tabs (100% Vector Icons) -->
-        <div class="provider-bottom-tabs">
+        <!-- Dedicated inDrive-Style Primary Job Tabs (Requests & Live Visit) -->
+        <div class="provider-bottom-tabs" style="grid-template-columns: 1fr 1fr;">
           <button
             class="provider-tab-btn ${currentTab === 'FEED' ? 'active' : ''}"
             onclick="state.providerTab='FEED'; renderUiOverlay();"
@@ -9156,22 +9285,6 @@ function renderProviderModeOverlay() {
           >
             ${activeJob ? `<span class="provider-tab-dot"></span>` : uiIcon('routeCar', 13)}
             <span>Visit</span>
-          </button>
-
-          <button
-            class="provider-tab-btn ${currentTab === 'WALLET' ? 'active' : ''}"
-            onclick="state.providerTab='WALLET'; renderUiOverlay();"
-          >
-            ${uiIcon('wallet', 13)}
-            <span>Wallet</span>
-          </button>
-
-          <button
-            class="provider-tab-btn ${currentTab === 'CATALOGUE' ? 'active' : ''}"
-            onclick="state.providerTab='CATALOGUE'; renderUiOverlay();"
-          >
-            ${uiIcon('image', 13)}
-            <span>Catalogue</span>
           </button>
         </div>
 

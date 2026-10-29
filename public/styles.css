@@ -269,125 +269,158 @@ html, body {
   50% { transform: scale(1.15); opacity: 1; }
 }
 
-/* Home Location Callout Bubble */
+/* inDrive Client Live Map Marker & Callout Bubble (Image 2 Exact Reproduction) */
+.indrive-client-map-marker-wrap {
+  background: transparent !important;
+  border: none !important;
+}
+
+.indrive-client-marker-root {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: auto;
+  cursor: grab;
+}
+
 .indrive-where-from-bubble {
+  position: relative;
   pointer-events: auto;
   cursor: pointer;
-  background: rgba(255, 255, 255, 0.98);
-  backdrop-filter: blur(10px);
-  color: var(--text-main);
-  padding: 8px 13px;
-  border-radius: 15px;
-  margin-bottom: 10px;
-  min-width: 175px;
-  max-width: 250px;
-  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.22);
-  border: 2px solid var(--blue-primary);
+  background: #1E232B;
+  color: #FFFFFF;
+  padding: 6px 14px 7px 14px;
+  border-radius: 14px;
+  margin-bottom: 6px;
+  min-width: 140px;
+  max-width: 220px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   transition: transform 0.15s ease;
 }
 
 .indrive-where-from-bubble:active {
-  transform: scale(0.97);
+  transform: scale(0.96);
 }
 
 .where-from-sub {
-  font-size: 9.5px;
-  font-weight: 800;
-  color: var(--blue-primary);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  margin-bottom: 2px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #94A3B8;
+  letter-spacing: 0.03em;
+  margin-bottom: 1px;
 }
 
 .where-from-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  font-size: 13px;
+  gap: 6px;
+  font-size: 13.5px;
   font-weight: 800;
-  color: var(--text-main);
+  color: #FFFFFF;
+}
+
+.where-from-text {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.where-from-order-pill {
-  margin-top: 6px;
-  background: var(--blue-primary);
-  color: #FFFFFF;
-  font-size: 11px;
-  font-weight: 800;
-  padding: 4px 10px;
-  border-radius: 99px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  box-shadow: 0 3px 10px rgba(0, 102, 255, 0.35);
+.where-from-tail {
+  position: absolute;
+  bottom: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 6px solid #1E232B;
 }
 
-/* Electric Blue Rounded Square Home Visit Pin */
+/* Authentic inDrive Hailing Person White Badge Pin */
 .indrive-waving-pin-box {
   position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   pointer-events: auto;
-  cursor: pointer;
-  width: 46px;
-  height: 46px;
-  border-radius: 15px;
-  background: var(--blue-primary);
-  border: 3px solid #FFFFFF;
+  cursor: grab;
+}
+
+.hailing-badge {
+  width: 42px;
+  height: 42px;
+  background: #FFFFFF;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 8px 22px rgba(0, 102, 255, 0.52);
-  transition: transform 0.18s ease, box-shadow 0.18s ease;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.22);
+  border: 1.5px solid rgba(0, 0, 0, 0.06);
+  transition: transform 0.15s ease;
 }
 
-.user-pin-pulse-ring {
-  position: absolute;
-  inset: -6px;
-  border-radius: 19px;
-  border: 2px solid rgba(0, 102, 255, 0.45);
-  animation: userPinRingPulse 2s ease-out infinite;
-  pointer-events: none;
-}
-
-@keyframes userPinRingPulse {
-  0% { transform: scale(0.95); opacity: 0.9; }
-  100% { transform: scale(1.32); opacity: 0; }
-}
-
-.user-pin-you-badge {
-  position: absolute;
-  bottom: -7px;
-  background: #0F172A;
-  color: #FFFFFF;
-  font-size: 8.5px;
-  font-weight: 900;
-  letter-spacing: 0.06em;
-  padding: 1px 6px;
-  border-radius: 99px;
-  border: 1.5px solid #FFFFFF;
-  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.35);
+.indrive-waving-pin-box:hover .hailing-badge {
+  transform: scale(1.05);
 }
 
 .indrive-pin-stem {
   width: 3.5px;
-  height: 14px;
-  background: var(--blue-primary);
-  transition: transform 0.18s ease;
+  height: 10px;
+  background: #0F172A;
+  border-radius: 2px;
 }
 
 .indrive-pin-anchor-dot {
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
-  background: rgba(0, 102, 255, 0.42);
-  border: 2px solid #FFFFFF;
-  margin-top: -3px;
-  box-shadow: 0 2px 8px rgba(0, 102, 255, 0.4);
-  transition: transform 0.18s ease, background 0.18s ease;
+  background: #0066FF;
+  border: 2.5px solid #FFFFFF;
+  box-shadow: 0 2px 8px rgba(0, 102, 255, 0.6);
+  margin-top: -2px;
+}
+
+/* Concentric inDrive Radar Sonar Waves (attached directly to client anchor on map) */
+@keyframes indriveGrandSonar {
+  0% {
+    width: 20px;
+    height: 20px;
+    opacity: 0.95;
+    transform: translate(-50%, -50%) scale(0.4);
+  }
+  60% {
+    opacity: 0.45;
+  }
+  100% {
+    width: 160px;
+    height: 160px;
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.7);
+  }
+}
+
+.indrive-sonar-ring {
+  position: absolute;
+  left: 50%;
+  bottom: 0px;
+  border-radius: 50%;
+  border: 2.5px solid #0066FF;
+  background: rgba(0, 102, 255, 0.12);
+  pointer-events: none;
+  animation: indriveGrandSonar 2.4s cubic-bezier(0.1, 0.5, 0.3, 1) infinite;
+}
+.indrive-sonar-ring.ring-1 {
+  animation-delay: 0s;
+}
+.indrive-sonar-ring.ring-2 {
+  animation-delay: 0.8s;
+}
+.indrive-sonar-ring.ring-3 {
+  animation-delay: 1.6s;
 }
 
 /* Provider Map Markers with Profession Icon Badge & "[ • • • ]" Thinking Bubble */
@@ -618,6 +651,8 @@ html, body {
   0% { transform: scale(0.6); opacity: 1; }
   100% { transform: scale(1.6); opacity: 0; }
 }
+
+.top-signup-pill-btn {
   white-space: nowrap;
   box-shadow: 0 6px 18px rgba(0, 102, 255, 0.28);
   transition: transform 0.15s ease, background 0.15s ease;
@@ -3564,6 +3599,8 @@ html, body {
   padding: 14px 16px;
   margin: 14px 0;
 }
+
+.fh-back-to-hub-btn {
   background: rgba(255, 255, 255, 0.96);
   backdrop-filter: blur(8px);
   border: 1px solid rgba(226, 232, 240, 0.95);
@@ -3582,7 +3619,6 @@ html, body {
 /* 5. The 7 Job Categories in Marketplace */
 .job-categories-container {
   padding: 12px 16px 84px;
-}
 }
 
 .job-category-row-card {
@@ -3931,13 +3967,14 @@ html, body {
 
 /* WhatsApp 3-Dots Animated Typing Wave */
 @keyframes waTypingWave {
-  0%, 60%, 100% {
-    transform: translateY(0);
+  0%, 100% {
+    transform: translateY(0) scale(0.9);
     opacity: 0.35;
   }
-  30% {
-    transform: translateY(-5px);
+  50% {
+    transform: translateY(-4px) scale(1.15);
     opacity: 1;
+    background-color: #00A884;
   }
 }
 

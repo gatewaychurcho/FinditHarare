@@ -2405,7 +2405,7 @@ const server = http.createServer(async (req, res) => {
           }
         }
       } else {
-        if (!userId || r.customerId === userId) {
+        if (userId && r.customerId === userId) {
           (r.offers || []).forEach((o) => {
             const oMs = Number(o.updatedAt || new Date(o.createdAt || 0).getTime() || 0);
             if (o.status !== 'DECLINED' && oMs > sinceMs && r.status === 'OPEN') {
@@ -4232,6 +4232,11 @@ Return ONLY JSON with keys:
         channelId: match?.channelId || channelId,
         action
       });
+      broadcastUpdate('CALL_RESPONDED', {
+        requestId: match?.requestId || requestId,
+        channelId: match?.channelId || channelId,
+        action
+      });
       return sendJson(res, 200, { ok: true });
     } catch (e) {
       return sendJson(res, 400, { error: e.message });
@@ -5311,6 +5316,7 @@ Return ONLY valid JSON with key: "reply" (string).`;
         db.activeCalls = db.activeCalls.filter((c) => c !== match);
         saveDb(db);
         broadcastUpdate('CALL_RESPONSE', { channelId, action: 'HANGUP' });
+        broadcastUpdate('CALL_RESPONDED', { channelId, action: 'HANGUP' });
       }
       return sendJson(res, 200, { ok: true, activeCalls: db.activeCalls });
     } catch (e) {
