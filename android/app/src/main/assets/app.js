@@ -1521,6 +1521,12 @@ function handleIncomingRealtimeEvent(data) {
     const myCats = state.role === 'PROVIDER' ? getProviderCategoryIds(state.currentUser) : [];
     const matchesMe = myCats.length === 0 || myCats.includes(req.categoryId);
     if (state.role === 'PROVIDER' && matchesMe) {
+      // Auto-expand provider sheet if folded/minimized so the new job card displays immediately
+      state.isSheetMinimized = false;
+      state.providerTab = 'FEED';
+
+      playNewMessageChime();
+
       if (state.currentUser && state.currentUser.isOnline === false) {
         showToast(`New Job in ${req.suburbName || 'Harare'} ($${req.budgetUsd})! You are currently Offline. Switch Online to bid.`, 'info', 6000);
       }
@@ -2404,6 +2410,159 @@ function reverseGeocodeHararePin(lat, lng) {
 }
 
 // ============================================================================
+// HARARE LOCAL GAZETTEER FOR 0ms INSTANT ADDRESS RELOCATION & GPS STREET NAMES
+// ============================================================================
+const HARARE_GAZETTEER = {
+  "herbert chitepo": { name: "Herbert Chitepo Avenue", lat: -17.8202, lng: 31.0450 },
+  "chitepo": { name: "Herbert Chitepo Avenue", lat: -17.8202, lng: 31.0450 },
+  "samora machel": { name: "Samora Machel Avenue", lat: -17.8286, lng: 31.0538 },
+  "julius nyerere": { name: "Julius Nyerere Way", lat: -17.8315, lng: 31.0489 },
+  "jason moyo": { name: "Jason Moyo Avenue", lat: -17.8305, lng: 31.0505 },
+  "robert mugabe": { name: "Robert Mugabe Road", lat: -17.8328, lng: 31.0520 },
+  "leopold takawira": { name: "Leopold Takawira Street", lat: -17.8250, lng: 31.0465 },
+  "churchill": { name: "Churchill Avenue", lat: -17.7960, lng: 31.0420 },
+  "borrowdale rd": { name: "Borrowdale Road", lat: -17.7780, lng: 31.0850 },
+  "borrowdale": { name: "Borrowdale Road", lat: -17.7520, lng: 31.0890 },
+  "enterprise": { name: "ED Mnangagwa Road", lat: -17.7980, lng: 31.1050 },
+  "ed mnangagwa": { name: "ED Mnangagwa Road", lat: -17.7980, lng: 31.1050 },
+  "sam nujoma": { name: "Sam Nujoma Street", lat: -17.8080, lng: 31.0495 },
+  "second st": { name: "Sam Nujoma Street", lat: -17.8080, lng: 31.0495 },
+  "simon muzenda": { name: "Simon Muzenda Street", lat: -17.8290, lng: 31.0570 },
+  "fourth st": { name: "Simon Muzenda Street", lat: -17.8290, lng: 31.0570 },
+  "rotten row": { name: "Rotten Row", lat: -17.8320, lng: 31.0370 },
+  "bishop gaul": { name: "Bishop Gaul Avenue", lat: -17.8260, lng: 31.0150 },
+  "lomagundi": { name: "Nemakonde Way (Lomagundi Rd)", lat: -17.7850, lng: 31.0250 },
+  "nemakonde": { name: "Nemakonde Way (Lomagundi Rd)", lat: -17.7850, lng: 31.0250 },
+  "kirkman": { name: "Solomon Mujuru Drive (Kirkman Rd)", lat: -17.8180, lng: 30.9850 },
+  "solomon mujuru": { name: "Solomon Mujuru Drive", lat: -17.8180, lng: 30.9850 },
+  "arcturus": { name: "Arcturus Road", lat: -17.8040, lng: 31.1240 },
+  "seke": { name: "Seke Road", lat: -17.8680, lng: 31.0650 },
+  "glenara": { name: "Glenara Avenue", lat: -17.8180, lng: 31.0960 },
+  "prince edward": { name: "Prince Edward Street", lat: -17.8120, lng: 31.0260 },
+  "baines": { name: "Baines Avenue", lat: -17.8180, lng: 31.0510 },
+  "central ave": { name: "Central Avenue", lat: -17.8240, lng: 31.0520 },
+  "kwame nkrumah": { name: "Kwame Nkrumah Avenue", lat: -17.8270, lng: 31.0515 },
+  "nelson mandela": { name: "Nelson Mandela Avenue", lat: -17.8290, lng: 31.0525 },
+  "george silundika": { name: "George Silundika Avenue", lat: -17.8260, lng: 31.0500 },
+  "fifth st": { name: "Fifth Street", lat: -17.8280, lng: 31.0590 },
+  "seventh st": { name: "Seventh Street", lat: -17.8230, lng: 31.0620 },
+  "chiremba": { name: "Chiremba Road", lat: -17.8450, lng: 31.0950 },
+  "dieppe": { name: "Dieppe Avenue", lat: -17.8380, lng: 31.0850 },
+  "cripps": { name: "Cripps Road", lat: -17.8480, lng: 31.0450 },
+  "simon mazorodze": { name: "Simon Mazorodze Road", lat: -17.8550, lng: 31.0350 },
+  "beatrice": { name: "Simon Mazorodze Road", lat: -17.8550, lng: 31.0350 },
+  "lytton": { name: "Lytton Road", lat: -17.8420, lng: 31.0080 },
+  "highfield": { name: "Highfield Road", lat: -17.8620, lng: 31.0180 },
+  "sherwood": { name: "Sherwood Drive", lat: -17.7910, lng: 30.9960 },
+  "upper east": { name: "Upper East Road", lat: -17.7680, lng: 31.0450 },
+  "pendennis": { name: "Pendennis Road", lat: -17.7550, lng: 31.0480 },
+  "hindhead": { name: "Hindhead Avenue", lat: -17.7780, lng: 31.1200 },
+  "crowhill": { name: "Crowhill Road", lat: -17.7280, lng: 31.1250 },
+  "oxford": { name: "Oxford Road", lat: -17.8020, lng: 31.0420 },
+  "suffolk": { name: "Suffolk Road", lat: -17.7920, lng: 31.0180 },
+  "kilwinning": { name: "Kilwinning Road", lat: -17.8680, lng: 31.0820 },
+  "parktown": { name: "Parktown Crescent", lat: -17.8920, lng: 31.0480 },
+  "avondale": { name: "Avondale", lat: -17.7955, lng: 31.0365 },
+  "sam levy": { name: "Sam Levy's Village", lat: -17.7530, lng: 31.0880 },
+  "cbd": { name: "Harare CBD", lat: -17.8292, lng: 31.0522 },
+  "joina": { name: "Joina City", lat: -17.8315, lng: 31.0489 },
+  "eastgate": { name: "Eastgate Mall", lat: -17.8300, lng: 31.0550 },
+  "westgate": { name: "Westgate", lat: -17.7640, lng: 30.9670 },
+  "belgravia": { name: "Belgravia", lat: -17.8020, lng: 31.0420 },
+  "milton park": { name: "Milton Park", lat: -17.8120, lng: 31.0260 },
+  "alexandra park": { name: "Alexandra Park", lat: -17.7850, lng: 31.0550 },
+  "gunhill": { name: "Gunhill", lat: -17.7950, lng: 31.0680 },
+  "newlands": { name: "Newlands", lat: -17.8080, lng: 31.0820 },
+  "highlands": { name: "Highlands", lat: -17.7920, lng: 31.0980 },
+  "greendale": { name: "Greendale", lat: -17.8040, lng: 31.1240 },
+  "chisipite": { name: "Chisipite", lat: -17.7780, lng: 31.1200 },
+  "glen lorne": { name: "Glen Lorne", lat: -17.7410, lng: 31.1480 },
+  "helensvale": { name: "Helensvale", lat: -17.7280, lng: 31.1250 },
+  "pomona": { name: "Pomona", lat: -17.7420, lng: 31.0960 },
+  "vainona": { name: "Vainona", lat: -17.7645, lng: 31.0715 },
+  "mt pleasant": { name: "Mt Pleasant", lat: -17.7680, lng: 31.0450 },
+  "mount pleasant": { name: "Mt Pleasant", lat: -17.7680, lng: 31.0450 },
+  "mabelreign": { name: "Mabelreign", lat: -17.7910, lng: 30.9960 },
+  "belvedere": { name: "Belvedere", lat: -17.8260, lng: 31.0150 },
+  "eastlea": { name: "Eastlea", lat: -17.8190, lng: 31.0810 },
+  "hatfield": { name: "Hatfield", lat: -17.8680, lng: 31.0820 },
+  "waterfalls": { name: "Waterfalls", lat: -17.8920, lng: 31.0480 },
+  "chitungwiza": { name: "Chitungwiza", lat: -18.0127, lng: 31.0756 },
+  "msasa": { name: "Msasa", lat: -17.8380, lng: 31.1150 },
+  "graniteside": { name: "Graniteside", lat: -17.8480, lng: 31.0550 },
+  "southerton": { name: "Southerton", lat: -17.8520, lng: 31.0250 },
+  "workington": { name: "Workington", lat: -17.8450, lng: 31.0180 },
+  "braeside": { name: "Braeside", lat: -17.8390, lng: 31.0680 },
+  "cranborne": { name: "Cranborne", lat: -17.8510, lng: 31.0750 },
+  "queensdale": { name: "Queensdale", lat: -17.8580, lng: 31.0820 },
+  "arundel": { name: "Arundel Village", lat: -17.7710, lng: 31.0520 },
+  "longcheng": { name: "Longcheng Plaza", lat: -17.8220, lng: 31.0060 },
+  "national sports stadium": { name: "National Sports Stadium", lat: -17.8210, lng: 30.9980 },
+  "uz": { name: "University of Zimbabwe (UZ)", lat: -17.7840, lng: 31.0530 },
+  "university of zimbabwe": { name: "University of Zimbabwe (UZ)", lat: -17.7840, lng: 31.0530 },
+  "parirenyatwa": { name: "Parirenyatwa Hospital", lat: -17.8140, lng: 31.0480 },
+  "sally mugabe": { name: "Sally Mugabe Central Hospital", lat: -17.8590, lng: 31.0250 }
+};
+
+function resolveHarareLocalCoordinates(query) {
+  if (!query || typeof query !== 'string') return null;
+  const q = query.toLowerCase().trim();
+  if (!q) return null;
+
+  // 1. Exact or substring match in Harare gazetteer
+  for (const [key, item] of Object.entries(HARARE_GAZETTEER)) {
+    if (q === key || q.includes(key) || key.includes(q)) {
+      return { lat: item.lat, lng: item.lng, name: item.name };
+    }
+  }
+
+  // 2. Suburbs registered in state.db
+  if (state.db && Array.isArray(state.db.suburbs)) {
+    for (const sub of state.db.suburbs) {
+      const sName = (sub.name || '').toLowerCase();
+      if (sName && (q.includes(sName) || sName.includes(q))) {
+        return { lat: sub.lat, lng: sub.lng, name: sub.name };
+      }
+    }
+  }
+
+  // 3. Word token matching
+  const words = q.split(/[\s,.-]+/).filter((w) => w.length >= 3);
+  for (const w of words) {
+    for (const [key, item] of Object.entries(HARARE_GAZETTEER)) {
+      if (key.includes(w)) {
+        return { lat: item.lat, lng: item.lng, name: item.name };
+      }
+    }
+  }
+
+  // 4. Fallback: pseudo-deterministic coordinate near Harare CBD
+  let hash = 0;
+  for (let i = 0; i < q.length; i++) hash = (hash * 31 + q.charCodeAt(i)) & 0xffffff;
+  const latOffset = (((hash % 200) - 100) * 0.00015);
+  const lngOffset = ((((hash >> 3) % 200) - 100) * 0.00015);
+  return {
+    lat: Number((-17.8292 + latOffset).toFixed(5)),
+    lng: Number((31.0522 + lngOffset).toFixed(5)),
+    name: query
+  };
+}
+
+function resolveNearestHarareThoroughfare(lat, lng) {
+  if (!lat || !lng) return "Herbert Chitepo Avenue";
+  let closestName = "Herbert Chitepo Avenue";
+  let minDist = Infinity;
+  for (const item of Object.values(HARARE_GAZETTEER)) {
+    const d = calculateDistanceMeters(lat, lng, item.lat, item.lng);
+    if (d < minDist) {
+      minDist = d;
+      closestName = item.name;
+    }
+  }
+  return closestName;
+}
+
+// ============================================================================
 // INDRIVE LIVE GPS NAVIGATION ENGINE & TURN-BY-TURN AUDIO DIRECTIONS
 // ============================================================================
 const liveNavState = {
@@ -2652,22 +2811,35 @@ function advanceNavigationStep(curLat, curLng) {
 
   const distToDest = calculateDistanceMeters(curLat, curLng, liveNavState.destinationLat, liveNavState.destinationLng);
   liveNavState.totalDistanceMeters = distToDest;
-  liveNavState.totalDurationSeconds = Math.round(distToDest / 8.5);
+  // Harare realistic transit speed (~30 km/h = 500 m/min)
+  liveNavState.totalDurationSeconds = Math.max(60, Math.round((distToDest / 500) * 60));
+
+  const turnDirection = currentStep.modifier ? `turn ${currentStep.modifier} into` : 'continue onto';
 
   if (distToManeuver < 35 && liveNavState.currentStepIdx < liveNavState.steps.length - 1) {
     liveNavState.currentStepIdx++;
     const nextStep = liveNavState.steps[liveNavState.currentStepIdx];
+    const nextTurn = nextStep.modifier ? `turn ${nextStep.modifier} into` : 'head onto';
     const speech = nextStep.type === 'arrive'
-      ? `In 50 meters, your client's live location is ahead.`
-      : `Turn ${nextStep.modifier || 'onto'} ${nextStep.name || 'next street'}`;
+      ? `In 50 meters, you will arrive at your destination.`
+      : `In ${Math.round(nextStep.distance || 100)} meters, ${nextTurn} ${nextStep.name || 'next street'}`;
     speakNavigationDirection(speech);
   } else if (distToDest <= 20) {
     speakNavigationDirection("You have arrived at your destination, thanks for using Findit");
     setTimeout(() => {
       stopNavigationHud();
     }, 3200);
-  } else if (distToManeuver <= 75 && distToManeuver > 35) {
-    const speech = `In ${Math.round(distToManeuver)} meters, turn ${currentStep.modifier || 'onto'} ${currentStep.name || 'next street'}`;
+  } else if (distToManeuver <= 320 && distToManeuver > 260) {
+    // 300 meters GPS advance alert with real street name (e.g. "In 300 meters, turn right into Herbert Chitepo Avenue")
+    const speech = `In 300 meters, ${turnDirection} ${currentStep.name}`;
+    speakNavigationDirection(speech);
+  } else if (distToManeuver <= 120 && distToManeuver > 70) {
+    // 100 meters GPS turn alert
+    const speech = `In 100 meters, ${turnDirection} ${currentStep.name}`;
+    speakNavigationDirection(speech);
+  } else if (distToManeuver <= 50 && distToManeuver > 35) {
+    // Immediate turn alert
+    const speech = `${turnDirection.charAt(0).toUpperCase() + turnDirection.slice(1)} ${currentStep.name}`;
     speakNavigationDirection(speech);
   }
 
@@ -2708,17 +2880,24 @@ async function drawRoadRouteOnMap(lat1, lng1, lat2, lng2, color = '#0066FF', wei
             osrmRouteCache.set(key, coords);
           }
           if (r.legs && r.legs[0] && r.legs[0].steps) {
-            steps = r.legs[0].steps.map((st) => ({
-              type: st.maneuver?.type || 'turn',
-              modifier: st.maneuver?.modifier || '',
-              name: st.name || (st.maneuver?.modifier ? `onto ${st.maneuver.modifier} street` : 'Harare Route'),
-              distance: Math.round(st.distance || 0),
-              duration: Math.round(st.duration || 0),
-              location: st.maneuver?.location ? [st.maneuver.location[1], st.maneuver.location[0]] : [lat2, lng2]
-            }));
+            steps = r.legs[0].steps.map((st) => {
+              const loc = st.maneuver?.location ? [st.maneuver.location[1], st.maneuver.location[0]] : [lat2, lng2];
+              let streetName = (st.name || '').trim();
+              if (!streetName || streetName.toLowerCase().includes('harare route') || streetName.toLowerCase().includes('unnamed')) {
+                streetName = resolveNearestHarareThoroughfare(loc[0], loc[1]);
+              }
+              return {
+                type: st.maneuver?.type || 'turn',
+                modifier: st.maneuver?.modifier || '',
+                name: streetName,
+                distance: Math.round(st.distance || 0),
+                duration: Math.round(st.duration || 0),
+                location: loc
+              };
+            });
             osrmStepsCache.set(key, steps);
             liveNavState.totalDistanceMeters = Math.round(r.distance || calculateDistanceMeters(lat1, lng1, lat2, lng2));
-            liveNavState.totalDurationSeconds = Math.round(r.duration || (liveNavState.totalDistanceMeters / 8.5));
+            liveNavState.totalDurationSeconds = Math.max(60, Math.round((liveNavState.totalDistanceMeters / 500) * 60));
           }
         }
       }
@@ -2731,19 +2910,21 @@ async function drawRoadRouteOnMap(lat1, lng1, lat2, lng2, color = '#0066FF', wei
 
   if (!steps || steps.length === 0) {
     const totalDist = calculateDistanceMeters(lat1, lng1, lat2, lng2);
-    const destName = reqContext?.exactAddress || reqContext?.suburbName || 'Client Address';
+    const startStreet = resolveNearestHarareThoroughfare(lat1, lng1);
+    const destStreet = resolveNearestHarareThoroughfare(lat2, lng2);
+    const destName = reqContext?.exactAddress || reqContext?.suburbName || destStreet;
     steps = [
       {
         type: 'depart',
         modifier: 'straight',
-        name: 'Head towards destination',
+        name: `Head onto ${startStreet}`,
         distance: Math.round(totalDist * 0.4),
         duration: Math.round(totalDist * 0.4 / 8.5),
         location: coords[Math.floor(coords.length * 0.4)] || [lat2, lng2]
       },
       {
         type: 'turn',
-        modifier: 'left',
+        modifier: 'right',
         name: `Turn onto ${destName}`,
         distance: Math.round(totalDist * 0.6),
         duration: Math.round(totalDist * 0.6 / 8.5),
@@ -2752,14 +2933,14 @@ async function drawRoadRouteOnMap(lat1, lng1, lat2, lng2, color = '#0066FF', wei
       {
         type: 'arrive',
         modifier: '',
-        name: `${reqContext?.customerName || 'Client'}'s Gate`,
+        name: `${reqContext?.customerName || 'Client'}'s Location`,
         distance: 25,
         duration: 5,
         location: [lat2, lng2]
       }
     ];
     liveNavState.totalDistanceMeters = totalDist;
-    liveNavState.totalDurationSeconds = Math.round(totalDist / 8.5);
+    liveNavState.totalDurationSeconds = Math.max(60, Math.round((totalDist / 500) * 60));
   }
 
   // inDrive Dual-Layer Route Polyline (Dark Casing + Glowing Blue Active Polyline)
@@ -2786,8 +2967,13 @@ async function drawRoadRouteOnMap(lat1, lng1, lat2, lng2, color = '#0066FF', wei
     liveNavState.steps = steps;
     liveNavState.currentStepIdx = 0;
     renderNavigationHud();
+    const totalKm = (liveNavState.totalDistanceMeters / 1000).toFixed(1);
+    const totalMins = Math.max(1, Math.round(liveNavState.totalDistanceMeters / 500));
     const firstStep = steps[0];
-    const initialSpeech = firstStep ? `Navigating to ${reqContext?.customerName || 'client'}. In ${firstStep.distance} meters, ${firstStep.name}` : `Navigating to client location.`;
+    const turnWord = firstStep?.modifier ? `turn ${firstStep.modifier} into` : 'head onto';
+    const initialSpeech = firstStep
+      ? `Navigating to ${reqContext?.customerName || 'client'}. In ${firstStep.distance} meters, ${turnWord} ${firstStep.name}. Route length is ${totalKm} kilometers, estimated arrival in ${totalMins} minutes.`
+      : `Navigating to client location. Route length is ${totalKm} kilometers.`;
     speakNavigationDirection(initialSpeech);
   }
 
@@ -3238,6 +3424,9 @@ function updateMapMarkers(force = false) {
 
   stopNavigationHud();
 
+  // Always synchronize client live GPS hailing marker and sonar wave pulses
+  updateLiveGpsMarker();
+
   // Reconcile and update provider markers with clean vector trade icons (NO profile photos on map)
   const currentProIds = new Set(onlinePros.map((p) => p.id));
   for (const [id, marker] of activeMapProviderMarkers.entries()) {
@@ -3255,6 +3444,31 @@ function updateMapMarkers(force = false) {
       const curPos = existingMarker.getLatLng();
       if (curPos.lat !== p.lat || curPos.lng !== p.lng) {
         existingMarker.setLatLng([p.lat, p.lng]);
+      }
+      if (existingMarker._showingThinkingDots !== showThinkingDots) {
+        const tradeSvg = getMapMarkerProfessionIconSvg(p.categoryId);
+        const markerHtml = `
+          <div class="indrive-map-pro-wrap">
+            ${showThinkingDots ? `
+              <div class="pro-thinking-dots-bubble">
+                <span></span><span></span><span></span>
+              </div>
+            ` : ''}
+            <div style="width:34px; height:34px; border-radius:10px; background:#0F172A; border:2px solid #0066FF; display:flex; align-items:center; justify-content:center; color:#FFFFFF; box-shadow:0 4px 12px rgba(0,102,255,0.38); cursor:pointer;" title="${escapeHtml(p.shortName || 'Pro')}">
+              <div style="width:22px; height:22px; display:flex; align-items:center; justify-content:center;">
+                ${tradeSvg}
+              </div>
+            </div>
+          </div>
+        `;
+        const icon = L.divIcon({
+          className: '',
+          html: markerHtml,
+          iconSize: [38, showThinkingDots ? 58 : 38],
+          iconAnchor: [19, showThinkingDots ? 48 : 19]
+        });
+        existingMarker.setIcon(icon);
+        existingMarker._showingThinkingDots = showThinkingDots;
       }
     } else {
       const tradeSvg = getMapMarkerProfessionIconSvg(p.categoryId);
@@ -3281,6 +3495,7 @@ function updateMapMarkers(force = false) {
       });
 
       const m = L.marker([p.lat, p.lng], { icon }).addTo(leafletMarkersLayer);
+      m._showingThinkingDots = showThinkingDots;
       m.on('click', () => openProviderCatalogueModal(p.id));
       activeMapProviderMarkers.set(p.id, m);
     }
@@ -7550,6 +7765,7 @@ function renderModalLayer() {
                 value="${escapeHtml(state.locationSearchQuery !== undefined ? state.locationSearchQuery : (state.customAddress || ''))}"
                 placeholder="Enter address or landmark"
                 oninput="handleLiveLocationQueryInput(this.value)"
+                onkeydown="if(event.key==='Enter'){event.preventDefault();submitCustomRouteAddress(event);}"
               />
               <button
                 type="button"
@@ -8933,17 +9149,41 @@ async function submitCustomRouteAddress(e) {
   state.isCustomAddressSelected = true;
   state.userHasManuallyDraggedPin = true;
 
-  await searchRealLocationAddress(true);
-  if (state.locationSearchResults && state.locationSearchResults.length > 0) {
-    selectGeocodedLocation(0);
-  } else {
-    closeModal();
-    renderAll();
-    if (leafletMap && state.pinnedLat && state.pinnedLng) {
-      leafletMap.flyTo([state.pinnedLat, state.pinnedLng], 16, { animate: true, duration: 0.85 });
-    }
-    showToast(`Address set to: ${state.customAddress}`);
+  // 1. INSTANT 0ms Avatar & Map Relocation using local Harare Gazetteer
+  const localMatch = resolveHarareLocalCoordinates(val);
+  if (localMatch) {
+    state.pinnedLat = localMatch.lat;
+    state.pinnedLng = localMatch.lng;
+    state.userLiveGpsLat = localMatch.lat;
+    state.userLiveGpsLng = localMatch.lng;
   }
+
+  // 2. Immediately close modal, update avatar marker position, and fly camera
+  closeModal();
+  updateLiveGpsMarker();
+  renderAll();
+
+  if (leafletMap && state.pinnedLat && state.pinnedLng) {
+    leafletMap.flyTo([state.pinnedLat, state.pinnedLng], 16, { animate: true, duration: 0.65 });
+  }
+  showToast(`Location set to: ${state.customAddress}`);
+
+  // 3. Asynchronously enhance with OpenStreetMap Nominatim in background if user entered specific house number
+  searchRealLocationAddress(true).then(() => {
+    if (state.locationSearchResults && state.locationSearchResults.length > 0) {
+      const top = state.locationSearchResults[0];
+      if (top && top.lat && top.lng) {
+        state.pinnedLat = top.lat;
+        state.pinnedLng = top.lng;
+        state.userLiveGpsLat = top.lat;
+        state.userLiveGpsLng = top.lng;
+        updateLiveGpsMarker();
+        if (leafletMap) {
+          leafletMap.flyTo([top.lat, top.lng], 16, { animate: true, duration: 0.5 });
+        }
+      }
+    }
+  }).catch(() => {});
 }
 
 function openSuburbPickerModal() {
@@ -11725,15 +11965,29 @@ function syncIncomingCallFromList(calls) {
     }
   }
 
-  // 2. If we have an incoming call or active call, and it is marked ENDED or removed from list: instant dual drop!
-  if (state.incomingCall || state.activeCall) {
-    const currentChan = (state.incomingCall || state.activeCall).channelId;
-    const currentReq = (state.incomingCall || state.activeCall).requestId;
-    const callStillActive = calls.some((c) => 
+  // 2. If incoming call was ringing but caller hung up before callee answered:
+  if (state.incomingCall) {
+    const currentChan = state.incomingCall.channelId;
+    const currentReq = state.incomingCall.requestId;
+    const callStillRinging = calls.some((c) => 
       ((c.channelId && c.channelId === currentChan) || (c.requestId && c.requestId === currentReq)) &&
-      c.status !== 'ENDED'
+      c.status === 'RINGING'
     );
-    if (!callStillActive) {
+    if (!callStillRinging) {
+      endInAppCall(false);
+      return;
+    }
+  }
+
+  // 3. If ongoing call was explicitly marked ENDED by peer:
+  if (state.activeCall) {
+    const currentChan = state.activeCall.channelId;
+    const currentReq = state.activeCall.requestId;
+    const explicitlyEnded = calls.some((c) =>
+      ((c.channelId && c.channelId === currentChan) || (c.requestId && c.requestId === currentReq)) &&
+      c.status === 'ENDED'
+    );
+    if (explicitlyEnded) {
       endInAppCall(false);
       return;
     }

@@ -2463,7 +2463,7 @@ const server = http.createServer(async (req, res) => {
       requests: db.requests,
       customers: (db.customers || []).map(stripPrivate),
       providers: (db.providers || []).map(stripPrivate),
-      activeCalls: (db.activeCalls || []).filter((c) => Date.now() - (c.startedAt || 0) < 50000 && c.status !== 'ENDED'),
+      activeCalls: (db.activeCalls || []).filter((c) => c.status !== 'ENDED' && (c.status === 'ACCEPTED' || Date.now() - (c.startedAt || 0) < 45000)),
       callLogs: isAdminViewer ? (db.callLogs || []) : [],
       adminNotifications: db.adminNotifications || [],
       supportChats: isAdminViewer ? (db.supportChats || {}) : {},
@@ -4174,9 +4174,9 @@ Return ONLY JSON with keys:
       const chan = channelId || ('call_' + (requestId || Date.now()));
 
       if (!Array.isArray(db.activeCalls)) db.activeCalls = [];
-      // Clean up stale calls older than 50 seconds
+      // Clean up stale calls: only expire RINGING calls if older than 45s without answer
       const nowMs = Date.now();
-      db.activeCalls = db.activeCalls.filter((c) => (nowMs - (c.startedAt || 0) < 50000) && c.status !== 'ENDED');
+      db.activeCalls = db.activeCalls.filter((c) => c.status !== 'ENDED' && (c.status === 'ACCEPTED' || nowMs - (c.startedAt || 0) < 45000));
 
       const callEntry = {
         id: 'call_' + (requestId || nowMs),
@@ -4252,7 +4252,8 @@ Return ONLY JSON with keys:
       const nowMs = Date.now();
 
       if (!Array.isArray(db.activeCalls)) db.activeCalls = [];
-      db.activeCalls = db.activeCalls.filter((c) => (nowMs - (c.startedAt || 0) < 50000) && c.status !== 'ENDED');
+      // Clean up stale calls: only expire unaccepted RINGING calls if older than 45 seconds
+      db.activeCalls = db.activeCalls.filter((c) => c.status !== 'ENDED' && (c.status === 'ACCEPTED' || nowMs - (c.startedAt || 0) < 45000));
 
       const incoming = db.activeCalls.find((c) => {
         if (c.status !== 'RINGING') return false;
@@ -4277,9 +4278,16 @@ Return ONLY JSON with keys:
         return false;
       }) || null;
 
-      const activeOutgoing = db.activeCalls.find((c) => {
+      // Active connected or outgoing call for either party (caller OR recipient)
+      const activeCall = db.activeCalls.find((c) => {
+        if (c.status !== 'ACCEPTED' && c.status !== 'RINGING') return false;
+        if (chanId && c.channelId === chanId) return true;
+        if (reqId && c.requestId === reqId) return true;
         if (!userId) return false;
-        return c.callerId === userId && (c.status === 'ACCEPTED' || c.status === 'RINGING');
+        const userPhoneDigits = userId.replace(/\D/g, '');
+        const isCaller = c.callerId === userId || (userPhoneDigits && c.callerId.replace(/\D/g, '') === userPhoneDigits);
+        const isRecipient = c.recipientId === userId || (userPhoneDigits && c.recipientId && c.recipientId.replace(/\D/g, '') === userPhoneDigits);
+        return isCaller || isRecipient;
       }) || null;
 
       const signals = chanId && Array.isArray(db.callSignals)
@@ -4289,7 +4297,7 @@ Return ONLY JSON with keys:
       return sendJson(res, 200, {
         ok: true,
         incomingCall: incoming,
-        activeCall: activeOutgoing,
+        activeCall: activeCall,
         signals,
         serverTime: nowMs
       });
