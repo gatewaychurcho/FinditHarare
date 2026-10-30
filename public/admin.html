@@ -327,7 +327,15 @@
       </div>
 
       <div id="adminNav">
-        <div class="nav-item active" onclick="setAdminTab('OVERVIEW')">📊 Overview &amp; Revenue</div>
+        <div class="nav-item active" onclick="setAdminTab('OVERVIEW')">📊 Real Operations &amp; Funnel</div>
+        <div class="nav-item" onclick="setAdminTab('DISPUTES')" style="background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.25);">
+          <span>⚖️ Complaints &amp; Disputes</span>
+          <span id="navDisputesBadge" class="nav-badge" style="background:#EF4444; color:#fff; display:none;">0</span>
+        </div>
+        <div class="nav-item" onclick="setAdminTab('RECONCILIATION')" style="background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.25);">
+          <span>💼 Wallet Reconciliation</span>
+          <span id="navReconcileBadge" class="nav-badge" style="background:#10B981; color:#fff; display:none;">0</span>
+        </div>
         <div class="nav-item" onclick="setAdminTab('FINANCIAL_AI')" style="background:rgba(16,185,129,0.12); border:1px solid rgba(16,185,129,0.3);">
           <span>📈 AI Financial Suite &amp; Charts</span>
           <span class="nav-badge" style="background:#10B981; color:#fff;">AI LIVE</span>
@@ -771,6 +779,8 @@
     // Tab Navigation
     const ALL_ADMIN_TABS = [
       'OVERVIEW',
+      'DISPUTES',
+      'RECONCILIATION',
       'FINANCIAL_AI',
       'DISPATCH',
       'CLIENTS',
@@ -798,6 +808,225 @@
       });
       renderAdmin();
       if (tab === 'DISPATCH') {
+        setTimeout(initAdminMap, 60);
+      }
+    }
+
+    // Operational Analytics Calculation Helper (100% Real Records, Zero-Mock)
+    function getOperationalMetrics(d) {
+      if (!d) return null;
+      if (d.metrics) return d.metrics;
+      const requests = Array.isArray(d.requests) ? d.requests : [];
+      const customers = Array.isArray(d.customers) ? d.customers : [];
+      const providers = Array.isArray(d.providers) ? d.providers : [];
+      const revenueLedger = Array.isArray(d.revenueLedger) ? d.revenueLedger : [];
+      const ecocashTopups = Array.isArray(d.ecocashTopups) ? d.ecocashTopups : [];
+
+      const postingCustomerIds = new Set(requests.map(r => r.customerId).filter(Boolean));
+      const customersPostingJobsCount = postingCustomerIds.size;
+      const totalRegisteredCustomers = customers.length;
+      const customerPostingRate = totalRegisteredCustomers > 0
+        ? ((customersPostingJobsCount / totalRegisteredCustomers) * 100).toFixed(1)
+        : '0.0';
+
+      const jobsReceivingBids = requests.filter(r =>
+        (Array.isArray(r.offers) && r.offers.length > 0) ||
+        r.acceptedOfferId ||
+        ['BOOKED', 'CONFIRMED', 'ARRIVED', 'IN_PROGRESS', 'COMPLETED'].includes(r.status)
+      );
+      const jobsReceivingBidsCount = jobsReceivingBids.length;
+      const totalJobsCount = requests.length;
+      const bidReceiptRate = totalJobsCount > 0
+        ? ((jobsReceivingBidsCount / totalJobsCount) * 100).toFixed(1)
+        : '0.0';
+
+      const ttfbSecondsList = [];
+      requests.forEach(r => {
+        if (Array.isArray(r.offers) && r.offers.length > 0 && r.createdAt) {
+          const reqTime = new Date(r.createdAt).getTime();
+          let firstOfferTime = Infinity;
+          r.offers.forEach(o => {
+            const ot = new Date(o.createdAt || r.createdAt).getTime();
+            if (ot < firstOfferTime) firstOfferTime = ot;
+          });
+          if (firstOfferTime !== Infinity && firstOfferTime >= reqTime) {
+            const diffSec = Math.max(1, Math.round((firstOfferTime - reqTime) / 1000));
+            ttfbSecondsList.push(diffSec);
+          }
+        }
+      });
+
+      let avgTtfbSeconds = 0;
+      let avgTtfbFormatted = 'N/A';
+      if (ttfbSecondsList.length > 0) {
+        avgTtfbSeconds = Math.round(ttfbSecondsList.reduce((a, b) => a + b, 0) / ttfbSecondsList.length);
+        if (avgTtfbSeconds < 60) avgTtfbFormatted = `${avgTtfbSeconds}s`;
+        else {
+          const m = Math.floor(avgTtfbSeconds / 60);
+          const s = avgTtfbSeconds % 60;
+          avgTtfbFormatted = s > 0 ? `${m}m ${s}s` : `${m}m`;
+        }
+      }
+
+      const jobsAccepted = requests.filter(r =>
+        r.acceptedOfferId ||
+        ['BOOKED', 'CONFIRMED', 'ARRIVED', 'IN_PROGRESS', 'COMPLETED'].includes(r.status)
+      );
+      const jobsAcceptedCount = jobsAccepted.length;
+      const acceptanceRate = jobsReceivingBidsCount > 0
+        ? ((jobsAcceptedCount / jobsReceivingBidsCount) * 100).toFixed(1)
+        : '0.0';
+
+      const jobsCompleted = requests.filter(r => r.status === 'COMPLETED');
+      const jobsCompletedCount = jobsCompleted.length;
+      const completionRate = jobsAcceptedCount > 0
+        ? ((jobsCompletedCount / jobsAcceptedCount) * 100).toFixed(1)
+        : '0.0';
+
+      const customerJobCounts = {};
+      requests.forEach(r => {
+        if (r.customerId) customerJobCounts[r.customerId] = (customerJobCounts[r.customerId] || 0) + 1;
+      });
+      const returningCustomerIds = Object.keys(customerJobCounts).filter(cid => customerJobCounts[cid] >= 2);
+      const returningCustomersCount = returningCustomerIds.length;
+      const repeatRetentionRate = customersPostingJobsCount > 0
+        ? ((returningCustomersCount / customersPostingJobsCount) * 100).toFixed(1)
+        : '0.0';
+
+      const totalCommissionCollectedUsd = revenueLedger.reduce((sum, entry) => {
+        return sum + (Number(entry.actualFeeCollectedUsd) || 0);
+      }, 0);
+
+      const totalCompletedGmvUsd = jobsCompleted.reduce((sum, r) => {
+        const val = Number(r.priceUsd || r.acceptedPriceUsd || (r.offers && r.offers.find(o => o.id === r.acceptedOfferId)?.priceUsd) || 0);
+        return sum + val;
+      }, 0);
+
+      const totalCommissionPromoWaivedUsd = revenueLedger
+        .filter(e => e.promoApplied)
+        .reduce((sum, e) => sum + (Number(e.standardFeeUsd) || 0), 0);
+
+      const totalEcoCashApprovedUsd = ecocashTopups
+        .filter(t => t.status === 'APPROVED')
+        .reduce((sum, t) => sum + (Number(t.amountUsd) || 0), 0);
+
+      const totalEcoCashPendingUsd = ecocashTopups
+        .filter(t => t.status === 'PENDING')
+        .reduce((sum, t) => sum + (Number(t.amountUsd) || 0), 0);
+
+      const providersBelowThreshold = providers.filter(p => (Number(p.walletBalanceUsd) || 0) < 2.0);
+      const providersNegativeBalance = providers.filter(p => (Number(p.walletBalanceUsd) || 0) < 0.0);
+
+      return {
+        customersPostingJobs: { count: customersPostingJobsCount, totalRegistered: totalRegisteredCustomers, ratePercent: Number(customerPostingRate) },
+        jobsReceivingBids: { count: jobsReceivingBidsCount, totalJobs: totalJobsCount, ratePercent: Number(bidReceiptRate) },
+        timeToFirstBid: { avgSeconds: avgTtfbSeconds, formatted: avgTtfbFormatted, sampleSize: ttfbSecondsList.length },
+        jobsAccepted: { count: jobsAcceptedCount, ratePercent: Number(acceptanceRate) },
+        jobsCompleted: { count: jobsCompletedCount, ratePercent: Number(completionRate) },
+        returningCustomers: { count: returningCustomersCount, totalPosters: customersPostingJobsCount, retentionRatePercent: Number(repeatRetentionRate) },
+        commissionCollected: { totalCollectedUsd: Number(totalCommissionCollectedUsd.toFixed(2)), completedGmvUsd: Number(totalCompletedGmvUsd.toFixed(2)), promoWaivedUsd: Number(totalCommissionPromoWaivedUsd.toFixed(2)), ledgerEntriesCount: revenueLedger.length },
+        reconciliation: {
+          ecoCashApprovedUsd: Number(totalEcoCashApprovedUsd.toFixed(2)),
+          ecoCashPendingUsd: Number(totalEcoCashPendingUsd.toFixed(2)),
+          providersBelowFloorCount: providersBelowThreshold.length,
+          providersNegativeBalanceCount: providersNegativeBalance.length
+        }
+      };
+    }
+
+    // Export All Transactions (CSV)
+    function downloadTransactionCsv() {
+      const rows = [['Date', 'Transaction ID', 'Type', 'Actor Name', 'Job ID', 'Amount USD', 'Method', 'Status', 'Notes']];
+      (db.revenueLedger || []).forEach(r => {
+        rows.push([
+          r.createdAt || r.timestamp || '',
+          r.id || '',
+          'COMMISSION_DEDUCTION',
+          `"${(r.providerName || '').replace(/"/g, '""')}"`,
+          r.requestId || '',
+          Number(r.actualFeeCollectedUsd || 0).toFixed(2),
+          `"${(r.paymentMethod || 'Wallet USD').replace(/"/g, '""')}"`,
+          r.promoApplied ? '0% PROMO WAIVED' : 'COLLECTED',
+          `"Job Val: $${r.bookingAmountUsd || 0} USD (${r.categoryName || ''})"`
+        ]);
+      });
+      (db.ecocashTopups || []).forEach(t => {
+        rows.push([
+          t.submittedAt || '',
+          t.id || '',
+          'ECOCASH_USD_TOPUP',
+          `"${(t.providerName || '').replace(/"/g, '""')}"`,
+          '',
+          Number(t.amountUsd || 0).toFixed(2),
+          'EcoCash USD',
+          t.status || 'PENDING',
+          `"Ref: ${t.approvalCode || t.ecoCashReference || ''}"`
+        ]);
+      });
+      (db.providers || []).forEach(p => {
+        (p.walletTransactions || []).forEach(tx => {
+          rows.push([
+            tx.date || '',
+            tx.id || '',
+            tx.type || 'WALLET_TX',
+            `"${(p.name || '').replace(/"/g, '""')}"`,
+            '',
+            Number(tx.amountUsd || 0).toFixed(2),
+            `"${(tx.method || '').replace(/"/g, '""')}"`,
+            'CONFIRMED',
+            `"${(tx.note || '').replace(/"/g, '""')}"`
+          ]);
+        });
+      });
+
+      const csvContent = 'data:text/csv;charset=utf-8,' + encodeURIComponent(rows.map(e => e.join(',')).join('\n'));
+      const link = document.createElement('a');
+      link.setAttribute('href', csvContent);
+      link.setAttribute('download', `findit_harare_ledger_${new Date().toISOString().slice(0, 10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      showAdminToast('Transaction ledger CSV exported successfully!', 'success');
+    }
+
+    // Complaints & Dispute Actions
+    async function resolveDispute(disputeId, action) {
+      const promptLabel = action === 'RESOLVE_REFUND' ? 'Refund client & penalize provider'
+        : action === 'RESOLVE_PAY_PROVIDER' ? 'Pay provider & dismiss complaint'
+        : action === 'DISMISS' ? 'Dismiss dispute'
+        : 'Mark investigating';
+      const note = prompt(`Enter resolution note for dispute (${promptLabel}):`, 'Issue investigated and resolved by Admin');
+      if (note === null) return;
+      try {
+        const res = await api('/api/admin/disputes/action', 'POST', { disputeId, action, note });
+        if (res && res.success) {
+          showAdminToast(`Dispute marked: ${action}`, 'success');
+          await loadAdminData(true);
+        } else {
+          showAdminToast(res?.error || 'Failed to update dispute', 'error');
+        }
+      } catch (e) {
+        showAdminToast(e.message, 'error');
+      }
+    }
+
+    // Suspension Appeal Actions
+    async function resolveAppeal(appealId, action) {
+      const defaultNote = action === 'APPROVE' ? 'Granted leniency. Account reinstated.' : 'Appeal rejected. Ban remains in effect.';
+      const note = prompt(`Enter reason / admin note for appeal decision (${action}):`, defaultNote);
+      if (note === null) return;
+      try {
+        const res = await api('/api/admin/appeals/resolve', 'POST', { appealId, action, adminResponse: note });
+        if (res && res.success) {
+          showAdminToast(`Appeal ${action === 'APPROVE' ? 'approved & account unbanned' : 'rejected'}!`, 'success');
+          await loadAdminData(true);
+        } else {
+          showAdminToast(res?.error || 'Failed to resolve appeal', 'error');
+        }
+      } catch (e) {
+        showAdminToast(e.message, 'error');
+      }
+    }
         setTimeout(initAdminMap, 60);
       }
     }
@@ -1668,6 +1897,10 @@
       setBadge('navApprovalBadge', pendingApprovals.length);
       setBadge('navWarnBadge', bannedCount);
       setBadge('navCancelBadge', (db.cancellationLogs || []).length);
+      const openDisp = (db.disputes || []).filter(d => d.status === 'OPEN' || d.status === 'INVESTIGATING');
+      const lowBalCount = (db.providers || []).filter(p => (Number(p.walletBalanceUsd) || 0) < 2.0).length;
+      setBadge('navDisputesBadge', openDisp.length);
+      setBadge('navReconcileBadge', lowBalCount);
 
       // KPI Header
       const kpiHtml = `
@@ -1721,13 +1954,187 @@
 
       let sectionHtml = '';
 
-      // TAB 1: OVERVIEW & REVENUE
+      // TAB 1: OVERVIEW & REVENUE (REAL OPERATING CENTRE)
       if (adminTab === 'OVERVIEW') {
+        const m = getOperationalMetrics(db);
         const ledger = db.revenueLedger || [];
         const totalSaved = ledger.filter(r => r.promoApplied).reduce((a, r) => a + (r.standardFeeUsd || 0), 0);
         const totalEarned = ledger.reduce((a, r) => a + (r.actualFeeCollectedUsd || 0), 0);
 
         sectionHtml = `
+          <!-- 100% REAL OPERATING METRICS & CONVERSION FUNNEL -->
+          <div class="card" style="margin-bottom:18px; border:2px solid rgba(0,102,255,0.25); background:linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%);">
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:16px;">
+              <div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span style="font-size:20px;">🏛️</span>
+                  <h2 style="font-size:18px; font-weight:800; color:#0F172A; letter-spacing:-0.01em;">Findit Harare — Operating Centre &amp; Conversion Funnel</h2>
+                  <span style="padding:3px 8px; border-radius:99px; background:#ECFDF5; color:#059669; font-size:11px; font-weight:800; border:1px solid rgba(16,185,129,0.3);">
+                    ✓ 100% REAL DATABASE METRICS
+                  </span>
+                </div>
+                <div style="font-size:12px; color:var(--muted); margin-top:2px;">
+                  Live calculation directly from database requests, offers, wallet transactions, and repeat bookings. Zero vanity figures.
+                </div>
+              </div>
+              <div style="display:flex; gap:8px; align-items:center;">
+                <button class="btn-green" style="padding:7px 14px; font-size:12px; font-weight:800; display:flex; align-items:center; gap:6px;" onclick="downloadTransactionCsv()">
+                  <span>📥</span> <span>Export Ledger (CSV)</span>
+                </button>
+                <button class="btn-outline" style="padding:7px 12px; font-size:12px; font-weight:700;" onclick="loadAdminData(true)">
+                  🔄 Recalculate Live
+                </button>
+              </div>
+            </div>
+
+            <!-- 7 CORE OPERATIONAL METRIC CARDS -->
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(185px, 1fr)); gap:12px; margin-bottom:18px;">
+              
+              <!-- 1. Customers Posting Jobs -->
+              <div style="background:#fff; border:1.5px solid var(--border); border-radius:12px; padding:12px 14px; box-shadow:0 1px 3px rgba(0,0,0,0.02);">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <span style="font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase;">1. Customers Posting</span>
+                  <span style="font-size:16px;">👥</span>
+                </div>
+                <div style="font-size:22px; font-weight:900; color:#0066FF; margin-top:4px;">
+                  ${m.customersPostingJobs.count} <span style="font-size:13px; font-weight:700; color:var(--muted);">/ ${m.customersPostingJobs.totalRegistered}</span>
+                </div>
+                <div style="font-size:11.5px; color:#059669; font-weight:700; margin-top:4px;">
+                  ${m.customersPostingJobs.ratePercent}% customer posting rate
+                </div>
+              </div>
+
+              <!-- 2. Jobs Receiving Bids -->
+              <div style="background:#fff; border:1.5px solid var(--border); border-radius:12px; padding:12px 14px; box-shadow:0 1px 3px rgba(0,0,0,0.02);">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <span style="font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase;">2. Jobs Receiving Bids</span>
+                  <span style="font-size:16px;">🏷️</span>
+                </div>
+                <div style="font-size:22px; font-weight:900; color:#0F172A; margin-top:4px;">
+                  ${m.jobsReceivingBids.count} <span style="font-size:13px; font-weight:700; color:var(--muted);">/ ${m.jobsReceivingBids.totalJobs}</span>
+                </div>
+                <div style="font-size:11.5px; color:#0066FF; font-weight:700; margin-top:4px;">
+                  ${m.jobsReceivingBids.ratePercent}% request bid receipt rate
+                </div>
+              </div>
+
+              <!-- 3. Time to First Bid -->
+              <div style="background:#fff; border:1.5px solid var(--border); border-radius:12px; padding:12px 14px; box-shadow:0 1px 3px rgba(0,0,0,0.02);">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <span style="font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase;">3. Time to First Bid</span>
+                  <span style="font-size:16px;">⏱️</span>
+                </div>
+                <div style="font-size:22px; font-weight:900; color:#8B5CF6; margin-top:4px;">
+                  ${m.timeToFirstBid.formatted}
+                </div>
+                <div style="font-size:11.5px; color:var(--muted); font-weight:600; margin-top:4px;">
+                  Sample: ${m.timeToFirstBid.sampleSize} requests
+                </div>
+              </div>
+
+              <!-- 4. Jobs Accepted -->
+              <div style="background:#fff; border:1.5px solid var(--border); border-radius:12px; padding:12px 14px; box-shadow:0 1px 3px rgba(0,0,0,0.02);">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <span style="font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase;">4. Jobs Accepted</span>
+                  <span style="font-size:16px;">🤝</span>
+                </div>
+                <div style="font-size:22px; font-weight:900; color:#0284C7; margin-top:4px;">
+                  ${m.jobsAccepted.count}
+                </div>
+                <div style="font-size:11.5px; color:#059669; font-weight:700; margin-top:4px;">
+                  ${m.jobsAccepted.ratePercent}% bid-to-accept rate
+                </div>
+              </div>
+
+              <!-- 5. Jobs Completed -->
+              <div style="background:#fff; border:1.5px solid var(--border); border-radius:12px; padding:12px 14px; box-shadow:0 1px 3px rgba(0,0,0,0.02);">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <span style="font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase;">5. Jobs Completed</span>
+                  <span style="font-size:16px;">✅</span>
+                </div>
+                <div style="font-size:22px; font-weight:900; color:#059669; margin-top:4px;">
+                  ${m.jobsCompleted.count}
+                </div>
+                <div style="font-size:11.5px; color:#059669; font-weight:700; margin-top:4px;">
+                  ${m.jobsCompleted.ratePercent}% job completion rate
+                </div>
+              </div>
+
+              <!-- 6. Returning Customers -->
+              <div style="background:#fff; border:1.5px solid var(--border); border-radius:12px; padding:12px 14px; box-shadow:0 1px 3px rgba(0,0,0,0.02);">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <span style="font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase;">6. Returning Customers</span>
+                  <span style="font-size:16px;">🔁</span>
+                </div>
+                <div style="font-size:22px; font-weight:900; color:#D97706; margin-top:4px;">
+                  ${m.returningCustomers.count} <span style="font-size:13px; font-weight:700; color:var(--muted);">/ ${m.returningCustomers.totalPosters}</span>
+                </div>
+                <div style="font-size:11.5px; color:#D97706; font-weight:700; margin-top:4px;">
+                  ${m.returningCustomers.retentionRatePercent}% repeat retention
+                </div>
+              </div>
+
+              <!-- 7. Commission Actually Collected -->
+              <div style="background:#fff; border:1.5px solid var(--border); border-radius:12px; padding:12px 14px; box-shadow:0 1px 3px rgba(0,0,0,0.02);">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <span style="font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase;">7. Real Fee Collected</span>
+                  <span style="font-size:16px;">💵</span>
+                </div>
+                <div style="font-size:22px; font-weight:900; color:#059669; margin-top:4px;">
+                  $${m.commissionCollected.totalCollectedUsd.toFixed(2)} <span style="font-size:12px; font-weight:700; color:var(--muted);">USD</span>
+                </div>
+                <div style="font-size:11.5px; color:var(--muted); font-weight:600; margin-top:4px;">
+                  From ${m.commissionCollected.ledgerEntriesCount} ledger transactions
+                </div>
+              </div>
+
+            </div>
+
+            <!-- VISUAL CONVERSION FUNNEL BAR -->
+            <div style="background:#F1F5F9; border-radius:12px; padding:12px 16px;">
+              <div style="font-size:12px; font-weight:800; color:#475569; text-transform:uppercase; margin-bottom:8px; display:flex; justify-content:space-between;">
+                <span>⚡ Real End-to-End Conversion Funnel</span>
+                <span style="color:#0066FF;">Completed Home Visits GMV: $${m.commissionCollected.completedGmvUsd.toFixed(2)} USD</span>
+              </div>
+              <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                
+                <div style="flex:1; min-width:130px; background:#fff; border:1px solid #CBD5E1; border-radius:8px; padding:8px 10px; text-align:center;">
+                  <div style="font-size:11px; font-weight:700; color:var(--muted);">1. Requests Posted</div>
+                  <div style="font-size:15px; font-weight:900; color:#0F172A;">${m.jobsReceivingBids.totalJobs} (100%)</div>
+                </div>
+
+                <div style="color:#94A3B8; font-weight:900;">➔</div>
+
+                <div style="flex:1; min-width:130px; background:#fff; border:1px solid #CBD5E1; border-radius:8px; padding:8px 10px; text-align:center;">
+                  <div style="font-size:11px; font-weight:700; color:var(--muted);">2. Received Offers</div>
+                  <div style="font-size:15px; font-weight:900; color:#0066FF;">${m.jobsReceivingBids.count} (${m.jobsReceivingBids.ratePercent}%)</div>
+                </div>
+
+                <div style="color:#94A3B8; font-weight:900;">➔</div>
+
+                <div style="flex:1; min-width:130px; background:#fff; border:1px solid #CBD5E1; border-radius:8px; padding:8px 10px; text-align:center;">
+                  <div style="font-size:11px; font-weight:700; color:var(--muted);">3. Offer Accepted</div>
+                  <div style="font-size:15px; font-weight:900; color:#0284C7;">${m.jobsAccepted.count} (${m.jobsAccepted.ratePercent}%)</div>
+                </div>
+
+                <div style="color:#94A3B8; font-weight:900;">➔</div>
+
+                <div style="flex:1; min-width:130px; background:#fff; border:1px solid #CBD5E1; border-radius:8px; padding:8px 10px; text-align:center;">
+                  <div style="font-size:11px; font-weight:700; color:var(--muted);">4. Job Completed</div>
+                  <div style="font-size:15px; font-weight:900; color:#059669;">${m.jobsCompleted.count} (${m.jobsCompleted.ratePercent}%)</div>
+                </div>
+
+                <div style="color:#94A3B8; font-weight:900;">➔</div>
+
+                <div style="flex:1; min-width:130px; background:#fff; border:1px solid #CBD5E1; border-radius:8px; padding:8px 10px; text-align:center;">
+                  <div style="font-size:11px; font-weight:700; color:var(--muted);">5. Repeat Customer</div>
+                  <div style="font-size:15px; font-weight:900; color:#D97706;">${m.returningCustomers.count} (${m.returningCustomers.retentionRatePercent}%)</div>
+                </div>
+
+              </div>
+            </div>
+
+          </div>
           <div class="panel-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:18px;">
             <div class="card">
               <h2 style="font-size:17px; font-weight:800; margin-bottom:8px;">💰 Dynamic Commission &amp; 0% Promo Engine</h2>
@@ -1819,6 +2226,235 @@
                 </table>
               </div>
             </div>
+          </div>
+        `;
+      }
+
+      // TAB 2: COMPLAINTS & DISPUTES
+      else if (adminTab === 'DISPUTES') {
+        const disputes = db.disputes || [];
+        const openDisp = disputes.filter(d => d.status === 'OPEN');
+        const investDisp = disputes.filter(d => d.status === 'INVESTIGATING');
+        const resolvedDisp = disputes.filter(d => d.status.startsWith('RESOLVED') || d.status === 'DISMISSED');
+        const totalDisputedAmount = disputes.reduce((sum, d) => sum + (Number(d.amountUsd) || 0), 0);
+
+        sectionHtml = `
+          <div class="card">
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:16px;">
+              <div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span style="font-size:20px;">⚖️</span>
+                  <h2 style="font-size:18px; font-weight:800; color:#0F172A;">Client &amp; Provider Complaints &amp; Disputes (${disputes.length})</h2>
+                </div>
+                <div style="font-size:12px; color:var(--muted); margin-top:2px;">
+                  Investigate service quality grievances, payment conflicts, no-shows, and issue client refunds or provider penalties.
+                </div>
+              </div>
+              <div style="display:flex; gap:8px;">
+                <button class="btn-blue" onclick="promptFileAdminDispute()">➕ File New Dispute</button>
+              </div>
+            </div>
+
+            <!-- Disputes Metric Cards -->
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:12px; margin-bottom:18px;">
+              <div style="background:#FFF1F2; border:1px solid #FECDD3; border-radius:10px; padding:12px;">
+                <div style="font-size:11px; font-weight:800; color:#E11D48;">OPEN DISPUTES</div>
+                <div style="font-size:22px; font-weight:900; color:#BE123C; margin-top:4px;">${openDisp.length}</div>
+                <div style="font-size:11px; color:var(--muted);">Awaiting investigation</div>
+              </div>
+              <div style="background:#FEF3C7; border:1px solid #FDE68A; border-radius:10px; padding:12px;">
+                <div style="font-size:11px; font-weight:800; color:#D97706;">UNDER INVESTIGATION</div>
+                <div style="font-size:22px; font-weight:900; color:#B45309; margin-top:4px;">${investDisp.length}</div>
+                <div style="font-size:11px; color:var(--muted);">In active review</div>
+              </div>
+              <div style="background:#ECFDF5; border:1px solid #A7F3D0; border-radius:10px; padding:12px;">
+                <div style="font-size:11px; font-weight:800; color:#059669;">RESOLVED / CLOSED</div>
+                <div style="font-size:22px; font-weight:900; color:#047857; margin-top:4px;">${resolvedDisp.length}</div>
+                <div style="font-size:11px; color:var(--muted);">Settled cases</div>
+              </div>
+              <div style="background:#EFF6FF; border:1px solid #BFDBFE; border-radius:10px; padding:12px;">
+                <div style="font-size:11px; font-weight:800; color:#0284C7;">TOTAL DISPUTED VALUE</div>
+                <div style="font-size:22px; font-weight:900; color:#0369A1; margin-top:4px;">$${totalDisputedAmount.toFixed(2)} USD</div>
+                <div style="font-size:11px; color:var(--muted);">Across all disputes</div>
+              </div>
+            </div>
+
+            <!-- Disputes Table -->
+            <div style="overflow-x:auto;">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Dispute ID &amp; Job</th>
+                    <th>Parties Involved</th>
+                    <th>Category &amp; Amount</th>
+                    <th>Reason &amp; Evidence</th>
+                    <th>Status</th>
+                    <th style="text-align:right;">Resolution Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${disputes.length === 0 ? `
+                    <tr><td colspan="6" style="text-align:center; padding:32px; color:var(--muted);">No disputes reported yet. Harare platform operation is clean and smooth.</td></tr>
+                  ` : disputes.map(d => `
+                    <tr style="${d.status === 'OPEN' ? 'background:#FFF5F5;' : (d.status === 'INVESTIGATING' ? 'background:#FFFBEB;' : '')}">
+                      <td>
+                        <div style="font-weight:800; font-size:13px; font-family:monospace; color:#0F172A;">${escapeHtml(d.id)}</div>
+                        <div style="font-size:11.5px; color:var(--blue-primary); font-weight:700;">${escapeHtml(d.taskTitle || 'Home Service')}</div>
+                        <div style="font-size:10.5px; color:var(--muted);">${d.createdAt ? new Date(d.createdAt).toLocaleDateString() : 'Recent'}</div>
+                      </td>
+                      <td>
+                        <div style="font-size:12px;">
+                          <strong>Client:</strong> ${escapeHtml(d.customer?.name || 'Client')} (${escapeHtml(d.customer?.phone || 'N/A')})
+                        </div>
+                        <div style="font-size:12px; margin-top:2px;">
+                          <strong>Pro:</strong> ${escapeHtml(d.provider?.name || 'Provider')} (${escapeHtml(d.provider?.phone || 'N/A')})
+                        </div>
+                        <div style="font-size:10.5px; color:var(--muted); margin-top:2px;">Raised by: <strong>${d.raisedBy}</strong></div>
+                      </td>
+                      <td>
+                        <span style="padding:2px 7px; border-radius:99px; font-size:10.5px; font-weight:800; background:#F1F5F9; color:#334155;">
+                          ${escapeHtml(d.category || 'ISSUE')}
+                        </span>
+                        <div style="font-size:13px; font-weight:900; color:#0F172A; margin-top:4px;">$${Number(d.amountUsd || 0).toFixed(2)} USD</div>
+                      </td>
+                      <td style="max-width:280px;">
+                        <div style="font-size:12px; font-weight:600; color:#1E293B;">"${escapeHtml(d.reason || '')}"</div>
+                        ${d.adminNotes ? `<div style="font-size:11px; color:#059669; margin-top:4px;"><strong>Admin Note:</strong> ${escapeHtml(d.adminNotes)}</div>` : ''}
+                      </td>
+                      <td>
+                        <span style="padding:3px 8px; border-radius:99px; font-size:11px; font-weight:800; background:${d.status === 'OPEN' ? '#FEE2E2' : (d.status === 'INVESTIGATING' ? '#FEF3C7' : '#ECFDF5')}; color:${d.status === 'OPEN' ? '#DC2626' : (d.status === 'INVESTIGATING' ? '#B45309' : '#059669')};">
+                          ${escapeHtml(d.status)}
+                        </span>
+                      </td>
+                      <td style="text-align:right;">
+                        ${d.status === 'OPEN' || d.status === 'INVESTIGATING' ? `
+                          <div style="display:flex; flex-direction:column; gap:4px; align-items:flex-end;">
+                            <button class="btn-green" style="padding:3px 8px; font-size:11px;" onclick="resolveDispute('${d.id}', 'RESOLVE_REFUND')">💸 Refund Client &amp; Penalize Pro</button>
+                            <button class="btn-blue" style="padding:3px 8px; font-size:11px;" onclick="resolveDispute('${d.id}', 'RESOLVE_PAY_PROVIDER')">💵 Pay Pro &amp; Dismiss</button>
+                            <button class="btn-outline" style="padding:3px 8px; font-size:11px;" onclick="resolveDispute('${d.id}', 'DISMISS')">❌ Dismiss Dispute</button>
+                          </div>
+                        ` : `
+                          <span style="font-size:11px; font-weight:700; color:var(--muted);">Resolved by Admin</span>
+                        `}
+                      </td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+      }
+
+      // TAB 3: WALLET & COMMISSION RECONCILIATION
+      else if (adminTab === 'RECONCILIATION') {
+        const m = getOperationalMetrics(db);
+        const providers = db.providers || [];
+        const lowBalancePros = providers.filter(p => (Number(p.walletBalanceUsd) || 0) < 2.0);
+        const negativeBalancePros = providers.filter(p => (Number(p.walletBalanceUsd) || 0) < 0.0);
+        const totalWalletLiabilityUsd = providers.reduce((sum, p) => sum + (Number(p.walletBalanceUsd) || 0), 0);
+
+        sectionHtml = `
+          <div class="card">
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:16px;">
+              <div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span style="font-size:20px;">💼</span>
+                  <h2 style="font-size:18px; font-weight:800; color:#0F172A;">Wallet &amp; Commission Reconciliation Operating Center</h2>
+                </div>
+                <div style="font-size:12px; color:var(--muted); margin-top:2px;">
+                  Reconcile EcoCash USD merchant SMS inflows, provider credit balances, commission deductions, and identify under-floor or negative accounts.
+                </div>
+              </div>
+              <div style="display:flex; gap:8px;">
+                <button class="btn-green" onclick="downloadTransactionCsv()">📥 Export Full Ledger (CSV)</button>
+              </div>
+            </div>
+
+            <!-- Reconciliation Summary Grid -->
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:12px; margin-bottom:18px;">
+              
+              <div style="background:#F0FDF4; border:1px solid #BBF7D0; border-radius:12px; padding:14px;">
+                <div style="font-size:11px; font-weight:800; color:#15803D;">ECOCASH INFLOW (APPROVED)</div>
+                <div style="font-size:22px; font-weight:900; color:#166534; margin-top:4px;">$${m.reconciliation.ecoCashApprovedUsd.toFixed(2)} USD</div>
+                <div style="font-size:11px; color:#15803D; font-weight:600; margin-top:2px;">Pending approval: $${m.reconciliation.ecoCashPendingUsd.toFixed(2)} USD</div>
+              </div>
+
+              <div style="background:#EFF6FF; border:1px solid #BFDBFE; border-radius:12px; padding:14px;">
+                <div style="font-size:11px; font-weight:800; color:#1D4ED8;">REAL COMMISSION COLLECTED</div>
+                <div style="font-size:22px; font-weight:900; color:#1E40AF; margin-top:4px;">$${m.commissionCollected.totalCollectedUsd.toFixed(2)} USD</div>
+                <div style="font-size:11px; color:#1D4ED8; font-weight:600; margin-top:2px;">Promo 0% waived: $${m.commissionCollected.promoWaivedUsd.toFixed(2)} USD</div>
+              </div>
+
+              <div style="background:#FAF5FF; border:1px solid #E9D5FF; border-radius:12px; padding:14px;">
+                <div style="font-size:11px; font-weight:800; color:#7E22CE;">TOTAL PROVIDER BALANCES</div>
+                <div style="font-size:22px; font-weight:900; color:#6B21A8; margin-top:4px;">$${totalWalletLiabilityUsd.toFixed(2)} USD</div>
+                <div style="font-size:11px; color:#7E22CE; font-weight:600; margin-top:2px;">Across ${providers.length} registered providers</div>
+              </div>
+
+              <div style="background:${lowBalancePros.length > 0 ? '#FFF1F2' : '#F8FAFC'}; border:1px solid ${lowBalancePros.length > 0 ? '#FECDD3' : '#E2E8F0'}; border-radius:12px; padding:14px;">
+                <div style="font-size:11px; font-weight:800; color:${lowBalancePros.length > 0 ? '#BE123C' : '#64748B'};">UNDER $2.00 FLOOR ALERT</div>
+                <div style="font-size:22px; font-weight:900; color:${lowBalancePros.length > 0 ? '#9F1239' : '#334155'}; margin-top:4px;">${lowBalancePros.length} Providers</div>
+                <div style="font-size:11px; color:#BE123C; font-weight:600; margin-top:2px;">${negativeBalancePros.length} with negative balance</div>
+              </div>
+
+            </div>
+
+            <!-- Provider Wallet Reconciliation Ledger -->
+            <h3 style="font-size:14px; font-weight:800; color:#0F172A; margin-bottom:10px;">Provider Wallet Reconciliation Ledger</h3>
+            <div style="overflow-x:auto;">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Provider Name</th>
+                    <th>Findit ID &amp; Suburb</th>
+                    <th>Phone</th>
+                    <th>Wallet Balance</th>
+                    <th>Balance Status</th>
+                    <th style="text-align:right;">Reconciliation Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${providers.map(p => {
+                    const bal = Number(p.walletBalanceUsd || 0);
+                    const isNeg = bal < 0;
+                    const isLow = bal < 2.0;
+                    return `
+                      <tr style="${isNeg ? 'background:#FFF1F2;' : (isLow ? 'background:#FFFBEB;' : '')}">
+                        <td>
+                          <div style="font-weight:800; font-size:13px; color:#0F172A;">${escapeHtml(p.name)}</div>
+                          <div style="font-size:11px; color:var(--blue-primary); font-weight:700;">${escapeHtml(p.brandName || '')}</div>
+                        </td>
+                        <td>
+                          <div style="font-family:monospace; font-size:11.5px; font-weight:700;">${p.finditId || p.id}</div>
+                          <div style="font-size:11px; color:var(--muted);">📍 ${escapeHtml(p.suburbName || 'Harare')}</div>
+                        </td>
+                        <td>
+                          <div style="font-weight:700; font-size:12px;">${p.phone || 'N/A'}</div>
+                        </td>
+                        <td>
+                          <div style="font-size:15px; font-weight:900; color:${isNeg ? '#DC2626' : (isLow ? '#D97706' : '#059669')};">
+                            $${bal.toFixed(2)} USD
+                          </div>
+                        </td>
+                        <td>
+                          <span style="padding:2px 8px; border-radius:99px; font-size:10.5px; font-weight:800; background:${isNeg ? '#FEE2E2' : (isLow ? '#FEF3C7' : '#ECFDF5')}; color:${isNeg ? '#DC2626' : (isLow ? '#B45309' : '#059669')};">
+                            ${isNeg ? '🔴 NEGATIVE DEBT' : (isLow ? '⚠️ BELOW $2 FLOOR' : '🟢 HEALTHY')}
+                          </span>
+                        </td>
+                        <td style="text-align:right;">
+                          <div style="display:flex; gap:6px; justify-content:flex-end;">
+                            <button class="btn-outline" style="padding:3px 8px; font-size:11.5px;" onclick="adjustProviderWallet('${p.id}', '${escapeHtml(p.name)}')">💵 Adjust Balance</button>
+                            ${isLow ? `<button class="btn-blue" style="padding:3px 8px; font-size:11.5px;" onclick="promptEcoCashTopupForProvider('${p.id}', '${p.phone}')">📲 Request EcoCash</button>` : ''}
+                          </div>
+                        </td>
+                      </tr>
+                    `;
+                  }).join('')}
+                </tbody>
+              </table>
+            </div>
+
           </div>
         `;
       }
@@ -2743,6 +3379,68 @@
                 />
               </div>
             </div>
+
+            <!-- SUSPENSION APPEALS QUEUE -->
+            ${(db.appeals || []).length > 0 ? `
+              <div style="background:#FFFBEB; border:1.5px solid #FCD34D; border-radius:12px; padding:14px; margin-bottom:16px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                  <div style="display:flex; align-items:center; gap:8px;">
+                    <span style="font-size:18px;">⚖️</span>
+                    <strong style="font-size:14px; color:#92400E;">Suspension Appeals Queue (${(db.appeals || []).filter(a => a.status === 'PENDING').length} Pending)</strong>
+                  </div>
+                  <span style="font-size:11.5px; color:#B45309; font-weight:700;">Banned accounts requesting review</span>
+                </div>
+                <div style="overflow-x:auto;">
+                  <table style="background:#fff; border-radius:8px;">
+                    <thead>
+                      <tr>
+                        <th>Account Name &amp; ID</th>
+                        <th>Phone &amp; Role</th>
+                        <th>Original Ban Reason</th>
+                        <th>Appeal Explanation</th>
+                        <th>Status</th>
+                        <th style="text-align:right;">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${(db.appeals || []).map(app => `
+                        <tr>
+                          <td>
+                            <div style="font-weight:800; font-size:12.5px;">${escapeHtml(app.name)}</div>
+                            <div style="font-family:monospace; font-size:11px; color:var(--muted);">${app.finditId}</div>
+                          </td>
+                          <td>
+                            <div style="font-weight:700; font-size:12px;">${app.phone}</div>
+                            <span style="font-size:10px; font-weight:800; padding:1px 6px; border-radius:99px; background:#EFF6FF; color:#0066FF;">${app.role}</span>
+                          </td>
+                          <td style="font-size:11.5px; color:#DC2626; font-weight:600;">
+                            ${escapeHtml(app.banReason || 'Policy violation')}
+                          </td>
+                          <td style="font-size:12px; font-weight:600; color:#1E293B; max-width:250px;">
+                            "${escapeHtml(app.appealReason)}"
+                          </td>
+                          <td>
+                            <span style="padding:2px 7px; border-radius:99px; font-size:10.5px; font-weight:800; background:${app.status === 'PENDING' ? '#FEF3C7' : (app.status === 'APPROVED' ? '#ECFDF5' : '#FEE2E2')}; color:${app.status === 'PENDING' ? '#B45309' : (app.status === 'APPROVED' ? '#059669' : '#DC2626')};">
+                              ${escapeHtml(app.status)}
+                            </span>
+                          </td>
+                          <td style="text-align:right;">
+                            ${app.status === 'PENDING' ? `
+                              <div style="display:flex; gap:4px; justify-content:flex-end;">
+                                <button class="btn-green" style="padding:3px 8px; font-size:11px;" onclick="resolveAppeal('${app.id}', 'APPROVE')">✅ Approve &amp; Unban</button>
+                                <button class="btn-outline" style="padding:3px 8px; font-size:11px;" onclick="resolveAppeal('${app.id}', 'REJECT')">❌ Reject Appeal</button>
+                              </div>
+                            ` : `
+                              <span style="font-size:11px; color:var(--muted);">${escapeHtml(app.adminResponse || 'Closed')}</span>
+                            `}
+                          </td>
+                        </tr>
+                      `).join('')}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ` : ''}
 
             <!-- Role Pills -->
             <div style="display:flex; gap:6px; margin-bottom:14px;">

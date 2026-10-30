@@ -6152,6 +6152,8 @@ async function submitExistingAccountLogin() {
       setSignInModalData({ notice: { tone: 'warn', text: `Hi ${d.name || ''}, you have a Client account but no Provider profile yet. To work as a provider, complete the provider verification once (ID document + face match + categories).`, actions: 'UPGRADE_TO_PROVIDER', name: d.name } });
     } else if (d.code === 'NO_CLIENT_PROFILE') {
       setSignInModalData({ notice: { tone: 'warn', text: 'This number is registered as a Service Provider. Log in as Provider — you can switch to Client mode from the side menu anytime.', actions: 'SWITCH_TO_PROVIDER' } });
+    } else if (d.code === 'BANNED') {
+      setSignInModalData({ notice: { tone: 'error', text: err.message || 'This account is suspended.', actions: 'SUBMIT_APPEAL', phone: phone } });
     } else if (d.code === 'NOT_FOUND') {
       setSignInModalData({ notice: { tone: 'error', text: 'No account found with this number.', actions: 'CREATE' } });
     } else {
@@ -6172,6 +6174,22 @@ function startProviderUpgradeFromLogin() {
   state.activeModal = 'SIGNUP_FLOW';
   lastRenderedModalKey = '';
   renderModalLayer();
+}
+
+async function promptSubmitSuspensionAppeal(phone) {
+  const reason = prompt('Please explain your appeal / reason for suspension review:', 'I believe my account was suspended by mistake and I abide by Findit Harare community guidelines.');
+  if (!reason || !reason.trim()) return;
+  try {
+    const res = await apiPost('/api/auth/appeal', { phone, appealReason: reason.trim() });
+    if (res && res.success) {
+      showToast('Suspension appeal submitted to Findit Admin for review!');
+      setSignInModalData({ notice: { tone: 'warn', text: 'Your appeal has been submitted to Admin. You will be notified once reviewed.' } });
+    } else {
+      showToast(res?.error || 'Failed to submit appeal', 'error');
+    }
+  } catch (e) {
+    showToast(e.message || 'Failed to submit appeal', 'error');
+  }
 }
 
 function startSignInForRole(role) {
@@ -6340,6 +6358,11 @@ function renderModalLayer() {
           ${notice.actions === 'CREATE' ? `
             <button type="button" class="btn-primary-blue" style="height:38px; font-size:12.5px;" onclick="setSignInModalData({ tab: 'SIGNUP', notice: null })">
               Create an Account
+            </button>
+          ` : ''}
+          ${notice.actions === 'SUBMIT_APPEAL' ? `
+            <button type="button" class="btn-primary-blue" style="height:38px; font-size:12.5px; background:#D97706;" onclick="promptSubmitSuspensionAppeal('${escapeHtml(notice.phone || '')}')">
+              ⚖️ Submit Suspension Appeal to Admin
             </button>
           ` : ''}
         </div>
