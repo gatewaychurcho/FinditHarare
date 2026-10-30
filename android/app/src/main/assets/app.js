@@ -83,6 +83,7 @@ const state = {
   // Collapsible bottom sheet & offer stack for 100% full-screen map view
   isSheetMinimized: false,
   isOffersMinimized: false,
+  isCallMinimized: false,
 
   // Modals: null | 'CANCEL_TASK' | 'CATALOGUE_VIEW' | 'DRAWER' | 'SIGNUP_FLOW' | 'TERMS_MODAL' | 'PRIVACY_MODAL' | 'HISTORY' | 'SAFETY' | 'SETTINGS' | 'SUBURB_PICKER' | 'SERVICE_PICKER' | 'NOTES_MODAL' | 'PAYMENT_MODAL' | 'UPLOAD_CATALOGUE' | 'EDIT_BIO_MODAL' | 'COMING_SOON_MODAL' | 'RATE_BOOKING_MODAL'
   activeModal: null,
@@ -263,6 +264,7 @@ if (typeof document !== 'undefined') {
 }
 
 function playArrivalUrgentAlarmSound() {
+  if (state.activeCall || state.incomingCall) return;
   try {
     unlockArrivalAudioContext();
     if (!arrivalAudioCtx) return;
@@ -311,6 +313,7 @@ function playArrivalUrgentAlarmSound() {
 }
 
 function triggerHardwareVibration(pattern = [800, 250, 800, 250, 1000]) {
+  if (state.activeCall) return; // Completely silent & clear calls
   try {
     if (typeof window !== 'undefined' && window.FinditNative && typeof window.FinditNative.vibratePattern === 'function') {
       const csv = Array.isArray(pattern) ? [0, ...pattern].join(',') : '0,800,250,800,250,1000';
@@ -1255,6 +1258,7 @@ function initRealtimeSync() {
 let audioCtxForChime = null;
 
 function playIncomingMessageSoundAndVibrate(message) {
+  if (state.activeCall || state.incomingCall) return; // Completely silent calls with zero beeps or interruptions
   // 1. Phone vibration (Standard message haptic pattern: vibrate - pause - vibrate)
   try {
     triggerHardwareVibration([140, 70, 140]);
@@ -1308,6 +1312,8 @@ function playIncomingMessageSoundAndVibrate(message) {
     }
   } catch (nativeErr) {}
 }
+
+const playNewMessageChime = playIncomingMessageSoundAndVibrate;
 
 function handleIncomingRealtimeEvent(data) {
   if (!data || data.eventType === 'CONNECTED' || data.eventType === 'PING') return;
@@ -2646,6 +2652,7 @@ if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
 }
 
 function playNavTurnChime() {
+  if (state.activeCall || state.incomingCall) return;
   try {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
     if (!AudioCtx) return;
@@ -2665,6 +2672,7 @@ function playNavTurnChime() {
 }
 
 function speakNavigationDirection(text) {
+  if (state.activeCall || state.incomingCall) return;
   if (!liveNavState.voiceEnabled) return;
   if (!text || typeof text !== 'string') return;
   const now = Date.now();
@@ -3284,12 +3292,13 @@ function updateLiveGpsMarker() {
             ${uiIcon('hailingPerson', 24)}
           </div>
           <div class="indrive-pin-stem"></div>
-          <div class="indrive-pin-anchor-dot"></div>
-          ${isSearching ? `
-            <div class="indrive-sonar-ring ring-1"></div>
-            <div class="indrive-sonar-ring ring-2"></div>
-            <div class="indrive-sonar-ring ring-3"></div>
-          ` : ''}
+          <div class="indrive-pin-anchor-dot">
+            ${isSearching ? `
+              <div class="indrive-sonar-ring ring-1"></div>
+              <div class="indrive-sonar-ring ring-2"></div>
+              <div class="indrive-sonar-ring ring-3"></div>
+            ` : ''}
+          </div>
         </div>
       </div>
     `,
@@ -4618,30 +4627,6 @@ function renderConfigureFareOverlay() {
             </button>
           </div>
 
-          <!-- Findit Dispatch: Need It Now vs Schedule for Later -->
-          <div style="display:flex; background:rgba(0,0,0,0.04); border-radius:12px; padding:3px; margin-bottom:10px;">
-            <button type="button" style="flex:1; border:none; padding:7px 10px; border-radius:9px; font-size:12px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; ${state.timingType !== 'SCHEDULED' ? 'background:#FFFFFF; color:var(--blue-primary); box-shadow:0 1px 3px rgba(0,0,0,0.08);' : 'background:transparent; color:var(--text-secondary);'}" onclick="setDispatchTimingType('IMMEDIATE')">
-              <span>${uiIcon('bolt', 13)} Now (Immediate)</span>
-            </button>
-            <button type="button" style="flex:1; border:none; padding:7px 10px; border-radius:9px; font-size:12px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; ${state.timingType === 'SCHEDULED' ? 'background:#FFFFFF; color:var(--blue-primary); box-shadow:0 1px 3px rgba(0,0,0,0.08);' : 'background:transparent; color:var(--text-secondary);'}" onclick="setDispatchTimingType('SCHEDULED')">
-              ${uiIcon('clock', 13)}
-              <span>Schedule for Later</span>
-            </button>
-          </div>
-
-          ${state.timingType === 'SCHEDULED' ? `
-            <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px; padding:10px 12px; margin-bottom:10px;">
-              <div style="font-size:11.5px; font-weight:800; color:#334155; margin-bottom:6px; display:flex; align-items:center; gap:4px;">
-                ${uiIcon('clock', 12)}
-                <span>Findit Direct Schedule (Date &amp; Time)</span>
-              </div>
-              <div style="display:flex; gap:8px;">
-                <input id="scheduledDateInput" type="date" value="${state.scheduledDate || ''}" oninput="state.scheduledDate=this.value" onchange="state.scheduledDate=this.value" style="flex:1.2; height:36px; border:1px solid #CBD5E1; border-radius:8px; padding:0 8px; font-size:12.5px; background:#fff; color:#0F172A;" />
-                <input id="scheduledTimeInput" type="time" value="${state.scheduledTime || '15:00'}" oninput="state.scheduledTime=this.value" onchange="state.scheduledTime=this.value" style="flex:0.8; height:36px; border:1px solid #CBD5E1; border-radius:8px; padding:0 8px; font-size:12.5px; background:#fff; color:#0F172A;" />
-              </div>
-            </div>
-          ` : ''}
-
           <div class="indrive-selected-tier-box">
             <div class="selected-tier-top" onclick="openServicePickerModal()" style="cursor:pointer;">
               <div>${getCategoryVectorSvg(activeCat.id, false)}</div>
@@ -5176,9 +5161,16 @@ function renderBookedTrackingOverlay(req) {
                 </div>
                 <span style="background:#2563EB; color:#FFFFFF; font-size:13.5px; font-weight:900; letter-spacing:1.5px; padding:3px 9px; border-radius:8px; flex-shrink:0;">#${req.startPinCode || '4829'}</span>
               </div>
-              <div style="margin-top:8px; background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:9px 12px; display:flex; align-items:center; justify-content:center; gap:6px; color:#64748B; font-size:11.5px; font-weight:700;">
-                <span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:#F59E0B; animation:waTypingWave 1.4s infinite;"></span>
-                <span>Enter PIN with specialist to unlock completion</span>
+              <div style="margin-top:8px; display:flex; flex-direction:column; gap:6px;">
+                <button
+                  type="button"
+                  class="btn-primary-blue"
+                  style="width:100%; height:42px; font-size:13px; font-weight:800; background:#10B981; box-shadow:0 3px 10px rgba(16,185,129,0.3);"
+                  onclick="openRateBookingModal('${req.id}')"
+                >
+                  ${uiIcon('check', 15)}
+                  <span>Mark Service Completed &amp; Rate</span>
+                </button>
               </div>
             `;
           }
@@ -6717,7 +6709,7 @@ function renderModalLayer() {
             </div>
           </div>
 
-          <button class="btn-primary-blue" onclick="completeBooking('${requestId}')">
+          <button id="rateBookingSubmitBtn" class="btn-primary-blue" onclick="completeBooking('${requestId}')">
             ${uiIcon('check', 16)}
             <span>${isProvider ? `Submit Client Review & Finish` : `Submit ${state.ratingStars}-Star Rating & Finish`}</span>
           </button>
@@ -7078,17 +7070,44 @@ function renderModalLayer() {
               <div style="font-weight:700; font-size:15px; color:var(--text-primary); margin-bottom:4px;">No ${isProvider ? 'services' : 'requests'} yet</div>
               <div style="font-size:13px;">${emptySub}</div>
             </div>
-          ` : items.map((r) => `
-            <div class="indrive-cancel-row" style="cursor:default;">
-              <div>
-                <div style="font-weight:800; font-size:14.5px;">${r.title}</div>
-                <div style="font-size:12px; color:var(--text-secondary); margin-top:2px;">
-                  ${isProvider ? `Client: ${r.customerName} • ` : ''}${r.exactAddress || r.suburbName || 'Harare'} • <span style="font-weight:700; color:var(--blue-primary);">${r.status}</span>
+          ` : items.map((r) => {
+            const isCompleted = r.status === 'COMPLETED';
+            const clientRatingObj = r.providerRatedByClient;
+            const provRatingObj = r.clientRatedByProvider;
+            const needsRating = isCompleted && ((!isProvider && !clientRatingObj) || (isProvider && !provRatingObj));
+            const myRatingScore = !isProvider ? clientRatingObj?.rating : provRatingObj?.rating;
+
+            return `
+              <div class="indrive-cancel-row" style="cursor:default; align-items:center;">
+                <div style="flex:1; min-width:0;">
+                  <div style="font-weight:800; font-size:14.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${r.title}</div>
+                  <div style="font-size:12px; color:var(--text-secondary); margin-top:2px;">
+                    ${isProvider ? `Client: ${r.customerName} • ` : ''}${r.exactAddress || r.suburbName || 'Harare'} • <span style="font-weight:700; color:${isCompleted ? '#10B981' : 'var(--blue-primary)'};">${r.status}</span>
+                  </div>
+                  ${myRatingScore ? `
+                    <div style="font-size:11.5px; font-weight:800; color:#F59E0B; margin-top:3px; display:flex; align-items:center; gap:3px;">
+                      ${uiIcon('star', 12)}
+                      <span>Rated ${myRatingScore}.0 ★</span>
+                    </div>
+                  ` : ''}
+                </div>
+                <div style="text-align:right; flex-shrink:0; margin-left:10px;">
+                  <div style="font-weight:800; font-size:15px; color:var(--blue-primary); margin-bottom:4px;">${formatUsdPrice(r.agreedTotalUsd || r.budgetUsd)}</div>
+                  ${needsRating ? `
+                    <button
+                      type="button"
+                      class="btn-primary-blue"
+                      style="width:auto; height:28px; padding:0 10px; font-size:11px; border-radius:8px; background:#10B981; box-shadow:0 2px 8px rgba(16,185,129,0.3);"
+                      onclick="closeModal(); openRateBookingModal('${r.id}')"
+                    >
+                      ${uiIcon('star', 11)}
+                      <span>${isProvider ? 'Rate Client' : 'Rate Specialist'}</span>
+                    </button>
+                  ` : ''}
                 </div>
               </div>
-              <div style="font-weight:800; font-size:15.5px; color:var(--blue-primary);">${formatUsdPrice(r.agreedTotalUsd || r.budgetUsd)}</div>
-            </div>
-          `).join('')}
+            `;
+          }).join('')}
         </div>
       </div>
     `;
@@ -8479,19 +8498,7 @@ function setBookingForMode(mode) {
 }
 
 function setDispatchTimingType(type) {
-  state.timingType = type === 'SCHEDULED' ? 'SCHEDULED' : 'IMMEDIATE';
-  if (state.timingType === 'SCHEDULED') {
-    if (!state.scheduledDate) {
-      const now = new Date();
-      const yyyy = now.getFullYear();
-      const mm = String(now.getMonth() + 1).padStart(2, '0');
-      const dd = String(now.getDate()).padStart(2, '0');
-      state.scheduledDate = `${yyyy}-${mm}-${dd}`;
-    }
-    if (!state.scheduledTime) {
-      state.scheduledTime = '15:00';
-    }
-  }
+  state.timingType = 'IMMEDIATE';
   renderUiOverlay(true);
 }
 
@@ -8543,10 +8550,6 @@ async function submitServiceRequest() {
     state.activeModal = 'SIGNUP_FLOW';
     renderAll();
     showToast('Please verify your WhatsApp first to find offers');
-    return;
-  }
-  if (state.timingType === 'SCHEDULED' && (!state.scheduledDate || !state.scheduledTime)) {
-    showToast('Please select a Date and Time for your scheduled visit', 'error');
     return;
   }
   try {
@@ -8887,6 +8890,7 @@ function openRateBookingModal(requestId) {
   } else {
     state.ratingTags = ['Punctual Arrival', 'Clean Mobile Kit', 'Professional Work'];
   }
+  lastRenderedModalKey = '';
   renderModalLayer();
 }
 
@@ -8916,14 +8920,14 @@ async function completeBooking(requestId) {
   if (isSubmittingReview) return;
   isSubmittingReview = true;
 
-  // 1. Immediately disable button and show loading state
-  const submitBtns = document.querySelectorAll('.btn-primary-blue');
-  submitBtns.forEach((b) => {
-    b.disabled = true;
-    b.style.opacity = '0.65';
-    b.style.pointerEvents = 'none';
-    b.innerHTML = '<span>Submitting Review...</span>';
-  });
+  // 1. Immediately disable the modal submit button and show loading state
+  const submitBtn = document.getElementById('rateBookingSubmitBtn');
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.style.opacity = '0.65';
+    submitBtn.style.pointerEvents = 'none';
+    submitBtn.innerHTML = '<span>Submitting Review...</span>';
+  }
 
   const role = state.role || 'CUSTOMER';
   const rating = state.ratingStars || 5;
@@ -8938,9 +8942,9 @@ async function completeBooking(requestId) {
     if (localReq) {
       localReq.status = 'COMPLETED';
       if (role === 'PROVIDER') {
-        localReq.clientRatedByProvider = { rating, comment: reviewText, customComment, tags: state.ratingTags };
+        localReq.clientRatedByProvider = { rating, comment: reviewText, customComment, tags: state.ratingTags, date: new Date().toISOString() };
       } else {
-        localReq.providerRatedByClient = { rating, comment: reviewText, customComment, tags: state.ratingTags };
+        localReq.providerRatedByClient = { rating, comment: reviewText, customComment, tags: state.ratingTags, date: new Date().toISOString() };
       }
     }
   }
@@ -8965,7 +8969,7 @@ async function completeBooking(requestId) {
   );
 
   try {
-    await apiPost('/api/bookings/status', {
+    const payload = {
       requestId,
       status: 'COMPLETED',
       ratedByRole: role,
@@ -8973,7 +8977,11 @@ async function completeBooking(requestId) {
       reviewText,
       customComment,
       tags: state.ratingTags
-    });
+    };
+    await Promise.allSettled([
+      apiPost('/api/reviews', payload),
+      apiPost('/api/bookings/status', payload)
+    ]);
     await fetchState(true);
   } catch (err) {
     console.warn('Booking complete network sync note:', err.message);
@@ -12447,6 +12455,7 @@ async function endInAppCall(notify = true) {
 
   state.activeCall = null;
   state.incomingCall = null;
+  state.isCallMinimized = false;
   renderCallModal();
 
   if (notify && chanId) {
@@ -12458,7 +12467,26 @@ async function endInAppCall(notify = true) {
   }
 }
 
-// Authentic iOS Call Screen (Incoming & Active)
+// ============================================================================
+// WHATSAPP & IOS IN-APP VOICE CALL CONTROLLER & FLOATING PiP WIDGET
+// ============================================================================
+function formatCallTimer(totalSeconds) {
+  const m = String(Math.floor((totalSeconds || 0) / 60)).padStart(2, '0');
+  const s = String((totalSeconds || 0) % 60).padStart(2, '0');
+  return `${m}:${s}`;
+}
+
+function minimizeCallScreen() {
+  state.isCallMinimized = true;
+  renderCallModal();
+}
+
+function expandCallScreen() {
+  state.isCallMinimized = false;
+  renderCallModal();
+}
+
+// Authentic iOS Call Screen & WhatsApp Floating PiP Mini Call Widget
 function renderCallModal() {
   const root = document.getElementById('callModalRoot');
   if (!root) return;
@@ -12508,7 +12536,7 @@ function renderCallModal() {
     return;
   }
 
-  // 2. Render Active Call Screen (Authentic iOS Active Call UI)
+  // 2. Render Active Call Screen
   if (!state.activeCall) {
     root.innerHTML = '';
     return;
@@ -12521,10 +12549,37 @@ function renderCallModal() {
   const avatarUrl = proMatch?.avatarUrl || custMatch?.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=240&q=80';
   const isOutgoing = state.activeCall.callState === 'OUTGOING';
 
+  // 2A. Render Minimized WhatsApp-Style Floating Pill (PiP Widget)
+  if (state.isCallMinimized) {
+    root.innerHTML = `
+      <div class="whatsapp-call-float-pill" onclick="expandCallScreen()" title="Tap to return to call">
+        <div class="wa-float-avatar-wrap">
+          <img src="${resolveMediaUrl(avatarUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_AVATAR_FALLBACK}';" class="wa-float-avatar" alt="${peerName}" />
+          <span class="wa-float-live-dot"></span>
+        </div>
+        <div class="wa-float-info">
+          <div class="wa-float-name">${escapeHtml(peerName)}</div>
+          <div id="callTimerText" class="wa-float-timer">${isOutgoing ? 'Calling...' : formatCallTimer(state.callSeconds)}</div>
+        </div>
+        <button type="button" class="wa-float-action-btn ${state.activeCall.isMuted ? 'muted' : ''}" onclick="event.stopPropagation(); toggleCallMute();" title="${state.activeCall.isMuted ? 'Unmute' : 'Mute'}">
+          <span style="display:inline-flex;">${state.activeCall.isMuted ? uiIcon('micOff', 15) : uiIcon('mic', 15)}</span>
+        </button>
+        <button type="button" class="wa-float-action-btn hangup" onclick="event.stopPropagation(); endInAppCall();" title="End Call">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" style="transform: rotate(135deg);"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+        </button>
+      </div>
+    `;
+    return;
+  }
+
+  // 2B. Full-Screen Call Interface with Minimize Button in Top Left
   root.innerHTML = `
     <div class="indrive-call-overlay">
-      <div class="ios-call-top-bar">
-        <div class="ios-call-encrypted-tag">
+      <div class="ios-call-top-bar" style="display:flex; align-items:center; justify-content:space-between; width:100%; padding:4px 4px 0 4px;">
+        <button type="button" class="ios-call-minimize-btn" onclick="minimizeCallScreen()" title="Minimize to PiP (WhatsApp Style)">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="ios-call-encrypted-tag" style="margin-right:auto; margin-left:10px;">
           ${uiIcon('lock', 12)}
           <span>End-to-End Encrypted</span>
         </div>
@@ -12537,7 +12592,7 @@ function renderCallModal() {
         <div class="ios-call-peer-name">${escapeHtml(peerName)}</div>
         <div class="ios-call-peer-context">${escapeHtml(contextTitle)}</div>
         <div id="callTimerText" class="ios-call-timer">
-          ${isOutgoing ? 'calling...' : '00:00'}
+          ${isOutgoing ? 'calling...' : formatCallTimer(state.callSeconds)}
         </div>
       </div>
 
@@ -12558,7 +12613,7 @@ function renderCallModal() {
           </div>
 
           <div class="ios-grid-btn-wrap">
-            <button type="button" class="ios-frosted-circle-btn" onclick="openChatDrawer(state.activeRequestId || (state.db.requests?.[0]?.id))">
+            <button type="button" class="ios-frosted-circle-btn" onclick="minimizeCallScreen(); openChatDrawer(state.activeRequestId || (state.db.requests?.[0]?.id));">
               ${uiIcon('chat', 22)}
             </button>
             <span class="ios-grid-label">message</span>

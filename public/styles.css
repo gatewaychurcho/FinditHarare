@@ -381,6 +381,7 @@ html, body {
 }
 
 .indrive-pin-anchor-dot {
+  position: relative;
   width: 12px;
   height: 12px;
   border-radius: 50%;
@@ -389,48 +390,56 @@ html, body {
   box-shadow: 0 2px 8px rgba(0, 102, 255, 0.6);
   margin-top: -2px;
   z-index: 5;
+  overflow: visible !important;
 }
 
 /* Concentric inDrive Radar Sonar Waves (attached directly to client anchor on map) */
 @keyframes indriveGrandSonar {
   0% {
-    width: 20px;
-    height: 20px;
+    width: 14px;
+    height: 14px;
     opacity: 0.95;
-    transform: translate(-50%, -50%) scale(0.35);
+    border-width: 2px;
+    transform: translate(-50%, -50%) scale(0.3);
   }
-  55% {
-    opacity: 0.55;
+  45% {
+    opacity: 0.65;
+  }
+  80% {
+    opacity: 0.25;
+    border-width: 1.5px;
   }
   100% {
-    width: 190px;
-    height: 190px;
+    width: 110px;
+    height: 110px;
     opacity: 0;
-    transform: translate(-50%, -50%) scale(2.2);
+    border-width: 1px;
+    transform: translate(-50%, -50%) scale(1.0);
   }
 }
 
 .indrive-sonar-ring {
   position: absolute;
   left: 50%;
-  bottom: 6px;
-  width: 20px;
-  height: 20px;
+  top: 50%;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
-  border: 2.5px solid #0066FF;
-  background: rgba(0, 102, 255, 0.14);
+  border: 2px solid #0066FF;
+  background: radial-gradient(circle, rgba(0, 102, 255, 0.22) 0%, rgba(0, 102, 255, 0.05) 65%, transparent 100%);
   pointer-events: none;
-  animation: indriveGrandSonar 2.4s cubic-bezier(0.1, 0.5, 0.3, 1) infinite;
-  z-index: 2;
+  transform: translate(-50%, -50%);
+  animation: indriveGrandSonar 2.2s cubic-bezier(0.2, 0.6, 0.35, 1) infinite;
+  z-index: -1;
 }
 .indrive-sonar-ring.ring-1 {
   animation-delay: 0s;
 }
 .indrive-sonar-ring.ring-2 {
-  animation-delay: 0.8s;
+  animation-delay: 0.75s;
 }
 .indrive-sonar-ring.ring-3 {
-  animation-delay: 1.6s;
+  animation-delay: 1.5s;
 }
 
 /* Provider Map Markers with Profession Icon Badge & "[ • • • ]" Thinking Bubble */
@@ -2804,8 +2813,152 @@ html, body {
 }
 
 /* ============================================================================
-   AUTHENTIC iOS CALL SCREEN (INCOMING & ACTIVE)
+   AUTHENTIC iOS CALL SCREEN & WHATSAPP FLOATING MINI CALL (PiP)
    ============================================================================ */
+.whatsapp-call-float-pill {
+  position: fixed;
+  top: calc(72px + env(safe-area-inset-top, 0px));
+  right: 16px;
+  z-index: 100000;
+  background: rgba(15, 23, 42, 0.94);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1.5px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(0, 102, 255, 0.2);
+  padding: 6px 10px 6px 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  animation: waFloatSlideIn 0.25s cubic-bezier(0.2, 0.8, 0.3, 1);
+  touch-action: manipulation;
+  pointer-events: auto;
+  user-select: none;
+}
+
+@keyframes waFloatSlideIn {
+  from {
+    transform: translateY(-20px) scale(0.9);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+.wa-float-avatar-wrap {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.wa-float-avatar {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1.5px solid #0066FF;
+}
+
+.wa-float-live-dot {
+  position: absolute;
+  bottom: 0px;
+  right: 0px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #10B981;
+  border: 1.5px solid #0F172A;
+  box-shadow: 0 0 6px #10B981;
+  animation: waDotPulse 1.6s infinite;
+}
+
+@keyframes waDotPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.85); }
+}
+
+.wa-float-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 60px;
+  max-width: 110px;
+}
+
+.wa-float-name {
+  font-size: 11.5px;
+  font-weight: 800;
+  color: #FFFFFF;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+}
+
+.wa-float-timer {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #10B981;
+  line-height: 1.2;
+}
+
+.wa-float-action-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  border: none;
+  color: #FFFFFF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+
+.wa-float-action-btn:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.wa-float-action-btn.muted {
+  background: #DC2626;
+  color: #FFFFFF;
+}
+
+.wa-float-action-btn.hangup {
+  background: #DC2626;
+  color: #FFFFFF;
+}
+
+.wa-float-action-btn.hangup:hover {
+  background: #B91C1C;
+}
+
+.ios-call-minimize-btn {
+  background: rgba(255, 255, 255, 0.14);
+  border: none;
+  color: #FFFFFF;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.15s;
+  flex-shrink: 0;
+}
+
+.ios-call-minimize-btn:hover {
+  background: rgba(255, 255, 255, 0.24);
+  transform: scale(1.05);
+}
+
 .indrive-call-overlay {
   position: fixed;
   inset: 0;

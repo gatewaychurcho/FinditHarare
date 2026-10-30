@@ -4464,7 +4464,10 @@ Return ONLY JSON with keys:
       }
 
       if (body.status === 'COMPLETED') {
-        if (!reqItem.pinVerifiedByProvider && !body.pinCode && !reqItem.autoStarted) {
+        const isClient = body.ratedByRole === 'CUSTOMER' || body.ratedByRole === 'CLIENT';
+        const alreadyCompleted = reqItem.status === 'COMPLETED';
+        // Only require PIN verification if provider is marking completed and it wasn't already completed/autoStarted
+        if (!alreadyCompleted && !isClient && !reqItem.pinVerifiedByProvider && !body.pinCode && !reqItem.autoStarted) {
           return sendJson(res, 400, { error: 'Start PIN must be entered and verified before service can be marked as completed.' });
         }
         deductBookingCommissionIfNeeded(reqItem, 'Job Marked Completed');
@@ -4475,20 +4478,23 @@ Return ONLY JSON with keys:
         const rawComment = body.reviewComment || body.reviewText || '';
         const comment = (customComment || rawComment || tags.join(', ') || 'Completed home service on Findit Harare').trim();
 
+        if (!Array.isArray(reqItem.offers)) reqItem.offers = [];
+        if (!Array.isArray(reqItem.messages)) reqItem.messages = [];
+
         const offer = reqItem.offers.find((o) => o.id === reqItem.acceptedOfferId);
         const provider = offer
-          ? db.providers.find((p) => p.id === offer.providerId)
-          : db.providers.find((p) => p.id === reqItem.acceptedProviderId);
-        const customer = db.customers.find((c) => c.id === reqItem.customerId) || db.customers[0];
+          ? (db.providers || []).find((p) => p.id === offer.providerId)
+          : (db.providers || []).find((p) => p.id === reqItem.acceptedProviderId);
+        const customer = (db.customers || []).find((c) => c.id === reqItem.customerId) || (db.customers ? db.customers[0] : null);
 
         if (ratedByRole === 'PROVIDER') {
           // Service Provider is rating the Client (User) to ensure fair treatment!
-          reqItem.clientRatedByProvider = { rating: newRating, tags, comment };
+          reqItem.clientRatedByProvider = { rating: newRating, tags, comment, date: new Date().toISOString() };
           if (customer) {
+            if (!Array.isArray(customer.reviews)) customer.reviews = [];
             customer.completedBookings = (customer.completedBookings || 0) + 1;
-            customer.reviewCount = (customer.reviewCount || 1) + 1;
+            customer.reviewCount = (customer.reviewCount || 0) + 1;
             customer.rating = Math.round(((customer.rating * (customer.reviewCount - 1) + newRating) / customer.reviewCount) * 100) / 100;
-            customer.reviews = customer.reviews || [];
             customer.reviews.unshift({
               providerName: provider ? provider.name : 'Service Provider',
               rating: newRating,
@@ -4502,13 +4508,14 @@ Return ONLY JSON with keys:
           }
         } else {
           // Client is rating the Service Provider
-          reqItem.providerRatedByClient = { rating: newRating, tags, comment };
+          reqItem.providerRatedByClient = { rating: newRating, tags, comment, date: new Date().toISOString() };
           if (provider) {
+            if (!Array.isArray(provider.reviews)) provider.reviews = [];
             provider.completedBookings = (provider.completedBookings || 0) + 1;
-            provider.reviewCount = (provider.reviewCount || 1) + 1;
+            provider.reviewCount = (provider.reviewCount || 0) + 1;
             provider.rating = Math.round(((provider.rating * (provider.reviewCount - 1) + newRating) / provider.reviewCount) * 100) / 100;
             provider.reviews.unshift({
-              customerName: reqItem.customerName,
+              customerName: reqItem.customerName || 'Client',
               rating: newRating,
               tags,
               date: 'Just now',
@@ -4538,6 +4545,71 @@ Return ONLY JSON with keys:
       broadcastUpdate('BOOKING_STATUS_UPDATED', { requestId: reqItem.id, request: reqItem, status: reqItem.status });
       broadcastUpdate('STATUS_UPDATED', { requestId: reqItem.id, request: reqItem, status: reqItem.status });
       return sendJson(res, 200, { request: reqItem });
+    } catch (e) {
+      return sendJson(res, 400, { error: e.message });
+    }
+  }
+
+  // Dedicated Review Submission Endpoint (Always allows Client to rate Provider or Provider to rate Client)
+  if (pathname === '/api/reviews' && req.method === 'POST') {
+    try {
+      const body = await parseBody(req);
+      const reqItem = ensureRequestInDb(body.requestId, body.requestSnapshot);
+      if (!reqItem) return sendJson(res, 404, { error: 'Booking not found' });
+
+      const ratedByRole = body.ratedByRole || 'CUSTOMER';
+      const newRating = Math.max(1, Math.min(5, Number(body.rating || 5)));
+      const tags = Array.isArray(body.tags) ? body.tags : [];
+      const customComment = (body.customComment || '').trim();
+      const rawComment = body.reviewComment || body.reviewText || '';
+      const comment = (customComment || rawComment || tags.join(', ') || 'Completed home service on Findit Harare').trim();
+
+      if (!Array.isArray(reqItem.offers)) reqItem.offers = [];
+      if (!Array.isArray(reqItem.messages)) reqItem.messages = [];
+
+      const offer = reqItem.offers.find((o) => o.id === reqItem.acceptedOfferId);
+      const provider = offer
+        ? (db.providers || []).find((p) => p.id === offer.providerId)
+        : (db.providers || []).find((p) => p.id === reqItem.acceptedProviderId);
+      const customer = (db.customers || []).find((c) => c.id === reqItem.customerId) || (db.customers ? db.customers[0] : null);
+
+      if (ratedByRole === 'PROVIDER') {
+        reqItem.clientRatedByProvider = { rating: newRating, tags, comment, date: new Date().toISOString() };
+        if (customer) {
+          if (!Array.isArray(customer.reviews)) customer.reviews = [];
+          customer.completedBookings = (customer.completedBookings || 0) + 1;
+          customer.reviewCount = (customer.reviewCount || 0) + 1;
+          customer.rating = Math.round(((customer.rating * (customer.reviewCount - 1) + newRating) / customer.reviewCount) * 100) / 100;
+          customer.reviews.unshift({
+            providerName: provider ? provider.name : 'Service Provider',
+            rating: newRating,
+            tags,
+            comment,
+            date: 'Just now'
+          });
+        }
+      } else {
+        reqItem.providerRatedByClient = { rating: newRating, tags, comment, date: new Date().toISOString() };
+        if (provider) {
+          if (!Array.isArray(provider.reviews)) provider.reviews = [];
+          provider.completedBookings = (provider.completedBookings || 0) + 1;
+          provider.reviewCount = (provider.reviewCount || 0) + 1;
+          provider.rating = Math.round(((provider.rating * (provider.reviewCount - 1) + newRating) / provider.reviewCount) * 100) / 100;
+          provider.reviews.unshift({
+            customerName: reqItem.customerName || 'Client',
+            rating: newRating,
+            tags,
+            date: 'Just now',
+            comment
+          });
+        }
+      }
+
+      reqItem.status = 'COMPLETED';
+      reqItem.updatedAt = Date.now();
+      await saveDbAsync(db);
+      broadcastUpdate('BOOKING_STATUS_UPDATED', { requestId: reqItem.id, request: reqItem, status: 'COMPLETED' });
+      return sendJson(res, 200, { ok: true, request: reqItem });
     } catch (e) {
       return sendJson(res, 400, { error: e.message });
     }
