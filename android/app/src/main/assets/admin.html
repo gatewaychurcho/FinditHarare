@@ -408,8 +408,14 @@
   </aside>
 
   <main class="main-area" id="adminRoot">
-    <div style="padding:40px; text-align:center; color:var(--muted); font-size:14px;">
-      Loading Findit Harare Control Center...
+    <div style="padding:30px; display:flex; flex-direction:column; gap:16px;">
+      <div style="height:48px; background:rgba(255,255,255,0.04); border-radius:14px; animation:pulse 1.2s infinite;"></div>
+      <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:12px;">
+        <div style="height:100px; background:rgba(255,255,255,0.04); border-radius:16px; animation:pulse 1.2s infinite;"></div>
+        <div style="height:100px; background:rgba(255,255,255,0.04); border-radius:16px; animation:pulse 1.2s infinite;"></div>
+        <div style="height:100px; background:rgba(255,255,255,0.04); border-radius:16px; animation:pulse 1.2s infinite;"></div>
+        <div style="height:100px; background:rgba(255,255,255,0.04); border-radius:16px; animation:pulse 1.2s infinite;"></div>
+      </div>
     </div>
   </main>
 
@@ -715,7 +721,7 @@
       }, 3500);
     }
 
-    // Fetch and sync Admin Database
+    // Fetch and sync Admin Database with 0ms Instant Cache
     async function loadAdminData(forceRender = false) {
       const token = getAdminToken();
       if (!token) {
@@ -723,26 +729,38 @@
         return;
       }
 
-      try {
-        if (!isInitialSessionChecked) {
-          const sessionCheck = await api('/api/admin/session');
-          if (!sessionCheck || !sessionCheck.authenticated) {
-            setAdminToken(null);
-            showAdminLockScreen();
-            return;
+      // Instant 0ms cache rendering from previous session
+      if (!db) {
+        try {
+          const cached = localStorage.getItem('findit_admin_db_cache');
+          if (cached) {
+            db = JSON.parse(cached);
+            hideAdminLockScreen();
+            renderAdmin();
           }
-          isInitialSessionChecked = true;
-        }
+        } catch (e) {}
+      }
 
-        hideAdminLockScreen();
+      try {
         const activeEl = document.activeElement;
         const isTyping = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT');
         if (isTyping && !forceRender) return;
 
-        const [nextDb, pendingRes] = await Promise.all([
+        // Fetch session validation, state and verifications simultaneously in parallel
+        const [sessionCheck, nextDb, pendingRes] = await Promise.all([
+          !isInitialSessionChecked ? api('/api/admin/session').catch(() => null) : Promise.resolve({ authenticated: true }),
           api('/api/state'),
           api('/api/admin/pending-verifications').catch(() => [])
         ]);
+
+        if (sessionCheck && sessionCheck.authenticated === false) {
+          setAdminToken(null);
+          showAdminLockScreen();
+          return;
+        }
+        isInitialSessionChecked = true;
+        hideAdminLockScreen();
+
         if (Array.isArray(pendingRes) && nextDb) {
           nextDb.pendingVerifications = pendingRes;
         }
@@ -763,6 +781,9 @@
         });
 
         db = nextDb;
+        try {
+          localStorage.setItem('findit_admin_db_cache', JSON.stringify(nextDb));
+        } catch (e) {}
 
         if (forceRender || fp !== lastAdminFingerprint) {
           lastAdminFingerprint = fp;

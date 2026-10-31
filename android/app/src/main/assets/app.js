@@ -60,6 +60,7 @@ const state = {
   draftVoiceNoteUrl: null,
   draftVoiceNoteDuration: 0,
   isRecordingVoiceNote: false,
+  isVoiceNotePaused: false,
   voiceNoteRecordSeconds: 0,
   notesLeakageWarning: '',
 
@@ -2752,8 +2753,12 @@ function renderNavigationHud() {
   const hud = document.getElementById('navigationHudOverlay');
   if (!hud) return;
 
-  if (!liveNavState.active || !liveNavState.steps || liveNavState.steps.length === 0) {
+  const prov = state.currentUser || state.db?.providers?.[0];
+  const activeJob = prov ? getProviderActiveBooking(prov.id) : null;
+  // If arrived outside gate, in-progress, completed, or start PIN verified, immediately dismiss HUD & voiceover
+  if (!liveNavState.active || !liveNavState.steps || liveNavState.steps.length === 0 || (activeJob && (activeJob.status === 'ARRIVED' || activeJob.status === 'IN_PROGRESS' || activeJob.status === 'COMPLETED' || activeJob.startPinVerified || activeJob.pinVerifiedByProvider))) {
     hud.style.display = 'none';
+    liveNavState.active = false;
     return;
   }
 
@@ -2808,7 +2813,14 @@ function renderNavigationHud() {
 
 function stopNavigationHud() {
   liveNavState.active = false;
+  liveNavState.isActive = false;
   liveNavState.steps = [];
+  if (window.speechSynthesis) {
+    try { window.speechSynthesis.cancel(); } catch (e) {}
+  }
+  if (window.FinditNative && typeof window.FinditNative.stopSpeech === 'function') {
+    try { window.FinditNative.stopSpeech(); } catch (e) {}
+  }
   const hud = document.getElementById('navigationHudOverlay');
   if (hud) hud.style.display = 'none';
 }
@@ -3979,6 +3991,7 @@ function renderUiOverlay(force = true) {
     state.draftPhotoUrl ? 1 : 0,
     state.draftVoiceNoteUrl ? 1 : 0,
     state.isRecordingVoiceNote ? 1 : 0,
+    state.isVoiceNotePaused ? 1 : 0,
     state.providerStatus,
     state.providerBreakEndsAt,
     state.bookingFor,
@@ -4729,42 +4742,57 @@ function renderConfigureFareOverlay() {
             `}
           </div>
 
-          <!-- Customer Voice Note Recording (Audio instructions) -->
+          <!-- WhatsApp Voice Note Recording (Audio instructions) -->
           <div style="margin-bottom:14px;">
             ${state.isRecordingVoiceNote ? `
-              <div style="background:#FEF2F2; border:1.5px solid #EF4444; border-radius:14px; padding:10px 14px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
-                <div style="display:flex; align-items:center; gap:8px;">
-                  <span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:#EF4444; animation:pulse 1s infinite;"></span>
-                  <span id="voiceNoteTimerLabel" style="font-size:13px; font-weight:800; color:#DC2626;">Recording (${formatVoiceSeconds(state.voiceNoteRecordSeconds)})</span>
+              <div class="wa-voice-record-bar">
+                <div class="wa-record-live-indicator">
+                  <span class="wa-pulse-mic-dot ${state.isVoiceNotePaused ? 'paused' : ''}"></span>
+                  <span id="voiceNoteTimerLabel" class="wa-record-timer-text">${formatVoiceSeconds(state.voiceNoteRecordSeconds)}</span>
                 </div>
-                <div style="display:flex; gap:6px;">
-                  <button type="button" class="small-pill-btn" style="background:#EF4444; color:#fff; border:none; font-weight:800; padding:6px 12px;" onclick="stopRecordingVoiceNote()">
-                    Done
+                <div class="wa-record-waveform-live">
+                  ${[14, 8, 18, 12, 20, 6, 16, 22, 10, 15, 7, 19, 11, 17, 9, 21, 13, 8, 16, 12, 18, 10, 14, 6]
+                    .map((h, i) => `<span class="wa-live-bar ${state.isVoiceNotePaused ? 'paused' : ''}" style="height:${h}px; animation-delay:${(i * 0.08).toFixed(2)}s;"></span>`).join('')}
+                </div>
+                <div class="wa-record-action-btns">
+                  <button type="button" class="wa-record-btn-icon trash" onclick="cancelVoiceNoteRecording()" title="Cancel & Discard">
+                    ${uiIcon('trash', 16)}
                   </button>
-                  <button type="button" class="small-pill-btn" style="color:#64748B; background:#F1F5F9; border:none;" onclick="cancelVoiceNoteRecording()">
-                    Cancel
+                  <button type="button" class="wa-record-btn-icon pause" onclick="togglePauseResumeVoiceNote()" title="${state.isVoiceNotePaused ? 'Resume Recording' : 'Pause Recording'}">
+                    ${state.isVoiceNotePaused ? uiIcon('mic', 16) : `<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>`}
+                  </button>
+                  <button type="button" class="wa-record-btn-icon send" onclick="stopRecordingVoiceNote()" title="Done & Attach">
+                    ${uiIcon('check', 17)}
                   </button>
                 </div>
               </div>
             ` : state.draftVoiceNoteUrl ? `
-              <div style="background:#EFF6FF; border:1.5px solid #0066FF; border-radius:14px; padding:10px 14px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
-                <div style="display:flex; align-items:center; gap:10px; min-width:0; flex:1;">
-                  <button type="button" class="small-pill-btn" style="background:#0066FF; color:#fff; border:none; width:34px; height:34px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; padding:0; flex-shrink:0;" onclick="toggleDraftVoiceNotePlay()">
-                    <span id="draftVoicePlayIcon" style="display:inline-flex; font-size:14px;">▶</span>
-                  </button>
-                  <div style="min-width:0;">
-                    <div style="font-size:13px; font-weight:800; color:#0066FF;">Voice Instructions Attached</div>
-                    <div style="font-size:11.5px; color:#1E40AF;">Duration: ~${state.draftVoiceNoteDuration || 5}s • Tap to preview</div>
+              <div class="wa-audio-player-bubble">
+                <button type="button" class="wa-play-circle-btn" onclick="toggleAudioPlay('draftVoice', '${state.draftVoiceNoteUrl}')" title="Play / Pause">
+                  <span id="audioPlayIcon_draftVoice" style="display:inline-flex;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                  </span>
+                </button>
+                <div class="wa-audio-body">
+                  <div style="font-size:11px; font-weight:800; color:#047857; margin-bottom:2px;">Voice Instructions Attached</div>
+                  <div class="wa-scrubber-bars-track" onclick="handleWaveformSeekClick(event, 'draftVoice', '${state.draftVoiceNoteUrl}', ${state.draftVoiceNoteDuration || 10})">
+                    ${generateWhatsAppWaveformBarsHtml('draftVoice')}
+                  </div>
+                  <div class="wa-audio-meta-row">
+                    <span id="audioTimeLabel_draftVoice">0:00 / ${formatVoiceSeconds(state.draftVoiceNoteDuration || 10)}</span>
+                    <button type="button" class="wa-speed-pill-btn" onclick="cycleAudioPlaybackSpeed('draftVoice')">
+                      <span id="audioSpeedLabel_draftVoice">1.0x</span>
+                    </button>
                   </div>
                 </div>
-                <button type="button" class="small-pill-btn" style="color:#DC2626; border-color:rgba(220,38,38,0.3); background:#FEF2F2;" onclick="removeDraftVoiceNote()">
-                  Delete
+                <button type="button" class="wa-record-btn-icon trash" style="background:transparent; border:none;" onclick="removeDraftVoiceNote()" title="Delete Voice Note">
+                  ${uiIcon('trash', 17)}
                 </button>
               </div>
             ` : `
               <button type="button" class="btn-dark-sec" style="width:100%; height:44px; font-size:13px; font-weight:700; justify-content:center; gap:8px; border:1.5px dashed var(--blue-border); background:var(--blue-soft);" onclick="startRecordingVoiceNote()">
                 <span style="color:var(--blue-primary); display:inline-flex;">${uiIcon('mic', 18)}</span>
-                <span>Record Voice Note (Optional Spoken Instructions)</span>
+                <span>Record Voice Note</span>
               </button>
             `}
           </div>
@@ -5252,17 +5280,20 @@ function renderBookedTrackingOverlay(req) {
 
             ${isCompleted ? `
               <button class="btn-primary-blue" style="width:100%; height:44px; font-size:14px; font-weight:800; background:#10B981; box-shadow:0 4px 14px rgba(16,185,129,0.35); margin-bottom:8px;" onclick="openRateBookingModal('${req.id}')">
-                ${uiIcon('check', 16)}
                 <span>Rate Specialist &amp; Finish</span>
               </button>
+            ` : (isInProgress || isArrived) ? `
+              <div style="margin-top:4px;">
+                <button class="btn-dark-sec" style="width:100%; font-size:12.5px; color:#DC2626; border-color:rgba(220,38,38,0.3); justify-content:center; padding:10px; font-weight:700;" onclick="openDisputeModal('${req.id}')">
+                  <span>Report a Dispute</span>
+                </button>
+              </div>
             ` : `
               <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
-                <button class="btn-dark-sec" style="font-size:11.5px; color:#DC2626; border-color:rgba(220,38,38,0.3); justify-content:center; gap:4px;" onclick="openDisputeModal('${req.id}')">
-                  <span>⚠️</span>
-                  <span>Dispute / Help</span>
+                <button class="btn-dark-sec" style="font-size:11.5px; color:#DC2626; border-color:rgba(220,38,38,0.3); justify-content:center; font-weight:700;" onclick="openDisputeModal('${req.id}')">
+                  <span>Report Dispute</span>
                 </button>
-                <button class="cancel-request-red-pill" style="justify-content:center;" onclick="openCancelTaskModal('${req.id}')">
-                  ${uiIcon('close', 14)}
+                <button class="cancel-request-red-pill" style="justify-content:center; font-weight:700;" onclick="openCancelTaskModal('${req.id}')">
                   <span>Cancel Job</span>
                 </button>
               </div>
@@ -6950,23 +6981,33 @@ function renderModalLayer() {
             `}
 
             ${(isAuth && isProvider) ? `
-              <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:14px; padding:12px; margin-bottom:12px;">
-                <div style="display:flex; align-items:center; justify-content:space-between;">
-                  <div>
-                    <div style="font-size:12.5px; font-weight:800; color:#0F172A; display:flex; align-items:center; gap:6px;">
-                      <span style="width:7px; height:7px; border-radius:50%; background:${user.isOnline !== false ? '#10B981' : '#64748B'};"></span>
-                      <span>${user.isOnline !== false ? 'Online & Ready for Jobs' : 'Offline'}</span>
-                    </div>
-                    <div style="font-size:10.5px; color:#64748B; margin-top:2px;">
-                      ${user.isOnline !== false ? 'Clients in Harare can see & book you' : 'Turn on to receive live requests'}
-                    </div>
+              <div style="background:#FFFFFF; border:1.5px solid #E2E8F0; border-radius:16px; padding:12px; margin-bottom:14px; box-shadow:0 2px 10px rgba(0,0,0,0.03);">
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+                  <div style="font-size:11px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; display:flex; align-items:center; gap:5px;">
+                    <span style="width:7px; height:7px; border-radius:50%; background:${(user.status === 'AVAILABLE' || (!user.status && user.isOnline !== false)) ? '#10B981' : user.status === 'BUSY' ? '#F59E0B' : (user.status === 'ON_BREAK' || user.status === 'LUNCH') ? '#3B82F6' : '#64748B'};"></span>
+                    <span>Status: <strong>${user.status || (user.isOnline !== false ? 'AVAILABLE' : 'OFFLINE')}</strong></span>
                   </div>
-                  <button
-                    type="button"
-                    onclick="toggleProviderOnlineStatus()"
-                    style="background:${user.isOnline !== false ? '#10B981' : '#475569'}; color:#FFFFFF; border:none; padding:6px 12px; border-radius:99px; font-size:11.5px; font-weight:800; cursor:pointer;"
-                  >
-                    ${user.isOnline !== false ? 'Go Offline' : 'Go Online'}
+                  ${(user.status === 'ON_BREAK' || user.status === 'LUNCH' || user.status === 'OFFLINE' || user.isOnline === false) ? `
+                    <button type="button" class="small-pill-btn" style="background:#10B981; color:#fff; border:none; font-weight:800; padding:3px 10px; font-size:11px;" onclick="setProviderStatus('AVAILABLE')">
+                      Go Available
+                    </button>
+                  ` : ''}
+                </div>
+                <div style="display:grid; grid-template-columns:repeat(5, 1fr); gap:4px;">
+                  <button type="button" class="small-pill-btn" style="padding:6px 2px; font-size:10.5px; font-weight:800; justify-content:center; ${(user.status === 'AVAILABLE' || (!user.status && user.isOnline !== false)) ? 'background:#10B981; color:#fff; border-color:#10B981;' : 'background:#F1F5F9; color:#475569;'}" onclick="setProviderStatus('AVAILABLE')">
+                    Online
+                  </button>
+                  <button type="button" class="small-pill-btn" style="padding:6px 2px; font-size:10.5px; font-weight:800; justify-content:center; ${user.status === 'BUSY' ? 'background:#F59E0B; color:#fff; border-color:#F59E0B;' : 'background:#F1F5F9; color:#475569;'}" onclick="setProviderStatus('BUSY')">
+                    Busy
+                  </button>
+                  <button type="button" class="small-pill-btn" style="padding:6px 2px; font-size:10.5px; font-weight:800; justify-content:center; ${user.status === 'ON_BREAK' ? 'background:#3B82F6; color:#fff; border-color:#3B82F6;' : 'background:#F1F5F9; color:#475569;'}" onclick="setProviderStatus('ON_BREAK', 15)">
+                    15m Break
+                  </button>
+                  <button type="button" class="small-pill-btn" style="padding:6px 2px; font-size:10.5px; font-weight:800; justify-content:center; ${user.status === 'LUNCH' ? 'background:#3B82F6; color:#fff; border-color:#3B82F6;' : 'background:#F1F5F9; color:#475569;'}" onclick="setProviderStatus('LUNCH', 45)">
+                    Lunch
+                  </button>
+                  <button type="button" class="small-pill-btn" style="padding:6px 2px; font-size:10.5px; font-weight:800; justify-content:center; ${user.status === 'OFFLINE' || user.isOnline === false ? 'background:#64748B; color:#fff; border-color:#64748B;' : 'background:#F1F5F9; color:#475569;'}" onclick="setProviderStatus('OFFLINE')">
+                    Offline
                   </button>
                 </div>
               </div>
@@ -8969,6 +9010,11 @@ async function declineOffer(requestId, offerId) {
 }
 
 function openCancelTaskModal(requestId) {
+  const req = (state.db?.requests || []).find((r) => r.id === requestId);
+  if (req && (req.status === 'IN_PROGRESS' || req.startPinVerified || req.pinVerifiedByProvider)) {
+    showToast('This job has already started (Start PIN verified) and cannot be cancelled. Please report a dispute.', 'error', 5000);
+    return;
+  }
   state.activeModal = 'CANCEL_TASK';
   state.modalData = { requestId };
   renderModalLayer();
@@ -8989,8 +9035,14 @@ async function submitCancelTaskWithReason(reason) {
     closeModal();
     return;
   }
-  markLocalStateMutation();
   const reqSnap = (state.db?.requests || []).find((r) => r.id === requestId) || null;
+  if (reqSnap && (reqSnap.status === 'IN_PROGRESS' || reqSnap.startPinVerified || reqSnap.pinVerifiedByProvider)) {
+    closeModal();
+    showToast('This job has already started (Start PIN verified) and cannot be cancelled. Please file a dispute.', 'error', 5000);
+    return;
+  }
+
+  markLocalStateMutation();
 
   // Immediate local transition so cancellation never lags or fails
   if (reqSnap) {
@@ -9726,75 +9778,78 @@ function renderProviderActiveVisitTab(prov, activeJob) {
 
   return `
     <div>
-      <!-- 3-Step inDrive Provider Job Progression Bar -->
-      <div class="provider-step-bar">
-        <div class="provider-step-pill ${isEnRoute ? 'active' : 'done'}">
+      <!-- Luxury 3-Step Provider Progression Bar -->
+      <div class="luxury-step-track">
+        <div class="luxury-step-segment ${isEnRoute ? 'active' : 'done'}">
           ${!isEnRoute ? uiIcon('check', 11) : ''}
           <span>1. En Route</span>
         </div>
-        <div class="provider-step-pill ${isArrived ? 'active' : isInProgress ? 'done' : ''}">
+        <div class="luxury-step-segment ${isArrived ? 'active' : isInProgress ? 'done' : ''}">
           ${isInProgress ? uiIcon('check', 11) : ''}
-          <span>2. Waiting Outside (PIN)</span>
+          <span>2. Outside Gate</span>
         </div>
-        <div class="provider-step-pill ${isInProgress ? 'active' : ''}">
+        <div class="luxury-step-segment ${isInProgress ? 'active' : ''}">
           <span>3. In Service</span>
         </div>
       </div>
 
-      <!-- Accepted Client Visit Summary Card -->
-      <div class="provider-order-card">
-        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
+      <!-- Luxury Accepted Client Visit Summary Card -->
+      <div class="luxury-provider-card">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px;">
           <div>
-            <div style="font-size:10.5px; font-weight:800; color:#059669; text-transform:uppercase; letter-spacing:0.04em; display:inline-flex; align-items:center; gap:4px;">
-              ${uiIcon('check', 12)}
-              <span>Client Accepted Your Offer</span>
+            <div style="font-size:10.5px; font-weight:800; color:#059669; text-transform:uppercase; letter-spacing:0.04em; margin-bottom:2px;">
+              Client Accepted Offer
             </div>
-            <div style="font-size:16.5px; font-weight:800; color:var(--text-main); margin-top:2px; display:flex; align-items:center; gap:6px;">
-              <span>${activeJob.customerName}</span>
-              <span style="font-size:12.5px; color:var(--text-secondary); display:inline-flex; align-items:center; gap:3px;">
-                ${(Number(activeJob.customerRating) || 0) > 0 ? `${uiIcon('star', 12)} ${activeJob.customerRating}` : '• New Client'}
+            <div style="font-size:17px; font-weight:900; color:var(--text-main); display:flex; align-items:center; gap:6px;">
+              <span>${escapeHtml(activeJob.customerName)}</span>
+              <span style="font-size:12px; color:var(--text-secondary); font-weight:700;">
+                ${(Number(activeJob.customerRating) || 0) > 0 ? `★ ${activeJob.customerRating}` : '• New Client'}
               </span>
             </div>
-            <div style="font-size:12.5px; color:var(--blue-primary); font-weight:700; margin-top:2px; display:flex; align-items:center; gap:4px;">
+            <div style="font-size:12.5px; color:var(--blue-primary); font-weight:700; margin-top:3px; display:flex; align-items:center; gap:4px;">
               ${uiIcon('pin', 13)}
-              <span>${activeJob.exactAddress}</span>
+              <span>${escapeHtml(activeJob.exactAddress || activeJob.suburbName || 'Harare')}</span>
             </div>
-          </div>
-
-          <div style="text-align:right;">
-            <div style="font-size:21px; font-weight:800; color:var(--blue-primary);">${formatUsdPrice(agreedUsd)}</div>
-            <div style="font-size:11px; color:#059669; font-weight:800;">Net: $${netUsd.toFixed(2)} (${activeJob.paymentMethod})</div>
           </div>
         </div>
 
-        <div style="font-size:13px; font-weight:800; color:var(--text-main); background:var(--blue-soft); padding:8px 11px; border-radius:11px; margin-bottom:10px; display:flex; align-items:center; gap:7px;">
+        <!-- Luxury Fare & Net Earnings Card -->
+        <div class="luxury-earnings-banner">
+          <div>
+            <div style="font-size:11px; font-weight:700; color:#94A3B8; text-transform:uppercase; letter-spacing:0.04em;">Agreed Fare</div>
+            <div class="luxury-fare-large">${formatUsdPrice(agreedUsd)}</div>
+          </div>
+          <div style="text-align:right;">
+            <div class="luxury-net-pill">Net Payout: $${netUsd.toFixed(2)}</div>
+            <div style="font-size:11px; color:#94A3B8; font-weight:600; margin-top:3px;">${activeJob.paymentMethod} • 10% fee</div>
+          </div>
+        </div>
+
+        <div style="font-size:13px; font-weight:800; color:var(--text-main); background:var(--blue-soft); padding:8px 12px; border-radius:12px; margin-bottom:10px; display:flex; align-items:center; gap:7px;">
           <span style="color:var(--blue-primary); display:inline-flex;">${uiIcon('briefcase', 14)}</span>
-          <span>${activeJob.title} • <span style="font-weight:600; color:var(--text-secondary);">${activeJob.description}</span></span>
+          <span>${escapeHtml(activeJob.title)} • <span style="font-weight:600; color:var(--text-secondary);">${escapeHtml(activeJob.description)}</span></span>
         </div>
 
         ${activeJob.bookingFor === 'SOMEONE_ELSE' ? `
-          <div style="font-size:11.5px; font-weight:700; color:#1E40AF; background:#DBEAFE; padding:7px 11px; border-radius:9px; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
-            ${uiIcon('user', 12)}
-            <span>Ordered for: <strong>${escapeHtml(activeJob.recipientName || 'Recipient')}</strong> ${activeJob.recipientPhone ? `(${escapeHtml(activeJob.recipientPhone)})` : ''}</span>
+          <div style="font-size:11.5px; font-weight:700; color:#1E40AF; background:#DBEAFE; padding:7px 11px; border-radius:10px; margin-bottom:8px;">
+            Ordered for: <strong>${escapeHtml(activeJob.recipientName || 'Recipient')}</strong> ${activeJob.recipientPhone ? `(${escapeHtml(activeJob.recipientPhone)})` : ''}
           </div>
         ` : ''}
 
         ${activeJob.timingType === 'SCHEDULED' ? `
-          <div style="font-size:11.5px; font-weight:700; color:#854D0E; background:#FEF9C3; padding:7px 11px; border-radius:9px; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
-            ${uiIcon('clock', 12)}
-            <span>${uiIcon('calendar', 13)} Scheduled Visit: <strong>${escapeHtml(activeJob.scheduledDate)} at ${escapeHtml(activeJob.scheduledTime)}</strong></span>
+          <div style="font-size:11.5px; font-weight:700; color:#854D0E; background:#FEF9C3; padding:7px 11px; border-radius:10px; margin-bottom:8px;">
+            Scheduled Visit: <strong>${escapeHtml(activeJob.scheduledDate)} at ${escapeHtml(activeJob.scheduledTime)}</strong>
           </div>
         ` : ''}
 
         ${activeJob.delayNotice ? `
-          <div style="font-size:11px; font-weight:700; color:#B45309; background:#FEF3C7; border:1px solid #FCD34D; padding:6px 10px; border-radius:8px; margin-bottom:8px; display:flex; align-items:center; gap:5px;">
-            <span>⏱️</span>
-            <span>Delay Alert: Running ~${activeJob.delayNotice.minutes}m late (${escapeHtml(activeJob.delayNotice.reason)})</span>
+          <div style="font-size:11.5px; font-weight:700; color:#B45309; background:#FEF3C7; border:1px solid #FCD34D; padding:7px 11px; border-radius:10px; margin-bottom:8px;">
+            Delay Alert: Running ~${activeJob.delayNotice.minutes}m late (${escapeHtml(activeJob.delayNotice.reason)})
           </div>
         ` : ''}
 
         ${activeJob.photoUrl ? `
-          <div style="display:flex; align-items:center; gap:9px; background:var(--blue-soft); border:1px solid var(--blue-border); border-radius:11px; padding:7px 11px; margin-bottom:10px;">
+          <div style="display:flex; align-items:center; gap:9px; background:var(--blue-soft); border:1px solid var(--blue-border); border-radius:12px; padding:7px 11px; margin-bottom:10px;">
             <img src="${resolveMediaUrl(activeJob.photoUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_TASK_PHOTO_FALLBACK}';" style="width:42px; height:42px; border-radius:8px; object-fit:cover; cursor:pointer;" onclick="openImagePreviewModal('${activeJob.photoUrl}', 'Client Reference Photo')" alt="Desired Style Reference" />
             <div style="flex:1; min-width:0;">
               <div style="font-size:12px; font-weight:800; color:var(--blue-primary);">Client Desired Style Photo</div>
@@ -9803,55 +9858,66 @@ function renderProviderActiveVisitTab(prov, activeJob) {
           </div>
         ` : ''}
 
-        <!-- Step 1: Outside Gate & Arrival Start PIN Entry -->
-        ${!isInProgress ? (() => {
-          return `
-            <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px; padding:10px; margin-bottom:10px;">
-              <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
-                <div style="font-size:11.5px; font-weight:800; color:#1E40AF; text-transform:uppercase; display:flex; align-items:center; gap:5px;">
-                  <span>${uiIcon('key', 13)}</span>
-                  <span>Step 1: Arrival Start PIN</span>
-                </div>
-                ${isEnRoute ? `
-                  <button class="btn-primary-blue" style="height:30px; font-size:11px; padding:0 10px;" onclick="providerMarkArrived('${activeJob.id}')">
-                    I'm Outside Gate
-                  </button>
-                ` : `
-                  <span style="font-size:11px; font-weight:800; color:#059669; background:#DCFCE7; padding:2px 8px; border-radius:99px;">Waiting Outside</span>
-                `}
-              </div>
-              <div style="font-size:11.5px; color:var(--text-secondary); margin-bottom:8px;">
-                Ask the client for the 4-digit Start PIN displayed on their screen:
-              </div>
-              <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
-                <input
-                  id="providerPinInput_${activeJob.id}"
-                  class="dark-input"
-                  type="tel"
-                  inputmode="numeric"
-                  pattern="[0-9]*"
-                  style="height:40px; font-size:18px; font-weight:900; letter-spacing:4px; text-align:center; padding:0 8px; width:100px; flex-shrink:0;"
-                  placeholder="••••"
-                  maxlength="4"
-                  oninput="if(this.value.length === 4) handleProviderAutoPinVerification(this.value, '${activeJob.id}')"
-                />
-                <select id="providerEstSelect_${activeJob.id}" class="dark-input" style="height:40px; font-size:12px; font-weight:700; flex:1;">
-                  <option value="15">Est: 15 mins</option>
-                  <option value="30" selected>Est: 30 mins</option>
-                  <option value="45">Est: 45 mins</option>
-                  <option value="60">Est: 1 hour</option>
-                  <option value="90">Est: 1.5 hours</option>
-                  <option value="120">Est: 2 hours</option>
-                </select>
-                <button type="button" class="btn-primary-blue" style="height:40px; padding:0 12px; font-size:12px; font-weight:800;" onclick="providerVerifyStartPin('${activeJob.id}')">
-                  Start Work
-                </button>
-              </div>
-              <div id="providerPinStatus_${activeJob.id}"></div>
-            </div>
-          `;
-        })() : ''}
+        ${activeJob.voiceNoteUrl ? `
+          <div style="margin-bottom:10px;">
+            ${renderWhatsAppAudioPlayerCard('visit_' + activeJob.id, activeJob.voiceNoteUrl, activeJob.voiceNoteDuration || 15, 'Client Spoken Voice Note')}
+          </div>
+        ` : ''}
 
+        <!-- STAGE 1: EN ROUTE (Provider sees "I'm Outside Gate" — PIN input is hidden!) -->
+        ${isEnRoute ? `
+          <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:14px; padding:12px; margin-bottom:10px; text-align:center;">
+            <div style="font-size:12px; color:var(--text-secondary); font-weight:600; margin-bottom:10px; line-height:1.4;">
+              You are en route with turn-by-turn audio directions. Tap below when you pull up outside the client's residence:
+            </div>
+            <button type="button" class="luxury-action-btn-primary luxury-action-btn-arrived" onclick="providerMarkArrived('${activeJob.id}')">
+              <span>I'm Outside Gate</span>
+            </button>
+          </div>
+        ` : ''}
+
+        <!-- STAGE 2: WAITING OUTSIDE GATE (Provider sees 4-digit PIN input!) -->
+        ${isArrived ? `
+          <div style="background:#F0FDF4; border:1.5px solid #86EFAC; border-radius:14px; padding:12px; margin-bottom:10px;">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
+              <div style="font-size:12px; font-weight:800; color:#15803D; text-transform:uppercase; display:flex; align-items:center; gap:5px;">
+                <span style="width:7px; height:7px; border-radius:50%; background:#16A34A; animation:pulse 1s infinite;"></span>
+                <span>Specialist Waiting Outside Gate</span>
+              </div>
+              <span style="font-size:11px; font-weight:800; color:#059669; background:#DCFCE7; padding:2px 8px; border-radius:99px;">Client Alerted</span>
+            </div>
+            <div style="font-size:11.5px; color:#166534; margin-bottom:8px;">
+              Ask the client for the 4-digit Start PIN displayed on their screen:
+            </div>
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+              <input
+                id="providerPinInput_${activeJob.id}"
+                class="dark-input"
+                type="tel"
+                inputmode="numeric"
+                pattern="[0-9]*"
+                style="height:44px; font-size:20px; font-weight:900; letter-spacing:4px; text-align:center; padding:0 8px; width:110px; flex-shrink:0; border:2px solid #16A34A;"
+                placeholder="••••"
+                maxlength="4"
+                oninput="if(this.value.length === 4) handleProviderAutoPinVerification(this.value, '${activeJob.id}')"
+              />
+              <select id="providerEstSelect_${activeJob.id}" class="dark-input" style="height:44px; font-size:12px; font-weight:700; flex:1;">
+                <option value="15">Est: 15 mins</option>
+                <option value="30" selected>Est: 30 mins</option>
+                <option value="45">Est: 45 mins</option>
+                <option value="60">Est: 1 hour</option>
+                <option value="90">Est: 1.5 hours</option>
+                <option value="120">Est: 2 hours</option>
+              </select>
+              <button type="button" class="btn-primary-blue" style="height:44px; padding:0 14px; font-size:12.5px; font-weight:800; background:#10B981;" onclick="providerVerifyStartPin('${activeJob.id}')">
+                Start Work
+              </button>
+            </div>
+            <div id="providerPinStatus_${activeJob.id}"></div>
+          </div>
+        ` : ''}
+
+        <!-- STAGE 3: IN PROGRESS & WORK ESTIMATION -->
         ${isInProgress ? (() => {
           const estMinutes = activeJob.estimatedDurationMinutes || 30;
           const endMs = activeJob.estimatedCompletionAt || (Date.now() + estMinutes * 60 * 1000);
@@ -9886,13 +9952,13 @@ function renderProviderActiveVisitTab(prov, activeJob) {
 
               <!-- Completion Step -->
               ${!activeJob.completionRequested ? `
-                <button class="btn-primary-blue" style="width:100%; height:44px; font-size:14px; font-weight:800; background:#10B981; box-shadow:0 4px 14px rgba(16,185,129,0.35);" onclick="providerRequestCompletion('${activeJob.id}')">
-                  ✨ I'm Done — Request Completion PIN
+                <button class="btn-primary-blue" style="width:100%; height:46px; font-size:14px; font-weight:800; background:#10B981; box-shadow:0 4px 14px rgba(16,185,129,0.35);" onclick="providerRequestCompletion('${activeJob.id}')">
+                  <span>I'm Done — Request Completion PIN</span>
                 </button>
               ` : `
                 <div style="background:#FFFFFF; border:1.5px solid #0066FF; border-radius:12px; padding:10px; margin-top:6px;">
                   <div style="font-size:12.5px; font-weight:800; color:#0066FF; margin-bottom:4px;">
-                    🎉 Marked Done! Enter Customer's Completion PIN:
+                    Marked Done! Enter Customer's Completion PIN:
                   </div>
                   <div style="font-size:11.5px; color:var(--text-secondary); margin-bottom:8px;">
                     Ask client for the 4-digit Completion PIN displayed on their screen:
@@ -9904,12 +9970,12 @@ function renderProviderActiveVisitTab(prov, activeJob) {
                       type="tel"
                       inputmode="numeric"
                       pattern="[0-9]*"
-                      style="height:40px; font-size:18px; font-weight:900; letter-spacing:4px; text-align:center; padding:0 8px; width:100px; flex-shrink:0;"
+                      style="height:44px; font-size:20px; font-weight:900; letter-spacing:4px; text-align:center; padding:0 8px; width:110px; flex-shrink:0; border:2px solid #0066FF;"
                       placeholder="••••"
                       maxlength="4"
                       oninput="if(this.value.length === 4) handleProviderCompletionPinVerification(this.value, '${activeJob.id}')"
                     />
-                    <button type="button" class="btn-primary-blue" style="flex:1; height:40px; font-size:13px; font-weight:800; background:#10B981;" onclick="handleProviderCompletionPinVerification(document.getElementById('providerCompletionPinInput_${activeJob.id}')?.value, '${activeJob.id}')">
+                    <button type="button" class="btn-primary-blue" style="flex:1; height:44px; font-size:13px; font-weight:800; background:#10B981;" onclick="handleProviderCompletionPinVerification(document.getElementById('providerCompletionPinInput_${activeJob.id}')?.value, '${activeJob.id}')">
                       Verify &amp; Finish Job
                     </button>
                   </div>
@@ -9926,38 +9992,42 @@ function renderProviderActiveVisitTab(prov, activeJob) {
         <div class="chat-preview-pill" onclick="openChatDrawer('${activeJob.id}')">
           <div class="chat-preview-dot"></div>
           <div class="chat-preview-text">
-            <span class="chat-preview-sender">${activeJob.messages[activeJob.messages.length - 1].senderName}:</span>
-            ${activeJob.messages[activeJob.messages.length - 1].text}
+            <span class="chat-preview-sender">${escapeHtml(activeJob.messages[activeJob.messages.length - 1].senderName)}:</span>
+            ${escapeHtml(activeJob.messages[activeJob.messages.length - 1].text)}
           </div>
           <span class="chat-preview-action">Reply ${uiIcon('chevronRight', 12)}</span>
         </div>
       ` : ''}
 
-      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; margin-bottom:8px;">
-        <button class="btn-dark-sec" style="font-size:11.5px; padding:0 8px; justify-content:center; gap:4px;" onclick="promptProviderDelayNotice('${activeJob.id}')" title="Send Transit Delay Notice to Client">
-          <span>⏱️</span>
+      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; margin-bottom:8px; margin-top:8px;">
+        <button class="btn-dark-sec" style="font-size:11.5px; padding:0 8px; justify-content:center; font-weight:700;" onclick="promptProviderDelayNotice('${activeJob.id}')" title="Send Transit Delay Notice to Client">
           <span>Delay (+15m)</span>
         </button>
-        <button class="btn-dark-sec" style="font-size:11.5px; padding:0 8px; justify-content:center; gap:4px;" onclick="startInAppCall('${(activeJob.customerName || 'Client').replace(/'/g, "\\'")}', '${escapeHtml(activeJob.title)}', 'call_${activeJob.id}', '${activeJob.customerId || activeJob.customerPhone || ''}')">
-          ${uiIcon('phone', 13)}
+        <button class="btn-dark-sec" style="font-size:11.5px; padding:0 8px; justify-content:center; font-weight:700;" onclick="startInAppCall('${(activeJob.customerName || 'Client').replace(/'/g, "\\'")}', '${escapeHtml(activeJob.title)}', 'call_${activeJob.id}', '${activeJob.customerId || activeJob.customerPhone || ''}')">
           <span>Call</span>
         </button>
-        <button class="btn-dark-sec" style="font-size:11.5px; padding:0 8px; justify-content:center; gap:4px;" onclick="openChatDrawer('${activeJob.id}')">
-          ${uiIcon('chat', 13)}
+        <button class="btn-dark-sec" style="font-size:11.5px; padding:0 8px; justify-content:center; font-weight:700;" onclick="openChatDrawer('${activeJob.id}')">
           <span>Chat ${(activeJob.messages && activeJob.messages.length > 0) ? `(${activeJob.messages.length})` : ''}</span>
         </button>
       </div>
 
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
-        <button class="btn-dark-sec" style="font-size:11.5px; color:#DC2626; border-color:rgba(220,38,38,0.3); justify-content:center; gap:4px;" onclick="openDisputeModal('${activeJob.id}')">
-          <span>⚠️</span>
-          <span>Report / Dispute</span>
-        </button>
-        <button class="cancel-request-red-pill" style="justify-content:center;" onclick="openCancelTaskModal('${activeJob.id}')">
-          ${uiIcon('close', 14)}
-          <span>Cancel Job</span>
-        </button>
-      </div>
+      <!-- Dispute / Cancellation Row: If in-progress or arrived outside, cancellation is LOCKED -->
+      ${(isInProgress || isArrived) ? `
+        <div style="margin-top:4px;">
+          <button class="btn-dark-sec" style="width:100%; font-size:12.5px; color:#DC2626; border-color:rgba(220,38,38,0.3); justify-content:center; padding:10px; font-weight:700;" onclick="openDisputeModal('${activeJob.id}')">
+            <span>Report a Dispute</span>
+          </button>
+        </div>
+      ` : `
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
+          <button class="btn-dark-sec" style="font-size:11.5px; color:#DC2626; border-color:rgba(220,38,38,0.3); justify-content:center; font-weight:700;" onclick="openDisputeModal('${activeJob.id}')">
+            <span>Report Dispute</span>
+          </button>
+          <button class="cancel-request-red-pill" style="justify-content:center; font-weight:700;" onclick="openCancelTaskModal('${activeJob.id}')">
+            <span>Cancel Job</span>
+          </button>
+        </div>
+      `}
     </div>
   `;
 }
@@ -10011,37 +10081,28 @@ function renderProviderRequestsFeedTab(prov, openRequests, activeJob) {
         </div>
       ` : ''}
 
-      <!-- Provider Availability & Break Status Selector -->
-      <div style="background:var(--bg-card); border:1px solid var(--border-light); border-radius:14px; padding:10px 12px; margin-bottom:12px; display:flex; flex-direction:column; gap:8px;">
-        <div style="display:flex; align-items:center; justify-content:space-between;">
-          <div style="font-size:11.5px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; display:flex; align-items:center; gap:5px;">
-            <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${(prov.status === 'AVAILABLE' || (!prov.status && prov.isOnline !== false)) ? '#10B981' : prov.status === 'BUSY' ? '#F59E0B' : (prov.status === 'ON_BREAK' || prov.status === 'LUNCH') ? '#3B82F6' : '#94A3B8'};"></span>
-            <span>Status: <strong>${prov.status || (prov.isOnline !== false ? 'AVAILABLE' : 'OFFLINE')}</strong></span>
+      <!-- Provider Break & Availability Notice (Status controls moved to Side Panel Drawer) -->
+      ${(prov.status === 'ON_BREAK' || prov.status === 'LUNCH') ? `
+        <div style="background:#EFF6FF; border:1px solid #BFDBFE; border-radius:14px; padding:10px 14px; margin-bottom:12px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
+          <div style="font-size:12px; font-weight:700; color:#1E40AF; display:flex; align-items:center; gap:6px;">
+            <span style="width:7px; height:7px; border-radius:50%; background:#3B82F6;"></span>
+            <span>${prov.status === 'LUNCH' ? 'Lunch Break Active' : 'Break Active'} — Job alerts paused</span>
           </div>
-          ${(prov.status === 'ON_BREAK' || prov.status === 'LUNCH' || prov.status === 'OFFLINE' || prov.isOnline === false) ? `
-            <button type="button" class="small-pill-btn" style="background:#10B981; color:#fff; border:none; font-weight:800; padding:4px 10px;" onclick="setProviderStatus('AVAILABLE')">
-              Resume Available
-            </button>
-          ` : ''}
-        </div>
-        <div style="display:grid; grid-template-columns:repeat(5, 1fr); gap:4px;">
-          <button type="button" class="small-pill-btn" style="padding:6px 2px; font-size:11px; font-weight:800; justify-content:center; ${(prov.status === 'AVAILABLE' || (!prov.status && prov.isOnline !== false)) ? 'background:#10B981; color:#fff; border-color:#10B981;' : 'background:#F1F5F9; color:#475569;'}" onclick="setProviderStatus('AVAILABLE')">
-            🟢 Online
-          </button>
-          <button type="button" class="small-pill-btn" style="padding:6px 2px; font-size:11px; font-weight:800; justify-content:center; ${prov.status === 'BUSY' ? 'background:#F59E0B; color:#fff; border-color:#F59E0B;' : 'background:#F1F5F9; color:#475569;'}" onclick="setProviderStatus('BUSY')">
-            🟡 Busy
-          </button>
-          <button type="button" class="small-pill-btn" style="padding:6px 2px; font-size:11px; font-weight:800; justify-content:center; ${prov.status === 'ON_BREAK' ? 'background:#3B82F6; color:#fff; border-color:#3B82F6;' : 'background:#F1F5F9; color:#475569;'}" onclick="setProviderStatus('ON_BREAK', 15)">
-            ☕ 15m Break
-          </button>
-          <button type="button" class="small-pill-btn" style="padding:6px 2px; font-size:11px; font-weight:800; justify-content:center; ${prov.status === 'LUNCH' ? 'background:#3B82F6; color:#fff; border-color:#3B82F6;' : 'background:#F1F5F9; color:#475569;'}" onclick="setProviderStatus('LUNCH', 45)">
-            🍱 Lunch
-          </button>
-          <button type="button" class="small-pill-btn" style="padding:6px 2px; font-size:11px; font-weight:800; justify-content:center; ${prov.status === 'OFFLINE' || prov.isOnline === false ? 'background:#64748B; color:#fff; border-color:#64748B;' : 'background:#F1F5F9; color:#475569;'}" onclick="setProviderStatus('OFFLINE')">
-            ⚪ Offline
+          <button type="button" class="small-pill-btn" style="background:#10B981; color:#fff; border:none; font-weight:800; padding:4px 12px; font-size:11px;" onclick="setProviderStatus('AVAILABLE')">
+            Resume Available
           </button>
         </div>
-      </div>
+      ` : (prov.status === 'OFFLINE' || prov.isOnline === false) ? `
+        <div style="background:#F1F5F9; border:1px solid #CBD5E1; border-radius:14px; padding:10px 14px; margin-bottom:12px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
+          <div style="font-size:12px; font-weight:700; color:#475569; display:flex; align-items:center; gap:6px;">
+            <span style="width:7px; height:7px; border-radius:50%; background:#94A3B8;"></span>
+            <span>You are Offline (Requests paused)</span>
+          </div>
+          <button type="button" class="small-pill-btn" style="background:#10B981; color:#fff; border:none; font-weight:800; padding:4px 12px; font-size:11px;" onclick="setProviderStatus('AVAILABLE')">
+            Go Online
+          </button>
+        </div>
+      ` : ''}
 
       ${(prov.status === 'ON_BREAK' || prov.status === 'LUNCH') ? `
         <div style="background:#EFF6FF; border:1.5px solid #3B82F6; border-radius:14px; padding:12px 14px; margin-bottom:12px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
@@ -10192,14 +10253,8 @@ function renderProviderRequestsFeedTab(prov, openRequests, activeJob) {
               ` : ''}
 
               ${r.voiceNoteUrl ? `
-                <div style="display:flex; align-items:center; gap:9px; background:#F0FDF4; border:1px solid #86EFAC; border-radius:10px; padding:6px 10px; margin-bottom:8px;">
-                  <button type="button" class="small-pill-btn" style="background:#16A34A; color:#fff; border:none; width:30px; height:30px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; padding:0; flex-shrink:0;" onclick="playAudioFromUrl('${resolveMediaUrl(r.voiceNoteUrl)}')">
-                    <span style="font-size:12px;">▶</span>
-                  </button>
-                  <div style="flex:1; min-width:0;">
-                    <div style="font-size:12px; font-weight:800; color:#15803D;">Customer Voice Note Attached</div>
-                    <div style="font-size:11px; color:#166534;">Tap to listen to client spoken instructions</div>
-                  </div>
+                <div style="margin-bottom:8px;">
+                  ${renderWhatsAppAudioPlayerCard('feed_' + r.id, r.voiceNoteUrl, r.voiceNoteDuration || 15, 'Client Spoken Voice Note')}
                 </div>
               ` : ''}
 
@@ -10994,6 +11049,7 @@ async function handleProviderAutoPinVerification(pinCode, requestId) {
     }
 
     triggerHardwareVibration([100, 50, 100]);
+    stopNavigationHud();
     showToast('Arrival PIN verified! Service is now IN PROGRESS.', 'success');
     await fetchState(true);
     renderAll(true);
@@ -11033,6 +11089,7 @@ async function providerVerifyStartPin(requestId) {
       estimatedMinutes,
       requestSnapshot: reqSnap
     });
+    stopNavigationHud();
     showToast('Arrival PIN verified! Service started.', 'success');
     await fetchState(true);
     renderAll(true);
@@ -11129,11 +11186,11 @@ async function handleProviderCompletionPinVerification(pinCode, requestId) {
 let mediaRecorderInstance = null;
 let recordedAudioChunks = [];
 let voiceRecordInterval = null;
-let activePlayingAudio = null;
+const activeAudioPlayers = {}; // id -> { audio: HTMLAudioElement, speed: number, duration: number }
 
 function formatVoiceSeconds(sec) {
   const m = Math.floor(sec / 60);
-  const s = sec % 60;
+  const s = Math.floor(sec % 60);
   return `${m}:${s < 10 ? '0' : ''}${s}`;
 }
 
@@ -11155,8 +11212,9 @@ async function startRecordingVoiceNote() {
       const reader = new FileReader();
       reader.onloadend = () => {
         state.draftVoiceNoteUrl = reader.result;
-        state.draftVoiceNoteDuration = state.voiceNoteRecordSeconds;
+        state.draftVoiceNoteDuration = state.voiceNoteRecordSeconds || 5;
         state.isRecordingVoiceNote = false;
+        state.isVoiceNotePaused = false;
         lastUiOverlaySignature = '';
         renderUiOverlay();
       };
@@ -11166,15 +11224,18 @@ async function startRecordingVoiceNote() {
 
     mediaRecorderInstance.start();
     state.isRecordingVoiceNote = true;
+    state.isVoiceNotePaused = false;
     state.voiceNoteRecordSeconds = 0;
     if (voiceRecordInterval) clearInterval(voiceRecordInterval);
     voiceRecordInterval = setInterval(() => {
-      state.voiceNoteRecordSeconds++;
-      if (state.voiceNoteRecordSeconds >= 60) {
-        stopRecordingVoiceNote();
-      } else {
-        const el = document.getElementById('voiceNoteTimerLabel');
-        if (el) el.textContent = formatVoiceSeconds(state.voiceNoteRecordSeconds);
+      if (!state.isVoiceNotePaused) {
+        state.voiceNoteRecordSeconds++;
+        if (state.voiceNoteRecordSeconds >= 120) {
+          stopRecordingVoiceNote();
+        } else {
+          const el = document.getElementById('voiceNoteTimerLabel');
+          if (el) el.textContent = formatVoiceSeconds(state.voiceNoteRecordSeconds);
+        }
       }
     }, 1000);
 
@@ -11185,11 +11246,27 @@ async function startRecordingVoiceNote() {
   }
 }
 
+function togglePauseResumeVoiceNote() {
+  if (!mediaRecorderInstance) return;
+  if (mediaRecorderInstance.state === 'recording') {
+    try { mediaRecorderInstance.pause(); } catch (e) {}
+    state.isVoiceNotePaused = true;
+    showToast('Voice recording paused', 'info');
+  } else if (mediaRecorderInstance.state === 'paused') {
+    try { mediaRecorderInstance.resume(); } catch (e) {}
+    state.isVoiceNotePaused = false;
+    showToast('Voice recording resumed', 'info');
+  }
+  lastUiOverlaySignature = '';
+  renderUiOverlay();
+}
+
 function stopRecordingVoiceNote() {
   if (voiceRecordInterval) clearInterval(voiceRecordInterval);
   voiceRecordInterval = null;
+  state.isVoiceNotePaused = false;
   if (mediaRecorderInstance && mediaRecorderInstance.state !== 'inactive') {
-    mediaRecorderInstance.stop();
+    try { mediaRecorderInstance.stop(); } catch (e) {}
   } else {
     state.isRecordingVoiceNote = false;
     lastUiOverlaySignature = '';
@@ -11200,8 +11277,9 @@ function stopRecordingVoiceNote() {
 function cancelVoiceNoteRecording() {
   if (voiceRecordInterval) clearInterval(voiceRecordInterval);
   voiceRecordInterval = null;
+  state.isVoiceNotePaused = false;
   if (mediaRecorderInstance && mediaRecorderInstance.state !== 'inactive') {
-    mediaRecorderInstance.stop();
+    try { mediaRecorderInstance.stop(); } catch (e) {}
   }
   recordedAudioChunks = [];
   state.isRecordingVoiceNote = false;
@@ -11212,9 +11290,10 @@ function cancelVoiceNoteRecording() {
 }
 
 function removeDraftVoiceNote() {
-  if (activePlayingAudio) {
-    try { activePlayingAudio.pause(); } catch (e) {}
-    activePlayingAudio = null;
+  const p = activeAudioPlayers['draftVoice'];
+  if (p && p.audio) {
+    try { p.audio.pause(); } catch (e) {}
+    delete activeAudioPlayers['draftVoice'];
   }
   state.draftVoiceNoteUrl = null;
   state.draftVoiceNoteDuration = 0;
@@ -11222,38 +11301,169 @@ function removeDraftVoiceNote() {
   renderUiOverlay();
 }
 
-function toggleDraftVoiceNotePlay() {
-  if (activePlayingAudio) {
-    activePlayingAudio.pause();
-    activePlayingAudio = null;
-    const icon = document.getElementById('draftVoicePlayIcon');
-    if (icon) icon.textContent = '▶';
-    return;
+function toggleAudioPlay(audioId, audioUrl) {
+  if (!audioUrl) return;
+  let playerObj = activeAudioPlayers[audioId];
+  if (!playerObj) {
+    const audio = new Audio(audioUrl);
+    playerObj = {
+      audio,
+      speed: 1.0,
+      duration: 0
+    };
+    activeAudioPlayers[audioId] = playerObj;
+
+    audio.addEventListener('loadedmetadata', () => {
+      playerObj.duration = audio.duration || 0;
+      updateAudioPlayerUI(audioId);
+    });
+
+    audio.addEventListener('timeupdate', () => {
+      updateAudioPlayerUI(audioId);
+    });
+
+    audio.addEventListener('ended', () => {
+      const playIcon = document.getElementById(`audioPlayIcon_${audioId}`);
+      if (playIcon) playIcon.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>`;
+      updateWaveformPlayedState(audioId, 0);
+      const timeLbl = document.getElementById(`audioTimeLabel_${audioId}`);
+      if (timeLbl && playerObj.duration) {
+        timeLbl.textContent = `0:00 / ${formatVoiceSeconds(Math.round(playerObj.duration))}`;
+      }
+    });
   }
-  if (!state.draftVoiceNoteUrl) return;
-  activePlayingAudio = new Audio(state.draftVoiceNoteUrl);
-  const icon = document.getElementById('draftVoicePlayIcon');
-  if (icon) icon.textContent = '⏸';
-  activePlayingAudio.onended = () => {
-    activePlayingAudio = null;
-    if (icon) icon.textContent = '▶';
-  };
-  activePlayingAudio.play().catch(() => {
-    activePlayingAudio = null;
-    if (icon) icon.textContent = '▶';
+
+  const audio = playerObj.audio;
+  const playIcon = document.getElementById(`audioPlayIcon_${audioId}`);
+
+  if (!audio.paused) {
+    audio.pause();
+    if (playIcon) playIcon.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>`;
+  } else {
+    // Pause other playing audios
+    Object.keys(activeAudioPlayers).forEach((id) => {
+      if (id !== audioId && !activeAudioPlayers[id].audio.paused) {
+        activeAudioPlayers[id].audio.pause();
+        const otherIcon = document.getElementById(`audioPlayIcon_${id}`);
+        if (otherIcon) otherIcon.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>`;
+      }
+    });
+
+    audio.playbackRate = playerObj.speed || 1.0;
+    audio.play().then(() => {
+      if (playIcon) playIcon.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>`;
+    }).catch((err) => {
+      showToast('Audio playback error: ' + err.message, 'error');
+    });
+  }
+}
+
+function cycleAudioPlaybackSpeed(audioId) {
+  let playerObj = activeAudioPlayers[audioId];
+  if (!playerObj) {
+    playerObj = { speed: 1.0 };
+    activeAudioPlayers[audioId] = playerObj;
+  }
+  const speeds = [1.0, 1.5, 2.0];
+  let cur = playerObj.speed || 1.0;
+  let nextIdx = (speeds.indexOf(cur) + 1) % speeds.length;
+  let nextSpeed = speeds[nextIdx];
+  playerObj.speed = nextSpeed;
+  if (playerObj.audio) {
+    playerObj.audio.playbackRate = nextSpeed;
+  }
+  const speedLbl = document.getElementById(`audioSpeedLabel_${audioId}`);
+  if (speedLbl) speedLbl.textContent = `${nextSpeed.toFixed(1)}x`;
+}
+
+function handleWaveformSeekClick(event, audioId, audioUrl, fallbackDuration) {
+  const track = event.currentTarget;
+  if (!track) return;
+  const rect = track.getBoundingClientRect();
+  const clickX = event.clientX - rect.left;
+  const pct = Math.max(0, Math.min(1, clickX / rect.width));
+
+  let playerObj = activeAudioPlayers[audioId];
+  if (!playerObj) {
+    toggleAudioPlay(audioId, audioUrl);
+    playerObj = activeAudioPlayers[audioId];
+  }
+  if (playerObj && playerObj.audio) {
+    const dur = playerObj.audio.duration || fallbackDuration || 10;
+    playerObj.audio.currentTime = dur * pct;
+    updateAudioPlayerUI(audioId);
+    if (playerObj.audio.paused) {
+      playerObj.audio.play().catch(() => {});
+      const playIcon = document.getElementById(`audioPlayIcon_${audioId}`);
+      if (playIcon) playIcon.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>`;
+    }
+  }
+}
+
+function updateAudioPlayerUI(audioId) {
+  const playerObj = activeAudioPlayers[audioId];
+  if (!playerObj || !playerObj.audio) return;
+  const cur = playerObj.audio.currentTime || 0;
+  const dur = playerObj.audio.duration || playerObj.duration || 10;
+  const pct = dur > 0 ? (cur / dur) : 0;
+
+  const timeLbl = document.getElementById(`audioTimeLabel_${audioId}`);
+  if (timeLbl) {
+    timeLbl.textContent = `${formatVoiceSeconds(cur)} / ${formatVoiceSeconds(dur)}`;
+  }
+  updateWaveformPlayedState(audioId, pct);
+}
+
+function updateWaveformPlayedState(audioId, pct) {
+  const track = document.getElementById(`waWaveform_${audioId}`);
+  if (!track) return;
+  const bars = track.querySelectorAll('.wa-scrub-bar');
+  const count = bars.length;
+  const activeCount = Math.round(count * pct);
+  bars.forEach((bar, idx) => {
+    if (idx < activeCount) bar.classList.add('played');
+    else bar.classList.remove('played');
   });
 }
 
+function generateWhatsAppWaveformBarsHtml(audioId) {
+  const barHeights = [
+    6, 12, 18, 10, 22, 14, 8, 16, 20, 12, 18, 24, 16, 10, 20, 14, 8, 16, 22, 18, 12, 14, 20, 16, 10, 8, 14, 18
+  ];
+  return `
+    <div id="waWaveform_${audioId}" style="display:flex; align-items:center; gap:2.5px; height:24px; width:100%;">
+      ${barHeights.map((h) => `<span class="wa-scrub-bar" style="height:${h}px; flex:1;"></span>`).join('')}
+    </div>
+  `;
+}
+
+function renderWhatsAppAudioPlayerCard(audioId, audioUrl, durationSec = 10, title = 'Spoken Voice Note') {
+  const resolvedUrl = resolveMediaUrl(audioUrl);
+  return `
+    <div class="wa-audio-player-bubble">
+      <button type="button" class="wa-play-circle-btn" onclick="toggleAudioPlay('${audioId}', '${resolvedUrl}')" title="Play Voice Note">
+        <span id="audioPlayIcon_${audioId}" style="display:inline-flex;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        </span>
+      </button>
+      <div class="wa-audio-body">
+        <div style="font-size:11px; font-weight:800; color:#047857; margin-bottom:2px;">${escapeHtml(title)}</div>
+        <div class="wa-scrubber-bars-track" onclick="handleWaveformSeekClick(event, '${audioId}', '${resolvedUrl}', ${durationSec})">
+          ${generateWhatsAppWaveformBarsHtml(audioId)}
+        </div>
+        <div class="wa-audio-meta-row">
+          <span id="audioTimeLabel_${audioId}">0:00 / ${formatVoiceSeconds(durationSec)}</span>
+          <button type="button" class="wa-speed-pill-btn" onclick="cycleAudioPlaybackSpeed('${audioId}')">
+            <span id="audioSpeedLabel_${audioId}">1.0x</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 function playAudioFromUrl(url) {
-  if (!url) return;
-  if (activePlayingAudio) {
-    try { activePlayingAudio.pause(); } catch (e) {}
-    activePlayingAudio = null;
-  }
-  activePlayingAudio = new Audio(url);
-  activePlayingAudio.play().catch((e) => {
-    showToast('Audio playback failed: ' + e.message, 'error');
-  });
+  toggleAudioPlay('generic_' + Math.random().toString(36).substring(2, 7), url);
 }
 
 async function setProviderStatus(newStatus, breakMins = 15) {

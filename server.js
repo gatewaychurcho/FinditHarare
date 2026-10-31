@@ -4496,6 +4496,14 @@ Return ONLY JSON with keys:
       const reason = (body.reason || 'Cancelled by user').trim();
       const previousStatus = reqItem.status;
 
+      // Once the 1st Start PIN is verified (job is IN_PROGRESS), cancellation is strictly blocked
+      // Users can only report a dispute to the operating centre
+      if (reqItem.status === 'IN_PROGRESS' || reqItem.startPinVerified || reqItem.pinVerifiedByProvider) {
+        return sendJson(res, 400, {
+          error: 'This job has already started (Start PIN verified) and cannot be cancelled. Please file a dispute to the operating centre.'
+        });
+      }
+
       if (staggeredBidTimers.has(reqItem.id)) {
         staggeredBidTimers.get(reqItem.id).forEach((t) => clearTimeout(t));
         staggeredBidTimers.delete(reqItem.id);

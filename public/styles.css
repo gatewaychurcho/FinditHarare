@@ -4144,3 +4144,317 @@ html, body {
 
 
 
+
+/* ==========================================================================
+   WHATSAPP VOICE NOTE RECORDING & PLAYBACK UI & UX
+   ========================================================================== */
+.wa-voice-record-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: #0B141A;
+  color: #FFFFFF;
+  border-radius: 24px;
+  padding: 8px 14px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  user-select: none;
+}
+
+.wa-record-live-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.wa-pulse-mic-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #EF4444;
+  box-shadow: 0 0 8px #EF4444;
+  animation: waMicPulse 1s infinite;
+  flex-shrink: 0;
+}
+
+.wa-pulse-mic-dot.paused {
+  background: #F59E0B;
+  box-shadow: 0 0 8px #F59E0B;
+  animation: none;
+}
+
+@keyframes waMicPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.85); }
+}
+
+.wa-record-timer-text {
+  font-size: 13.5px;
+  font-weight: 700;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+  color: #FFFFFF;
+  letter-spacing: 0.5px;
+}
+
+.wa-record-waveform-live {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 22px;
+  flex: 1;
+  justify-content: center;
+  padding: 0 8px;
+  overflow: hidden;
+}
+
+.wa-live-bar {
+  width: 2.5px;
+  background: #25D366;
+  border-radius: 2px;
+  transition: height 0.15s ease;
+  animation: waWaveLive 1s ease-in-out infinite alternate;
+}
+
+.wa-live-bar.paused {
+  animation-play-state: paused;
+  background: #94A3B8;
+}
+
+@keyframes waWaveLive {
+  0% { height: 4px; }
+  100% { height: 20px; }
+}
+
+.wa-record-action-btns {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.wa-record-btn-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.12);
+  color: #FFFFFF;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.wa-record-btn-icon:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.wa-record-btn-icon.trash {
+  color: #EF4444;
+}
+
+.wa-record-btn-icon.pause {
+  color: #F59E0B;
+}
+
+.wa-record-btn-icon.send {
+  background: #25D366;
+  color: #FFFFFF;
+}
+
+.wa-record-btn-icon.send:hover {
+  background: #20BD5A;
+}
+
+/* WhatsApp Audio Playback Message Bubble */
+.wa-audio-player-bubble {
+  background: #F0FDF4;
+  border: 1.5px solid #86EFAC;
+  border-radius: 18px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  user-select: none;
+}
+
+.wa-play-circle-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #10B981;
+  color: #FFFFFF;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.35);
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.wa-play-circle-btn:hover {
+  transform: scale(1.05);
+  background: #059669;
+}
+
+.wa-audio-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.wa-scrubber-bars-track {
+  display: flex;
+  align-items: center;
+  gap: 2.5px;
+  height: 24px;
+  cursor: pointer;
+  padding: 2px 0;
+}
+
+.wa-scrub-bar {
+  width: 3px;
+  border-radius: 2px;
+  background: #CBD5E1;
+  transition: background 0.1s ease, height 0.1s ease;
+}
+
+.wa-scrub-bar.played {
+  background: #10B981;
+}
+
+.wa-audio-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  font-weight: 700;
+  color: #047857;
+}
+
+.wa-speed-pill-btn {
+  background: #E2E8F0;
+  color: #0F172A;
+  border: none;
+  border-radius: 99px;
+  padding: 2px 7px;
+  font-size: 10.5px;
+  font-weight: 800;
+  cursor: pointer;
+  letter-spacing: 0.3px;
+  transition: background 0.15s ease;
+}
+
+.wa-speed-pill-btn:hover {
+  background: #CBD5E1;
+}
+
+/* ==========================================================================
+   PREMIUM LUXURY PROVIDER VISIT CARD
+   ========================================================================== */
+.luxury-provider-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: 20px;
+  padding: 16px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
+}
+
+.luxury-step-track {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.luxury-step-segment {
+  height: 32px;
+  border-radius: 10px;
+  background: #F1F5F9;
+  color: #64748B;
+  font-size: 11.5px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  transition: all 0.25s ease;
+}
+
+.luxury-step-segment.active {
+  background: #0066FF;
+  color: #FFFFFF;
+  box-shadow: 0 2px 10px rgba(0, 102, 255, 0.25);
+}
+
+.luxury-step-segment.done {
+  background: #ECFDF5;
+  color: #059669;
+  border: 1px solid #A7F3D0;
+}
+
+.luxury-earnings-banner {
+  background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%);
+  border-radius: 16px;
+  padding: 12px 16px;
+  color: #FFFFFF;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.12);
+}
+
+.luxury-fare-large {
+  font-size: 24px;
+  font-weight: 900;
+  letter-spacing: -0.5px;
+  color: #FFFFFF;
+}
+
+.luxury-net-pill {
+  background: rgba(16, 185, 129, 0.18);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  color: #34D399;
+  font-size: 11.5px;
+  font-weight: 800;
+  padding: 3px 10px;
+  border-radius: 99px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.luxury-action-btn-primary {
+  width: 100%;
+  height: 48px;
+  border-radius: 14px;
+  background: #0066FF;
+  color: #FFFFFF;
+  font-size: 14px;
+  font-weight: 800;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 102, 255, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.luxury-action-btn-primary:active {
+  transform: scale(0.98);
+}
+
+.luxury-action-btn-arrived {
+  background: #10B981;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);
+}
