@@ -739,9 +739,11 @@
         const isTyping = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT');
         if (isTyping && !forceRender) return;
 
-        const nextDb = await api('/api/state');
-        const pendingRes = await api('/api/admin/pending-verifications');
-        if (Array.isArray(pendingRes)) {
+        const [nextDb, pendingRes] = await Promise.all([
+          api('/api/state'),
+          api('/api/admin/pending-verifications').catch(() => [])
+        ]);
+        if (Array.isArray(pendingRes) && nextDb) {
           nextDb.pendingVerifications = pendingRes;
         }
 
@@ -3986,7 +3988,7 @@
     document.addEventListener('DOMContentLoaded', () => {
       loadAdminData();
       if (adminPollingInterval) clearInterval(adminPollingInterval);
-      adminPollingInterval = setInterval(() => loadAdminData(false), 1500);
+      adminPollingInterval = setInterval(() => loadAdminData(false), 4000);
 
       try {
         const es = new EventSource('/api/stream');

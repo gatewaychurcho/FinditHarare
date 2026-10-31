@@ -57,7 +57,15 @@ const state = {
   draftAutoAccept: false,
   draftNotes: '',
   draftPhotoUrl: null,
+  draftVoiceNoteUrl: null,
+  draftVoiceNoteDuration: 0,
+  isRecordingVoiceNote: false,
+  voiceNoteRecordSeconds: 0,
   notesLeakageWarning: '',
+
+  // Provider Availability & Break Status
+  providerStatus: 'AVAILABLE', // 'AVAILABLE' | 'BUSY' | 'ON_BREAK' | 'LUNCH' | 'OFFLINE'
+  providerBreakEndsAt: null,
 
   // inDrive Style: Booking for Myself or Someone Else
   bookingFor: 'ME', // 'ME' | 'SOMEONE_ELSE'
@@ -313,7 +321,7 @@ function playArrivalUrgentAlarmSound() {
 }
 
 function triggerHardwareVibration(pattern = [800, 250, 800, 250, 1000]) {
-  if (state.activeCall) return; // Completely silent & clear calls
+  if (state.activeCall || state.incomingCall) return; // Completely silent & clear calls without interruption beeps or vibration
   try {
     if (typeof window !== 'undefined' && window.FinditNative && typeof window.FinditNative.vibratePattern === 'function') {
       const csv = Array.isArray(pattern) ? [0, ...pattern].join(',') : '0,800,250,800,250,1000';
@@ -3969,6 +3977,10 @@ function renderUiOverlay(force = true) {
     state.draftAutoAccept,
     state.draftNotes,
     state.draftPhotoUrl ? 1 : 0,
+    state.draftVoiceNoteUrl ? 1 : 0,
+    state.isRecordingVoiceNote ? 1 : 0,
+    state.providerStatus,
+    state.providerBreakEndsAt,
     state.bookingFor,
     state.timingType,
     state.scheduledDate,
@@ -4717,6 +4729,46 @@ function renderConfigureFareOverlay() {
             `}
           </div>
 
+          <!-- Customer Voice Note Recording (Audio instructions) -->
+          <div style="margin-bottom:14px;">
+            ${state.isRecordingVoiceNote ? `
+              <div style="background:#FEF2F2; border:1.5px solid #EF4444; border-radius:14px; padding:10px 14px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:#EF4444; animation:pulse 1s infinite;"></span>
+                  <span id="voiceNoteTimerLabel" style="font-size:13px; font-weight:800; color:#DC2626;">Recording (${formatVoiceSeconds(state.voiceNoteRecordSeconds)})</span>
+                </div>
+                <div style="display:flex; gap:6px;">
+                  <button type="button" class="small-pill-btn" style="background:#EF4444; color:#fff; border:none; font-weight:800; padding:6px 12px;" onclick="stopRecordingVoiceNote()">
+                    Done
+                  </button>
+                  <button type="button" class="small-pill-btn" style="color:#64748B; background:#F1F5F9; border:none;" onclick="cancelVoiceNoteRecording()">
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ` : state.draftVoiceNoteUrl ? `
+              <div style="background:#EFF6FF; border:1.5px solid #0066FF; border-radius:14px; padding:10px 14px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
+                <div style="display:flex; align-items:center; gap:10px; min-width:0; flex:1;">
+                  <button type="button" class="small-pill-btn" style="background:#0066FF; color:#fff; border:none; width:34px; height:34px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; padding:0; flex-shrink:0;" onclick="toggleDraftVoiceNotePlay()">
+                    <span id="draftVoicePlayIcon" style="display:inline-flex; font-size:14px;">▶</span>
+                  </button>
+                  <div style="min-width:0;">
+                    <div style="font-size:13px; font-weight:800; color:#0066FF;">Voice Instructions Attached</div>
+                    <div style="font-size:11.5px; color:#1E40AF;">Duration: ~${state.draftVoiceNoteDuration || 5}s • Tap to preview</div>
+                  </div>
+                </div>
+                <button type="button" class="small-pill-btn" style="color:#DC2626; border-color:rgba(220,38,38,0.3); background:#FEF2F2;" onclick="removeDraftVoiceNote()">
+                  Delete
+                </button>
+              </div>
+            ` : `
+              <button type="button" class="btn-dark-sec" style="width:100%; height:44px; font-size:13px; font-weight:700; justify-content:center; gap:8px; border:1.5px dashed var(--blue-border); background:var(--blue-soft);" onclick="startRecordingVoiceNote()">
+                <span style="color:var(--blue-primary); display:inline-flex;">${uiIcon('mic', 18)}</span>
+                <span>Record Voice Note (Optional Spoken Instructions)</span>
+              </button>
+            `}
+          </div>
+
           <div class="indrive-find-footer-row">
             <button class="footer-icon-btn" onclick="openPaymentModal()" title="Payment Method (${state.draftPaymentMethod})">
               ${uiIcon('wallet', 20)}
@@ -5136,44 +5188,12 @@ function renderBookedTrackingOverlay(req) {
           </div>
         ` : ''}
 
-        <!-- Action Buttons: Masked Call, Full Screen Chat, and Complete Service (unlocked after code confirmation) -->
+        <!-- Action Buttons: Masked Call, Full Screen Chat, and Completion Stage -->
         ${(() => {
-          const isCodeConfirmed = Boolean(req.pinVerifiedByProvider || req.status === 'IN_PROGRESS' || req.status === 'COMPLETED');
-          if (!isCodeConfirmed) {
-            return `
-              <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-                <button class="btn-dark-sec" onclick="startInAppCall('${(prov?.name || 'Pro').replace(/'/g, "\\'")}', '${escapeHtml(req.title)}', 'call_${req.id}', '${prov?.id || ''}')">
-                  ${uiIcon('phone', 14)}
-                  <span>Call</span>
-                </button>
-                <button class="btn-dark-sec" onclick="openChatDrawer('${req.id}', '${prov?.id || ''}')">
-                  ${uiIcon('chat', 14)}
-                  <span>Chat ${(req.messages && req.messages.length > 0) ? `(${req.messages.length})` : ''}</span>
-                </button>
-              </div>
-              <div style="margin-top:8px; background:#EFF6FF; border:1.5px dashed #3B82F6; border-radius:12px; padding:8px 12px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
-                <div style="display:flex; align-items:center; gap:8px; min-width:0;">
-                  <span style="display:inline-flex; flex-shrink:0;">${uiIcon('key', 16)}</span>
-                  <div style="min-width:0;">
-                    <div style="font-size:12px; font-weight:800; color:#1E40AF;">Share Start PIN with Specialist</div>
-                    <div style="font-size:10.5px; color:#3B82F6;">Complete button unlocks once code is verified</div>
-                  </div>
-                </div>
-                <span style="background:#2563EB; color:#FFFFFF; font-size:13.5px; font-weight:900; letter-spacing:1.5px; padding:3px 9px; border-radius:8px; flex-shrink:0;">#${req.startPinCode || '4829'}</span>
-              </div>
-              <div style="margin-top:8px; display:flex; flex-direction:column; gap:6px;">
-                <button
-                  type="button"
-                  class="btn-primary-blue"
-                  style="width:100%; height:42px; font-size:13px; font-weight:800; background:#10B981; box-shadow:0 3px 10px rgba(16,185,129,0.3);"
-                  onclick="openRateBookingModal('${req.id}')"
-                >
-                  ${uiIcon('check', 15)}
-                  <span>Mark Service Completed &amp; Rate</span>
-                </button>
-              </div>
-            `;
-          }
+          const isArrived = req.status === 'ARRIVED';
+          const isInProgress = req.status === 'IN_PROGRESS' || Boolean(req.pinVerifiedByProvider);
+          const isCompleted = req.status === 'COMPLETED';
+
           return `
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px;">
               <button class="btn-dark-sec" onclick="startInAppCall('${(prov?.name || 'Pro').replace(/'/g, "\\'")}', '${escapeHtml(req.title)}', 'call_${req.id}', '${prov?.id || ''}')">
@@ -5185,10 +5205,68 @@ function renderBookedTrackingOverlay(req) {
                 <span>Chat ${(req.messages && req.messages.length > 0) ? `(${req.messages.length})` : ''}</span>
               </button>
             </div>
-            <button class="btn-primary-blue" style="width:100%; height:44px; font-size:14px; font-weight:800; background:#10B981; box-shadow:0 4px 14px rgba(16,185,129,0.35);" onclick="openRateBookingModal('${req.id}')">
-              ${uiIcon('check', 16)}
-              <span>Mark Service Completed &amp; Rate</span>
-            </button>
+
+            ${isArrived ? `
+              <div style="background:#EFF6FF; border:1.5px dashed #3B82F6; border-radius:12px; padding:10px 12px; display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px;">
+                <div style="display:flex; align-items:center; gap:8px; min-width:0;">
+                  <span style="display:inline-flex; flex-shrink:0;">${uiIcon('key', 16)}</span>
+                  <div style="min-width:0;">
+                    <div style="font-size:12.5px; font-weight:800; color:#1E40AF;">Share Start PIN with Specialist</div>
+                    <div style="font-size:11px; color:#3B82F6;">Give this code to your specialist so they can start work</div>
+                  </div>
+                </div>
+                <span style="background:#2563EB; color:#FFFFFF; font-size:16px; font-weight:900; letter-spacing:2px; padding:4px 10px; border-radius:8px; flex-shrink:0;">#${req.startPinCode || '4829'}</span>
+              </div>
+            ` : ''}
+
+            ${isInProgress ? `
+              <div style="background:#F0FDF4; border:1.5px solid #86EFAC; border-radius:12px; padding:10px 12px; margin-bottom:8px;">
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:4px;">
+                  <div style="font-size:12px; font-weight:800; color:#15803D; display:flex; align-items:center; gap:5px;">
+                    <span style="display:inline-block; width:7px; height:7px; border-radius:50%; background:#16A34A; animation:pulse 1s infinite;"></span>
+                    <span>Service In Progress</span>
+                  </div>
+                  <div style="font-size:11.5px; font-weight:700; color:#166534;">
+                    ~${req.estimatedDurationMinutes || 30}m estimated duration
+                  </div>
+                </div>
+                <div style="font-size:11px; color:#166534;">
+                  Specialist is working at your home. When finished, they will mark done and you will provide your Completion PIN.
+                </div>
+
+                ${req.completionRequested ? `
+                  <div style="margin-top:8px; background:#FFFFFF; border:2px solid #16A34A; border-radius:10px; padding:10px; text-align:center;">
+                    <div style="font-size:12px; font-weight:800; color:#15803D; margin-bottom:3px;">
+                      🎉 Specialist Finished Work! Check work and give Completion PIN:
+                    </div>
+                    <div style="font-size:22px; font-weight:900; color:#15803D; letter-spacing:3px; margin:4px 0;">
+                      #${req.completionPinCode || '7291'}
+                    </div>
+                    <div style="font-size:10.5px; color:#475569;">
+                      Specialist must enter this code to complete job and reconcile payment.
+                    </div>
+                  </div>
+                ` : ''}
+              </div>
+            ` : ''}
+
+            ${isCompleted ? `
+              <button class="btn-primary-blue" style="width:100%; height:44px; font-size:14px; font-weight:800; background:#10B981; box-shadow:0 4px 14px rgba(16,185,129,0.35); margin-bottom:8px;" onclick="openRateBookingModal('${req.id}')">
+                ${uiIcon('check', 16)}
+                <span>Rate Specialist &amp; Finish</span>
+              </button>
+            ` : `
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
+                <button class="btn-dark-sec" style="font-size:11.5px; color:#DC2626; border-color:rgba(220,38,38,0.3); justify-content:center; gap:4px;" onclick="openDisputeModal('${req.id}')">
+                  <span>⚠️</span>
+                  <span>Dispute / Help</span>
+                </button>
+                <button class="cancel-request-red-pill" style="justify-content:center;" onclick="openCancelTaskModal('${req.id}')">
+                  ${uiIcon('close', 14)}
+                  <span>Cancel Job</span>
+                </button>
+              </div>
+            `}
           `;
         })()}
       </div>
@@ -6736,6 +6814,41 @@ function renderModalLayer() {
             ${uiIcon('check', 16)}
             <span>${isProvider ? `Submit Client Review & Finish` : `Submit ${state.ratingStars}-Star Rating & Finish`}</span>
           </button>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  if (state.activeModal === 'DISPUTE_MODAL') {
+    const jobId = state.modalData?.jobId;
+    root.innerHTML = `
+      <div class="modal-backdrop" onclick="closeModal()">
+        <div class="indrive-modal-sheet" onclick="event.stopPropagation()">
+          <div class="cancel-sheet-header">
+            <div class="cancel-sheet-title">Report Issue / Dispute</div>
+            <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
+          </div>
+          <div style="padding:10px 0;">
+            <div style="font-size:12.5px; color:var(--text-secondary); margin-bottom:12px; line-height:1.45;">
+              Our 24/7 operating centre reviews complaints, chat messages, and transactions to ensure fair treatment.
+            </div>
+            <label style="font-size:11px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; margin-bottom:5px; display:block;">Dispute Reason</label>
+            <select id="disputeCategorySelect" class="dark-input" style="width:100%; margin-bottom:12px; height:42px; font-weight:700; border-radius:10px;">
+              <option value="SPECIALIST_NO_SHOW">Specialist Did Not Show Up</option>
+              <option value="CLIENT_UNREACHABLE">Client Unreachable / Locked Gate</option>
+              <option value="WORK_QUALITY">Work Quality &amp; Completeness Issue</option>
+              <option value="PAYMENT_DISPUTE">Payment Disagreement</option>
+              <option value="SAFETY_CONCERN">Safety or Professional Conduct Concern</option>
+              <option value="PROPERTY_DAMAGE">Property Damage</option>
+              <option value="OTHER">Other Issue</option>
+            </select>
+            <label style="font-size:11px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; margin-bottom:5px; display:block;">Incident Details</label>
+            <textarea id="disputeReasonInput" class="dark-input" rows="4" style="width:100%; font-size:13px; line-height:1.45; resize:none; padding:10px; border-radius:10px;" placeholder="Please give specific details so the operating team can investigate and resolve immediately..."></textarea>
+            <button type="button" class="btn-primary-blue" style="margin-top:14px; width:100%; height:44px; background:#DC2626; box-shadow:0 4px 14px rgba(220,38,38,0.35);" onclick="submitDisputeFromModal('${jobId}')">
+              Submit Dispute to Operating Centre
+            </button>
+          </div>
         </div>
       </div>
     `;
@@ -8581,6 +8694,8 @@ async function submitServiceRequest() {
     const sub = (cat.subServices || [])[state.selectedSubServiceIdx] || { name: `${cat.name} Home Service` };
     const reqId = 'req_' + Date.now().toString().slice(-5);
     const attachedPhoto = state.draftPhotoUrl || null;
+    const attachedVoiceNote = state.draftVoiceNoteUrl || null;
+    const attachedVoiceNoteDuration = state.draftVoiceNoteDuration || null;
     const nowIso = new Date().toISOString();
 
     // inDrive Live Location: Uses live GPS by default; only uses custom address if explicitly chosen
@@ -8612,6 +8727,8 @@ async function submitServiceRequest() {
       title: sub.name,
       description: state.draftNotes || (isLive ? `Service delivery straight to my location at ${targetAddress}.` : `Service at ${targetAddress}.`),
       photoUrl: attachedPhoto,
+      voiceNoteUrl: attachedVoiceNote,
+      voiceNoteDuration: attachedVoiceNoteDuration,
       suburbId: state.selectedSuburbId,
       suburbName: suburbClean,
       exactAddress: targetAddress,
@@ -8642,6 +8759,8 @@ async function submitServiceRequest() {
     };
 
     state.draftPhotoUrl = null;
+    state.draftVoiceNoteUrl = null;
+    state.draftVoiceNoteDuration = 0;
     if (!state.db) state.db = {};
     if (!Array.isArray(state.db.requests)) state.db.requests = [];
     state.db.requests.unshift(optimisticReq);
@@ -8680,7 +8799,9 @@ async function submitServiceRequest() {
       paymentMethod: state.draftPaymentMethod,
       budgetUsd: Number(state.draftFareUsd),
       autoAccept: state.draftAutoAccept,
-      photoUrl: attachedPhoto
+      photoUrl: attachedPhoto,
+      voiceNoteUrl: attachedVoiceNote,
+      voiceNoteDuration: attachedVoiceNoteDuration
     });
 
     if (res && res.request && state.db?.requests) {
@@ -8904,6 +9025,7 @@ async function submitCancelTaskWithReason(reason) {
 }
 
 function openRateBookingModal(requestId) {
+  isSubmittingReview = false;
   state.ratingStars = 5;
   state.customReviewComment = '';
   state.activeModal = 'RATE_BOOKING_MODAL';
@@ -8943,7 +9065,13 @@ async function completeBooking(requestId) {
   if (isSubmittingReview) return;
   isSubmittingReview = true;
 
-  // 1. Immediately disable the modal submit button and show loading state
+  // 1. Immediately read any custom comment from DOM box
+  const commentEl = document.getElementById('customRatingCommentBox');
+  if (commentEl && commentEl.value) {
+    state.customReviewComment = commentEl.value.trim();
+  }
+
+  // 2. Immediately disable the modal submit button and show loading state
   const submitBtn = document.getElementById('rateBookingSubmitBtn');
   if (submitBtn) {
     submitBtn.disabled = true;
@@ -9675,64 +9803,122 @@ function renderProviderActiveVisitTab(prov, activeJob) {
           </div>
         ` : ''}
 
-        <!-- Compact Provider Execution Bar (Outside Gate & PIN Entry) -->
+        <!-- Step 1: Outside Gate & Arrival Start PIN Entry -->
         ${!isInProgress ? (() => {
-          const provUser = state.currentUser || state.db.providers[0];
-          const distMeters = calculateDistanceMeters(provUser?.lat, provUser?.lng, activeJob.lat, activeJob.lng);
-          const isWithin20m = distMeters <= 20 || isArrived;
-          const proximitySec = (state.bookingProximitySeconds && state.bookingProximitySeconds[activeJob.id]) || 0;
-          const autoOutsideRemaining = Math.max(0, 90 - proximitySec);
-          const autoPairRemaining = Math.max(0, 180 - proximitySec);
-
           return `
-            <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px; padding:7px 9px; margin-bottom:10px;">
-              <div style="display:flex; align-items:center; gap:8px;">
+            <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px; padding:10px; margin-bottom:10px;">
+              <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+                <div style="font-size:11.5px; font-weight:800; color:#1E40AF; text-transform:uppercase; display:flex; align-items:center; gap:5px;">
+                  <span>${uiIcon('key', 13)}</span>
+                  <span>Step 1: Arrival Start PIN</span>
+                </div>
                 ${isEnRoute ? `
-                  <button class="btn-primary-blue" style="height:36px; font-size:12px; font-weight:700; padding:0 12px; white-space:nowrap; flex-shrink:0; border-radius:8px;" onclick="providerMarkArrived('${activeJob.id}')">
-                    ${uiIcon('pin', 13)}
-                    <span>I'm Waiting Outside</span>
+                  <button class="btn-primary-blue" style="height:30px; font-size:11px; padding:0 10px;" onclick="providerMarkArrived('${activeJob.id}')">
+                    I'm Outside Gate
                   </button>
                 ` : `
-                  <div style="height:36px; padding:0 10px; background:#FEF3C7; border:1px solid #FCD34D; border-radius:8px; display:flex; align-items:center; gap:5px; font-size:11.5px; font-weight:800; color:#B45309; white-space:nowrap; flex-shrink:0;">
-                    <span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:#F59E0B;"></span>
-                    <span>Outside Gate</span>
-                  </div>
+                  <span style="font-size:11px; font-weight:800; color:#059669; background:#DCFCE7; padding:2px 8px; border-radius:99px;">Waiting Outside</span>
                 `}
-
-                <div style="flex:1; display:flex; align-items:center; gap:8px; min-width:0;">
-                  <input
-                    id="providerPinInput_${activeJob.id}"
-                    class="dark-input"
-                    type="tel"
-                    inputmode="numeric"
-                    pattern="[0-9]*"
-                    style="height:36px; font-size:16px; font-weight:800; letter-spacing:4px; text-align:center; padding:0 8px; width:95px; flex-shrink:0; margin:0;"
-                    placeholder="••••"
-                    maxlength="4"
-                    oninput="if(this.value.length === 4) handleProviderAutoPinVerification(this.value, '${activeJob.id}')"
-                  />
-                  <div id="providerPinStatus_${activeJob.id}" style="flex:1; min-width:0;">
-                    <span style="font-size:11px; font-weight:600; color:var(--text-secondary);">Enter 4-digit PIN</span>
-                  </div>
-                </div>
               </div>
-
-              ${isWithin20m ? `
-                <div style="font-size:10.5px; font-weight:700; color:#059669; margin-top:5px; display:flex; align-items:center; gap:4px;">
-                  <span style="width:5px; height:5px; border-radius:50%; background:#10B981;"></span>
-                  <span>Within 20m of client ${isEnRoute ? `• Auto-notifying Outside in ${autoOutsideRemaining}s` : `• Auto-pairs in <span class="proximity-autopair-timer">${autoPairRemaining}s</span>`}</span>
-                </div>
-              ` : ''}
+              <div style="font-size:11.5px; color:var(--text-secondary); margin-bottom:8px;">
+                Ask the client for the 4-digit Start PIN displayed on their screen:
+              </div>
+              <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                <input
+                  id="providerPinInput_${activeJob.id}"
+                  class="dark-input"
+                  type="tel"
+                  inputmode="numeric"
+                  pattern="[0-9]*"
+                  style="height:40px; font-size:18px; font-weight:900; letter-spacing:4px; text-align:center; padding:0 8px; width:100px; flex-shrink:0;"
+                  placeholder="••••"
+                  maxlength="4"
+                  oninput="if(this.value.length === 4) handleProviderAutoPinVerification(this.value, '${activeJob.id}')"
+                />
+                <select id="providerEstSelect_${activeJob.id}" class="dark-input" style="height:40px; font-size:12px; font-weight:700; flex:1;">
+                  <option value="15">Est: 15 mins</option>
+                  <option value="30" selected>Est: 30 mins</option>
+                  <option value="45">Est: 45 mins</option>
+                  <option value="60">Est: 1 hour</option>
+                  <option value="90">Est: 1.5 hours</option>
+                  <option value="120">Est: 2 hours</option>
+                </select>
+                <button type="button" class="btn-primary-blue" style="height:40px; padding:0 12px; font-size:12px; font-weight:800;" onclick="providerVerifyStartPin('${activeJob.id}')">
+                  Start Work
+                </button>
+              </div>
+              <div id="providerPinStatus_${activeJob.id}"></div>
             </div>
           `;
         })() : ''}
 
-        ${isInProgress ? `
-          <button class="btn-primary-blue" style="height:44px; font-size:14px; background:#10B981;" onclick="openRateBookingModal('${activeJob.id}')">
-            ${uiIcon('check', 16)}
-            <span>Complete Service &amp; Collect ${formatUsdPrice(agreedUsd)}</span>
-          </button>
-        ` : ''}
+        ${isInProgress ? (() => {
+          const estMinutes = activeJob.estimatedDurationMinutes || 30;
+          const endMs = activeJob.estimatedCompletionAt || (Date.now() + estMinutes * 60 * 1000);
+          const remainingSec = Math.max(0, Math.floor((endMs - Date.now()) / 1000));
+          const remainingMins = Math.ceil(remainingSec / 60);
+
+          return `
+            <div style="background:#F0FDF4; border:1.5px solid #86EFAC; border-radius:14px; padding:12px; margin-bottom:12px;">
+              <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
+                <div style="font-size:12px; font-weight:800; color:#15803D; display:flex; align-items:center; gap:5px;">
+                  <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#16A34A; animation:pulse 1s infinite;"></span>
+                  <span>TASK IN PROGRESS</span>
+                </div>
+                <div style="font-size:12px; font-weight:800; color:#166534;">
+                  ~${remainingMins} mins remaining
+                </div>
+              </div>
+              <div style="font-size:11.5px; color:#166534; margin-bottom:10px;">
+                Estimated duration: <strong>${estMinutes} mins</strong>. You can adjust ETA if work takes more or less time:
+              </div>
+              <div style="display:flex; gap:6px; margin-bottom:12px;">
+                <button type="button" class="small-pill-btn" style="flex:1; justify-content:center; background:#FFFFFF; color:#15803D; border:1px solid #86EFAC; font-weight:800;" onclick="providerAdjustEstimatedTime('${activeJob.id}', -15)">
+                  -15m
+                </button>
+                <button type="button" class="small-pill-btn" style="flex:1; justify-content:center; background:#FFFFFF; color:#15803D; border:1px solid #86EFAC; font-weight:800;" onclick="providerAdjustEstimatedTime('${activeJob.id}', 15)">
+                  +15m
+                </button>
+                <button type="button" class="small-pill-btn" style="flex:1; justify-content:center; background:#FFFFFF; color:#15803D; border:1px solid #86EFAC; font-weight:800;" onclick="providerAdjustEstimatedTime('${activeJob.id}', 30)">
+                  +30m
+                </button>
+              </div>
+
+              <!-- Completion Step -->
+              ${!activeJob.completionRequested ? `
+                <button class="btn-primary-blue" style="width:100%; height:44px; font-size:14px; font-weight:800; background:#10B981; box-shadow:0 4px 14px rgba(16,185,129,0.35);" onclick="providerRequestCompletion('${activeJob.id}')">
+                  ✨ I'm Done — Request Completion PIN
+                </button>
+              ` : `
+                <div style="background:#FFFFFF; border:1.5px solid #0066FF; border-radius:12px; padding:10px; margin-top:6px;">
+                  <div style="font-size:12.5px; font-weight:800; color:#0066FF; margin-bottom:4px;">
+                    🎉 Marked Done! Enter Customer's Completion PIN:
+                  </div>
+                  <div style="font-size:11.5px; color:var(--text-secondary); margin-bottom:8px;">
+                    Ask client for the 4-digit Completion PIN displayed on their screen:
+                  </div>
+                  <div style="display:flex; align-items:center; gap:8px;">
+                    <input
+                      id="providerCompletionPinInput_${activeJob.id}"
+                      class="dark-input"
+                      type="tel"
+                      inputmode="numeric"
+                      pattern="[0-9]*"
+                      style="height:40px; font-size:18px; font-weight:900; letter-spacing:4px; text-align:center; padding:0 8px; width:100px; flex-shrink:0;"
+                      placeholder="••••"
+                      maxlength="4"
+                      oninput="if(this.value.length === 4) handleProviderCompletionPinVerification(this.value, '${activeJob.id}')"
+                    />
+                    <button type="button" class="btn-primary-blue" style="flex:1; height:40px; font-size:13px; font-weight:800; background:#10B981;" onclick="handleProviderCompletionPinVerification(document.getElementById('providerCompletionPinInput_${activeJob.id}')?.value, '${activeJob.id}')">
+                      Verify &amp; Finish Job
+                    </button>
+                  </div>
+                  <div id="providerCompletionPinStatus_${activeJob.id}"></div>
+                </div>
+              `}
+            </div>
+          `;
+        })() : ''}
       </div>
 
       <!-- Latest Message Snippet Pill (if messages exist) -->
@@ -9747,7 +9933,7 @@ function renderProviderActiveVisitTab(prov, activeJob) {
         </div>
       ` : ''}
 
-      <div style="display:grid; grid-template-columns:1.1fr 1fr 1fr; gap:6px;">
+      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; margin-bottom:8px;">
         <button class="btn-dark-sec" style="font-size:11.5px; padding:0 8px; justify-content:center; gap:4px;" onclick="promptProviderDelayNotice('${activeJob.id}')" title="Send Transit Delay Notice to Client">
           <span>⏱️</span>
           <span>Delay (+15m)</span>
@@ -9761,14 +9947,17 @@ function renderProviderActiveVisitTab(prov, activeJob) {
           <span>Chat ${(activeJob.messages && activeJob.messages.length > 0) ? `(${activeJob.messages.length})` : ''}</span>
         </button>
       </div>
-      ${(!isArrived && !isInProgress) ? `
-        <div style="margin-top:8px;">
-          <button class="cancel-request-red-pill" style="justify-content:center; width:100%;" onclick="openCancelTaskModal('${activeJob.id}')">
-            ${uiIcon('close', 14)}
-            <span>Cancel Job</span>
-          </button>
-        </div>
-      ` : ''}
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
+        <button class="btn-dark-sec" style="font-size:11.5px; color:#DC2626; border-color:rgba(220,38,38,0.3); justify-content:center; gap:4px;" onclick="openDisputeModal('${activeJob.id}')">
+          <span>⚠️</span>
+          <span>Report / Dispute</span>
+        </button>
+        <button class="cancel-request-red-pill" style="justify-content:center;" onclick="openCancelTaskModal('${activeJob.id}')">
+          ${uiIcon('close', 14)}
+          <span>Cancel Job</span>
+        </button>
+      </div>
     </div>
   `;
 }
@@ -9822,7 +10011,57 @@ function renderProviderRequestsFeedTab(prov, openRequests, activeJob) {
         </div>
       ` : ''}
 
-      ${prov.isOnline === false ? `
+      <!-- Provider Availability & Break Status Selector -->
+      <div style="background:var(--bg-card); border:1px solid var(--border-light); border-radius:14px; padding:10px 12px; margin-bottom:12px; display:flex; flex-direction:column; gap:8px;">
+        <div style="display:flex; align-items:center; justify-content:space-between;">
+          <div style="font-size:11.5px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; display:flex; align-items:center; gap:5px;">
+            <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${(prov.status === 'AVAILABLE' || (!prov.status && prov.isOnline !== false)) ? '#10B981' : prov.status === 'BUSY' ? '#F59E0B' : (prov.status === 'ON_BREAK' || prov.status === 'LUNCH') ? '#3B82F6' : '#94A3B8'};"></span>
+            <span>Status: <strong>${prov.status || (prov.isOnline !== false ? 'AVAILABLE' : 'OFFLINE')}</strong></span>
+          </div>
+          ${(prov.status === 'ON_BREAK' || prov.status === 'LUNCH' || prov.status === 'OFFLINE' || prov.isOnline === false) ? `
+            <button type="button" class="small-pill-btn" style="background:#10B981; color:#fff; border:none; font-weight:800; padding:4px 10px;" onclick="setProviderStatus('AVAILABLE')">
+              Resume Available
+            </button>
+          ` : ''}
+        </div>
+        <div style="display:grid; grid-template-columns:repeat(5, 1fr); gap:4px;">
+          <button type="button" class="small-pill-btn" style="padding:6px 2px; font-size:11px; font-weight:800; justify-content:center; ${(prov.status === 'AVAILABLE' || (!prov.status && prov.isOnline !== false)) ? 'background:#10B981; color:#fff; border-color:#10B981;' : 'background:#F1F5F9; color:#475569;'}" onclick="setProviderStatus('AVAILABLE')">
+            🟢 Online
+          </button>
+          <button type="button" class="small-pill-btn" style="padding:6px 2px; font-size:11px; font-weight:800; justify-content:center; ${prov.status === 'BUSY' ? 'background:#F59E0B; color:#fff; border-color:#F59E0B;' : 'background:#F1F5F9; color:#475569;'}" onclick="setProviderStatus('BUSY')">
+            🟡 Busy
+          </button>
+          <button type="button" class="small-pill-btn" style="padding:6px 2px; font-size:11px; font-weight:800; justify-content:center; ${prov.status === 'ON_BREAK' ? 'background:#3B82F6; color:#fff; border-color:#3B82F6;' : 'background:#F1F5F9; color:#475569;'}" onclick="setProviderStatus('ON_BREAK', 15)">
+            ☕ 15m Break
+          </button>
+          <button type="button" class="small-pill-btn" style="padding:6px 2px; font-size:11px; font-weight:800; justify-content:center; ${prov.status === 'LUNCH' ? 'background:#3B82F6; color:#fff; border-color:#3B82F6;' : 'background:#F1F5F9; color:#475569;'}" onclick="setProviderStatus('LUNCH', 45)">
+            🍱 Lunch
+          </button>
+          <button type="button" class="small-pill-btn" style="padding:6px 2px; font-size:11px; font-weight:800; justify-content:center; ${prov.status === 'OFFLINE' || prov.isOnline === false ? 'background:#64748B; color:#fff; border-color:#64748B;' : 'background:#F1F5F9; color:#475569;'}" onclick="setProviderStatus('OFFLINE')">
+            ⚪ Offline
+          </button>
+        </div>
+      </div>
+
+      ${(prov.status === 'ON_BREAK' || prov.status === 'LUNCH') ? `
+        <div style="background:#EFF6FF; border:1.5px solid #3B82F6; border-radius:14px; padding:12px 14px; margin-bottom:12px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
+          <div style="display:flex; align-items:center; gap:9px; flex:1; min-width:0;">
+            <span style="font-size:20px;">☕</span>
+            <div>
+              <div style="font-size:13px; font-weight:800; color:#1E40AF;">You are on ${prov.status === 'LUNCH' ? 'Lunch Break' : 'Break'}</div>
+              <div style="font-size:11.5px; color:#3B82F6; font-weight:600;">Job opportunities are paused while you rest. Tap Resume when ready.</div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onclick="setProviderStatus('AVAILABLE')"
+            class="btn-primary-blue"
+            style="width:auto; height:34px; padding:0 14px; font-size:12px; white-space:nowrap; cursor:pointer;"
+          >
+            <span>Resume Now</span>
+          </button>
+        </div>
+      ` : prov.isOnline === false || prov.status === 'OFFLINE' ? `
         <div style="background:#FFFBEB; border:1.5px solid #F59E0B; border-radius:14px; padding:12px 14px; margin-bottom:12px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
           <div style="display:flex; align-items:center; gap:9px; flex:1; min-width:0;">
             <div style="width:10px; height:10px; border-radius:50%; background:#F59E0B; box-shadow:0 0 0 3px rgba(245,158,11,0.25); flex-shrink:0;"></div>
@@ -9833,7 +10072,7 @@ function renderProviderRequestsFeedTab(prov, openRequests, activeJob) {
           </div>
           <button
             type="button"
-            onclick="toggleProviderOnlineStatus()"
+            onclick="setProviderStatus('AVAILABLE')"
             class="btn-primary-blue"
             style="width:auto; height:34px; padding:0 14px; font-size:12px; white-space:nowrap; cursor:pointer;"
           >
@@ -9948,6 +10187,18 @@ function renderProviderRequestsFeedTab(prov, openRequests, activeJob) {
                   <div style="flex:1; min-width:0;">
                     <div style="font-size:12px; font-weight:800; color:var(--blue-primary);">Desired Style Photo Attached</div>
                     <div style="font-size:11px; color:var(--text-secondary); cursor:pointer;" onclick="openImagePreviewModal('${r.photoUrl}', 'Desired Style Photo')">Tap to inspect style before bidding</div>
+                  </div>
+                </div>
+              ` : ''}
+
+              ${r.voiceNoteUrl ? `
+                <div style="display:flex; align-items:center; gap:9px; background:#F0FDF4; border:1px solid #86EFAC; border-radius:10px; padding:6px 10px; margin-bottom:8px;">
+                  <button type="button" class="small-pill-btn" style="background:#16A34A; color:#fff; border:none; width:30px; height:30px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; padding:0; flex-shrink:0;" onclick="playAudioFromUrl('${resolveMediaUrl(r.voiceNoteUrl)}')">
+                    <span style="font-size:12px;">▶</span>
+                  </button>
+                  <div style="flex:1; min-width:0;">
+                    <div style="font-size:12px; font-weight:800; color:#15803D;">Customer Voice Note Attached</div>
+                    <div style="font-size:11px; color:#166534;">Tap to listen to client spoken instructions</div>
                   </div>
                 </div>
               ` : ''}
@@ -10742,20 +10993,10 @@ async function handleProviderAutoPinVerification(pinCode, requestId) {
       `;
     }
 
-    if ('vibrate' in navigator) try { navigator.vibrate([100, 50, 100]); } catch (e) {}
-
-    // Complete job & transition directly to provider review & rating
-    setTimeout(async () => {
-      try {
-        await apiPost('/api/bookings/status', {
-          requestId,
-          status: 'COMPLETED',
-          requestSnapshot: res?.request || reqSnap
-        });
-      } catch (err) {}
-      await fetchState(true);
-      openRateBookingModal(requestId);
-    }, 600);
+    triggerHardwareVibration([100, 50, 100]);
+    showToast('Arrival PIN verified! Service is now IN PROGRESS.', 'success');
+    await fetchState(true);
+    renderAll(true);
   } catch (err) {
     if (input) {
       input.disabled = false;
@@ -10777,18 +11018,305 @@ async function handleProviderAutoPinVerification(pinCode, requestId) {
 async function providerVerifyStartPin(requestId) {
   const input = document.getElementById(`providerPinInput_${requestId}`);
   const pinCode = input ? input.value.trim() : '';
+  const estSelect = document.getElementById(`providerEstSelect_${requestId}`);
+  const estimatedMinutes = estSelect ? Number(estSelect.value) : 30;
+  if (!pinCode || pinCode.length !== 4) {
+    showToast('Please enter the 4-digit Arrival PIN from client.', 'error');
+    return;
+  }
   try {
     markLocalStateMutation();
     const reqSnap = (state.db?.requests || []).find((r) => r.id === requestId) || null;
     await apiPost('/api/bookings/verify-pin', {
       requestId,
       pinCode,
+      estimatedMinutes,
       requestSnapshot: reqSnap
     });
-    showToast('Start PIN verified! Service is now in progress.');
+    showToast('Arrival PIN verified! Service started.', 'success');
     await fetchState(true);
+    renderAll(true);
   } catch (err) {
     showToast(err.message, 'error');
+  }
+}
+
+async function providerAdjustEstimatedTime(requestId, additionalMinutes) {
+  try {
+    markLocalStateMutation();
+    await apiPost('/api/bookings/adjust-estimated-time', {
+      requestId,
+      additionalMinutes: Number(additionalMinutes)
+    });
+    showToast(`Estimated duration adjusted (${additionalMinutes > 0 ? '+' : ''}${additionalMinutes}m)`, 'info');
+    await fetchState(true);
+    renderAll(true);
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function providerRequestCompletion(requestId) {
+  try {
+    markLocalStateMutation();
+    await apiPost('/api/bookings/request-completion', {
+      requestId,
+      providerId: state.currentUser?.id
+    });
+    showToast('Marked as done! Ask client for Completion PIN.', 'info');
+    await fetchState(true);
+    renderAll(true);
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function handleProviderCompletionPinVerification(pinCode, requestId) {
+  if (!pinCode || pinCode.length !== 4) return;
+  const input = document.getElementById(`providerCompletionPinInput_${requestId}`);
+  const statusEl = document.getElementById(`providerCompletionPinStatus_${requestId}`);
+
+  if (input) input.disabled = true;
+  if (statusEl) {
+    statusEl.innerHTML = `
+      <div style="display:inline-flex; align-items:center; gap:5px; font-size:11.5px; font-weight:700; color:#059669;">
+        <svg class="wa-spin-svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="3" stroke-linecap="round"><circle cx="12" cy="12" r="10" stroke-opacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10"/></svg>
+        <span>Finalizing...</span>
+      </div>
+    `;
+  }
+
+  try {
+    markLocalStateMutation();
+    const reqSnap = (state.db?.requests || []).find((r) => r.id === requestId) || null;
+    const res = await apiPost('/api/bookings/verify-completion-pin', {
+      requestId,
+      pinCode,
+      requestSnapshot: reqSnap
+    });
+
+    if (statusEl) {
+      statusEl.innerHTML = `
+        <div style="display:inline-flex; align-items:center; gap:4px; font-size:12px; font-weight:800; color:#10B981;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          <span>Complete!</span>
+        </div>
+      `;
+    }
+
+    triggerHardwareVibration([100, 50, 100]);
+    showToast('Completion PIN verified! Job officially finished.', 'success');
+    await fetchState(true);
+    openRateBookingModal(requestId);
+  } catch (err) {
+    if (input) {
+      input.disabled = false;
+      input.value = '';
+      input.focus();
+      input.classList.add('input-shake-error');
+      setTimeout(() => input.classList.remove('input-shake-error'), 500);
+    }
+    if (statusEl) {
+      statusEl.innerHTML = `
+        <div style="font-size:11px; font-weight:800; color:#DC2626;">
+          ${escapeHtml(err.message || 'Incorrect Completion PIN')}
+        </div>
+      `;
+    }
+  }
+}
+
+let mediaRecorderInstance = null;
+let recordedAudioChunks = [];
+let voiceRecordInterval = null;
+let activePlayingAudio = null;
+
+function formatVoiceSeconds(sec) {
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m}:${s < 10 ? '0' : ''}${s}`;
+}
+
+async function startRecordingVoiceNote() {
+  if (state.activeCall || state.incomingCall) {
+    showToast('Cannot record voice note during an ongoing voice call.', 'error');
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    recordedAudioChunks = [];
+    mediaRecorderInstance = new MediaRecorder(stream);
+    mediaRecorderInstance.ondataavailable = (e) => {
+      if (e.data && e.data.size > 0) recordedAudioChunks.push(e.data);
+    };
+    mediaRecorderInstance.onstop = () => {
+      const mime = mediaRecorderInstance.mimeType || 'audio/webm';
+      const audioBlob = new Blob(recordedAudioChunks, { type: mime });
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        state.draftVoiceNoteUrl = reader.result;
+        state.draftVoiceNoteDuration = state.voiceNoteRecordSeconds;
+        state.isRecordingVoiceNote = false;
+        lastUiOverlaySignature = '';
+        renderUiOverlay();
+      };
+      reader.readAsDataURL(audioBlob);
+      stream.getTracks().forEach((t) => t.stop());
+    };
+
+    mediaRecorderInstance.start();
+    state.isRecordingVoiceNote = true;
+    state.voiceNoteRecordSeconds = 0;
+    if (voiceRecordInterval) clearInterval(voiceRecordInterval);
+    voiceRecordInterval = setInterval(() => {
+      state.voiceNoteRecordSeconds++;
+      if (state.voiceNoteRecordSeconds >= 60) {
+        stopRecordingVoiceNote();
+      } else {
+        const el = document.getElementById('voiceNoteTimerLabel');
+        if (el) el.textContent = formatVoiceSeconds(state.voiceNoteRecordSeconds);
+      }
+    }, 1000);
+
+    lastUiOverlaySignature = '';
+    renderUiOverlay();
+  } catch (err) {
+    showToast('Microphone access denied or unavailable: ' + err.message, 'error');
+  }
+}
+
+function stopRecordingVoiceNote() {
+  if (voiceRecordInterval) clearInterval(voiceRecordInterval);
+  voiceRecordInterval = null;
+  if (mediaRecorderInstance && mediaRecorderInstance.state !== 'inactive') {
+    mediaRecorderInstance.stop();
+  } else {
+    state.isRecordingVoiceNote = false;
+    lastUiOverlaySignature = '';
+    renderUiOverlay();
+  }
+}
+
+function cancelVoiceNoteRecording() {
+  if (voiceRecordInterval) clearInterval(voiceRecordInterval);
+  voiceRecordInterval = null;
+  if (mediaRecorderInstance && mediaRecorderInstance.state !== 'inactive') {
+    mediaRecorderInstance.stop();
+  }
+  recordedAudioChunks = [];
+  state.isRecordingVoiceNote = false;
+  state.draftVoiceNoteUrl = null;
+  state.draftVoiceNoteDuration = 0;
+  lastUiOverlaySignature = '';
+  renderUiOverlay();
+}
+
+function removeDraftVoiceNote() {
+  if (activePlayingAudio) {
+    try { activePlayingAudio.pause(); } catch (e) {}
+    activePlayingAudio = null;
+  }
+  state.draftVoiceNoteUrl = null;
+  state.draftVoiceNoteDuration = 0;
+  lastUiOverlaySignature = '';
+  renderUiOverlay();
+}
+
+function toggleDraftVoiceNotePlay() {
+  if (activePlayingAudio) {
+    activePlayingAudio.pause();
+    activePlayingAudio = null;
+    const icon = document.getElementById('draftVoicePlayIcon');
+    if (icon) icon.textContent = '▶';
+    return;
+  }
+  if (!state.draftVoiceNoteUrl) return;
+  activePlayingAudio = new Audio(state.draftVoiceNoteUrl);
+  const icon = document.getElementById('draftVoicePlayIcon');
+  if (icon) icon.textContent = '⏸';
+  activePlayingAudio.onended = () => {
+    activePlayingAudio = null;
+    if (icon) icon.textContent = '▶';
+  };
+  activePlayingAudio.play().catch(() => {
+    activePlayingAudio = null;
+    if (icon) icon.textContent = '▶';
+  });
+}
+
+function playAudioFromUrl(url) {
+  if (!url) return;
+  if (activePlayingAudio) {
+    try { activePlayingAudio.pause(); } catch (e) {}
+    activePlayingAudio = null;
+  }
+  activePlayingAudio = new Audio(url);
+  activePlayingAudio.play().catch((e) => {
+    showToast('Audio playback failed: ' + e.message, 'error');
+  });
+}
+
+async function setProviderStatus(newStatus, breakMins = 15) {
+  const prov = state.currentUser;
+  if (!prov) return;
+  state.providerStatus = newStatus;
+  if (newStatus === 'OFFLINE') {
+    state.providerBreakEndsAt = null;
+  } else if (newStatus === 'ON_BREAK' || newStatus === 'LUNCH') {
+    state.providerBreakEndsAt = Date.now() + breakMins * 60 * 1000;
+  } else {
+    state.providerBreakEndsAt = null;
+  }
+  renderAll(true);
+  try {
+    await apiPost('/api/providers/status', {
+      providerId: prov.id,
+      status: newStatus,
+      breakMinutes: breakMins
+    });
+    showToast(
+      newStatus === 'AVAILABLE' ? '🟢 You are now Online & Available for jobs!' :
+      newStatus === 'ON_BREAK' ? `☕ Break active for ${breakMins} mins. Job alerts paused.` :
+      newStatus === 'LUNCH' ? `🍱 Lunch active for ${breakMins} mins. Job alerts paused.` :
+      newStatus === 'BUSY' ? '🟡 Status set to Busy.' : '⚪ You are now Offline.',
+      'info'
+    );
+    await fetchState(false);
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+function openDisputeModal(jobId) {
+  state.activeModal = 'DISPUTE_MODAL';
+  state.modalData = { jobId };
+  lastRenderedModalKey = '';
+  renderModalLayer();
+}
+
+async function submitDisputeFromModal(jobId) {
+  const reasonEl = document.getElementById('disputeReasonInput');
+  const catEl = document.getElementById('disputeCategorySelect');
+  const reason = (reasonEl?.value || '').trim();
+  const category = catEl?.value || 'QUALITY_OF_WORK';
+  if (!reason) {
+    showToast('Please provide details for the dispute.', 'error');
+    return;
+  }
+  try {
+    await apiPost('/api/disputes/file', {
+      jobId,
+      role: state.role,
+      actorId: state.currentUser?.id,
+      category,
+      reason,
+      amountUsd: 0
+    });
+    showToast('Dispute filed. Admin will investigate immediately.', 'success');
+    closeModal();
+    await fetchState(true);
+  } catch (e) {
+    showToast(e.message, 'error');
   }
 }
 

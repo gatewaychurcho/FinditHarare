@@ -3,6 +3,7 @@ const https = require('https');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const zlib = require('zlib');
 
 // Lightweight .env loader
 try {
@@ -1529,7 +1530,7 @@ Return ONLY a JSON object with keys:
 
     const targetCatId = aiData.matchedCategoryId || reqItem.categoryId;
     const matchedProviders = (db.providers || [])
-      .filter((p) => !p.isBanned)
+      .filter((p) => !p.isBanned && p.isOnline !== false && (!p.status || p.status === 'AVAILABLE' || p.status === 'ONLINE'))
       .filter((p) => {
         const pCats = Array.isArray(p.categoryIds) ? p.categoryIds : [p.categoryId];
         return pCats.includes(targetCatId) || pCats.includes(reqItem.categoryId);
@@ -1821,25 +1822,26 @@ async function r2GetObject(objectKey, timeoutMs = 2000) {
 }
 
 function offloadDataUriToR2Url(val) {
-  if (typeof val !== 'string' || !val.startsWith('data:image/')) {
+  if (typeof val !== 'string' || (!val.startsWith('data:image/') && !val.startsWith('data:audio/'))) {
     return val;
   }
-  const match = val.match(/^data:(image\/[a-zA-Z0-9+.-]+);base64,(.+)$/);
+  const match = val.match(/^data:((?:image|audio)\/[a-zA-Z0-9+.-]+);base64,(.+)$/);
   if (!match) return val;
   const contentType = match[1];
   const base64Data = match[2];
   const hash = crypto.createHash('sha1').update(base64Data).digest('hex').slice(0, 20);
-  const mediaKey = `img_${hash}`;
+  const prefix = contentType.startsWith('audio/') ? 'aud' : 'img';
+  const mediaKey = `${prefix}_${hash}`;
   try {
     const buffer = Buffer.from(base64Data, 'base64');
     r2MediaCache.set(mediaKey, { buffer, contentType });
 
-    // Also persist to local uploads directory so server restarts or local caching never lose images
+    // Also persist to local uploads directory so server restarts or local caching never lose images or audio
     const uploadsDir = path.join(__dirname, 'public', 'uploads');
     if (!fs.existsSync(uploadsDir)) {
       try { fs.mkdirSync(uploadsDir, { recursive: true }); } catch (e) {}
     }
-    const ext = contentType.includes('png') ? 'png' : 'jpg';
+    const ext = contentType.includes('png') ? 'png' : contentType.includes('webm') ? 'webm' : contentType.includes('wav') ? 'wav' : contentType.includes('mp3') ? 'mp3' : contentType.includes('ogg') ? 'ogg' : 'jpg';
     try {
       fs.writeFileSync(path.join(uploadsDir, `${mediaKey}.${ext}`), buffer);
     } catch (e) {}
@@ -1861,6 +1863,13 @@ function compactDbMediaForFastSync(stateObj) {
     if (p.avatarUrl) p.avatarUrl = offloadDataUriToR2Url(p.avatarUrl);
     if (p.selfieUrl) p.selfieUrl = offloadDataUriToR2Url(p.selfieUrl);
     if (p.idPhotoUrl) p.idPhotoUrl = offloadDataUriToR2Url(p.idPhotoUrl);
+    if (p.idDocument) {
+      if (typeof p.idDocument === 'string') {
+        p.idDocument = offloadDataUriToR2Url(p.idDocument);
+      } else if (p.idDocument && p.idDocument.photoUrl) {
+        p.idDocument.photoUrl = offloadDataUriToR2Url(p.idDocument.photoUrl);
+      }
+    }
     if (Array.isArray(p.portfolio)) {
       p.portfolio.forEach((item) => {
         if (item && item.imageUrl) item.imageUrl = offloadDataUriToR2Url(item.imageUrl);
@@ -1875,9 +1884,13 @@ function compactDbMediaForFastSync(stateObj) {
   (stateObj.requests || []).forEach((r) => {
     if (!r) return;
     if (r.photoUrl) r.photoUrl = offloadDataUriToR2Url(r.photoUrl);
+    if (r.voiceNoteUrl) r.voiceNoteUrl = offloadDataUriToR2Url(r.voiceNoteUrl);
     (r.offers || []).forEach((o) => {
       if (o && o.providerAvatarUrl) o.providerAvatarUrl = offloadDataUriToR2Url(o.providerAvatarUrl);
     });
+    if (Array.isArray(r.messages) && r.messages.length > 30) {
+      r.messages = r.messages.slice(-30);
+    }
   });
   (stateObj.kycVerifications || []).forEach((k) => {
     if (!k) return;
@@ -2465,13 +2478,27 @@ async function sendJson(res, statusCode, data) {
       await Promise.race([pendingCloudSavePromise, new Promise((r) => setTimeout(r, 260))]);
     } catch (e) {}
   }
-  res.writeHead(statusCode, {
+  const jsonStr = JSON.stringify(data);
+  const headers = {
     'Content-Type': 'application/json; charset=utf-8',
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-admin-token'
-  });
-  res.end(JSON.stringify(data));
+  };
+
+  const req = res.req;
+  const acceptEncoding = (req && req.headers && req.headers['accept-encoding']) || '';
+  if (jsonStr.length > 1024 && acceptEncoding.includes('gzip')) {
+    try {
+      const gzipped = zlib.gzipSync(jsonStr);
+      headers['Content-Encoding'] = 'gzip';
+      res.writeHead(statusCode, headers);
+      return res.end(gzipped);
+    } catch (e) {}
+  }
+
+  res.writeHead(statusCode, headers);
+  res.end(jsonStr);
 }
 
 function parseBody(req) {
@@ -2596,17 +2623,15 @@ const server = http.createServer(async (req, res) => {
     }
 
     // Check disk fallback in public/uploads/
-    const diskPathJpg = path.join(__dirname, 'public', 'uploads', `${mediaKey}.jpg`);
-    const diskPathPng = path.join(__dirname, 'public', 'uploads', `${mediaKey}.png`);
-    if (fs.existsSync(diskPathJpg)) {
-      const buf = fs.readFileSync(diskPathJpg);
-      res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=86400', 'Access-Control-Allow-Origin': '*' });
-      return res.end(buf);
-    }
-    if (fs.existsSync(diskPathPng)) {
-      const buf = fs.readFileSync(diskPathPng);
-      res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=86400', 'Access-Control-Allow-Origin': '*' });
-      return res.end(buf);
+    const exts = ['jpg', 'png', 'webm', 'wav', 'mp3', 'ogg'];
+    for (const ext of exts) {
+      const diskPath = path.join(__dirname, 'public', 'uploads', `${mediaKey}.${ext}`);
+      if (fs.existsSync(diskPath)) {
+        const buf = fs.readFileSync(diskPath);
+        const cType = ext === 'png' ? 'image/png' : ext === 'jpg' ? 'image/jpeg' : `audio/${ext}`;
+        res.writeHead(200, { 'Content-Type': cType, 'Cache-Control': 'public, max-age=86400', 'Access-Control-Allow-Origin': '*' });
+        return res.end(buf);
+      }
     }
 
     // Fallback: Clean SVG image placeholder (never broken icon or CORS redirect)
@@ -2623,7 +2648,11 @@ const server = http.createServer(async (req, res) => {
 
   // Synchronize shared cloud state across all Vercel serverless instances before handling API calls
   if (pathname.startsWith('/api/')) {
-    await syncFromCloudKvStore(req.method !== 'GET');
+    if (req.method !== 'GET') {
+      await syncFromCloudKvStore(true);
+    } else {
+      syncFromCloudKvStore(false).catch(() => {});
+    }
   }
 
   // Lightweight Background Notification Polling Endpoint for Android Native APK (even when app is closed/backgrounded)
@@ -2636,6 +2665,11 @@ const server = http.createServer(async (req, res) => {
     const catList = catsCsv ? catsCsv.split(',').map((s) => s.trim()).filter(Boolean) : [];
     const notifications = [];
 
+    const provUser = (role === 'PROVIDER' && userId) ? (db.providers || []).find((p) => p.id === userId) : null;
+    const isProvAvailableForJobs = provUser
+      ? (provUser.isOnline !== false && (!provUser.status || provUser.status === 'AVAILABLE' || provUser.status === 'ONLINE'))
+      : true;
+
     (db.requests || []).forEach((r) => {
       if (!r || !r.id) return;
       const reqCreatedMs = new Date(r.createdAt || 0).getTime() || 0;
@@ -2643,7 +2677,7 @@ const server = http.createServer(async (req, res) => {
 
       if (role === 'PROVIDER') {
         const matchesCat = catList.length === 0 || !r.categoryId || catList.includes(r.categoryId);
-        if (r.status === 'OPEN' && matchesCat && reqCreatedMs > sinceMs) {
+        if (r.status === 'OPEN' && matchesCat && reqCreatedMs > sinceMs && isProvAvailableForJobs) {
           notifications.push({
             id: Math.abs(r.id.split('').reduce((a, b) => ((a << 5) - a) + b.charCodeAt(0), 0)) % 90000 + 1000,
             title: `New Job in ${r.suburbName || 'Harare'} ($${r.budgetUsd} USD)`,
@@ -2717,14 +2751,23 @@ const server = http.createServer(async (req, res) => {
     if (!db || !Array.isArray(db.requests)) {
       db = loadDb();
     }
-    try {
-      await syncFromCloudKvStore(false);
-    } catch (e) {}
     const isAdminViewer = validateAdminToken(req);
     const stripPrivate = (u) => {
       const { password, passwordHash, idDocument, idPhotoUrl, nationalIdNumber, ...rest } = u;
+      let cleanDoc = idDocument;
+      if (cleanDoc && typeof cleanDoc === 'object' && cleanDoc.photoUrl) {
+        cleanDoc = { ...cleanDoc, photoUrl: offloadDataUriToR2Url(cleanDoc.photoUrl) };
+      } else if (typeof cleanDoc === 'string') {
+        cleanDoc = offloadDataUriToR2Url(cleanDoc);
+      }
       return isAdminViewer
-        ? { ...rest, idDocument, idPhotoUrl, nationalIdNumber, hasPassword: Boolean(password || passwordHash) }
+        ? {
+            ...rest,
+            idDocument: cleanDoc,
+            idPhotoUrl: idPhotoUrl ? offloadDataUriToR2Url(idPhotoUrl) : null,
+            nationalIdNumber,
+            hasPassword: Boolean(password || passwordHash)
+          }
         : rest;
     };
     const publicPayload = {
@@ -4148,18 +4191,58 @@ Return ONLY JSON with keys:
     }
   }
 
-  if (pathname === '/api/providers/online' && req.method === 'POST') {
+  if ((pathname === '/api/providers/online' || pathname === '/api/providers/status' || pathname === '/api/provider/status') && req.method === 'POST') {
     try {
       const body = await parseBody(req);
       const prov = ensureProviderInDb(body.providerId, body.providerSnapshot);
       if (!prov) return sendJson(res, 404, { error: 'Provider not found' });
       if (prov.isBanned) return sendJson(res, 403, { error: `Account suspended: ${prov.banReason}` });
-      prov.isOnline = body.isOnline !== undefined ? Boolean(body.isOnline) : !prov.isOnline;
+
+      const newStatus = (body.status || '').toUpperCase();
+      if (newStatus === 'OFFLINE') {
+        prov.isOnline = false;
+        prov.status = 'OFFLINE';
+        prov.breakEndsAt = null;
+        prov.breakStartedAt = null;
+      } else if (newStatus === 'ON_BREAK') {
+        prov.isOnline = true;
+        prov.status = 'ON_BREAK';
+        const mins = Number(body.breakMinutes) || 15;
+        prov.breakDurationMinutes = mins;
+        prov.breakStartedAt = new Date().toISOString();
+        prov.breakEndsAt = Date.now() + mins * 60 * 1000;
+      } else if (newStatus === 'LUNCH') {
+        prov.isOnline = true;
+        prov.status = 'LUNCH';
+        const mins = Number(body.breakMinutes) || 45;
+        prov.breakDurationMinutes = mins;
+        prov.breakStartedAt = new Date().toISOString();
+        prov.breakEndsAt = Date.now() + mins * 60 * 1000;
+      } else if (newStatus === 'BUSY') {
+        prov.isOnline = true;
+        prov.status = 'BUSY';
+        prov.breakEndsAt = null;
+        prov.breakStartedAt = null;
+      } else if (newStatus === 'AVAILABLE' || newStatus === 'ONLINE') {
+        prov.isOnline = true;
+        prov.status = 'AVAILABLE';
+        prov.breakEndsAt = null;
+        prov.breakStartedAt = null;
+      } else if (body.isOnline !== undefined) {
+        prov.isOnline = Boolean(body.isOnline);
+        prov.status = prov.isOnline ? 'AVAILABLE' : 'OFFLINE';
+      }
+
       if (body.workingHours) {
         prov.workingHours = body.workingHours;
       }
       saveDb(db);
-      broadcastUpdate('PROVIDER_STATUS_CHANGED', { providerId: prov.id, isOnline: prov.isOnline });
+      broadcastUpdate('PROVIDER_STATUS_CHANGED', {
+        providerId: prov.id,
+        isOnline: prov.isOnline,
+        status: prov.status || (prov.isOnline ? 'AVAILABLE' : 'OFFLINE'),
+        breakEndsAt: prov.breakEndsAt || null
+      });
       return sendJson(res, 200, { ok: true, provider: prov });
     } catch (e) {
       return sendJson(res, 400, { error: e.message });
@@ -4171,9 +4254,6 @@ Return ONLY JSON with keys:
     const parts = pathname.split('/');
     const requestId = parts[3];
     if (!requestId) return sendJson(res, 400, { error: 'Missing requestId' });
-    try {
-      await syncFromCloudKvStore(false);
-    } catch (e) {}
     const reqItem = (db.requests || []).find((r) => r.id === requestId);
     if (!reqItem) return sendJson(res, 404, { error: 'Request not found' });
     return sendJson(res, 200, {
@@ -4238,6 +4318,8 @@ Return ONLY JSON with keys:
         title: body.title || `${category.name} Service`,
         description: body.description || (hasLiveGps ? `Deliver service to my current live location.` : `Service visit in ${suburb.name}.`),
         photoUrl: body.photoUrl ? offloadDataUriToR2Url(body.photoUrl) : null,
+        voiceNoteUrl: body.voiceNoteUrl ? offloadDataUriToR2Url(body.voiceNoteUrl) : null,
+        voiceNoteDuration: body.voiceNoteDuration ? Number(body.voiceNoteDuration) : null,
         suburbId: suburb.id,
         suburbName: body.suburbName || suburb.name,
         exactAddress: body.exactAddress || (hasLiveGps ? `Current Live Location (${suburb.name})` : `${suburb.sampleStreet}, Harare`),
@@ -4261,6 +4343,13 @@ Return ONLY JSON with keys:
         budgetUsd: Number(body.budgetUsd) || 25,
         startPinCode: String(crypto.randomInt(1000, 9999)),
         pinVerifiedByProvider: false,
+        startPinVerified: false,
+        completionPinCode: String(crypto.randomInt(1000, 9999)),
+        completionPinVerified: false,
+        completionRequested: false,
+        completionRequestedAt: null,
+        estimatedDurationMinutes: null,
+        estimatedCompletionAt: null,
         directProviderId: body.directProviderId || null,
         status: 'OPEN',
         acceptedOfferId: null,
@@ -4728,6 +4817,8 @@ Return ONLY JSON with keys:
     }
   }
 
+  // Step 1: Provider Enters Customer's 4-Digit Arrival Start PIN to begin task
+  // NOTE: Platform commission is NOT deducted here; commission is deducted strictly upon 2nd PIN completion!
   if (pathname === '/api/bookings/verify-pin' && req.method === 'POST') {
     try {
       const body = await parseBody(req);
@@ -4739,26 +4830,151 @@ Return ONLY JSON with keys:
         return sendJson(res, 400, { error: 'Incorrect 4-digit Start PIN. Ask the client for the Start PIN shown on their booking screen.' });
       }
       
+      const estMins = Math.max(5, Math.min(600, Number(body.estimatedMinutes || body.estimatedDurationMinutes || 30)));
       reqItem.pinVerifiedByProvider = true;
+      reqItem.startPinVerified = true;
       reqItem.status = 'IN_PROGRESS';
+      reqItem.startedAt = new Date().toISOString();
+      reqItem.estimatedDurationMinutes = estMins;
+      reqItem.estimatedCompletionAt = Date.now() + estMins * 60 * 1000;
+      reqItem.completionPinCode = reqItem.completionPinCode || String(crypto.randomInt(1000, 9999));
       reqItem.updatedAt = Date.now();
 
-      // Secure Commission Deduction: Deduct from provider on PIN verification
-      deductBookingCommissionIfNeeded(reqItem, isAuto ? '20m Geofence Auto-Pair' : '4-Digit Start PIN Verified');
-
+      if (!Array.isArray(reqItem.messages)) reqItem.messages = [];
       reqItem.messages.push({
         id: 'msg_' + Date.now(),
         senderRole: 'SYSTEM',
         senderName: 'Findit Harare',
         type: 'PIN_VERIFIED',
         text: isAuto
-          ? `20m Geofence Auto-Pair Verified. Service is now IN PROGRESS.`
-          : `Arrival PIN #${reqItem.startPinCode} Verified. Provider has arrived and service is now IN PROGRESS.`,
+          ? `20m Geofence Auto-Pair Verified. Service is now IN PROGRESS. Estimated duration: ~${estMins} mins.`
+          : `Arrival PIN #${reqItem.startPinCode} Verified. Specialist has started work. Estimated duration: ~${estMins} mins.`,
         timestamp: new Date().toISOString()
       });
       saveDb(db);
       broadcastUpdate('PIN_VERIFIED', { requestId: reqItem.id, request: reqItem });
+      broadcastUpdate('BOOKING_STATUS_UPDATED', { requestId: reqItem.id, request: reqItem, status: 'IN_PROGRESS' });
       return sendJson(res, 200, { request: reqItem });
+    } catch (e) {
+      return sendJson(res, 400, { error: e.message });
+    }
+  }
+
+  // Step 2: Provider Edits / Adjusts Estimated Duration (+15m, +30m, -15m or custom)
+  if (pathname === '/api/bookings/adjust-estimated-time' && req.method === 'POST') {
+    try {
+      const body = await parseBody(req);
+      const reqItem = ensureRequestInDb(body.requestId, body.requestSnapshot);
+      if (!reqItem) return sendJson(res, 404, { error: 'Booking not found' });
+
+      let currentMins = Number(reqItem.estimatedDurationMinutes) || 30;
+      if (body.newEstimatedMinutes !== undefined) {
+        currentMins = Math.max(5, Math.min(600, Number(body.newEstimatedMinutes)));
+      } else if (body.additionalMinutes !== undefined) {
+        currentMins = Math.max(5, Math.min(600, currentMins + Number(body.additionalMinutes)));
+      }
+      reqItem.estimatedDurationMinutes = currentMins;
+      const startMs = reqItem.startedAt ? new Date(reqItem.startedAt).getTime() : Date.now();
+      reqItem.estimatedCompletionAt = startMs + currentMins * 60 * 1000;
+      reqItem.updatedAt = Date.now();
+
+      if (!Array.isArray(reqItem.messages)) reqItem.messages = [];
+      reqItem.messages.push({
+        id: 'msg_' + Date.now(),
+        senderRole: 'SYSTEM',
+        senderName: 'Findit Dispatch',
+        type: 'ETA_UPDATED',
+        text: `Specialist updated estimated completion duration to ~${currentMins} minutes.`,
+        timestamp: new Date().toISOString()
+      });
+      saveDb(db);
+      broadcastUpdate('ESTIMATED_TIME_UPDATED', {
+        requestId: reqItem.id,
+        estimatedDurationMinutes: reqItem.estimatedDurationMinutes,
+        estimatedCompletionAt: reqItem.estimatedCompletionAt,
+        request: reqItem
+      });
+      return sendJson(res, 200, { ok: true, request: reqItem });
+    } catch (e) {
+      return sendJson(res, 400, { error: e.message });
+    }
+  }
+
+  // Step 3: Provider Marks Physical Work Finished ("I'm Done — Request Completion PIN")
+  if (pathname === '/api/bookings/request-completion' && req.method === 'POST') {
+    try {
+      const body = await parseBody(req);
+      const reqItem = ensureRequestInDb(body.requestId, body.requestSnapshot);
+      if (!reqItem) return sendJson(res, 404, { error: 'Booking not found' });
+
+      reqItem.completionRequested = true;
+      reqItem.completionRequestedAt = Date.now();
+      reqItem.completionPinCode = reqItem.completionPinCode || String(crypto.randomInt(1000, 9999));
+      reqItem.updatedAt = Date.now();
+
+      if (!Array.isArray(reqItem.messages)) reqItem.messages = [];
+      reqItem.messages.push({
+        id: 'msg_' + Date.now(),
+        senderRole: 'SYSTEM',
+        senderName: 'Findit Harare',
+        type: 'COMPLETION_REQUESTED',
+        text: `Specialist marked task as DONE! Client, please inspect the work and share Completion PIN #${reqItem.completionPinCode} to finalize.`,
+        timestamp: new Date().toISOString()
+      });
+      saveDb(db);
+      broadcastUpdate('COMPLETION_REQUESTED', {
+        requestId: reqItem.id,
+        completionPinCode: reqItem.completionPinCode,
+        request: reqItem
+      });
+      return sendJson(res, 200, { ok: true, request: reqItem });
+    } catch (e) {
+      return sendJson(res, 400, { error: e.message });
+    }
+  }
+
+  // Step 4: Provider Enters Customer's 4-Digit Completion PIN to Finalize Job & Deduct Commission
+  if (pathname === '/api/bookings/verify-completion-pin' && req.method === 'POST') {
+    try {
+      const body = await parseBody(req);
+      const reqItem = ensureRequestInDb(body.requestId, body.requestSnapshot);
+      if (!reqItem) return sendJson(res, 404, { error: 'Booking not found' });
+
+      const providedPin = String(body.pinCode || '').trim();
+      const expectedPin = String(reqItem.completionPinCode || '').trim();
+      if (providedPin !== expectedPin) {
+        return sendJson(res, 400, { error: `Incorrect Completion PIN. Ask the client for their 4-digit Completion PIN (#${expectedPin ? '****' : 'not generated'}).` });
+      }
+
+      reqItem.completionPinVerified = true;
+      reqItem.status = 'COMPLETED';
+      reqItem.completedAt = new Date().toISOString();
+      reqItem.updatedAt = Date.now();
+
+      // Platform commission deducted strictly upon Completion PIN verification
+      deductBookingCommissionIfNeeded(reqItem, '4-Digit Completion PIN Verified');
+
+      // Update provider and customer completed stats
+      const offer = (reqItem.offers || []).find((o) => o.id === reqItem.acceptedOfferId);
+      const prov = (db.providers || []).find((p) => p.id === (reqItem.acceptedProviderId || offer?.providerId));
+      if (prov) prov.completedBookings = (prov.completedBookings || 0) + 1;
+      const cust = (db.customers || []).find((c) => c.id === reqItem.customerId);
+      if (cust) cust.completedBookings = (cust.completedBookings || 0) + 1;
+
+      if (!Array.isArray(reqItem.messages)) reqItem.messages = [];
+      reqItem.messages.push({
+        id: 'msg_' + Date.now(),
+        senderRole: 'SYSTEM',
+        senderName: 'Findit Harare',
+        type: 'BOOKING_COMPLETED',
+        text: `Completion PIN #${reqItem.completionPinCode} verified! Service is officially completed. Platform commission reconciled.`,
+        timestamp: new Date().toISOString()
+      });
+
+      saveDb(db);
+      broadcastUpdate('BOOKING_COMPLETED', { requestId: reqItem.id, request: reqItem, status: 'COMPLETED' });
+      broadcastUpdate('BOOKING_STATUS_UPDATED', { requestId: reqItem.id, request: reqItem, status: 'COMPLETED' });
+      return sendJson(res, 200, { ok: true, request: reqItem });
     } catch (e) {
       return sendJson(res, 400, { error: e.message });
     }
@@ -5043,8 +5259,12 @@ Return ONLY JSON with keys:
 
       if (body.status === 'IN_PROGRESS') {
         reqItem.pinVerifiedByProvider = true;
+        reqItem.startPinVerified = true;
         reqItem.autoStarted = Boolean(body.autoStarted);
-        deductBookingCommissionIfNeeded(reqItem, body.autoStarted ? 'Proximity Auto-Pair' : 'In-Progress Status');
+        const estMins = Math.max(5, Math.min(600, Number(body.estimatedMinutes || reqItem.estimatedDurationMinutes || 30)));
+        reqItem.estimatedDurationMinutes = estMins;
+        reqItem.estimatedCompletionAt = Date.now() + estMins * 60 * 1000;
+        reqItem.completionPinCode = reqItem.completionPinCode || String(crypto.randomInt(1000, 9999));
         if (!reqItem.messages) reqItem.messages = [];
         reqItem.messages.push({
           id: 'msg_' + Date.now(),
@@ -5053,11 +5273,12 @@ Return ONLY JSON with keys:
           type: 'PIN_VERIFIED',
           text: body.autoStarted
             ? `Proximity Auto-Pair active: Both parties detected within 20 meters for 1 minute. Task automatically recorded as STARTED.`
-            : `Arrival PIN verified. Service is now IN PROGRESS.`,
+            : `Arrival PIN verified. Service is now IN PROGRESS. Estimated duration: ~${estMins} mins.`,
           timestamp: new Date().toISOString()
         });
         saveDb(db);
         broadcastUpdate('PIN_VERIFIED', { requestId: reqItem.id, request: reqItem });
+        broadcastUpdate('BOOKING_STATUS_UPDATED', { requestId: reqItem.id, request: reqItem, status: 'IN_PROGRESS' });
         return sendJson(res, 200, { request: reqItem });
       }
 
