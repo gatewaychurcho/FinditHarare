@@ -1,9 +1,13 @@
 :root {
-  --blue-primary: #0066FF;
-  --blue-bright: #2563EB;
-  --blue-dark: #0047B3;
+  --blue-primary: #0052FF;
+  --blue-bright: #0066FF;
+  --blue-dark: #07173D;
   --blue-soft: #EBF3FF;
   --blue-border: #BFDBFE;
+  --orange-accent: #FF7A00;
+  --orange-glow: #FFA000;
+  --orange-soft: #FFF7ED;
+  --orange-border: #FED7AA;
   --bg-page: #F1F5F9;
   --bg-sheet: #FFFFFF;
   --bg-card: #F8FAFC;
@@ -3192,12 +3196,13 @@ html, body {
  * FINDIT HARARE AUTHENTIC SPLASH, ONBOARDING & MULTI-HUB
  * ============================================================================ */
 
-/* 1. Clean Authentic Brand Splash Screen (No AI / Hyper Fake Graphics) */
+/* 1. Clean Authentic Brand Splash Screen */
 .splash-screen {
   position: fixed;
   inset: 0;
   z-index: 99999;
-  background: #FFFFFF;
+  background: #06112A;
+  color: #FFFFFF;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3220,26 +3225,35 @@ html, body {
   max-width: 320px;
 }
 
+.splash-app-logo {
+  width: 96px;
+  height: 96px;
+  border-radius: 24px;
+  box-shadow: 0 12px 36px rgba(0, 82, 255, 0.45);
+  margin-bottom: 16px;
+  animation: splashLogoBounce 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
 .splash-brand-mark {
   font-size: 34px;
   font-weight: 900;
   letter-spacing: -0.6px;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .splash-findit-txt {
-  color: #0066FF;
+  color: #FFFFFF;
 }
 
 .splash-harare-txt {
-  color: #0B1B3D;
+  color: #FF7A00;
   margin-left: 6px;
 }
 
 .splash-catchphrase {
   font-size: 13.5px;
   font-weight: 700;
-  color: #64748B;
+  color: #94A3B8;
   letter-spacing: 0.02em;
   margin-bottom: 24px;
 }
@@ -3247,7 +3261,7 @@ html, body {
 .splash-loader-track {
   width: 160px;
   height: 4px;
-  background: #E2E8F0;
+  background: rgba(255, 255, 255, 0.12);
   border-radius: 99px;
   overflow: hidden;
 }
@@ -3255,21 +3269,22 @@ html, body {
 .splash-loader-fill {
   width: 0%;
   height: 100%;
-  background: #0066FF;
+  background: linear-gradient(90deg, #0052FF 0%, #FF7A00 100%);
   border-radius: 99px;
   transition: width 0.9s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* 2. Onboarding Carousel Screens (Grounded & Authentic Style) */
+/* 2. Onboarding Carousel Screens with High-Res Hero Splash Graphics */
 .fh-onboarding-screen {
   position: fixed;
   inset: 0;
   z-index: 9999;
-  background: #FFFFFF;
+  background: #06112A;
+  color: #FFFFFF;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  padding: 16px 20px 28px;
+  padding: 16px 20px 24px;
   overflow-y: auto;
   box-sizing: border-box;
 }
@@ -3282,20 +3297,20 @@ html, body {
 }
 
 .onboarding-skip-btn {
-  background: none;
-  border: none;
-  color: #64748B;
-  font-size: 14.5px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #CBD5E1;
+  font-size: 13.5px;
   font-weight: 800;
   cursor: pointer;
-  padding: 6px 12px;
+  padding: 5px 14px;
   border-radius: 99px;
-  transition: background 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 
 .onboarding-skip-btn:hover {
-  background: #F1F5F9;
-  color: #0F172A;
+  background: rgba(255, 255, 255, 0.2);
+  color: #FFFFFF;
 }
 
 .onboarding-graphic-container {
@@ -3304,176 +3319,94 @@ html, body {
   align-items: center;
   justify-content: center;
   margin: 6px 0 16px;
-  min-height: 280px;
   position: relative;
 }
 
-.onboarding-mock-phone {
-  width: 250px;
-  height: 350px;
-  background: #F8FAFC;
-  border: 4px solid #E2E8F0;
-  border-radius: 36px;
-  position: relative;
+.onboarding-hero-image-wrap {
+  width: 100%;
+  max-width: 320px;
+  height: 380px;
+  max-height: 52vh;
+  border-radius: 26px;
   overflow: hidden;
-  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.08);
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-}
-
-.onboarding-mock-map-bg {
-  position: absolute;
-  inset: 0;
-  opacity: 0.9;
-  background-size: 24px 24px;
-}
-
-.onboarding-pin-bubble {
-  position: absolute;
-  background: #0066FF;
-  color: #FFFFFF;
-  border-radius: 50%;
-  width: 24px;
-  height: 24px;
+  box-shadow: 0 16px 40px rgba(0, 82, 255, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.1);
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 10px rgba(0, 102, 255, 0.35);
-  z-index: 2;
+  background: #040D21;
 }
 
-.onboarding-bid-card {
-  position: absolute;
-  z-index: 4;
-  background: #FFFFFF;
-  border-radius: 12px;
-  padding: 6px 10px;
-  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.12);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  font-weight: 800;
-  color: #0F172A;
-  border: 1px solid #E2E8F0;
-  animation: floatBid 3s ease-in-out infinite alternate;
-}
-
-@keyframes floatBid {
-  0% { transform: translateY(0); }
-  100% { transform: translateY(-6px); }
-}
-
-.onboarding-character-img {
-  position: relative;
-  z-index: 3;
-  height: 270px;
-  max-width: 100%;
-  object-fit: contain;
-  filter: drop-shadow(0 10px 18px rgba(15, 23, 42, 0.18));
-}
-
-/* Isometric Animated Splash Art */
-.isometric-art-wrapper {
-  position: relative;
+.onboarding-hero-splash-img {
   width: 100%;
   height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.onboarding-footer-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.onboarding-headline-text {
+  font-size: 18px;
+  line-height: 1.45;
+  font-weight: 800;
+  color: #FFFFFF;
+  margin-bottom: 18px;
+  max-width: 330px;
+}
+
+.onboarding-headline-text .highlight-accent {
+  color: #FF7A00;
+  font-weight: 900;
+}
+
+.onboarding-pagination-dots {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 3;
-  padding: 12px;
-  box-sizing: border-box;
+  gap: 8px;
+  margin-bottom: 18px;
 }
 
-.iso-phone-base {
-  position: relative;
-  width: 160px;
-  height: 240px;
-  background: linear-gradient(135deg, #1E293B 0%, #0F172A 100%);
-  border-radius: 28px;
-  border: 4px solid #334155;
-  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.1);
+.onboarding-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.22);
+  transition: all 0.25s ease;
+}
+
+.onboarding-dot.active {
+  width: 24px;
+  background: #FF7A00;
+  box-shadow: 0 0 10px rgba(255, 122, 0, 0.6);
+}
+
+.onboarding-cta-btn {
+  width: 100%;
+  max-width: 360px;
+  height: 50px;
+  background: linear-gradient(135deg, #0052FF 0%, #FF7A00 100%);
+  color: #FFFFFF;
+  border: none;
+  border-radius: 25px;
+  font-size: 15.5px;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(255, 122, 0, 0.35);
   display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  animation: isoFloat 3.5s ease-in-out infinite alternate;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: transform 0.15s ease, opacity 0.15s ease;
 }
 
-@keyframes isoFloat {
-  0% { transform: translateY(0px) rotate(-3deg); }
-  100% { transform: translateY(-8px) rotate(-1deg); }
-}
-
-.iso-screen {
-  flex: 1;
-  background: #F8FAFC;
-  margin: 6px;
-  border-radius: 20px;
-  display: flex;
-  flex-direction: column;
-  padding: 10px 8px;
-  position: relative;
-  overflow: hidden;
-}
-
-.iso-touch-hand {
-  position: absolute;
-  bottom: 18px;
-  right: 12px;
-  z-index: 8;
-  animation: handTapAction 2.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-  filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.25));
-}
-
-@keyframes handTapAction {
-  0%, 100% { transform: translate(16px, 20px) scale(0.96); opacity: 0.9; }
-  45%, 55% { transform: translate(0, 0) scale(1.02); opacity: 1; }
-}
-
-.iso-tap-ripple {
-  position: absolute;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: rgba(0, 102, 255, 0.3);
-  border: 2px solid #0066FF;
-  animation: rippleExpand 2.2s ease-out infinite;
-  pointer-events: none;
-}
-
-@keyframes rippleExpand {
-  0%, 40% { transform: scale(0.2); opacity: 0; }
-  50% { transform: scale(0.8); opacity: 0.9; }
-  100% { transform: scale(2.2); opacity: 0; }
-}
-
-.iso-notif-card-float {
-  background: #FFFFFF;
-  border: 1.5px solid #0066FF;
-  border-radius: 14px;
-  padding: 8px 10px;
-  box-shadow: 0 12px 28px rgba(0, 102, 255, 0.25);
-  animation: notifDescendPulse 2.8s ease-in-out infinite;
-  z-index: 6;
-}
-
-@keyframes notifDescendPulse {
-  0%, 100% { transform: translateY(-4px) scale(0.97); }
-  50% { transform: translateY(2px) scale(1.03); }
-}
-
-.iso-radar-ring {
-  position: absolute;
-  border-radius: 50%;
-  border: 1.5px solid rgba(0, 102, 255, 0.35);
-  animation: radarRingPulse 2.4s ease-out infinite;
-}
-
-@keyframes radarRingPulse {
-  0% { transform: scale(0.3); opacity: 0.9; }
-  100% { transform: scale(1.8); opacity: 0; }
+.onboarding-cta-btn:active {
+  transform: scale(0.98);
 }
 
 /* WhatsApp Style Auto PIN Verification */
@@ -3483,11 +3416,10 @@ html, body {
   vertical-align: middle;
 }
 
-@keyframes waSpin {
-  100% { transform: rotate(360deg); }
-}
-
 .input-shake-error {
+  animation: inputShake 0.4s ease;
+  border-color: #EF4444 !important;
+}
   animation: inputShake 0.4s ease;
   border-color: #EF4444 !important;
 }

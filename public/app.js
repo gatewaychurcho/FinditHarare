@@ -681,7 +681,7 @@ function renderOnboardingLayer() {
   lastRenderedOnboardingSig = sig;
 
   if (slide === 0) {
-    // Step 1: Hand ordering on phone with animated isometric illustration
+    // 1st Splash Screen: Customer discovering services (3rd user uploaded image)
     container.innerHTML = `
       <div class="fh-onboarding-screen">
         <div class="onboarding-top-nav">
@@ -689,78 +689,14 @@ function renderOnboardingLayer() {
         </div>
 
         <div class="onboarding-graphic-container">
-          <div class="onboarding-mock-phone">
-            <div class="onboarding-mock-map-bg" style="background-image: radial-gradient(#CBD5E1 1.5px, transparent 1.5px), radial-gradient(#CBD5E1 1.5px, #F8FAFC 1.5px);"></div>
-            
-            <div class="onboarding-pin-bubble" style="top:20px; left:24px;">${uiIcon('pin', 12)}</div>
-            <div class="onboarding-pin-bubble" style="top:40px; right:20px;">${uiIcon('pin', 12)}</div>
-
-            <div class="onboarding-bid-card" style="top:42px; left:14px;">
-              <span style="color:#0066FF; font-weight:800;">${uiIcon('star', 12)} 4.9</span>
-              <span style="font-weight:800;">$25 USD</span>
-            </div>
-
-            <div class="isometric-art-wrapper">
-              <svg viewBox="0 0 200 240" width="100%" height="100%" style="overflow:visible;">
-                <defs>
-                  <linearGradient id="phoneGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stop-color="#1E293B"/>
-                    <stop offset="100%" stop-color="#0F172A"/>
-                  </linearGradient>
-                  <linearGradient id="screenGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stop-color="#FFFFFF"/>
-                    <stop offset="100%" stop-color="#F1F5F9"/>
-                  </linearGradient>
-                  <linearGradient id="btnGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stop-color="#0066FF"/>
-                    <stop offset="100%" stop-color="#0052CC"/>
-                  </linearGradient>
-                </defs>
-                
-                <!-- Isometric Phone Body -->
-                <g transform="translate(20, 20) skewY(-6) scale(0.92)">
-                  <rect x="10" y="10" width="145" height="210" rx="24" fill="url(#phoneGrad1)" stroke="#334155" stroke-width="3"/>
-                  <rect x="18" y="22" width="129" height="186" rx="16" fill="url(#screenGrad1)"/>
-                  <rect x="62" y="15" width="40" height="4" rx="2" fill="#475569"/>
-                  
-                  <rect x="26" y="34" width="55" height="8" rx="4" fill="#94A3B8"/>
-                  <rect x="26" y="46" width="80" height="12" rx="4" fill="#0F172A"/>
-                  
-                  <!-- Mini Map Surface -->
-                  <rect x="26" y="66" width="113" height="72" rx="8" fill="#E2E8F0"/>
-                  <path d="M26 95 Q60 85 90 100 T139 90" stroke="#CBD5E1" stroke-width="8" fill="none"/>
-                  <path d="M75 66 L75 138" stroke="#CBD5E1" stroke-width="6" fill="none"/>
-                  
-                  <!-- Blue Pin on Phone -->
-                  <circle cx="85" cy="94" r="7" fill="#0066FF"/>
-                  <circle cx="85" cy="94" r="3" fill="#FFFFFF"/>
-                  
-                  <!-- Tap Ripple -->
-                  <circle cx="82" cy="164" r="14" fill="none" stroke="#0066FF" stroke-width="2" opacity="0.8">
-                    <animate attributeName="r" values="8;24;36" dur="2s" repeatCount="indefinite"/>
-                    <animate attributeName="opacity" values="0.9;0.4;0" dur="2s" repeatCount="indefinite"/>
-                  </circle>
-                  
-                  <!-- Button -->
-                  <rect x="26" y="150" width="113" height="28" rx="8" fill="url(#btnGrad1)"/>
-                  <text x="82" y="168" fill="#FFFFFF" font-size="11" font-weight="bold" text-anchor="middle" font-family="-apple-system, sans-serif">Book Service</text>
-                </g>
-                
-                <!-- Animated Isometric Hand Tapping -->
-                <g class="iso-touch-hand">
-                  <path d="M125 180 L155 160 L175 190 L145 210 Z" fill="#0066FF" opacity="0.9"/>
-                  <path d="M115 165 L145 147 L160 170 L130 187 Z" fill="#FDBA74"/>
-                  <path d="M115 165 L95 151 C91 148 92 142 97 139 C101 136 107 137 111 141 L125 157 Z" fill="#FDBA74"/>
-                  <ellipse cx="96" cy="153" rx="6" ry="3" fill="#000000" opacity="0.25"/>
-                </g>
-              </svg>
-            </div>
+          <div class="onboarding-hero-image-wrap">
+            <img src="/assets/splash_slide1.jpg" alt="Findit Harare Client Screen" class="onboarding-hero-splash-img" />
           </div>
         </div>
 
         <div class="onboarding-footer-area">
           <div class="onboarding-headline-text">
-            Post your task and receive competitive <span class="highlight-accent">bids</span> from verified experts nearby.
+            Find verified experts in Harare for home, repairs, beauty &amp; more at <span class="highlight-accent">your price</span>.
           </div>
 
           <div class="onboarding-pagination-dots">
@@ -776,7 +712,7 @@ function renderOnboardingLayer() {
       </div>
     `;
   } else {
-    // Step 2: Notification being received on phone with animated isometric card
+    // 2nd Splash Screen: Service Provider receiving requests & earning (2nd user uploaded image)
     container.innerHTML = `
       <div class="fh-onboarding-screen">
         <div class="onboarding-top-nav">
@@ -784,64 +720,14 @@ function renderOnboardingLayer() {
         </div>
 
         <div class="onboarding-graphic-container">
-          <div class="onboarding-mock-phone">
-            <div class="onboarding-mock-map-bg" style="background-image: radial-gradient(#CBD5E1 1.5px, transparent 1.5px), radial-gradient(#CBD5E1 1.5px, #F8FAFC 1.5px);"></div>
-
-            <div class="isometric-art-wrapper">
-              <svg viewBox="0 0 200 240" width="100%" height="100%" style="overflow:visible;">
-                <defs>
-                  <linearGradient id="phoneGrad2" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stop-color="#1E293B"/>
-                    <stop offset="100%" stop-color="#0F172A"/>
-                  </linearGradient>
-                  <linearGradient id="screenGrad2" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stop-color="#F8FAFC"/>
-                    <stop offset="100%" stop-color="#EFF6FF"/>
-                  </linearGradient>
-                </defs>
-                
-                <!-- Radar Alert Waves -->
-                <circle cx="100" cy="110" r="40" fill="none" stroke="#0066FF" stroke-width="1.5" opacity="0.7">
-                  <animate attributeName="r" values="30;65;95" dur="2.4s" repeatCount="indefinite"/>
-                  <animate attributeName="opacity" values="0.8;0.3;0" dur="2.4s" repeatCount="indefinite"/>
-                </circle>
-                
-                <!-- Isometric Phone Body -->
-                <g transform="translate(20, 20) skewY(6) scale(0.92)">
-                  <rect x="10" y="10" width="145" height="210" rx="24" fill="url(#phoneGrad2)" stroke="#334155" stroke-width="3"/>
-                  <rect x="18" y="22" width="129" height="186" rx="16" fill="url(#screenGrad2)"/>
-                  <rect x="62" y="15" width="40" height="4" rx="2" fill="#475569"/>
-                  
-                  <rect x="26" y="34" width="60" height="8" rx="4" fill="#94A3B8"/>
-                  <path d="M30 65 Q70 85 110 55 T135 105" stroke="#93C5FD" stroke-width="4" stroke-dasharray="4 4" fill="none"/>
-                </g>
-                
-                <!-- Floating Animated Incoming Notification Card -->
-                <g class="iso-notif-card-float" transform="translate(16, 72)">
-                  <rect x="0" y="0" width="168" height="66" rx="14" fill="#FFFFFF" stroke="#0066FF" stroke-width="2"/>
-                  
-                  <!-- Alert Bell Icon Circle -->
-                  <circle cx="24" cy="24" r="14" fill="#EFF6FF"/>
-                  <path d="M24 16 C21 16 19 18 19 21 L19 26 L17 28 L31 28 L29 26 L29 21 C29 18 27 16 24 16 Z M22 29 C22 30 23 31 24 31 C25 31 26 30 26 29 Z" fill="#0066FF"/>
-                  <circle cx="31" cy="16" r="4" fill="#EF4444"/>
-                  
-                  <text x="44" y="22" fill="#0F172A" font-size="12" font-weight="800" font-family="-apple-system, sans-serif">New Task Alert</text>
-                  <text x="44" y="36" fill="#64748B" font-size="10" font-weight="600" font-family="-apple-system, sans-serif">Borrowdale • Plumbing</text>
-                  
-                  <rect x="10" y="44" width="65" height="16" rx="8" fill="#ECFDF5"/>
-                  <text x="42" y="55" fill="#059669" font-size="10" font-weight="800" text-anchor="middle" font-family="-apple-system, sans-serif">$45 USD</text>
-                  
-                  <rect x="85" y="44" width="72" height="16" rx="8" fill="#0066FF"/>
-                  <text x="121" y="55" fill="#FFFFFF" font-size="9.5" font-weight="800" text-anchor="middle" font-family="-apple-system, sans-serif">View Offer</text>
-                </g>
-              </svg>
-            </div>
+          <div class="onboarding-hero-image-wrap">
+            <img src="/assets/splash_slide2.jpg" alt="Findit Harare Provider Screen" class="onboarding-hero-splash-img" />
           </div>
         </div>
 
         <div class="onboarding-footer-area">
           <div class="onboarding-headline-text">
-            Receive <span class="highlight-accent">instant alerts</span> when clients nearby in Harare request your services.
+            Receive <span class="highlight-accent">instant job alerts</span> nearby in Harare, submit offers &amp; grow your earnings.
           </div>
 
           <div class="onboarding-pagination-dots">
