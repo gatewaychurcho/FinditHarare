@@ -83,7 +83,8 @@ const state = {
   searchTimerSeconds: 120,
 
   activeRequestId: null,
-  providerTab: 'FEED', // 'FEED' | 'ACTIVE_JOB' | 'WALLET' | 'CATALOGUE'
+  customerTab: 'HOME', // 'HOME' | 'REQUESTS' | 'OFFERS' | 'PROFILE'
+  providerTab: 'FEED', // 'HOME' | 'FEED' | 'ACTIVE_JOB' | 'PROFILE'
 
   // Service Provider Wallet Top-Up State
   walletTopupMethod: 'EcoCash USD',
@@ -3864,6 +3865,7 @@ function renderUiOverlay(force = true) {
     state.isAuthenticated,
     state.screenStep,
     state.hubView,
+    state.customerTab || 'HOME',
     state.providerTab,
     state.isSheetMinimized,
     state.selectedCategoryId,
@@ -3930,16 +3932,30 @@ function renderUiOverlay(force = true) {
   } else if (state.role === 'PROVIDER') {
     contentHtml = renderProviderModeOverlay();
   } else {
-    if (activeReq && isBookedStatus(activeReq.status)) {
-      contentHtml = renderBookedTrackingOverlay(activeReq);
-    } else if (activeReq && activeReq.status === 'OPEN') {
-      contentHtml = renderSearchingRadarOverlay(activeReq);
-    } else if (state.screenStep === 'CONFIGURE') {
-      contentHtml = renderConfigureFareOverlay();
+    // CUSTOMER MODE
+    const curCustTab = state.customerTab || 'HOME';
+    if (curCustTab === 'PROFILE') {
+      contentHtml = renderCurvedBrandHeader('CUSTOMER') + renderCustomerProfileTab();
+    } else if (curCustTab === 'REQUESTS') {
+      contentHtml = renderCurvedBrandHeader('CUSTOMER') + renderCustomerRequestsTab();
+    } else if (curCustTab === 'OFFERS') {
+      contentHtml = renderCurvedBrandHeader('CUSTOMER') + renderCompareOffersOverlay(activeReq);
     } else {
-      contentHtml = renderHomeDiscoveryOverlay();
+      // HOME TAB
+      if (activeReq && isBookedStatus(activeReq.status)) {
+        contentHtml = renderBookedTrackingOverlay(activeReq);
+      } else if (activeReq && activeReq.status === 'OPEN') {
+        contentHtml = renderSearchingRadarOverlay(activeReq);
+      } else if (state.screenStep === 'CONFIGURE') {
+        contentHtml = renderConfigureFareOverlay();
+      } else {
+        contentHtml = renderHomeDiscoveryOverlay();
+      }
     }
   }
+
+  // Native Bottom Dock
+  contentHtml += renderGlobalBottomNavDock();
 
   overlay.innerHTML = warningBannerHtml + contentHtml;
 }
@@ -4272,153 +4288,286 @@ function renderMainHubOverlay() {
 }
 
 // ----------------------------------------------------------------------------
-// HOME MAP, ICONIFIED SERVICE TILES & TOP SERVICES (COLLAPSIBLE SHEET)
+// NEW FORM & DESIGN SYSTEM HELPERS (PHONE 1 & 2 MOCKUP TRANSFORMATION)
+// ----------------------------------------------------------------------------
+function getCategoryTileBannerBg(catId) {
+  switch (catId) {
+    case 'repairs_construction': return 'bg-repairs';
+    case 'beauty_care': return 'bg-beauty';
+    case 'cleaning_domestic': return 'bg-cleaning';
+    case 'automotive': return 'bg-automotive';
+    case 'solar_power_water': return 'bg-solar';
+    case 'gardening_outdoor': return 'bg-gardening';
+    case 'general_labour': return 'bg-labour';
+    default: return 'bg-transport';
+  }
+}
+
+function selectCategoryAndOpenRequest(catId) {
+  state.selectedCategoryId = catId;
+  state.selectedSubServiceIdx = 0;
+  state.screenStep = 'CONFIGURE';
+  renderAll(true);
+}
+
+function focusSearchOrConfigure() {
+  openConfigureStep(0);
+}
+
+function handleDraftNotesInput(textarea) {
+  state.draftNotes = textarea.value;
+  const counter = document.getElementById('descCharCounter');
+  if (counter) counter.textContent = `${textarea.value.length}/500`;
+}
+
+function switchCustomerTab(tabName) {
+  state.customerTab = tabName;
+  state.isSheetMinimized = false;
+  if (tabName !== 'HOME') {
+    state.screenStep = 'HOME';
+  }
+  renderAll(true);
+}
+
+function switchProviderTab(tabName) {
+  state.providerTab = tabName;
+  state.isSheetMinimized = false;
+  renderAll(true);
+}
+
+function openStatusPickerModal() {
+  state.activeModal = 'STATUS_PICKER';
+  renderModalLayer();
+}
+
+function renderCurvedBrandHeader(role = 'CUSTOMER') {
+  const isCust = role === 'CUSTOMER';
+  const user = state.currentUser;
+  const userName = user?.name ? user.name.split(' ')[0] : (isCust ? 'Blessing' : 'Specialist');
+  const unreadCount = getUnreadNotificationsCount();
+  const avatarInitials = user?.avatarInitials || (user?.name ? user.name.slice(0, 2).toUpperCase() : (isCust ? 'B' : 'FH'));
+
+  if (isCust) {
+    return `
+      <div class="fh-curved-brand-header">
+        <div class="fh-header-top-row">
+          <div class="fh-header-user-info" onclick="switchCustomerTab('PROFILE')">
+            <div class="fh-header-avatar">
+              ${user?.avatarUrl
+                ? `<img src="${resolveMediaUrl(user.avatarUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_AVATAR_FALLBACK}';" alt="Avatar" />`
+                : `<span>${avatarInitials}</span>`
+              }
+            </div>
+            <div class="fh-header-titles">
+              <div class="fh-header-greeting">Hello, ${escapeHtml(userName)}!</div>
+              <div class="fh-header-sub">Find the right service, fast.</div>
+            </div>
+          </div>
+          <div class="fh-header-actions">
+            <button type="button" class="fh-header-bell-btn" onclick="openNotificationCenterModal()" title="Notifications">
+              ${uiIcon('bell', 20)}
+              ${unreadCount > 0 ? `<span class="fh-header-badge-dot">${unreadCount}</span>` : ''}
+            </button>
+          </div>
+        </div>
+        <div class="fh-header-search-bar" onclick="focusSearchOrConfigure()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#64748B" stroke-width="2.5" stroke-linecap="round">
+            <circle cx="11" cy="11" r="7"/>
+            <path d="M20 20l-3.5-3.5"/>
+          </svg>
+          <input
+            type="text"
+            class="fh-header-search-input"
+            id="homeSearchInput"
+            placeholder="What service do you need?"
+            onfocus="focusSearchOrConfigure()"
+            readonly
+          />
+        </div>
+      </div>
+    `;
+  } else {
+    // Provider Header
+    const status = state.providerStatus || user?.status || 'AVAILABLE';
+    const statusClass = status === 'AVAILABLE' ? 'fh-status-dot-green' : status === 'BUSY' ? 'fh-status-dot-yellow' : status === 'ON_BREAK' ? 'fh-status-dot-blue' : 'fh-status-dot-gray';
+    const statusLabel = status === 'AVAILABLE' ? 'Available' : status === 'BUSY' ? 'Busy' : status === 'ON_BREAK' ? 'On Break' : 'Offline';
+
+    return `
+      <div class="fh-curved-brand-header">
+        <div class="fh-header-top-row">
+          <div class="fh-header-user-info" onclick="switchProviderTab('PROFILE')">
+            <div class="fh-header-avatar">
+              ${user?.avatarUrl
+                ? `<img src="${resolveMediaUrl(user.avatarUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_AVATAR_FALLBACK}';" alt="Avatar" />`
+                : `<span>${avatarInitials}</span>`
+              }
+            </div>
+            <div class="fh-header-titles">
+              <div class="fh-header-greeting">Good morning, ${escapeHtml(userName)}!</div>
+              <div class="fh-header-sub">New opportunities are waiting.</div>
+            </div>
+          </div>
+          <div class="fh-header-actions">
+            <button type="button" class="fh-provider-status-pill" onclick="openStatusPickerModal()" title="Change Status">
+              <span class="${statusClass}"></span>
+              <span>${statusLabel}</span>
+              ${uiIcon('chevronDown', 13)}
+            </button>
+            <button type="button" class="fh-header-bell-btn" onclick="openNotificationCenterModal()" title="Notifications">
+              ${uiIcon('bell', 20)}
+              ${unreadCount > 0 ? `<span class="fh-header-badge-dot">${unreadCount}</span>` : ''}
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+}
+
+function renderGlobalBottomNavDock() {
+  const isCust = state.role === 'CUSTOMER';
+  const req = isCust ? getCustomerActiveRequest() : null;
+  const activeOffersCount = (req && req.status === 'OPEN' && req.offers) ? req.offers.filter((o) => o.status !== 'DECLINED').length : 0;
+  const openReqsCount = (state.role === 'PROVIDER' && state.db?.requests) ? state.db.requests.filter((r) => r.status === 'OPEN').length : 0;
+  const provActiveJob = state.role === 'PROVIDER' ? getProviderActiveBooking(state.currentUser?.id) : null;
+
+  if (isCust) {
+    const cur = state.customerTab || 'HOME';
+    return `
+      <div class="fh-bottom-nav-dock">
+        <button type="button" class="fh-nav-tab-btn ${cur === 'HOME' ? 'active' : ''}" onclick="switchCustomerTab('HOME')">
+          <div class="fh-nav-tab-icon">${uiIcon('home', 20)}</div>
+          <span class="fh-nav-tab-label">Home</span>
+        </button>
+        <button type="button" class="fh-nav-tab-btn ${cur === 'REQUESTS' ? 'active' : ''}" onclick="switchCustomerTab('REQUESTS')">
+          <div class="fh-nav-tab-icon">${uiIcon('notes', 20)}</div>
+          <span class="fh-nav-tab-label">Requests</span>
+        </button>
+        <button type="button" class="fh-nav-tab-btn ${cur === 'OFFERS' ? 'active' : ''}" onclick="switchCustomerTab('OFFERS')">
+          <div class="fh-nav-tab-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+            ${activeOffersCount > 0 ? `<span class="fh-nav-badge-pill">${activeOffersCount}</span>` : ''}
+          </div>
+          <span class="fh-nav-tab-label">Offers</span>
+        </button>
+        <button type="button" class="fh-nav-tab-btn ${cur === 'PROFILE' ? 'active' : ''}" onclick="switchCustomerTab('PROFILE')">
+          <div class="fh-nav-tab-icon">${uiIcon('user', 20)}</div>
+          <span class="fh-nav-tab-label">Profile</span>
+        </button>
+      </div>
+    `;
+  } else {
+    const cur = state.providerTab || 'FEED';
+    return `
+      <div class="fh-bottom-nav-dock">
+        <button type="button" class="fh-nav-tab-btn ${cur === 'HOME' ? 'active' : ''}" onclick="switchProviderTab('HOME')">
+          <div class="fh-nav-tab-icon">${uiIcon('home', 20)}</div>
+          <span class="fh-nav-tab-label">Home</span>
+        </button>
+        <button type="button" class="fh-nav-tab-btn ${cur === 'FEED' ? 'active' : ''}" onclick="switchProviderTab('FEED')">
+          <div class="fh-nav-tab-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+            ${openReqsCount > 0 ? `<span class="fh-nav-badge-pill">${openReqsCount}</span>` : ''}
+          </div>
+          <span class="fh-nav-tab-label">Opportunities</span>
+        </button>
+        <button type="button" class="fh-nav-tab-btn ${cur === 'ACTIVE_JOB' ? 'active' : ''}" onclick="switchProviderTab('ACTIVE_JOB')">
+          <div class="fh-nav-tab-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+            ${provActiveJob ? `<span class="fh-nav-badge-pill" style="background:#10B981; width:8px; height:8px; min-width:8px; padding:0;"></span>` : ''}
+          </div>
+          <span class="fh-nav-tab-label">My Jobs</span>
+        </button>
+        <button type="button" class="fh-nav-tab-btn ${cur === 'PROFILE' ? 'active' : ''}" onclick="switchProviderTab('PROFILE')">
+          <div class="fh-nav-tab-icon">${uiIcon('user', 20)}</div>
+          <span class="fh-nav-tab-label">Profile</span>
+        </button>
+      </div>
+    `;
+  }
+}
+
+// ----------------------------------------------------------------------------
+// HOME DISCOVERY SCREEN (PHONE 1 & SCREEN 1: BRAND HEADER, SEARCH, CATEGORY GRID, FLOATING CTA)
 // ----------------------------------------------------------------------------
 function renderHomeDiscoveryOverlay() {
   const categories = state.db.categories || [];
   const topServices = getPersonalizedAndTopServices();
 
   return `
-    <!-- Top Row: Left Hamburger Menu + Notification Bell + Profile / Sign In -->
-    <div class="indrive-top-left-row" style="display:flex; align-items:center; gap:8px;">
-      <button class="indrive-circle-btn" onclick="openSideDrawerModal()" title="Menu">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
-          <path d="M4 7h16M4 12h16M4 17h16"/>
-        </svg>
-      </button>
+    ${renderCurvedBrandHeader('CUSTOMER')}
 
-      <button class="indrive-circle-btn" style="position:relative;" onclick="openNotificationCenterModal()" title="Notification Center &amp; Admin Notices">
-        ${uiIcon('bell', 18)}
-        ${getUnreadNotificationsCount() > 0 ? `
-          <span style="position:absolute; top:-2px; right:-2px; background:#EF4444; color:#FFFFFF; font-size:9.5px; font-weight:800; min-width:17px; height:17px; border-radius:99px; display:inline-flex; align-items:center; justify-content:center; border:2px solid #FFFFFF; padding:0 3px;">
-            ${getUnreadNotificationsCount()}
-          </span>
-        ` : ''}
-      </button>
-
-      ${state.isAuthenticated ? `
-        <button class="indrive-circle-btn" onclick="openSideDrawerModal()" title="Profile" style="background:var(--blue-soft); color:var(--blue-primary); font-weight:800; font-size:12px;">
-          ${state.currentUser?.avatarInitials || (state.currentUser?.name ? state.currentUser.name.slice(0, 2).toUpperCase() : 'FH')}
-        </button>
-      ` : `
-        <button class="btn-primary-blue pointer-auto" style="height:34px; padding:0 12px; font-size:12px; border-radius:99px; width:auto; pointer-events:auto;" onclick="openSignInRoleChoiceModal()">
-          <span>Sign In</span>
-        </button>
-      `}
-    </div>
-
-    <div>
-      <div class="sheet-floating-controls" style="justify-content:flex-end;">
-        <button class="map-floating-gps-btn" onclick="useBrowserGeolocation(false)" title="Center on My Live Location">
-          ${uiIcon('crosshair', 19)}
-        </button>
-      </div>
-
-      ${state.isSheetMinimized ? `
-        <div class="minimized-map-restore-bar" onclick="toggleSheetMinimize(false)">
-          <div>
-            <div style="font-size:13.5px; font-weight:800; color:var(--text-main);">Explore Harare Home Services</div>
-            <div style="font-size:11.5px; color:var(--text-secondary); font-weight:600;">Full-screen map active • Tap to open services</div>
-          </div>
-          <button type="button" class="minimized-restore-btn" onclick="toggleSheetMinimize(false); event.stopPropagation();">
-            ${uiIcon('chevronUp', 14)}
-            <span>Services</span>
+    <div class="fh-main-screen-container">
+      <!-- inDrive Map / Services Switch Bar -->
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; gap:8px;">
+        <div style="font-size:13px; font-weight:800; color:#0F172A; display:flex; align-items:center; gap:6px;">
+          <span>What do you need?</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:6px;">
+          <button type="button" class="sheet-collapse-pill" onclick="toggleSheetMinimize(true)" title="View Full Street Map">
+            ${uiIcon('map', 13)}
+            <span>Full Map</span>
+          </button>
+          <button type="button" class="map-floating-gps-btn" style="position:static; width:34px; height:34px; box-shadow:none; border:1px solid #CBD5E1;" onclick="useBrowserGeolocation(false)" title="Locate Me">
+            ${uiIcon('crosshair', 16)}
           </button>
         </div>
-      ` : `
-        <div class="indrive-dark-sheet">
-          <div class="sheet-top-handle-bar">
-            <span style="font-size:11.5px; font-weight:800; color:var(--text-secondary);">Harare Home-Visit Pros</span>
-            <div class="sheet-grabber" onclick="toggleSheetMinimize(true)" title="Collapse panel to see full map"></div>
-            <button class="sheet-collapse-pill" onclick="toggleSheetMinimize(true)">
-              ${uiIcon('map', 13)}
-              <span>Full Map</span>
-              ${uiIcon('chevronDown', 13)}
-            </button>
-          </div>
+      </div>
 
-          <!-- Horizontal Service Category Tiles with Matching Custom Profession Icons -->
-          <div class="indrive-cat-strip">
-            ${categories.map((cat) => {
-              const isSelected = cat.id === state.selectedCategoryId;
-              const isSoon = cat.status !== 'ACTIVE';
-              return `
-                <div
-                  class="indrive-cat-tile ${isSelected ? 'active' : ''} ${isSoon ? 'soon' : ''}"
-                  onclick="selectHomeCategory('${cat.id}')"
-                >
-                  ${isSoon ? `<span class="cat-soon-dot">Soon</span>` : ''}
-                  <div class="cat-tile-icon">${getCategoryVectorSvg(cat.id, isSelected)}</div>
-                  <div class="cat-tile-label">${cat.name}</div>
-                </div>
-              `;
-            }).join('')}
-          </div>
-
-          <!-- Search & Transport Row (Transport & Rides placed right beside Job Search) -->
-          <div style="display:flex; gap:8px; align-items:stretch; margin-bottom:12px;">
-            <button class="indrive-where-to-btn" style="flex:1; margin-bottom:0;" onclick="openConfigureStep(0)">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0066FF" stroke-width="2.5" stroke-linecap="round">
-                <circle cx="11" cy="11" r="7"/>
-                <path d="M20 20l-3.5-3.5"/>
-              </svg>
-              <span>What service &amp; price?</span>
-            </button>
-
-            <button class="indrive-where-to-btn" style="width:auto; flex:0 0 auto; padding:0 14px; background:#0F172A; color:#FFFFFF; border:1px solid #334155; margin-bottom:0;" onclick="openComingSoonServiceModal('Transport & Rides', 'Bakkies, trucks, haulage & city rides across Harare')" title="Transport & Rides">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#60A5FA" stroke-width="2.2" stroke-linecap="round"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.5 2.8C2 10.9 2 11.2 2 11.5V16c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></svg>
-              <span style="color:#FFFFFF; font-weight:800; font-size:13px;">Transport</span>
-            </button>
-          </div>
-
-          <!-- Section Header: Most Used / Top Requested Services for Selected Category -->
-          <div style="font-size:11px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; margin:4px 4px 4px; display:flex; justify-content:space-between; align-items:center;">
-            <span>Most Used Services • ${(categories.find((c) => c.id === state.selectedCategoryId) || categories[0])?.name || 'Harare'}</span>
-            <span style="color:var(--blue-primary); font-size:10.5px;">Tap to book</span>
-          </div>
-
-          <div class="indrive-history-list">
-            ${topServices.map((srv) => `
-              <div class="indrive-history-row" onclick="selectTopServiceShortcut('${srv.categoryId}', ${srv.subIdx})">
-                <div class="history-icon-circle">
-                  ${getCategoryVectorSvg(srv.categoryId, false)}
-                </div>
-                <div style="flex:1; min-width:0;">
-                  <div class="history-title">${srv.title}</div>
-                  <div class="history-sub">${srv.categoryName} • ${srv.badge} ${srv.duration ? `• ~${srv.duration}` : ''}</div>
-                </div>
-                <div style="font-size:14.5px; font-weight:800; color:var(--blue-primary); display:inline-flex; align-items:center; gap:4px;">
-                  <span>~$${srv.priceUsd}</span>
-                  ${uiIcon('chevronRight', 14)}
-                </div>
-              </div>
-            `).join('')}
-          </div>
-
-          <!-- Online Shopping Placed on Bottom -->
-          <div style="margin-top:14px; padding-top:10px; border-top:1px solid var(--border-light);">
+      <!-- 8 Photographic / Illustrated Category Cards Grid -->
+      <div class="fh-category-grid">
+        ${categories.map((cat) => {
+          const isSelected = cat.id === state.selectedCategoryId;
+          const bgClass = getCategoryTileBannerBg(cat.id);
+          return `
             <div
-              class="indrive-history-row"
-              style="background:linear-gradient(135deg, rgba(0,102,255,0.06) 0%, rgba(14,165,233,0.1) 100%); border:1.5px solid rgba(0,102,255,0.22); border-radius:14px; padding:11px 13px; cursor:pointer;"
-              onclick="openComingSoonServiceModal('Online Shopping', 'Harare retail stores, groceries, electronics & express courier delivery')"
+              class="fh-category-card ${isSelected ? 'selected' : ''}"
+              onclick="selectCategoryAndOpenRequest('${cat.id}')"
             >
-              <div style="width:40px; height:40px; border-radius:12px; background:#0066FF; color:#FFFFFF; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
-              </div>
-              <div style="flex:1; min-width:0; margin-left:10px;">
-                <div style="font-size:13.5px; font-weight:800; color:var(--text-main); display:flex; align-items:center; gap:6px;">
-                  <span>Online Shopping</span>
-                  <span style="background:#0066FF; color:#FFF; font-size:9.5px; font-weight:800; padding:1px 6px; border-radius:99px; text-transform:uppercase;">Stores</span>
+              <div class="fh-category-card-banner ${bgClass}">
+                <div class="fh-category-icon-circle">
+                  ${getCategoryVectorSvg(cat.id, true)}
                 </div>
-                <div style="font-size:11.5px; color:var(--text-secondary); font-weight:600;">Harare shops, electronics, groceries &amp; delivery</div>
               </div>
-              <div style="color:var(--blue-primary); display:inline-flex; align-items:center;">
-                ${uiIcon('chevronRight', 16)}
+              <div class="fh-category-card-info">
+                <div class="fh-category-card-title">${escapeHtml(cat.name)}</div>
               </div>
             </div>
+          `;
+        }).join('')}
+      </div>
+
+      <!-- Section: Popular in Harare -->
+      <div style="font-size:11px; font-weight:800; color:#64748B; text-transform:uppercase; letter-spacing:0.04em; margin:16px 2px 8px; display:flex; justify-content:space-between; align-items:center;">
+        <span>Popular in Harare</span>
+        <span style="color:#0052FF; font-size:10.5px; font-weight:700;">Instant Match</span>
+      </div>
+
+      <div class="indrive-history-list" style="margin-bottom:16px;">
+        ${topServices.slice(0, 4).map((srv) => `
+          <div class="indrive-history-row" onclick="selectTopServiceShortcut('${srv.categoryId}', ${srv.subIdx})" style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:14px; padding:10px 12px; margin-bottom:8px;">
+            <div class="history-icon-circle" style="background:#EFF6FF; color:#0052FF;">
+              ${getCategoryVectorSvg(srv.categoryId, false)}
+            </div>
+            <div style="flex:1; min-width:0; margin-left:10px;">
+              <div class="history-title" style="font-size:13px; font-weight:800; color:#0F172A;">${escapeHtml(srv.title)}</div>
+              <div class="history-sub" style="font-size:11.5px; color:#64748B;">${escapeHtml(srv.categoryName)} • ~${srv.duration || '1-2 hrs'}</div>
+            </div>
+            <div style="font-size:14px; font-weight:800; color:#0052FF; display:inline-flex; align-items:center; gap:4px;">
+              <span>~$${srv.priceUsd}</span>
+              ${uiIcon('chevronRight', 14)}
+            </div>
           </div>
-        </div>
-      `}
+        `).join('')}
+      </div>
+
+      <!-- Floating Bottom Vibrant Orange CTA Button -->
+      <div class="fh-floating-orange-cta-wrap">
+        <button type="button" class="fh-orange-pill-cta" onclick="openConfigureStep(0)">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          <span>Post a Request</span>
+        </button>
+      </div>
     </div>
   `;
 }
@@ -4429,276 +4578,513 @@ function selectTopServiceShortcut(catId, subIdx) {
 }
 
 // ----------------------------------------------------------------------------
-// CONFIGURE SERVICE TIER & RECOMMENDED FARE SHEET (COLLAPSIBLE)
+// REQUEST A SERVICE SCREEN (PHONE 2 & SCREEN 2: CLEAN FORM CARD)
 // ----------------------------------------------------------------------------
 function renderConfigureFareOverlay() {
   const categories = state.db.categories || [];
   const activeCat = categories.find((c) => c.id === state.selectedCategoryId) || categories[0];
   const subServices = activeCat?.subServices || [];
   const currentSub = subServices[state.selectedSubServiceIdx] || subServices[0] || { name: activeCat.fullName, defaultUsd: 25, duration: '2 hrs' };
-  const baseUsd = currentSub.defaultUsd || 25;
-
-  const tiers = [
-    {
-      key: 'STANDARD',
-      title: activeCat.name,
-      rating: '4.9',
-      eta: '~4 min away',
-      sub: 'Standard verified home-visit pro',
-      recUsd: baseUsd
-    },
-    {
-      key: 'PLATINUM',
-      title: 'Platinum Pro',
-      rating: '4.96',
-      eta: 'Master portfolio',
-      sub: 'Top-rated senior specialists',
-      recUsd: Math.round(baseUsd * 1.25)
-    },
-    {
-      key: 'ONE_CLICK',
-      title: 'One Click',
-      rating: '4.9',
-      eta: 'Priority dispatch',
-      sub: 'In a hurry? Skip bidding',
-      recUsd: Math.round(baseUsd * 1.15 * 2) / 2
-    },
-    {
-      key: 'BUDGET',
-      title: 'Junior Pro',
-      rating: '4.7',
-      eta: 'Rising talent',
-      sub: 'Budget-friendly home service',
-      recUsd: Math.max(8, Math.round(baseUsd * 0.8))
-    }
-  ];
-
-  const selectedTierObj = tiers.find((t) => t.key === state.selectedTierKey) || tiers[0];
-  const otherTiers = tiers.filter((t) => t.key !== state.selectedTierKey);
 
   return `
-    <div class="indrive-top-route-card">
-      <div class="top-route-row" onclick="openSuburbPickerModal()">
-        <span style="color:#10B981; display:inline-flex;">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-        </span>
-        <div class="top-route-text" style="display:flex; align-items:center; gap:6px; min-width:0;">
-          <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-            ${state.isCustomAddressSelected ? `${state.customAddress}, ${state.customSuburbLabel.split(',')[0]}` : `My Current Live Location`}
-          </span>
-          <span style="background:#DCFCE7; color:#15803D; font-size:9.5px; font-weight:800; padding:2px 7px; border-radius:99px; display:inline-flex; align-items:center; gap:3px; flex-shrink:0;">
-            <span style="width:5px; height:5px; border-radius:50%; background:#16A34A;"></span> ${state.isCustomAddressSelected ? 'Custom Address' : 'Live GPS'}
-          </span>
+    <div class="fh-main-screen-container" style="padding-top:14px;">
+      <div class="fh-request-form-card">
+        <!-- Form Header with Back Arrow -->
+        <div class="fh-form-header-row">
+          <button type="button" class="fh-form-back-btn" onclick="backToHomeStep()" title="Back">
+            ${uiIcon('arrowLeft', 18)}
+          </button>
+          <div class="fh-form-header-title">Request a Service</div>
         </div>
-        <button class="entrance-pill-btn" onclick="event.stopPropagation(); promptEntranceNote()">
-          <span>${state.entranceNote || 'Main Gate'}</span>
-        </button>
-      </div>
 
-      <div class="top-route-row" onclick="openServicePickerModal()">
-        <span style="color:var(--blue-primary); display:inline-flex;">${uiIcon('sparkle', 18)}</span>
-        <div class="top-route-text">
-          ${currentSub.name}
-          <span class="top-route-muted">~${currentSub.duration}</span>
+        <!-- Service Category Selector -->
+        <div class="fh-form-group">
+          <div class="fh-form-select-card" onclick="openServicePickerModal()">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <div style="color:#0052FF;">${getCategoryVectorSvg(activeCat.id, false)}</div>
+              <div>
+                <div style="font-size:14px; font-weight:800; color:#0F172A;">${escapeHtml(currentSub.name)}</div>
+                <div style="font-size:11.5px; color:#64748B;">${escapeHtml(activeCat.name)} • ~${currentSub.duration || '2 hrs'}</div>
+              </div>
+            </div>
+            <span style="color:#64748B;">${uiIcon('chevronDown', 16)}</span>
+          </div>
         </div>
-        <span style="color:var(--blue-primary); display:inline-flex;">${uiIcon('chevronRight', 16)}</span>
+
+        <!-- Describe Your Request -->
+        <div class="fh-form-group">
+          <div class="fh-form-label-row">
+            <span class="fh-form-label">Describe your request</span>
+            <span class="fh-form-counter" id="descCharCounter">${(state.draftNotes || '').length}/500</span>
+          </div>
+          <textarea
+            class="fh-form-textarea"
+            placeholder="Fix leaking kitchen tap and check water pressure."
+            maxlength="500"
+            oninput="handleDraftNotesInput(this)"
+          >${escapeHtml(state.draftNotes || '')}</textarea>
+        </div>
+
+        <!-- Budget (USD) -->
+        <div class="fh-form-group">
+          <div class="fh-form-label-row">
+            <span class="fh-form-label">Budget (USD)</span>
+            <span style="font-size:11px; color:#0052FF; font-weight:700;">inDrive Negotiation</span>
+          </div>
+          <div class="fh-budget-input-wrap">
+            <button type="button" class="fh-budget-adjust-btn" onclick="adjustDraftFare(-1)">−</button>
+            <div class="fh-budget-amount-box">
+              <div class="fh-budget-amount-val">${formatUsdPrice(state.draftFareUsd)}</div>
+              <div class="fh-budget-rec-text">Recommended: ${formatUsdPrice(state.recommendedFareUsd)}</div>
+            </div>
+            <button type="button" class="fh-budget-adjust-btn" onclick="adjustDraftFare(1)">+</button>
+          </div>
+        </div>
+
+        <!-- Location Suburb Selector -->
+        <div class="fh-form-group">
+          <div class="fh-form-label-row">
+            <span class="fh-form-label">Location</span>
+            <span style="font-size:11px; color:#10B981; font-weight:700;">Harare Suburb</span>
+          </div>
+          <div class="fh-form-select-card" onclick="openSuburbPickerModal()">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span style="color:#0052FF;">${uiIcon('pin', 16)}</span>
+              <span style="font-size:13.5px; font-weight:700; color:#0F172A;">
+                ${state.isCustomAddressSelected ? `${state.customAddress}, ${state.customSuburbLabel.split(',')[0]}` : state.customSuburbLabel.split(',')[0] || 'Avondale, Harare'}
+              </span>
+            </div>
+            <span style="color:#64748B;">${uiIcon('chevronDown', 16)}</span>
+          </div>
+        </div>
+
+        <!-- Media Attachments Row: Photo + WhatsApp Voice Note -->
+        <div class="fh-media-row">
+          <!-- Photos -->
+          <input type="file" id="stylePhotoInput" accept="image/*" style="display:none;" onchange="handleDraftStylePhotoUpload(this)" />
+          ${state.draftPhotoUrl ? `
+            <div class="fh-media-card" style="border-style:solid; border-color:#0052FF; background:#EFF6FF;" onclick="openImagePreviewModal('${state.draftPhotoUrl}', 'Attached Photo')">
+              <img src="${resolveMediaUrl(state.draftPhotoUrl, 'task')}" onerror="this.onerror=null; this.src='${DEFAULT_TASK_PHOTO_FALLBACK}';" style="width:36px; height:36px; border-radius:8px; object-fit:cover;" alt="Photo" />
+              <div style="font-size:11px; font-weight:800; color:#0052FF;">Photo Attached</div>
+              <span style="font-size:10px; color:#DC2626;" onclick="event.stopPropagation(); removeDraftStylePhoto();">Remove</span>
+            </div>
+          ` : `
+            <div class="fh-media-card" onclick="document.getElementById('stylePhotoInput').click()">
+              <span style="color:#0052FF;">${uiIcon('camera', 22)}</span>
+              <div style="font-size:11.5px; font-weight:700; color:#0F172A;">Add Photos</div>
+              <div style="font-size:10px; color:#94A3B8;">(Optional)</div>
+            </div>
+          `}
+
+          <!-- Voice Note -->
+          ${state.draftVoiceNoteUrl ? `
+            <div class="fh-media-card" style="border-style:solid; border-color:#10B981; background:#F0FDF4;" onclick="playAudioFromUrl('${state.draftVoiceNoteUrl}')">
+              <span style="color:#10B981;">${uiIcon('sparkle', 22)}</span>
+              <div style="font-size:11px; font-weight:800; color:#15803D;">Voice Note Ready</div>
+              <span style="font-size:10px; color:#DC2626;" onclick="event.stopPropagation(); state.draftVoiceNoteUrl=null; state.draftVoiceNoteDuration=0; renderAll(true);">Remove</span>
+            </div>
+          ` : state.isRecordingVoiceNote ? `
+            <div class="fh-media-card" style="border-style:solid; border-color:#EF4444; background:#FEF2F2;">
+              <span style="color:#DC2626; font-size:11px; font-weight:800;" id="voiceNoteTimerLabel">${formatVoiceSeconds(state.voiceNoteRecordSeconds)}</span>
+              <button type="button" class="small-pill-btn" style="background:#DC2626; color:#FFF; font-size:10px; margin-top:4px;" onclick="stopVoiceNoteRecording(true)">Done</button>
+            </div>
+          ` : `
+            <div class="fh-media-card" onclick="startVoiceNoteRecording()">
+              <div class="fh-media-voice-btn-circle">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+              </div>
+              <div style="font-size:11.5px; font-weight:700; color:#0F172A;">Add Voice Note</div>
+              <div style="font-size:10px; color:#94A3B8;">(Optional)</div>
+            </div>
+          `}
+        </div>
+
+        <!-- Submit Request Button -->
+        <button type="button" class="fh-orange-pill-cta" style="margin-top:8px;" onclick="submitServiceRequest()">
+          <span>Submit Request</span>
+        </button>
       </div>
     </div>
+  `;
+}
 
-    <div>
-      <div class="sheet-floating-controls">
-        <button class="indrive-circle-btn" onclick="backToHomeStep()" title="Back">
-          ${uiIcon('arrowLeft', 19)}
+// ----------------------------------------------------------------------------
+// OFFERS RECEIVED SCREEN (PHONE 4 & SCREEN 4: COMPARE OFFERS)
+// ----------------------------------------------------------------------------
+function renderCompareOffersOverlay(req) {
+  if (!req) req = getCustomerActiveRequest();
+  const activeOffers = (req?.offers || []).filter((o) => o.status !== 'DECLINED');
+
+  return `
+    <div class="fh-main-screen-container" style="padding-top:14px;">
+      <!-- Header -->
+      <div class="fh-form-header-row" style="margin-bottom:12px;">
+        <button type="button" class="fh-form-back-btn" onclick="switchCustomerTab('HOME')" title="Back">
+          ${uiIcon('arrowLeft', 18)}
         </button>
-        <button class="map-floating-gps-btn" onclick="useBrowserGeolocation(false)" title="Center on My Live Location">
-          ${uiIcon('crosshair', 19)}
-        </button>
+        <div>
+          <div class="fh-form-header-title">Offers Received</div>
+          <div style="font-size:12px; color:#64748B; font-weight:600;">${activeOffers.length} offer${activeOffers.length !== 1 ? 's' : ''} for this request</div>
+        </div>
       </div>
 
-      ${state.isSheetMinimized ? `
-        <div class="minimized-map-restore-bar" onclick="toggleSheetMinimize(false)">
-          <div>
-            <div style="font-size:13.5px; font-weight:800; color:var(--text-main);">${currentSub.name} • ${formatUsdPrice(state.draftFareUsd)}</div>
-            <div style="font-size:11.5px; color:var(--text-secondary); font-weight:600;">Full-screen map active • Tap to continue booking</div>
+      ${req ? `
+        <!-- Request Summary Banner -->
+        <div class="fh-request-summary-banner" style="margin-bottom:14px;">
+          <div class="fh-request-summary-thumb" style="display:flex; align-items:center; justify-content:center; color:#0052FF;">
+            ${getCategoryVectorSvg(req.categoryId, false)}
           </div>
-          <button type="button" class="minimized-restore-btn" onclick="toggleSheetMinimize(false); event.stopPropagation();">
-            ${uiIcon('chevronUp', 14)}
-            <span>Open Fare</span>
-          </button>
+          <div style="flex:1; min-width:0;">
+            <div style="font-size:14px; font-weight:800; color:#0F172A;">${escapeHtml(req.title)}</div>
+            <div style="font-size:12px; color:#64748B; display:flex; align-items:center; gap:4px; margin-top:2px;">
+              <span>📍 ${escapeHtml(req.suburbName || 'Harare')}</span>
+              <span>•</span>
+              <span style="font-weight:700; color:#0052FF;">$${req.budgetUsd}</span>
+            </div>
+          </div>
+        </div>
+      ` : ''}
+
+      ${activeOffers.length === 0 ? `
+        <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:18px; padding:32px 16px; text-align:center;">
+          <div style="font-size:15px; font-weight:800; color:#0F172A; margin-bottom:6px;">No offers yet</div>
+          <div style="font-size:12.5px; color:#64748B; max-width:260px; margin:0 auto 16px;">Nearby Harare specialists are reviewing your request. Offers will appear here in real time.</div>
+          <button type="button" class="btn-primary-blue" style="width:auto; height:36px; padding:0 18px; margin:0 auto;" onclick="switchCustomerTab('HOME')">View Live Radar</button>
         </div>
       ` : `
-        <div class="indrive-dark-sheet">
-          <div class="sheet-top-handle-bar">
-            <span style="font-size:11.5px; font-weight:800; color:var(--text-secondary);">Set Your Offer Fare (USD)</span>
-            <div class="sheet-grabber" onclick="toggleSheetMinimize(true)"></div>
-            <button class="sheet-collapse-pill" onclick="toggleSheetMinimize(true)">
-              ${uiIcon('map', 13)}
-              <span>Full Map</span>
-              ${uiIcon('chevronDown', 13)}
-            </button>
-          </div>
-
-          <div class="indrive-selected-tier-box">
-            <div class="selected-tier-top" onclick="openServicePickerModal()" style="cursor:pointer;">
-              <div>${getCategoryVectorSvg(activeCat.id, false)}</div>
-              <div class="selected-tier-info">
-                <div class="selected-tier-name">
-                  <span>${selectedTierObj.title}</span>
-                </div>
-                <div class="selected-tier-meta">
-                  ${uiIcon('star', 12)}
-                  <span>${selectedTierObj.rating} • ${selectedTierObj.eta}</span>
-                </div>
-                <div class="selected-tier-sub">${selectedTierObj.sub}</div>
-              </div>
-              <span style="color:var(--blue-primary);">${uiIcon('notes', 15)}</span>
-            </div>
-
-            <div class="selected-fare-adjuster">
-              <button class="fare-circle-btn" onclick="adjustDraftFare(-0.5)">−</button>
-              <div class="fare-center-display">
-                <div class="fare-big-amount">${formatUsdPrice(state.draftFareUsd)}</div>
-                <div class="fare-rec-sub">Recommended fare: ${formatUsdPrice(state.recommendedFareUsd)}</div>
-              </div>
-              <button class="fare-circle-btn" onclick="adjustDraftFare(0.5)">+</button>
-            </div>
-          </div>
-
-          ${otherTiers.map((t) => `
-            <div class="indrive-tier-row" onclick="selectConfigureTier('${t.key}', ${t.recUsd})">
-              <div>${getCategoryVectorSvg(activeCat.id, false)}</div>
-              <div class="selected-tier-info">
-                <div class="selected-tier-name">${t.title}</div>
-                <div class="selected-tier-meta">
-                  ${uiIcon('star', 12)}
-                  <span>${t.rating} • ${t.eta}</span>
-                </div>
-                <div class="selected-tier-sub">${t.sub}</div>
-              </div>
-              <div class="tier-row-price">${t.key === 'ONE_CLICK' ? formatUsdPrice(t.recUsd) : '~' + formatUsdPrice(t.recUsd)}</div>
-            </div>
-          `).join('')}
-
-          <!-- Original Feature: Special Instructions Bar with Anti-Leakage Shield & Quick Presets -->
-          <div class="special-notes-trigger-bar" onclick="openNotesModal()">
-            <div style="display:flex; align-items:center; gap:9px; min-width:0;">
-              <span style="color:var(--blue-primary); display:inline-flex;">${uiIcon('notes', 16)}</span>
-              <div style="min-width:0;">
-                <div style="font-size:12.5px; font-weight:800; color:var(--text-main); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-                  ${state.draftNotes ? state.draftNotes : 'Add special instructions or preset notes'}
-                </div>
-                <div style="font-size:11px; color:var(--text-secondary); font-weight:600; display:flex; align-items:center; gap:4px;">
-                  ${uiIcon('shield', 11)}
-                  <span>Phone numbers &amp; WhatsApp links auto-filtered</span>
-                </div>
-              </div>
-            </div>
-            <span style="color:var(--blue-primary); display:inline-flex;">${uiIcon('chevronRight', 15)}</span>
-          </div>
-
-          <div class="indrive-auto-accept-row" onclick="toggleDraftAutoAccept()">
-            <div class="auto-accept-left">
-              <span style="color:var(--blue-primary); display:inline-flex;">${uiIcon('navigation', 16)}</span>
-              <span>Auto-accept offer of ${formatUsdPrice(state.draftFareUsd)}</span>
-            </div>
-            <div class="indrive-switch ${state.draftAutoAccept ? 'on' : ''}">
-              <div class="indrive-switch-knob"></div>
-            </div>
-          </div>
-
-          <!-- Style Reference Photo Upload (1 photo of hairstyle, nails, fade) -->
-          <div style="margin-bottom:14px;">
-            <input type="file" id="stylePhotoInput" accept="image/*" style="display:none;" onchange="handleDraftStylePhotoUpload(this)" />
-            ${state.draftPhotoUrl ? `
-              <div class="style-photo-preview-wrap" style="background:#EFF6FF; border:1.5px solid #0066FF; border-radius:14px; padding:10px 12px; display:flex; align-items:center; gap:10px;">
-                <img src="${resolveMediaUrl(state.draftPhotoUrl, 'task')}" onerror="this.onerror=null; this.src='${DEFAULT_TASK_PHOTO_FALLBACK}';" class="style-photo-thumb" style="width:52px; height:52px; border-radius:10px; object-fit:cover; cursor:pointer;" onclick="openImagePreviewModal('${state.draftPhotoUrl}', 'Desired Style Photo')" alt="Style Photo" />
-                <div style="flex:1; min-width:0;">
-                  <div style="font-size:13px; font-weight:800; color:#0066FF;">Desired Style Photo Attached</div>
-                  <div style="font-size:11.5px; color:#1E40AF; cursor:pointer;" onclick="openImagePreviewModal('${state.draftPhotoUrl}', 'Desired Style Photo')">Tap photo to view full size</div>
-                </div>
-                <button type="button" class="small-pill-btn" style="color:#DC2626; border-color:rgba(220,38,38,0.3); background:#FEF2F2;" onclick="removeDraftStylePhoto()">
-                  Remove
-                </button>
-              </div>
-            ` : `
-              <button type="button" class="btn-dark-sec" style="width:100%; height:44px; font-size:13px; font-weight:700; justify-content:center; gap:8px; border:1.5px dashed var(--blue-border); background:var(--blue-soft);" onclick="document.getElementById('stylePhotoInput').click()">
-                <span style="color:var(--blue-primary); display:inline-flex;">${uiIcon('camera', 18)}</span>
-                <span>Attach 1 Photo of Desired Style (Hair, Nails, Fade)</span>
-              </button>
-            `}
-          </div>
-
-          <!-- WhatsApp Voice Note Recording (Audio instructions) -->
-          <div style="margin-bottom:14px;">
-            ${state.isRecordingVoiceNote ? `
-              <div class="wa-voice-record-bar">
-                <div class="wa-record-live-indicator">
-                  <span class="wa-pulse-mic-dot ${state.isVoiceNotePaused ? 'paused' : ''}"></span>
-                  <span id="voiceNoteTimerLabel" class="wa-record-timer-text">${formatVoiceSeconds(state.voiceNoteRecordSeconds)}</span>
-                </div>
-                <div class="wa-record-waveform-live">
-                  ${[14, 8, 18, 12, 20, 6, 16, 22, 10, 15, 7, 19, 11, 17, 9, 21, 13, 8, 16, 12, 18, 10, 14, 6]
-                    .map((h, i) => `<span class="wa-live-bar ${state.isVoiceNotePaused ? 'paused' : ''}" style="height:${h}px; animation-delay:${(i * 0.08).toFixed(2)}s;"></span>`).join('')}
-                </div>
-                <div class="wa-record-action-btns">
-                  <button type="button" class="wa-record-btn-icon trash" onclick="cancelVoiceNoteRecording()" title="Cancel & Discard">
-                    ${uiIcon('trash', 16)}
-                  </button>
-                  <button type="button" class="wa-record-btn-icon pause" onclick="togglePauseResumeVoiceNote()" title="${state.isVoiceNotePaused ? 'Resume Recording' : 'Pause Recording'}">
-                    ${state.isVoiceNotePaused ? uiIcon('mic', 16) : `<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>`}
-                  </button>
-                  <button type="button" class="wa-record-btn-icon send" onclick="stopRecordingVoiceNote()" title="Done & Attach">
-                    ${uiIcon('check', 17)}
-                  </button>
-                </div>
-              </div>
-            ` : state.draftVoiceNoteUrl ? `
-              <div class="wa-audio-player-bubble">
-                <button type="button" class="wa-play-circle-btn" onclick="toggleAudioPlay('draftVoice', '${state.draftVoiceNoteUrl}')" title="Play / Pause">
-                  <span id="audioPlayIcon_draftVoice" style="display:inline-flex;">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                  </span>
-                </button>
-                <div class="wa-audio-body">
-                  <div style="font-size:11px; font-weight:800; color:#047857; margin-bottom:2px;">Voice Instructions Attached</div>
-                  <div class="wa-scrubber-bars-track" onclick="handleWaveformSeekClick(event, 'draftVoice', '${state.draftVoiceNoteUrl}', ${state.draftVoiceNoteDuration || 10})">
-                    ${generateWhatsAppWaveformBarsHtml('draftVoice')}
+        <div class="fh-offers-container">
+          ${activeOffers.map((offer) => {
+            const prov = resolveProviderByIdOrOffer(offer.providerId, req, offer);
+            const distKm = (offer.distanceKm || calculateDistanceKm(prov?.lat, prov?.lng, req.lat, req.lng) || 2.4).toFixed(1);
+            return `
+              <div class="fh-provider-offer-card">
+                <div class="fh-offer-card-top">
+                  <div class="fh-offer-provider-left">
+                    <img
+                      src="${resolveMediaUrl(prov?.avatarUrl)}"
+                      onerror="this.onerror=null; this.src='${DEFAULT_AVATAR_FALLBACK}';"
+                      class="fh-offer-avatar"
+                      alt="${escapeHtml(offer.providerName || prov?.name || 'Pro')}"
+                    />
+                    <div style="min-width:0; flex:1;">
+                      <div class="fh-offer-name-row">
+                        <span class="fh-offer-name">${escapeHtml(offer.providerName || prov?.name || 'Harare Pro')}</span>
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="#0052FF"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+                      </div>
+                      <div class="fh-offer-meta-row">
+                        <span style="color:#F59E0B; display:inline-flex;">${uiIcon('star', 12)}</span>
+                        <span>${prov?.rating || '4.8'} (${prov?.completedBookings || 120} jobs)</span>
+                      </div>
+                      <div style="font-size:11px; color:#10B981; font-weight:700; margin-top:2px;">
+                        ● Available Today • ${distKm} km
+                      </div>
+                    </div>
                   </div>
-                  <div class="wa-audio-meta-row">
-                    <span id="audioTimeLabel_draftVoice">0:00 / ${formatVoiceSeconds(state.draftVoiceNoteDuration || 10)}</span>
-                    <button type="button" class="wa-speed-pill-btn" onclick="cycleAudioPlaybackSpeed('draftVoice')">
-                      <span id="audioSpeedLabel_draftVoice">1.0x</span>
-                    </button>
-                  </div>
+                  <div class="fh-offer-price-tag">$${offer.priceUsd}</div>
                 </div>
-                <button type="button" class="wa-record-btn-icon trash" style="background:transparent; border:none;" onclick="removeDraftVoiceNote()" title="Delete Voice Note">
-                  ${uiIcon('trash', 17)}
-                </button>
+
+                <div class="fh-offer-actions-row">
+                  <button type="button" class="fh-btn-ghost" onclick="openProviderPortfolioModal('${prov?.id || offer.providerId}')">
+                    View Profile
+                  </button>
+                  <button type="button" class="fh-btn-orange" onclick="acceptOffer('${req.id}', '${offer.id}')">
+                    Accept Offer
+                  </button>
+                </div>
               </div>
-            ` : `
-              <button type="button" class="btn-dark-sec" style="width:100%; height:44px; font-size:13px; font-weight:700; justify-content:center; gap:8px; border:1.5px dashed var(--blue-border); background:var(--blue-soft);" onclick="startRecordingVoiceNote()">
-                <span style="color:var(--blue-primary); display:inline-flex;">${uiIcon('mic', 18)}</span>
-                <span>Record Voice Note</span>
-              </button>
-            `}
-          </div>
-
-          <div class="indrive-find-footer-row">
-            <button class="footer-icon-btn" onclick="openPaymentModal()" title="Payment Method (${state.draftPaymentMethod})">
-              ${uiIcon('wallet', 20)}
-            </button>
-
-            <button class="indrive-find-offers-btn" onclick="submitServiceRequest()">
-              <span>Find offers</span>
-              ${uiIcon('chevronRight', 17)}
-            </button>
-
-            <button class="footer-icon-btn" onclick="openNotesModal()" title="Special Instructions">
-              ${uiIcon('notes', 19)}
-            </button>
-          </div>
+            `;
+          }).join('')}
         </div>
       `}
+    </div>
+  `;
+}
+
+// ----------------------------------------------------------------------------
+// CUSTOMER REQUESTS TAB
+// ----------------------------------------------------------------------------
+function renderCustomerRequestsTab() {
+  const req = getCustomerActiveRequest();
+  const pastRequests = (state.db?.requests || []).filter((r) => r.customerId === state.currentUser?.id && r.status === 'COMPLETED');
+
+  return `
+    <div class="fh-main-screen-container" style="padding-top:14px;">
+      <div style="font-size:18px; font-weight:800; color:#0F172A; margin-bottom:12px;">My Requests</div>
+
+      ${req ? `
+        <div class="fh-request-form-card" style="border:1.5px solid #0052FF; margin-bottom:16px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <span style="background:#EFF6FF; color:#0052FF; font-size:11px; font-weight:800; padding:3px 10px; border-radius:99px;">Active: ${req.status}</span>
+            <span style="font-size:15px; font-weight:800; color:#0052FF;">$${req.budgetUsd}</span>
+          </div>
+          <div style="font-size:15px; font-weight:800; color:#0F172A; margin-bottom:2px;">${escapeHtml(req.title)}</div>
+          <div style="font-size:12px; color:#64748B; margin-bottom:12px;">📍 ${escapeHtml(req.suburbName || 'Harare')}</div>
+          <button type="button" class="fh-orange-pill-cta" style="height:40px; font-size:13px;" onclick="switchCustomerTab('HOME')">
+            View Live Status
+          </button>
+        </div>
+      ` : ''}
+
+      <div style="font-size:13px; font-weight:800; color:#64748B; text-transform:uppercase; margin-bottom:8px;">Past Visits</div>
+
+      ${pastRequests.length === 0 ? `
+        <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:16px; padding:24px; text-align:center; color:#64748B; font-size:13px;">
+          No past completed requests yet.
+        </div>
+      ` : `
+        <div style="display:flex; flex-direction:column; gap:8px;">
+          ${pastRequests.map((r) => `
+            <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:14px; padding:12px 14px; display:flex; justify-content:space-between; align-items:center;">
+              <div>
+                <div style="font-size:13.5px; font-weight:800; color:#0F172A;">${escapeHtml(r.title)}</div>
+                <div style="font-size:11.5px; color:#64748B;">📍 ${escapeHtml(r.suburbName || 'Harare')} • Completed</div>
+              </div>
+              <div style="font-size:14px; font-weight:800; color:#0052FF;">$${r.agreedTotalUsd || r.budgetUsd}</div>
+            </div>
+          `).join('')}
+        </div>
+      `}
+    </div>
+  `;
+}
+
+// ----------------------------------------------------------------------------
+// CUSTOMER PROFILE TAB
+// ----------------------------------------------------------------------------
+function renderCustomerProfileTab() {
+  const user = state.currentUser;
+  const rating = user?.rating ? Number(user.rating).toFixed(1) : '5.0';
+  const visits = user?.completedBookings || 0;
+  const walletBal = Number(user?.walletBalanceUsd || 0).toFixed(2);
+
+  return `
+    <div class="fh-main-screen-container" style="padding-top:14px;">
+      <!-- Profile Card -->
+      <div class="fh-profile-card" style="margin-bottom:12px;">
+        <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
+          <div class="drawer-avatar-circle" style="width:52px; height:52px; border-radius:50%; background:#EFF6FF; color:#0052FF; font-size:18px; font-weight:800; display:flex; align-items:center; justify-content:center;">
+            ${user?.avatarUrl
+              ? `<img src="${resolveMediaUrl(user.avatarUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_AVATAR_FALLBACK}';" style="width:100%; height:100%; border-radius:50%; object-fit:cover;" alt="Avatar" />`
+              : `<span>${user?.avatarInitials || (user?.name ? user.name.slice(0, 2).toUpperCase() : 'FH')}</span>`
+            }
+          </div>
+          <div style="flex:1; min-width:0;">
+            <div style="font-size:16px; font-weight:800; color:#0F172A;">${escapeHtml(user?.name || 'Findit Client')}</div>
+            <div style="font-size:12px; color:#64748B; font-weight:600;">${escapeHtml(user?.phone || '+263 77')} • ${escapeHtml(user?.suburbName || 'Avondale')}</div>
+            <div style="font-size:11px; font-weight:800; color:#0052FF; margin-top:2px;">ID: ${user?.finditId || 'FH-USR-VERIFIED'}</div>
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; padding-top:10px; border-top:1px solid #F1F5F9;">
+          <div style="background:#F8FAFC; border-radius:12px; padding:8px 10px; text-align:center;">
+            <div style="font-size:11px; color:#64748B; font-weight:600;">Rating</div>
+            <div style="font-size:15px; font-weight:800; color:#0F172A;">★ ${rating}</div>
+          </div>
+          <div style="background:#F8FAFC; border-radius:12px; padding:8px 10px; text-align:center;">
+            <div style="font-size:11px; color:#64748B; font-weight:600;">Completed</div>
+            <div style="font-size:15px; font-weight:800; color:#0F172A;">${visits} visits</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Mode Switch Card -->
+      <div class="fh-role-switch-banner" onclick="toggleClientAndProviderMode()">
+        <div>
+          <div style="font-size:14px; font-weight:800;">Switch to Service Provider</div>
+          <div style="font-size:11.5px; opacity:0.85;">Offer services in Harare &amp; earn your price</div>
+        </div>
+        <span style="font-size:18px;">➔</span>
+      </div>
+
+      <!-- Menu Items List -->
+      <div class="fh-profile-menu-list">
+        <div class="fh-profile-menu-row" onclick="openWalletTopupModal()">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span style="color:#0052FF;">${uiIcon('wallet', 18)}</span>
+            <span>Wallet &amp; EcoCash Balance</span>
+          </div>
+          <span style="color:#0052FF; font-weight:800;">$${walletBal}</span>
+        </div>
+        <div class="fh-profile-menu-row" onclick="switchCustomerTab('REQUESTS')">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span style="color:#0052FF;">${uiIcon('notes', 18)}</span>
+            <span>My Service History</span>
+          </div>
+          ${uiIcon('chevronRight', 16)}
+        </div>
+        <div class="fh-profile-menu-row" onclick="openDisputeHistoryModal()">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span style="color:#0052FF;">${uiIcon('shield', 18)}</span>
+            <span>Dispute &amp; Resolution Center</span>
+          </div>
+          ${uiIcon('chevronRight', 16)}
+        </div>
+        <div class="fh-profile-menu-row" onclick="openSafetyCenterModal()">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span style="color:#0052FF;">${uiIcon('shield', 18)}</span>
+            <span>Safety Center &amp; Emergency SOS</span>
+          </div>
+          ${uiIcon('chevronRight', 16)}
+        </div>
+        <div class="fh-profile-menu-row" onclick="openWhatsAppDirectSupport()">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span style="color:#10B981;">💬</span>
+            <span>WhatsApp Support</span>
+          </div>
+          ${uiIcon('chevronRight', 16)}
+        </div>
+        <div class="fh-profile-menu-row" onclick="logoutCurrentAccount()" style="color:#DC2626;">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span>🚪</span>
+            <span>Log Out</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ----------------------------------------------------------------------------
+// PROVIDER PROFILE TAB
+// ----------------------------------------------------------------------------
+function renderProviderProfileTab() {
+  const prov = state.currentUser || state.db?.providers?.[0];
+  const walletBal = Number(prov?.walletBalanceUsd || 0).toFixed(2);
+  const rating = prov?.rating ? Number(prov.rating).toFixed(1) : '4.9';
+  const completed = prov?.completedBookings || 0;
+
+  return `
+    <div class="fh-main-screen-container" style="padding-top:14px;">
+      <!-- Profile Card -->
+      <div class="fh-profile-card" style="margin-bottom:12px;">
+        <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
+          <div class="drawer-avatar-circle" style="width:52px; height:52px; border-radius:50%; background:#EFF6FF; color:#0052FF; font-size:18px; font-weight:800; display:flex; align-items:center; justify-content:center;">
+            ${prov?.avatarUrl
+              ? `<img src="${resolveMediaUrl(prov.avatarUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_AVATAR_FALLBACK}';" style="width:100%; height:100%; border-radius:50%; object-fit:cover;" alt="Avatar" />`
+              : `<span>${prov?.avatarInitials || (prov?.name ? prov.name.slice(0, 2).toUpperCase() : 'FH')}</span>`
+            }
+          </div>
+          <div style="flex:1; min-width:0;">
+            <div style="font-size:16px; font-weight:800; color:#0F172A; display:flex; align-items:center; gap:6px;">
+              <span>${escapeHtml(prov?.name || 'Specialist')}</span>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="#0052FF"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+            </div>
+            <div style="font-size:12px; color:#64748B;">${escapeHtml(prov?.phone || '+263 77')}</div>
+            <div style="font-size:11px; font-weight:800; color:#0052FF; margin-top:2px;">ID: ${prov?.finditId || 'FH-PRO-VERIFIED'}</div>
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; padding-top:10px; border-top:1px solid #F1F5F9;">
+          <div style="background:#F8FAFC; border-radius:12px; padding:8px 10px; text-align:center;">
+            <div style="font-size:11px; color:#64748B; font-weight:600;">Rating</div>
+            <div style="font-size:15px; font-weight:800; color:#0F172A;">★ ${rating}</div>
+          </div>
+          <div style="background:#F8FAFC; border-radius:12px; padding:8px 10px; text-align:center;">
+            <div style="font-size:11px; color:#64748B; font-weight:600;">Completed Jobs</div>
+            <div style="font-size:15px; font-weight:800; color:#0F172A;">${completed}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Mode Switch Card -->
+      <div class="fh-role-switch-banner" onclick="toggleClientAndProviderMode()">
+        <div>
+          <div style="font-size:14px; font-weight:800;">Switch to Client Mode</div>
+          <div style="font-size:11.5px; opacity:0.85;">Hire specialists &amp; request home services</div>
+        </div>
+        <span style="font-size:18px;">➔</span>
+      </div>
+
+      <!-- Menu Items List -->
+      <div class="fh-profile-menu-list">
+        <div class="fh-profile-menu-row" onclick="openWalletTopupModal()">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span style="color:#0052FF;">${uiIcon('wallet', 18)}</span>
+            <span>Provider Wallet (Commission Balance)</span>
+          </div>
+          <span style="color:#0052FF; font-weight:800;">$${walletBal}</span>
+        </div>
+        <div class="fh-profile-menu-row" onclick="state.providerTab='CATALOGUE'; renderUiOverlay();">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span style="color:#0052FF;">${uiIcon('list', 18)}</span>
+            <span>Service Catalogue &amp; Rates</span>
+          </div>
+          ${uiIcon('chevronRight', 16)}
+        </div>
+        <div class="fh-profile-menu-row" onclick="openSafetyCenterModal()">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span style="color:#0052FF;">${uiIcon('shield', 18)}</span>
+            <span>Safety Center &amp; Emergency SOS</span>
+          </div>
+          ${uiIcon('chevronRight', 16)}
+        </div>
+        <div class="fh-profile-menu-row" onclick="openWhatsAppDirectSupport()">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span style="color:#10B981;">💬</span>
+            <span>WhatsApp Provider Support</span>
+          </div>
+          ${uiIcon('chevronRight', 16)}
+        </div>
+        <div class="fh-profile-menu-row" onclick="logoutCurrentAccount()" style="color:#DC2626;">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span>🚪</span>
+            <span>Log Out</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ----------------------------------------------------------------------------
+// PROVIDER HOME TAB
+// ----------------------------------------------------------------------------
+function renderProviderHomeTab(prov, openRequests, activeJob) {
+  const completedToday = 2;
+  const walletBal = Number(prov?.walletBalanceUsd || 0).toFixed(2);
+
+  return `
+    <div class="fh-main-screen-container" style="padding-top:14px;">
+      <!-- Active Job Card if any -->
+      ${activeJob ? `
+        <div class="fh-request-form-card" style="border:2px solid #0052FF; cursor:pointer;" onclick="switchProviderTab('ACTIVE_JOB')">
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+            <span style="background:#EFF6FF; color:#0052FF; font-size:11px; font-weight:800; padding:3px 10px; border-radius:99px;">Active Visit in Progress</span>
+            <span style="font-size:15px; font-weight:900; color:#0052FF;">$${activeJob.agreedTotalUsd || activeJob.budgetUsd}</span>
+          </div>
+          <div style="font-size:14px; font-weight:800; color:#0F172A; margin-bottom:2px;">${escapeHtml(activeJob.customerName)}</div>
+          <div style="font-size:12px; color:#64748B; margin-bottom:10px;">📍 ${escapeHtml(activeJob.suburbName || 'Harare')}</div>
+          <button type="button" class="fh-orange-pill-cta" style="height:38px; font-size:13px;" onclick="switchProviderTab('ACTIVE_JOB'); event.stopPropagation();">
+            Continue Visit
+          </button>
+        </div>
+      ` : ''}
+
+      <!-- Quick Stats Cards -->
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px;">
+        <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:16px; padding:12px 14px;">
+          <div style="font-size:11px; color:#64748B; font-weight:700; text-transform:uppercase;">Today's Jobs</div>
+          <div style="font-size:22px; font-weight:900; color:#0052FF; margin-top:2px;">${completedToday}</div>
+          <div style="font-size:11px; color:#10B981; font-weight:600; margin-top:2px;">Completed</div>
+        </div>
+        <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:16px; padding:12px 14px;">
+          <div style="font-size:11px; color:#64748B; font-weight:700; text-transform:uppercase;">Wallet Balance</div>
+          <div style="font-size:22px; font-weight:900; color:#0F172A; margin-top:2px;">$${walletBal}</div>
+          <div style="font-size:11px; color:#0052FF; font-weight:600; margin-top:2px; cursor:pointer;" onclick="openWalletTopupModal()">Top Up</div>
+        </div>
+      </div>
+
+      <!-- Opportunities Banner -->
+      <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:18px; padding:16px; margin-bottom:14px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+          <div style="font-size:15px; font-weight:800; color:#0F172A;">Job Opportunities</div>
+          <span style="background:#FF7A00; color:#FFF; font-size:10px; font-weight:800; padding:2px 8px; border-radius:99px;">${openRequests.length} Available</span>
+        </div>
+        <div style="font-size:12.5px; color:#64748B; margin-bottom:14px;">Clients in Harare are currently requesting services in your categories.</div>
+        <button type="button" class="fh-orange-pill-cta" style="height:42px; font-size:14px;" onclick="switchProviderTab('FEED')">
+          Browse Opportunities (${openRequests.length})
+        </button>
+      </div>
     </div>
   `;
 }
@@ -4901,14 +5287,50 @@ function renderBookedTrackingOverlay(req) {
   const isArrived = req.status === 'ARRIVED';
   const isInProgress = req.status === 'IN_PROGRESS' || Boolean(req.pinVerifiedByProvider);
 
+  // SCREEN 6: SERVICE IN PROGRESS (Exact implementation from Screenshot 2, Phone 6)
+  if (isInProgress) {
+    return `
+      <div class="fh-main-screen-container" style="padding-top:14px;">
+        <div class="fh-request-form-card" style="text-align:center;">
+          <div class="fh-form-header-row" style="margin-bottom:14px; text-align:left;">
+            <div class="fh-form-header-title">Request in Progress</div>
+          </div>
+          <div class="fh-in-progress-shield">
+            <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+          </div>
+          <div style="font-size:20px; font-weight:800; color:#0F172A; margin-bottom:4px;">Service in Progress!</div>
+          <div style="font-size:13px; color:#64748B; line-height:1.45; margin-bottom:16px;">
+            <strong>${escapeHtml(prov?.name || 'Your specialist')}</strong> has arrived and is working on your request.
+          </div>
+
+          <button type="button" class="fh-orange-pill-cta" style="margin-bottom:14px;" onclick="openChatDrawer('${req.id}', '${prov?.id}')">
+            <span>Contact Pro</span>
+          </button>
+
+          <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:14px; padding:12px 14px; text-align:left; margin-bottom:14px;">
+            <div style="font-size:11px; font-weight:800; color:#64748B; text-transform:uppercase; margin-bottom:6px;">Service Details</div>
+            <div style="font-size:13.5px; font-weight:800; color:#0F172A; margin-bottom:4px;">${escapeHtml(req.title)}</div>
+            <div style="font-size:12px; color:#64748B; margin-bottom:2px;">📍 ${escapeHtml(req.suburbName || 'Harare')}</div>
+            <div style="font-size:13.5px; font-weight:800; color:#0052FF;">Agreed Total: ${formatUsdPrice(agreedPrice)}</div>
+          </div>
+
+          <!-- Dispute only: cancellation blocked once 1st PIN verified -->
+          <button type="button" class="btn-dark-sec" style="color:#DC2626; border-color:#FECACA; background:#FEF2F2;" onclick="openDisputeModal('${req.id}')">
+            ${uiIcon('shield', 14)}
+            <span>Report Dispute / Need Help</span>
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
   let statusIcon = uiIcon('routeCar', 18);
   let statusHeadline = `${prov?.shortName || prov?.name || 'Pro'} is arriving in ~${acceptedOffer?.etaMinutes || 4} min`;
   if (req.status === 'ARRIVED') {
     statusIcon = uiIcon('pin', 18);
     statusHeadline = `${prov?.shortName || prov?.name} is waiting outside!`;
-  } else if (req.status === 'IN_PROGRESS' || req.pinVerifiedByProvider) {
-    statusIcon = uiIcon('sparkle', 18);
-    statusHeadline = `Service in progress at your home`;
   }
 
   return `
@@ -7177,21 +7599,83 @@ function renderModalLayer() {
     return;
   }
 
-  // DESIRED STYLE REFERENCE PHOTO PREVIEW MODAL
+  // DESIRED STYLE REFERENCE PHOTO / VIDEO PREVIEW MODAL
   if (state.activeModal === 'IMAGE_PREVIEW') {
     const { photoUrl, title } = state.modalData || {};
+    const isVideo = photoUrl && (photoUrl.endsWith('.mp4') || photoUrl.endsWith('.webm') || photoUrl.includes('video'));
     root.innerHTML = `
       <div class="modal-backdrop" onclick="closeModal()">
         <div class="indrive-modal-sheet" onclick="event.stopPropagation()" style="text-align:center; padding:18px;">
           <div class="cancel-sheet-header" style="margin-bottom:14px;">
-            <div class="cancel-sheet-title">${title || 'Style Reference Photo'}</div>
+            <div class="cancel-sheet-title">${escapeHtml(title || 'Media Reference')}</div>
             <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
           </div>
           <div style="max-height:68vh; overflow:auto; border-radius:14px; border:1.5px solid var(--border-light); background:#0F172A; display:flex; align-items:center; justify-content:center;">
-            <img src="${resolveMediaUrl(photoUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_TASK_PHOTO_FALLBACK}';" style="max-width:100%; max-height:65vh; display:block; object-fit:contain; border-radius:14px;" alt="Desired Style Reference" />
+            ${isVideo ? `
+              <video src="${resolveMediaUrl(photoUrl)}" controls playsinline style="max-width:100%; max-height:65vh; display:block; border-radius:14px;"></video>
+            ` : `
+              <img src="${resolveMediaUrl(photoUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_TASK_PHOTO_FALLBACK}';" style="max-width:100%; max-height:65vh; display:block; object-fit:contain; border-radius:14px;" alt="Desired Style Reference" />
+            `}
           </div>
           <div style="font-size:12px; font-weight:700; color:var(--text-secondary); margin-top:12px;">
-            Exact client reference photo attached to this service booking
+            ${isVideo ? 'Tap video to play, pause, or seek' : 'Exact client reference photo attached to this service booking'}
+          </div>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // PROVIDER AVAILABILITY STATUS PICKER MODAL
+  if (state.activeModal === 'STATUS_PICKER') {
+    root.innerHTML = `
+      <div class="modal-backdrop" onclick="closeModal()">
+        <div class="indrive-modal-sheet" onclick="event.stopPropagation()" style="border-radius:24px 24px 0 0; padding:18px 16px 24px;">
+          <div class="cancel-sheet-header" style="margin-bottom:14px;">
+            <div class="cancel-sheet-title">Set Your Availability</div>
+            <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:8px;">
+            <div class="fh-form-select-card" onclick="setProviderStatus('AVAILABLE'); closeModal();">
+              <div style="display:flex; align-items:center; gap:10px;">
+                <span class="fh-status-dot-green"></span>
+                <div>
+                  <div style="font-size:14px; font-weight:800; color:#0F172A;">Available (Online)</div>
+                  <div style="font-size:11.5px; color:#64748B;">Receive new service requests in Harare</div>
+                </div>
+              </div>
+              ${(state.providerStatus === 'AVAILABLE' || (!state.providerStatus && state.currentUser?.isOnline !== false)) ? '<span style="color:#10B981; font-weight:900;">&#10003;</span>' : ''}
+            </div>
+            <div class="fh-form-select-card" onclick="setProviderStatus('BUSY'); closeModal();">
+              <div style="display:flex; align-items:center; gap:10px;">
+                <span class="fh-status-dot-yellow"></span>
+                <div>
+                  <div style="font-size:14px; font-weight:800; color:#0F172A;">Busy (Working)</div>
+                  <div style="font-size:11.5px; color:#64748B;">Currently working with a client</div>
+                </div>
+              </div>
+              ${state.providerStatus === 'BUSY' ? '<span style="color:#F59E0B; font-weight:900;">&#10003;</span>' : ''}
+            </div>
+            <div class="fh-form-select-card" onclick="setProviderStatus('ON_BREAK', 15); closeModal();">
+              <div style="display:flex; align-items:center; gap:10px;">
+                <span class="fh-status-dot-blue"></span>
+                <div>
+                  <div style="font-size:14px; font-weight:800; color:#0F172A;">15 Min Break</div>
+                  <div style="font-size:11.5px; color:#64748B;">Pause job alerts for 15 minutes</div>
+                </div>
+              </div>
+              ${state.providerStatus === 'ON_BREAK' ? '<span style="color:#3B82F6; font-weight:900;">&#10003;</span>' : ''}
+            </div>
+            <div class="fh-form-select-card" onclick="setProviderStatus('OFFLINE'); closeModal();">
+              <div style="display:flex; align-items:center; gap:10px;">
+                <span class="fh-status-dot-gray"></span>
+                <div>
+                  <div style="font-size:14px; font-weight:800; color:#0F172A;">Offline</div>
+                  <div style="font-size:11.5px; color:#64748B;">Clock out and stop all alerts</div>
+                </div>
+              </div>
+              ${state.providerStatus === 'OFFLINE' ? '<span style="color:#64748B; font-weight:900;">&#10003;</span>' : ''}
+            </div>
           </div>
         </div>
       </div>
@@ -9549,6 +10033,33 @@ function renderProviderModeOverlay() {
   const myPendingApprovals = (state.db.approvalQueue || []).filter((a) => a.providerId === prov.id && a.status === 'PENDING');
 
   const currentTab = state.providerTab || (activeJob ? 'ACTIVE_JOB' : 'FEED');
+
+  let bodyHtml = '';
+  if (currentTab === 'HOME') {
+    bodyHtml = renderProviderHomeTab(prov, openRequests, activeJob);
+  } else if (currentTab === 'ACTIVE_JOB') {
+    bodyHtml = `<div class="fh-main-screen-container" style="padding-top:14px;">${renderProviderActiveVisitTab(prov, activeJob)}</div>`;
+  } else if (currentTab === 'PROFILE') {
+    bodyHtml = renderProviderProfileTab();
+  } else if (currentTab === 'CATALOGUE') {
+    bodyHtml = `<div class="fh-main-screen-container" style="padding-top:14px;">${renderProviderCatalogueTab(prov, myPendingApprovals)}</div>`;
+  } else {
+    // FEED (Opportunities)
+    bodyHtml = `<div class="fh-main-screen-container" style="padding-top:14px;">${renderProviderRequestsFeedTab(prov, openRequests, activeJob)}</div>`;
+  }
+
+  return `
+    ${renderCurvedBrandHeader('PROVIDER')}
+    ${bodyHtml}
+  `;
+}
+
+function _legacy_renderProviderModeOverlay_unused() {
+  const currentTab = 'FEED';
+  const prov = null;
+  const activeJob = null;
+  const openRequests = [];
+  const myPendingApprovals = [];
 
   return `
     <div class="provider-top-bar" style="justify-content:space-between;">
