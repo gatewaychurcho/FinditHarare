@@ -2350,6 +2350,46 @@ const wsClients = new Set();
 const pendingOtpStore = new Map();
 const staggeredBidTimers = new Map();
 
+function publishToPusher(eventType, payload = {}) {
+  try {
+    const appId = process.env.PUSHER_APP_ID || '2193489';
+    const key = process.env.PUSHER_KEY || '315bc9cc65277fb63a58';
+    const secret = process.env.PUSHER_SECRET || '64aac0e9bbd924a764cc';
+    const cluster = process.env.PUSHER_CLUSTER || 'ap2';
+
+    const body = JSON.stringify({
+      name: eventType || 'UPDATE',
+      channels: ['findit-harare'],
+      data: JSON.stringify(payload || {})
+    });
+
+    const bodyMd5 = crypto.createHash('md5').update(body, 'utf8').digest('hex');
+    const timestamp = Math.floor(Date.now() / 1000);
+    const path = `/apps/${appId}/events`;
+    const query = `auth_key=${key}&auth_timestamp=${timestamp}&auth_version=1.0&body_md5=${bodyMd5}`;
+    const stringToSign = `POST\n${path}\n${query}`;
+    const authSignature = crypto.createHmac('sha256', secret).update(stringToSign).digest('hex');
+
+    const fullUrl = `https://api-${cluster}.pusher.com${path}?${query}&auth_signature=${authSignature}`;
+
+    const req = https.request(fullUrl, {
+      method: 'POST',
+      rejectUnauthorized: false,
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(body)
+      }
+    }, (res) => {
+      res.resume();
+    });
+    req.on('error', () => {});
+    req.write(body);
+    req.end();
+  } catch (e) {
+    // silently catch so local server is never blocked
+  }
+}
+
 function broadcastUpdate(eventType, payload = {}) {
   const jsonStr = JSON.stringify({ eventType, payload, timestamp: new Date().toISOString() });
   const sseMsg = `data: ${jsonStr}\n\n`;
@@ -2371,6 +2411,9 @@ function broadcastUpdate(eventType, payload = {}) {
       wsClients.delete(client);
     }
   }
+
+  // 3. Instant Push via Pusher Channels WebSockets (0ms global sync)
+  publishToPusher(eventType, payload);
 }
 
 function setupWebSocketServer(httpServer) {

@@ -1131,7 +1131,32 @@ function stopFastLiveOffersPoll() {
   }
 }
 
+let pusherInstance = null;
+function initPusherRealtime() {
+  if (typeof Pusher === 'undefined') return;
+  if (pusherInstance) return;
+  try {
+    pusherInstance = new Pusher('315bc9cc65277fb63a58', {
+      cluster: 'ap2',
+      forceTLS: true
+    });
+    const channel = pusherInstance.subscribe('findit-harare');
+    channel.bind_global((eventName, data) => {
+      if (!eventName || eventName.startsWith('pusher:') || eventName.startsWith('pusher_internal:')) return;
+      let payload = data;
+      if (typeof data === 'string') {
+        try { payload = JSON.parse(data); } catch (e) {}
+      }
+      handleIncomingRealtimeEvent({ eventType: eventName, payload });
+    });
+    console.log('[Findit] Pusher Realtime WebSocket connected (cluster: ap2)');
+  } catch (err) {
+    console.warn('Pusher init notice:', err);
+  }
+}
+
 function initRealtimeSync() {
+  initPusherRealtime();
   connectWebSocket();
   if (state.isAuthenticated && state.currentUser) {
     try { startActiveCallPolling(); } catch (e) {}

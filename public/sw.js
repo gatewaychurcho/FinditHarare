@@ -16,7 +16,8 @@ const SHELL_ASSETS = [
   '/icons/apple-touch-icon.png',
   '/vendor/leaflet.css',
   '/vendor/leaflet.js',
-  '/vendor/AgoraRTC_N-4.20.0.js'
+  '/vendor/AgoraRTC_N-4.20.0.js',
+  '/vendor/pusher.min.js'
 ];
 
 self.addEventListener('install', (evt) => {
