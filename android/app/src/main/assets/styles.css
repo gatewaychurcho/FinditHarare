@@ -4395,55 +4395,43 @@ html, body {
    PREMIUM IN-DRIVE + MARKETPLACE UI / UX SYSTEM (NEW FORM & TABS TRANSFORMATION)
    ============================================================================ */
 
-/* Top Royal Blue Curved Header */
+/* Top Royal Blue Header (Matching User's Mockup in Image 1) */
 .fh-curved-brand-header {
   position: relative;
   z-index: 30;
   pointer-events: auto;
-  background: linear-gradient(180deg, #0052FF 0%, #0047DF 75%, #003ECC 100%);
-  border-radius: 0 0 38px 38px;
-  padding: 16px 18px 26px;
-  box-shadow: 0 12px 30px rgba(0, 82, 255, 0.25);
+  background: linear-gradient(180deg, #0740B8 0%, #0047DF 55%, #0036B8 100%);
+  padding: 20px 16px 26px;
   color: #FFFFFF;
+  box-shadow: 0 10px 30px rgba(0, 60, 200, 0.25);
 }
 
 .fh-header-top-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
 }
 
-.fh-header-user-info {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-  flex: 1;
-}
-
-.fh-header-avatar {
-  width: 42px;
-  height: 42px;
+.fh-header-logo-badge {
+  width: 44px;
+  height: 44px;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.18);
-  border: 1.5px solid rgba(255, 255, 255, 0.35);
+  background: #FFFFFF;
+  padding: 3px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: 800;
-  font-size: 14px;
-  color: #FFFFFF;
-  flex-shrink: 0;
   cursor: pointer;
   overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.4);
 }
 
-.fh-header-avatar img {
+.fh-header-logo-badge img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .fh-header-titles {
@@ -4452,23 +4440,19 @@ html, body {
 }
 
 .fh-header-greeting {
-  font-size: 16px;
+  font-size: 22px;
   font-weight: 800;
   color: #FFFFFF;
-  line-height: 1.25;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
 }
 
 .fh-header-sub {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.82);
+  font-size: 13.5px;
+  color: rgba(255, 255, 255, 0.88);
   font-weight: 500;
+  margin-top: 3px;
   line-height: 1.3;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .fh-header-actions {
@@ -4479,11 +4463,11 @@ html, body {
 }
 
 .fh-header-bell-btn {
-  width: 38px;
-  height: 38px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.16);
-  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.3);
   color: #FFFFFF;
   display: flex;
   align-items: center;
@@ -4494,7 +4478,7 @@ html, body {
 }
 
 .fh-header-bell-btn:active {
-  background: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.3);
 }
 
 .fh-header-badge-dot {
@@ -4569,13 +4553,15 @@ html, body {
 /* Header Search Bar */
 .fh-header-search-bar {
   background: #FFFFFF;
-  border-radius: 14px;
-  padding: 10px 14px;
+  border-radius: 99px;
+  height: 48px;
+  padding: 0 16px;
   display: flex;
   align-items: center;
-  gap: 10px;
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.08);
+  gap: 12px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
   cursor: pointer;
+  margin-top: 14px;
 }
 
 .fh-header-search-input {
@@ -4583,55 +4569,54 @@ html, body {
   background: transparent;
   outline: none;
   width: 100%;
-  font-size: 13.5px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 500;
   color: #0F172A;
   font-family: inherit;
 }
 
 .fh-header-search-input::placeholder {
-  color: #94A3B8;
+  color: #64748B;
   font-weight: 500;
 }
 
-/* Main Content Screen Container */
+/* Main Content Screen Container (Seamless rounded white sheet on top of blue header) */
 .fh-main-screen-container {
   pointer-events: auto;
   flex: 1;
   overflow-y: auto;
-  padding: 12px 14px 140px;
-  background: #F8FAFC;
+  padding: 16px 12px 140px;
+  background: #FFFFFF;
+  border-radius: 28px 28px 0 0;
+  margin-top: -14px;
+  position: relative;
+  z-index: 35;
   width: 100%;
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.04);
 }
 
-/* Category Grid (Photographic Services) */
+/* Category Grid (3 Columns matching Image 1) */
 .fh-category-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 11px;
-  margin-bottom: 16px;
-}
-
-@media (min-width: 480px) {
-  .fh-category-grid {
-    grid-template-columns: repeat(3, 1fr);
-  }
+  grid-template-columns: repeat(3, 1fr);
+  gap: 9px;
+  margin-bottom: 22px;
 }
 
 .fh-category-card {
   background: #FFFFFF;
-  border: 1px solid #E2E8F0;
+  border: 1px solid #E8EEF5;
   border-radius: 16px;
   overflow: hidden;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
   cursor: pointer;
   display: flex;
   flex-direction: column;
-  transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+  transition: transform 0.16s ease, box-shadow 0.16s ease;
 }
 
 .fh-category-card:active {
-  transform: scale(0.97);
+  transform: scale(0.96);
   border-color: #0052FF;
 }
 
@@ -4641,11 +4626,13 @@ html, body {
 }
 
 .fh-category-card-img-wrap {
-  width: 100%;
-  height: 94px;
+  width: calc(100% - 8px);
+  height: 74px;
+  margin: 4px auto 0;
+  border-radius: 12px;
   position: relative;
   overflow: hidden;
-  background: #E2E8F0;
+  background: #F1F5F9;
 }
 
 .fh-category-card-real-img {
@@ -4663,8 +4650,98 @@ html, body {
 .fh-category-card-img-overlay {
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, rgba(0,0,0,0.02) 0%, rgba(0,0,0,0.28) 100%);
+  background: linear-gradient(180deg, rgba(0,0,0,0.01) 0%, rgba(0,0,0,0.25) 100%);
   pointer-events: none;
+}
+
+.fh-category-card-info {
+  padding: 6px 3px 8px;
+  text-align: center;
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.fh-category-card-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #0F172A;
+  line-height: 1.25;
+}
+
+/* Modern Functional Location Input Card (Replacing Crossed Dropdown) */
+.fh-location-card {
+  background: #F8FAFC;
+  border: 1.5px solid #E2E8F0;
+  border-radius: 16px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: border-color 0.15s ease;
+}
+
+.fh-location-card:focus-within {
+  border-color: #0052FF;
+  background: #FFFFFF;
+}
+
+.fh-loc-input-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fh-loc-text-field {
+  border: none;
+  background: transparent;
+  outline: none;
+  width: 100%;
+  font-size: 14px;
+  font-weight: 700;
+  color: #0F172A;
+  font-family: inherit;
+}
+
+.fh-loc-text-field::placeholder {
+  color: #94A3B8;
+  font-weight: 500;
+}
+
+.fh-loc-actions-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-top: 6px;
+  border-top: 1px solid #EDF2F7;
+}
+
+.fh-loc-pill-btn {
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 99px;
+  border: 1px solid #CBD5E1;
+  background: #FFFFFF;
+  color: #334155;
+  font-size: 11.5px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: inherit;
+}
+
+.fh-loc-pill-btn:active {
+  transform: scale(0.96);
+}
+
+.fh-loc-pill-btn.active-gps {
+  background: #ECFDF5;
+  border-color: #A7F3D0;
+  color: #065F46;
 }
 
 .fh-category-card-banner {

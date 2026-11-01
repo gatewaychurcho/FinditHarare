@@ -2012,14 +2012,24 @@ function mergeCloudIntoLocalDb(localDb, cloudDb) {
   if (!cloudDb || typeof cloudDb !== 'object') return localDb;
   const deletedAccountIds = Array.from(new Set([...(localDb.deletedAccountIds || []), ...(cloudDb.deletedAccountIds || [])]));
   const deletedChangelogIds = Array.from(new Set([...(localDb.deletedChangelogIds || []), ...(cloudDb.deletedChangelogIds || [])]));
+  const resetAt = Math.max(Number(localDb.resetAt || 0), Number(cloudDb.resetAt || 0));
+
+  let mergedRequests = mergeRequestLists(localDb.requests || [], cloudDb.requests || []);
+  if (resetAt > 0) {
+    mergedRequests = mergedRequests.filter((r) => {
+      const rTime = Number(r.updatedAt || new Date(r.createdAt || 0).getTime() || 0);
+      return rTime > resetAt;
+    });
+  }
 
   const merged = {
     ...localDb,
     ...cloudDb,
+    resetAt,
     deletedAccountIds,
     deletedChangelogIds,
     settings: { ...(localDb.settings || {}), ...(cloudDb.settings || {}) },
-    requests: mergeRequestLists(localDb.requests || [], cloudDb.requests || []),
+    requests: mergedRequests,
     providers: mergeByIdList(localDb.providers || [], cloudDb.providers || [], deletedAccountIds),
     customers: mergeByIdList(localDb.customers || [], cloudDb.customers || [], deletedAccountIds),
     changelogs: mergeByIdList(localDb.changelogs || [], cloudDb.changelogs || [], deletedChangelogIds),
@@ -2745,6 +2755,29 @@ const server = http.createServer(async (req, res) => {
     });
 
     return sendJson(res, 200, { serverTime: nowMs, notifications: notifications.slice(0, 4) });
+  }
+
+  if (pathname === '/api/reset-data' && (req.method === 'POST' || req.method === 'GET')) {
+    if (!db) db = loadDb();
+    const nowReset = Date.now();
+    db.resetAt = nowReset;
+    db.requests = [];
+    db.activeCalls = [];
+    db.activeDisputes = [];
+    db.reviews = [];
+    (db.customers || []).forEach(c => {
+      c.activeRequestId = null;
+      c.completedBookings = 0;
+    });
+    (db.providers || []).forEach(p => {
+      p.activeBookingId = null;
+      p.completedBookings = 0;
+      p.status = 'AVAILABLE';
+    });
+    saveDb(db);
+    pushCloudKvState(db, 3000).catch(() => {});
+    broadcastUpdate('STATE_RESET', { resetAt: nowReset });
+    return sendJson(res, 200, { ok: true, resetAt: nowReset, message: 'All demo data reset successfully' });
   }
 
   if (pathname === '/api/state' && req.method === 'GET') {

@@ -3093,71 +3093,93 @@ window.addEventListener('offline', () => {
 
 function useBrowserGeolocation(silent = false) {
   state.userHasManuallyDraggedPin = false;
-  state.isCustomAddressSelected = false;
-  state.customAddress = 'Current Live Location';
+  state.isCustomAddressSelected = true;
+  state.isLiveGpsActive = true;
+
   if (state.role === 'PROVIDER') {
     startProviderLiveLocationWatcher();
   } else {
     startClientLiveLocationWatcher();
   }
+
+  const applyGpsPosition = (latitude, longitude, label = 'Harare') => {
+    state.userLiveGpsLat = Number(latitude.toFixed(5));
+    state.userLiveGpsLng = Number(longitude.toFixed(5));
+    state.pinnedLat = state.userLiveGpsLat;
+    state.pinnedLng = state.userLiveGpsLng;
+
+    // Immediately resolve nearest suburb from local db so response is instant
+    if (state.db && Array.isArray(state.db.suburbs)) {
+      let nearest = state.db.suburbs[0];
+      let bestDist = Infinity;
+      for (const s of state.db.suburbs) {
+        const d = Math.hypot(s.lat - state.pinnedLat, s.lng - state.pinnedLng);
+        if (d < bestDist) {
+          bestDist = d;
+          nearest = s;
+        }
+      }
+      state.selectedSuburbId = nearest.id;
+      const street = nearest.sampleStreet ? nearest.sampleStreet.split(',')[0] : nearest.name;
+      state.customAddress = street;
+      state.customSuburbLabel = `${nearest.name}, Harare`;
+    }
+
+    // Direct DOM sync for location text field
+    const locInp = document.getElementById('requestServiceLocationInput');
+    if (locInp) {
+      locInp.value = `${state.customAddress}, ${state.customSuburbLabel.split(',')[0]}`;
+    }
+
+    if (state.role !== 'PROVIDER') {
+      reverseGeocodeHararePin(state.pinnedLat, state.pinnedLng);
+    }
+
+    if (state.role === 'PROVIDER' && state.currentUser) {
+      state.currentUser.lat = state.userLiveGpsLat;
+      state.currentUser.lng = state.userLiveGpsLng;
+      const pMatch = (state.db?.providers || []).find((p) => p.id === state.currentUser.id);
+      if (pMatch) {
+        pMatch.lat = state.userLiveGpsLat;
+        pMatch.lng = state.userLiveGpsLng;
+      }
+      apiPost('/api/providers/location', {
+        providerId: state.currentUser.id,
+        lat: state.userLiveGpsLat,
+        lng: state.userLiveGpsLng
+      }).catch(() => {});
+    }
+
+    updateLiveGpsMarker();
+    updateMapMarkers(true);
+    if (leafletMap) {
+      leafletMap.flyTo([state.userLiveGpsLat, state.userLiveGpsLng], 17, { animate: true, duration: 0.8 });
+    }
+    if (!silent) {
+      showToast(`📍 Live Location: ${state.customAddress}, ${state.customSuburbLabel.split(',')[0]}`, 'success');
+    }
+    renderUiOverlay();
+  };
+
   if ('geolocation' in navigator) {
+    if (!silent) showToast('📡 Acquiring live GPS...', 'info', 2000);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        const { latitude, longitude } = pos.coords;
-        state.userLiveGpsLat = Number(latitude.toFixed(5));
-        state.userLiveGpsLng = Number(longitude.toFixed(5));
-
-        state.pinnedLat = state.userLiveGpsLat;
-        state.pinnedLng = state.userLiveGpsLng;
-        state.userHasManuallyDraggedPin = false;
-        state.isCustomAddressSelected = false;
-        if (state.role !== 'PROVIDER') {
-          reverseGeocodeHararePin(state.pinnedLat, state.pinnedLng);
-        }
-
-        if (state.role === 'PROVIDER' && state.currentUser) {
-          state.currentUser.lat = state.userLiveGpsLat;
-          state.currentUser.lng = state.userLiveGpsLng;
-          const pMatch = (state.db?.providers || []).find((p) => p.id === state.currentUser.id);
-          if (pMatch) {
-            pMatch.lat = state.userLiveGpsLat;
-            pMatch.lng = state.userLiveGpsLng;
-          }
-          apiPost('/api/providers/location', {
-            providerId: state.currentUser.id,
-            lat: state.userLiveGpsLat,
-            lng: state.userLiveGpsLng
-          }).catch(() => {});
-        }
-
-        updateLiveGpsMarker();
-        updateMapMarkers(true);
-        if (leafletMap) {
-          leafletMap.flyTo([state.userLiveGpsLat || state.pinnedLat, state.userLiveGpsLng || state.pinnedLng], 17, { animate: true, duration: 0.8 });
-        }
-        if (!silent) {
-          showToast(`Centered on live GPS: ${state.customAddress || 'Harare'}`);
-        }
+        applyGpsPosition(pos.coords.latitude, pos.coords.longitude, 'Live GPS');
       },
-      () => {
-        state.userHasManuallyDraggedPin = false;
-        state.isCustomAddressSelected = false;
-        if (state.userLiveGpsLat && state.userLiveGpsLng) {
-          state.pinnedLat = state.userLiveGpsLat;
-          state.pinnedLng = state.userLiveGpsLng;
-        }
-        updateLiveGpsMarker();
-        if (leafletMap) {
-          leafletMap.flyTo([state.pinnedLat, state.pinnedLng], 17, { animate: true, duration: 0.8 });
-        }
-        if (!silent) {
-          showToast('Centered on Harare location');
-        }
+      (err) => {
+        console.warn('Geolocation fallback:', err ? err.message : 'timeout');
+        // Graceful fallback to user / Harare center
+        const fallbackLat = state.userLiveGpsLat || state.pinnedLat || -17.8252;
+        const fallbackLng = state.userLiveGpsLng || state.pinnedLng || 31.0335;
+        applyGpsPosition(fallbackLat, fallbackLng, 'Harare');
       },
-      { enableHighAccuracy: true, timeout: 8000 }
+      { enableHighAccuracy: true, timeout: 6000, maximumAge: 30000 }
     );
-  } else if (!silent && leafletMap) {
-    leafletMap.flyTo([state.pinnedLat, state.pinnedLng], 17, { animate: true, duration: 0.8 });
+  } else {
+    const fallbackLat = state.pinnedLat || -17.8252;
+    const fallbackLng = state.pinnedLng || 31.0335;
+    applyGpsPosition(fallbackLat, fallbackLng, 'Harare');
   }
 }
 
@@ -4351,6 +4373,12 @@ function handleDraftNotesInput(textarea) {
   if (counter) counter.textContent = `${textarea.value.length}/500`;
 }
 
+function handleManualAddressInput(val) {
+  state.customAddress = String(val || '').trim();
+  state.isCustomAddressSelected = true;
+  state.userHasManuallyDraggedPin = true;
+}
+
 function switchCustomerTab(tabName) {
   state.customerTab = tabName;
   state.isSheetMinimized = false;
@@ -4374,25 +4402,16 @@ function openStatusPickerModal() {
 function renderCurvedBrandHeader(role = 'CUSTOMER') {
   const isCust = role === 'CUSTOMER';
   const user = state.currentUser;
-  const userName = user?.name ? user.name.split(' ')[0] : (isCust ? 'Blessing' : 'Specialist');
+  const isAuth = Boolean(state.isAuthenticated && user && user.name);
+  const userName = isAuth ? user.name.split(' ')[0] : 'Guest';
   const unreadCount = getUnreadNotificationsCount();
-  const avatarInitials = user?.avatarInitials || (user?.name ? user.name.slice(0, 2).toUpperCase() : (isCust ? 'B' : 'FH'));
 
   if (isCust) {
     return `
       <div class="fh-curved-brand-header">
         <div class="fh-header-top-row">
-          <div class="fh-header-user-info" onclick="switchCustomerTab('PROFILE')">
-            <div class="fh-header-avatar">
-              ${user?.avatarUrl
-                ? `<img src="${resolveMediaUrl(user.avatarUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_AVATAR_FALLBACK}';" alt="Avatar" />`
-                : `<span>${avatarInitials}</span>`
-              }
-            </div>
-            <div class="fh-header-titles">
-              <div class="fh-header-greeting">Hello, ${escapeHtml(userName)}!</div>
-              <div class="fh-header-sub">Find the right service, fast.</div>
-            </div>
+          <div class="fh-header-logo-badge" onclick="switchCustomerTab('PROFILE')" title="Findit Harare">
+            <img src="/assets/brand-logo-full.png" onerror="this.onerror=null; this.src='/assets/logo.png';" alt="Findit Logo" />
           </div>
           <div class="fh-header-actions">
             <button type="button" class="fh-header-bell-btn" onclick="openNotificationCenterModal()" title="Notifications">
@@ -4400,6 +4419,10 @@ function renderCurvedBrandHeader(role = 'CUSTOMER') {
               ${unreadCount > 0 ? `<span class="fh-header-badge-dot">${unreadCount}</span>` : ''}
             </button>
           </div>
+        </div>
+        <div class="fh-header-titles" style="margin-top:14px;">
+          <div class="fh-header-greeting">Hello, ${escapeHtml(userName)}!</div>
+          <div class="fh-header-sub">Find the right service, fast.</div>
         </div>
         <div class="fh-header-search-bar" onclick="focusSearchOrConfigure()">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#64748B" stroke-width="2.5" stroke-linecap="round">
@@ -4537,30 +4560,13 @@ function renderHomeDiscoveryOverlay() {
     `;
   }
 
-  const categories = state.db.categories || [];
-  const topServices = getPersonalizedAndTopServices();
+  const categories = state.db?.categories || [];
 
   return `
     ${renderCurvedBrandHeader('CUSTOMER')}
 
     <div class="fh-main-screen-container">
-      <!-- inDrive Map / Services Switch Bar -->
-      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; gap:8px;">
-        <div style="font-size:13px; font-weight:800; color:#0F172A; display:flex; align-items:center; gap:6px;">
-          <span>What service do you need?</span>
-        </div>
-        <div style="display:flex; align-items:center; gap:6px;">
-          <button type="button" class="sheet-collapse-pill" onclick="toggleSheetMinimize(true)" title="View Full Street Map">
-            ${uiIcon('map', 13)}
-            <span>Full Map</span>
-          </button>
-          <button type="button" class="map-floating-gps-btn" style="position:static; width:34px; height:34px; box-shadow:none; border:1px solid #CBD5E1;" onclick="useBrowserGeolocation(false)" title="Locate Me">
-            ${uiIcon('crosshair', 16)}
-          </button>
-        </div>
-      </div>
-
-      <!-- 8 Real Photographic Category Cards Grid -->
+      <!-- 8 Real Photographic Category Cards Grid (3 Columns matching Mockup) -->
       <div class="fh-category-grid">
         ${categories.map((cat) => {
           const isSelected = cat.id === state.selectedCategoryId;
@@ -4580,30 +4586,6 @@ function renderHomeDiscoveryOverlay() {
             </div>
           `;
         }).join('')}
-      </div>
-
-      <!-- Section: Popular in Harare -->
-      <div style="font-size:11px; font-weight:800; color:#64748B; text-transform:uppercase; letter-spacing:0.04em; margin:16px 2px 8px; display:flex; justify-content:space-between; align-items:center;">
-        <span>Popular in Harare</span>
-        <span style="color:#0052FF; font-size:10.5px; font-weight:700;">Instant Match</span>
-      </div>
-
-      <div class="indrive-history-list" style="margin-bottom:16px;">
-        ${topServices.slice(0, 4).map((srv) => `
-          <div class="indrive-history-row" onclick="selectTopServiceShortcut('${srv.categoryId}', ${srv.subIdx})" style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:14px; padding:10px 12px; margin-bottom:8px;">
-            <div class="history-icon-circle" style="background:#EFF6FF; color:#0052FF;">
-              ${getCategoryVectorSvg(srv.categoryId, false)}
-            </div>
-            <div style="flex:1; min-width:0; margin-left:10px;">
-              <div class="history-title" style="font-size:13px; font-weight:800; color:#0F172A;">${escapeHtml(srv.title)}</div>
-              <div class="history-sub" style="font-size:11.5px; color:#64748B;">${escapeHtml(srv.categoryName)} • ~${srv.duration || '1-2 hrs'}</div>
-            </div>
-            <div style="font-size:14px; font-weight:800; color:#0052FF; display:inline-flex; align-items:center; gap:4px;">
-              <span>~$${srv.priceUsd}</span>
-              ${uiIcon('chevronRight', 14)}
-            </div>
-          </div>
-        `).join('')}
       </div>
 
       <!-- Floating Bottom Vibrant Orange CTA Button Pinned at Bottom -->
@@ -4701,29 +4683,39 @@ function renderConfigureFareOverlay() {
           </div>
         </div>
 
-        <!-- Location Suburb Selector with Live GPS & Map Pick -->
+        <!-- Location Section with Live GPS & Map Pin (Crossed dropdown replaced) -->
         <div class="fh-form-group">
           <div class="fh-form-label-row">
-            <span class="fh-form-label">Location</span>
-            <div style="display:flex; align-items:center; gap:6px;">
-              <button type="button" class="small-pill-btn" onclick="useBrowserGeolocation(false)" style="background:#EFF6FF; color:#0052FF; border:1px solid #BFDBFE; font-size:11px; padding:3px 8px;" title="Use Live GPS">
-                ${uiIcon('crosshair', 12)}
-                <span>Live GPS</span>
-              </button>
-              <button type="button" class="small-pill-btn" onclick="toggleSheetMinimize(true)" style="background:#F0FDF4; color:#15803D; border:1px solid #BBF7D0; font-size:11px; padding:3px 8px;" title="Pick on Map">
-                ${uiIcon('map', 12)}
-                <span>Pick on Map</span>
-              </button>
-            </div>
+            <span class="fh-form-label">Service Location</span>
+            <span style="font-size:11px; color:#10B981; font-weight:700;">Harare GPS</span>
           </div>
-          <div class="fh-form-select-card" onclick="openSuburbPickerModal()">
-            <div style="display:flex; align-items:center; gap:8px;">
-              <span style="color:#0052FF;">${uiIcon('pin', 16)}</span>
-              <span style="font-size:13.5px; font-weight:700; color:#0F172A;">
-                ${state.isCustomAddressSelected ? `${state.customAddress}, ${state.customSuburbLabel.split(',')[0]}` : state.customSuburbLabel.split(',')[0] || 'Avondale, Harare'}
+          <div class="fh-location-card">
+            <div class="fh-loc-input-line">
+              <span style="color:#0052FF; display:flex; align-items:center;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0052FF" stroke-width="2.5" stroke-linecap="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
               </span>
+              <input
+                type="text"
+                id="requestServiceLocationInput"
+                class="fh-loc-text-field"
+                placeholder="Enter street address or tap Live GPS..."
+                value="${escapeHtml(state.customAddress && state.customAddress !== 'Current Live Location' ? `${state.customAddress}, ${state.customSuburbLabel ? state.customSuburbLabel.split(',')[0] : 'Avondale'}` : (state.customSuburbLabel || 'Avondale, Harare'))}"
+                oninput="handleManualAddressInput(this.value)"
+              />
             </div>
-            <span style="color:#64748B;">${uiIcon('chevronDown', 16)}</span>
+            <div class="fh-loc-actions-bar">
+              <button type="button" class="fh-loc-pill-btn ${state.isLiveGpsActive ? 'active-gps' : ''}" onclick="useBrowserGeolocation(false)" title="Use Live GPS">
+                <span class="live-pulse-dot" style="width:7px; height:7px; background:#10B981; border-radius:50%; display:inline-block;"></span>
+                <span>📍 Live GPS</span>
+              </button>
+              <button type="button" class="fh-loc-pill-btn" onclick="toggleSheetMinimize(true)" title="Pick on Map">
+                ${uiIcon('map', 13)}
+                <span>🗺️ Pick on Map</span>
+              </button>
+              <button type="button" class="fh-loc-pill-btn" onclick="openSuburbPickerModal()" title="Choose Suburb">
+                <span>🏘️ Suburbs</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -9224,6 +9216,12 @@ async function submitServiceRequest() {
     const attachedVoiceNote = state.draftVoiceNoteUrl || null;
     const attachedVoiceNoteDuration = state.draftVoiceNoteDuration || null;
     const nowIso = new Date().toISOString();
+    const locInp = document.getElementById('requestServiceLocationInput');
+    if (locInp && locInp.value) {
+      const parts = locInp.value.split(',');
+      state.customAddress = parts[0].trim();
+      if (parts[1]) state.customSuburbLabel = parts.slice(1).join(',').trim();
+    }
 
     // inDrive Live Location: Uses live GPS by default; only uses custom address if explicitly chosen
     const isLive = !state.isCustomAddressSelected;
@@ -14011,4 +14009,26 @@ function startVoiceNoteRecording() {
 
 function stopVoiceNoteRecording() {
   stopRecordingVoiceNote();
+}
+
+window.resetApp = async function() {
+  try {
+    await fetch('/api/reset-data');
+    localStorage.removeItem('findit_offline_db');
+    state.activeRequestId = null;
+    state.customerTab = 'HOME';
+    state.screenStep = 'HOME';
+    state.hubView = 'MARKETPLACE';
+    state.role = 'CUSTOMER';
+    if (state.db) state.db.requests = [];
+    showToast('App and database reset successfully!', 'success');
+    await fetchState(true);
+    renderAll(true);
+  } catch (e) {
+    location.reload();
+  }
+};
+
+if (typeof window !== 'undefined' && window.location.search.includes('reset')) {
+  setTimeout(() => window.resetApp(), 300);
 }
