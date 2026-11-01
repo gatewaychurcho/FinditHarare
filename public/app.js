@@ -1614,7 +1614,31 @@ function handleIncomingRealtimeEvent(data) {
         else if (newStatus) state.db.requests[idx].status = newStatus;
       }
     }
+
+    const myId = state.currentUser?.id;
+    const myFinditId = state.currentUser?.finditId;
+    const myPhone = (state.currentUser?.phone || '').replace(/\D/g, '');
+    const targetReq = (state.db?.requests || []).find((r) => r.id === reqId) || reqObj;
+
+    const isCustomerParty = state.role === 'CUSTOMER' && Boolean(targetReq && (
+      targetReq.customerId === myId ||
+      targetReq.customerFinditId === myFinditId ||
+      (myPhone && (targetReq.customerPhone || '').replace(/\D/g, '') === myPhone)
+    ));
+    const isProviderParty = state.role === 'PROVIDER' && Boolean(targetReq && (
+      targetReq.acceptedProviderId === myId ||
+      (targetReq.offers || []).some((o) => o.providerId === myId || (myFinditId && o.providerFinditId === myFinditId))
+    ));
+    const isDirectlyInvolved = isCustomerParty || isProviderParty;
+
     if (newStatus === 'COMPLETED' || newStatus === 'CANCELLED') {
+      if (!isDirectlyInvolved) {
+        // Silently purge from feed/background cache without disrupting unrelated users
+        lastUiOverlaySignature = '';
+        renderAll(false);
+        return;
+      }
+
       stopArrivalVibrationAlert();
       stopNavigationHud();
       if (leafletRoutePolyline) {
@@ -1657,24 +1681,80 @@ function handleIncomingRealtimeEvent(data) {
     }
   }
 
-  // 7. TASK CANCELLED (By user or provider)
+  // 7. TASK CANCELLED (By user or provider — Private to involved parties ONLY)
   if (data.eventType === 'TASK_CANCELLED') {
-    stopArrivalVibrationAlert();
-    if (data.payload?.request && state.db?.requests) {
-      const idx = state.db.requests.findIndex((r) => r.id === data.payload.requestId);
-      if (idx >= 0) state.db.requests[idx] = data.payload.request;
+    const reqId = data.payload?.requestId || data.payload?.request?.id;
+    const reqObj = data.payload?.request;
+    if (reqObj && state.db?.requests && reqId) {
+      const idx = state.db.requests.findIndex((r) => r.id === reqId);
+      if (idx >= 0) state.db.requests[idx] = reqObj;
+    } else if (state.db?.requests && reqId) {
+      const r = state.db.requests.find((x) => x.id === reqId);
+      if (r) {
+        r.status = 'CANCELLED';
+        if (data.payload?.reason) r.cancelReason = data.payload.reason;
+      }
     }
-    lastUiOverlaySignature = '';
+
+    const myId = state.currentUser?.id;
+    const myFinditId = state.currentUser?.finditId;
+    const myPhone = (state.currentUser?.phone || '').replace(/\D/g, '');
+    const targetReq = (state.db?.requests || []).find((r) => r.id === reqId) || reqObj;
+
+    const isCustomerParty = state.role === 'CUSTOMER' && Boolean(targetReq && (
+      targetReq.customerId === myId ||
+      targetReq.customerFinditId === myFinditId ||
+      (myPhone && (targetReq.customerPhone || '').replace(/\D/g, '') === myPhone)
+    ));
+    const isProviderParty = state.role === 'PROVIDER' && Boolean(targetReq && (
+      targetReq.acceptedProviderId === myId ||
+      (targetReq.offers || []).some((o) => o.providerId === myId || (myFinditId && o.providerFinditId === myFinditId))
+    ));
+
+    // STRICT PRIVACY: If not involved, NEVER display cancellation toast and NEVER disrupt their active screen!
+    if (!isCustomerParty && !isProviderParty) {
+      lastUiOverlaySignature = '';
+      renderAll(false);
+      return;
+    }
+
+    stopArrivalVibrationAlert();
+    stopNavigationHud();
+    if (leafletRoutePolyline) {
+      try { leafletRoutePolyline.remove(); } catch (e) {}
+      leafletRoutePolyline = null;
+    }
+    if (leafletRoutePolylineCasing) {
+      try { leafletRoutePolylineCasing.remove(); } catch (e) {}
+      leafletRoutePolylineCasing = null;
+    }
+
+    if (state.activeRequestId === reqId) {
+      state.activeRequestId = null;
+    }
+    state.activeModal = null;
+    lastRenderedModalKey = '';
+
     if (state.role === 'CUSTOMER') {
       state.screenStep = 'HOME';
-      state.activeRequestId = null;
+      state.customerTab = 'HOME';
       state.pendingSearchFareUsd = null;
     }
     if (state.role === 'PROVIDER') {
       state.providerTab = 'FEED';
     }
-    showToast(data.payload?.reason ? `Booking cancelled: ${data.payload.reason}` : `Booking was cancelled.`);
-    renderAll();
+
+    // Cancellation toast visible ONLY to the directly involved parties
+    const actorRole = data.payload?.cancelledByRole;
+    if (actorRole === state.role) {
+      showToast('Booking cancelled.');
+    } else {
+      const reasonTxt = data.payload?.reason ? `: ${data.payload.reason}` : '';
+      showToast(`Booking cancelled${reasonTxt}`, 'info');
+    }
+    lastUiOverlaySignature = '';
+    lastOffersSignature = '';
+    renderAll(true);
     return;
   }
 
@@ -3352,8 +3432,31 @@ function updateLiveGpsMarker() {
 let lastMapSignature = '';
 const activeMapProviderMarkers = new Map();
 const activeMapOfficeMarkers = new Map();
+const activeMapOpportunityMarkers = new Map();
 let activeRouteProviderMarker = null;
 let activeRouteClientMarker = null;
+
+function resolveHarareSuburbCoords(suburbName = '') {
+  const s = String(suburbName || '').toLowerCase();
+  if (s.includes('avondale')) return [-17.7989, 31.0374];
+  if (s.includes('borrowdale')) return [-17.7539, 31.0926];
+  if (s.includes('belgravia')) return [-17.8015, 31.0502];
+  if (s.includes('eastlea')) return [-17.8286, 31.0772];
+  if (s.includes('mount pleasant') || s.includes('mt pleasant')) return [-17.7786, 31.0456];
+  if (s.includes('highlands')) return [-17.8055, 31.0955];
+  if (s.includes('milton park')) return [-17.8118, 31.0267];
+  if (s.includes('greystone')) return [-17.7478, 31.1215];
+  if (s.includes('newlands')) return [-17.8105, 31.0766];
+  if (s.includes('chisipite')) return [-17.7686, 31.1189];
+  if (s.includes('marlborough')) return [-17.7512, 30.9856];
+  if (s.includes('mabelreign')) return [-17.7856, 30.9989];
+  if (s.includes('waterfalls')) return [-17.8925, 31.0375];
+  if (s.includes('hatfield')) return [-17.8812, 31.0856];
+  if (s.includes('braeside')) return [-17.8456, 31.0689];
+  if (s.includes('glen lorne')) return [-17.7312, 31.1456];
+  if (s.includes('cbd') || s.includes('central')) return [-17.8292, 31.0522];
+  return [-17.8252, 31.0530];
+}
 
 function updateMapMarkers(force = false) {
   const centerPin = document.getElementById('centerMapPin');
@@ -3550,10 +3653,72 @@ function updateMapMarkers(force = false) {
       activeMapOfficeMarkers.set(p.id, om);
     }
   });
+
+  // Reconcile and plot live customer requests (Opportunities) on map for service providers
+  if (state.isAuthenticated && state.role === 'PROVIDER' && !isBooked) {
+    const prov = state.currentUser || state.db.providers?.[0];
+    const myCategoryIds = getProviderCategoryIds(prov);
+    const openRequests = (state.db.requests || []).filter((r) => {
+      if (r.status !== 'OPEN') return false;
+      if (r.acceptedProviderId && r.acceptedProviderId !== prov?.id) return false;
+      if (r.acceptedOfferId) return false;
+      const reqCat = normalizeCategoryId(r.categoryId);
+      return myCategoryIds.includes(reqCat);
+    }).filter((r) => !(state.dismissedJobIds || []).includes(r.id));
+
+    const openIds = new Set(openRequests.map((r) => r.id));
+    for (const [id, marker] of activeMapOpportunityMarkers.entries()) {
+      if (!openIds.has(id)) {
+        try { leafletMarkersLayer.removeLayer(marker); } catch (e) {}
+        activeMapOpportunityMarkers.delete(id);
+      }
+    }
+
+    openRequests.forEach((r) => {
+      let lat = Number(r.lat);
+      let lng = Number(r.lng);
+      if (!lat || !lng || isNaN(lat) || isNaN(lng)) {
+        const coords = resolveHarareSuburbCoords(r.suburbName || r.exactAddress);
+        lat = coords[0];
+        lng = coords[1];
+      }
+
+      const isSelected = (state.selectedOpportunityId === r.id);
+      const suburbLabel = (r.suburbName || r.exactAddress || 'Harare').split(',')[0].trim();
+      const pinHtml = `
+        <div class="fh-opportunity-map-pin ${isSelected ? 'selected' : ''}" style="cursor:pointer; display:flex; flex-direction:column; align-items:center;">
+          <div style="background:${isSelected ? '#0052FF' : '#0F172A'}; color:#FFFFFF; border:2px solid #FFFFFF; border-radius:18px; padding:3px 9px; box-shadow:0 4px 14px rgba(0,0,0,0.3); display:inline-flex; align-items:center; gap:5px; white-space:nowrap; transform:${isSelected ? 'scale(1.1)' : 'scale(1)'}; transition:transform 0.15s ease;">
+            <span style="font-size:12px; font-weight:900; color:${isSelected ? '#FFFFFF' : '#10B981'};">$${r.budgetUsd}</span>
+            <span style="font-size:10.5px; font-weight:700; color:${isSelected ? '#E0E7FF' : '#CBD5E1'}; max-width:90px; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(suburbLabel)}</span>
+          </div>
+          <div style="width:0; height:0; border-left:5px solid transparent; border-right:5px solid transparent; border-top:6px solid ${isSelected ? '#0052FF' : '#0F172A'};"></div>
+        </div>
+      `;
+
+      const existingMarker = activeMapOpportunityMarkers.get(r.id);
+      if (existingMarker) {
+        existingMarker.setLatLng([lat, lng]);
+        const newIcon = L.divIcon({ className: '', html: pinHtml, iconSize: [120, 36], iconAnchor: [60, 36] });
+        existingMarker.setIcon(newIcon);
+      } else {
+        const icon = L.divIcon({ className: '', html: pinHtml, iconSize: [120, 36], iconAnchor: [60, 36] });
+        const m = L.marker([lat, lng], { icon }).addTo(leafletMarkersLayer);
+        m.on('click', () => {
+          showOpportunityOnMap(r.id);
+        });
+        activeMapOpportunityMarkers.set(r.id, m);
+      }
+    });
+  } else {
+    activeMapOpportunityMarkers.forEach((m) => { try { leafletMarkersLayer.removeLayer(m); } catch (e) {} });
+    activeMapOpportunityMarkers.clear();
+  }
 }
 
 function drawProviderAndClientRouteMarkers(prov, req) {
-  // Clear general catalogue pins so only active trip participants show
+  // Clear general pins so only active trip participants show
+  activeMapOpportunityMarkers.forEach((m) => { try { leafletMarkersLayer.removeLayer(m); } catch (e) {} });
+  activeMapOpportunityMarkers.clear();
   activeMapProviderMarkers.forEach((m) => { try { leafletMarkersLayer.removeLayer(m); } catch (e) {} });
   activeMapProviderMarkers.clear();
   activeMapOfficeMarkers.forEach((m) => { try { leafletMarkersLayer.removeLayer(m); } catch (e) {} });
@@ -10415,11 +10580,16 @@ function renderProviderModeOverlay() {
     bodyHtml = `<div class="fh-main-screen-container" style="padding-top:14px;">${renderProviderCatalogueTab(prov, myPendingApprovals)}</div>`;
   } else {
     // FEED (Opportunities)
-    bodyHtml = `<div class="fh-main-screen-container" style="padding-top:14px;">${renderProviderRequestsFeedTab(prov, openRequests, activeJob)}</div>`;
+    if (state.providerFeedView === 'MAP' && !activeJob) {
+      bodyHtml = renderProviderOpportunitiesMapOverlay(prov, openRequests);
+    } else {
+      bodyHtml = `<div class="fh-main-screen-container" style="padding-top:14px;">${renderProviderRequestsFeedTab(prov, openRequests, activeJob)}</div>`;
+    }
   }
 
+  const isMapFeed = (state.providerFeedView === 'MAP' && !activeJob && currentTab === 'FEED');
   return `
-    ${renderCurvedBrandHeader('PROVIDER')}
+    ${isMapFeed ? '' : renderCurvedBrandHeader('PROVIDER')}
     ${bodyHtml}
   `;
 }
@@ -10831,6 +11001,246 @@ async function promptProviderDelayNotice(requestId) {
 }
 
 // ----------------------------------------------------------------------------
+// PROVIDER OPPORTUNITIES MAP CONTROLS & MAP OVERLAY
+// ----------------------------------------------------------------------------
+function setProviderFeedView(view) {
+  state.providerFeedView = view;
+  if (view === 'MAP') {
+    state.isSheetMinimized = true;
+    const prov = state.currentUser || state.db?.providers?.[0];
+    const myCategoryIds = getProviderCategoryIds(prov);
+    const openRequests = (state.db?.requests || []).filter((r) => {
+      if (r.status !== 'OPEN') return false;
+      if (r.acceptedProviderId && r.acceptedProviderId !== prov?.id) return false;
+      if (r.acceptedOfferId) return false;
+      const reqCat = normalizeCategoryId(r.categoryId);
+      return myCategoryIds.includes(reqCat);
+    }).filter((r) => !(state.dismissedJobIds || []).includes(r.id));
+
+    if (!state.selectedOpportunityId && openRequests.length > 0) {
+      state.selectedOpportunityId = openRequests[0].id;
+    }
+    const selReq = openRequests.find((r) => r.id === state.selectedOpportunityId) || openRequests[0];
+    if (selReq && leafletMap) {
+      let lat = Number(selReq.lat);
+      let lng = Number(selReq.lng);
+      if (!lat || !lng || isNaN(lat) || isNaN(lng)) {
+        const coords = resolveHarareSuburbCoords(selReq.suburbName || selReq.exactAddress);
+        lat = coords[0];
+        lng = coords[1];
+      }
+      setTimeout(() => {
+        try {
+          leafletMap.invalidateSize();
+          leafletMap.flyTo([lat, lng], 14, { duration: 0.8 });
+        } catch (e) {}
+      }, 80);
+    }
+  }
+  lastUiOverlaySignature = '';
+  renderAll(true);
+}
+
+function showOpportunityOnMap(requestId) {
+  state.providerFeedView = 'MAP';
+  state.selectedOpportunityId = requestId;
+  state.providerTab = 'FEED';
+  state.isSheetMinimized = true;
+  const req = (state.db?.requests || []).find((r) => r.id === requestId);
+  if (req && leafletMap) {
+    let lat = Number(req.lat);
+    let lng = Number(req.lng);
+    if (!lat || !lng || isNaN(lat) || isNaN(lng)) {
+      const coords = resolveHarareSuburbCoords(req.suburbName || req.exactAddress);
+      lat = coords[0];
+      lng = coords[1];
+    }
+    setTimeout(() => {
+      try {
+        leafletMap.invalidateSize();
+        leafletMap.flyTo([lat, lng], 15, { duration: 0.8 });
+      } catch (e) {}
+    }, 80);
+  }
+  lastUiOverlaySignature = '';
+  renderAll(true);
+}
+
+function cycleOpportunityOnMap(direction) {
+  const prov = state.currentUser || state.db?.providers?.[0];
+  const myCategoryIds = getProviderCategoryIds(prov);
+  const openRequests = (state.db?.requests || []).filter((r) => {
+    if (r.status !== 'OPEN') return false;
+    if (r.acceptedProviderId && r.acceptedProviderId !== prov?.id) return false;
+    if (r.acceptedOfferId) return false;
+    const reqCat = normalizeCategoryId(r.categoryId);
+    return myCategoryIds.includes(reqCat);
+  }).filter((r) => !(state.dismissedJobIds || []).includes(r.id));
+
+  if (openRequests.length <= 1) return;
+  const currentIdx = Math.max(0, openRequests.findIndex((r) => r.id === state.selectedOpportunityId));
+  let nextIdx = currentIdx + direction;
+  if (nextIdx >= openRequests.length) nextIdx = 0;
+  if (nextIdx < 0) nextIdx = openRequests.length - 1;
+
+  const nextReq = openRequests[nextIdx];
+  if (nextReq) {
+    showOpportunityOnMap(nextReq.id);
+  }
+}
+
+function renderProviderOpportunitiesMapOverlay(prov, openRequests) {
+  const visibleRequests = openRequests.filter((r) => !(state.dismissedJobIds || []).includes(r.id));
+  const currentIdx = Math.max(0, visibleRequests.findIndex((r) => r.id === state.selectedOpportunityId));
+  const activeReq = visibleRequests[currentIdx] || visibleRequests[0];
+  const totalCount = visibleRequests.length;
+
+  return `
+    <div style="position:relative; width:100%; height:100%; pointer-events:none;">
+      <!-- Floating Top Bar with Segmented View Switcher -->
+      <div style="position:absolute; top:12px; left:12px; right:12px; display:flex; align-items:center; justify-content:space-between; gap:10px; z-index:900; pointer-events:auto;">
+        <div style="background:rgba(255,255,255,0.95); backdrop-filter:blur(8px); border:1px solid rgba(226,232,240,0.8); border-radius:12px; padding:6px 10px; display:inline-flex; align-items:center; gap:6px; box-shadow:0 4px 14px rgba(0,0,0,0.08);">
+          <span style="width:8px; height:8px; border-radius:50%; background:#10B981; animation:pulse 1.2s infinite; flex-shrink:0;"></span>
+          <span style="font-size:12px; font-weight:800; color:#0F172A;">${totalCount} Client Request${totalCount === 1 ? '' : 's'} on Map</span>
+        </div>
+
+        <div style="background:rgba(255,255,255,0.95); backdrop-filter:blur(8px); border:1px solid rgba(226,232,240,0.8); border-radius:12px; padding:3px; display:inline-flex; gap:3px; box-shadow:0 4px 14px rgba(0,0,0,0.08);">
+          <button type="button" onclick="setProviderFeedView('LIST')" style="border:none; background:transparent; color:#64748B; font-size:11.5px; font-weight:800; padding:5px 12px; border-radius:8px; cursor:pointer; display:inline-flex; align-items:center; gap:5px;">
+            ${uiIcon('list', 12)}
+            <span>List</span>
+          </button>
+          <button type="button" style="border:none; background:#0052FF; color:#FFFFFF; font-size:11.5px; font-weight:800; padding:5px 12px; border-radius:8px; cursor:pointer; display:inline-flex; align-items:center; gap:5px; box-shadow:0 2px 6px rgba(0,82,255,0.3);">
+            ${uiIcon('map', 12)}
+            <span>Map</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Floating Location GPS Button -->
+      <div style="position:absolute; right:14px; top:68px; z-index:900; pointer-events:auto;">
+        <button type="button" class="map-floating-gps-btn" style="background:#FFFFFF; border:1px solid #CBD5E1; box-shadow:0 4px 14px rgba(0,0,0,0.12);" onclick="useBrowserGeolocation(false)" title="My GPS Location">
+          ${uiIcon('crosshair', 18)}
+        </button>
+      </div>
+
+      <!-- Bottom Floating Selected Opportunity Card -->
+      ${activeReq ? (() => {
+        const r = activeReq;
+        const myExistingOffer = (r.offers || []).find((o) => o.providerId === prov.id || (prov.finditId && o.providerFinditId === prov.finditId));
+        const isOfferDeclined = Boolean(myExistingOffer && myExistingOffer.status === 'DECLINED');
+        const isOfferPending = Boolean(myExistingOffer && (myExistingOffer.status === 'PROPOSED' || myExistingOffer.status === 'COUNTERED'));
+        const commPercent = Number(state.db?.settings?.commissionPercent || 11);
+        const minReserve = Number(state.db?.settings?.minWalletBalanceUsd || 2.0);
+        const isPromo = Boolean(state.db?.settings?.launchPromoActive);
+        const jobBudgetUsd = Number(r.budgetUsd || 0);
+        const requiredCommUsd = Math.round(jobBudgetUsd * (commPercent / 100) * 100) / 100;
+        const walletBalUsd = Number(prov.walletBalanceUsd || 0);
+        const surpassesWallet = !isPromo && (walletBalUsd < requiredCommUsd || walletBalUsd < minReserve || (walletBalUsd - requiredCommUsd) < minReserve);
+        const bid1Usd = Number((jobBudgetUsd + 2).toFixed(2));
+        const bid2Usd = Number((jobBudgetUsd + 3.5).toFixed(2));
+        const bid1Surpasses = !isPromo && (walletBalUsd < Math.round(bid1Usd * (commPercent / 100) * 100) / 100);
+        const bid2Surpasses = !isPromo && (walletBalUsd < Math.round(bid2Usd * (commPercent / 100) * 100) / 100);
+
+        let displayLocation = r.exactAddress || r.clientLiveAddress || r.suburbName || 'Harare';
+        let badgeSuburb = r.suburbName || (displayLocation.split(',')[0] || 'Harare').trim();
+
+        return `
+          <div style="position:absolute; bottom:64px; left:12px; right:12px; max-width:480px; margin:0 auto; z-index:900; pointer-events:auto;">
+            <div class="provider-order-card" style="box-shadow:0 8px 30px rgba(15,23,42,0.18); border:2px solid #0052FF; background:#FFFFFF;">
+              <!-- Navigation Header between opportunities -->
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; border-bottom:1px solid #F1F5F9; padding-bottom:6px;">
+                <div style="font-size:11.5px; font-weight:800; color:#64748B;">
+                  Opportunity ${currentIdx + 1} of ${totalCount}
+                </div>
+                ${totalCount > 1 ? `
+                  <div style="display:flex; gap:6px;">
+                    <button type="button" onclick="cycleOpportunityOnMap(-1)" class="btn-dark-sec" style="height:26px; padding:0 8px; font-size:11px; font-weight:800; border-radius:6px;">
+                      ◀ Prev
+                    </button>
+                    <button type="button" onclick="cycleOpportunityOnMap(1)" class="btn-dark-sec" style="height:26px; padding:0 8px; font-size:11px; font-weight:800; border-radius:6px;">
+                      Next ▶
+                    </button>
+                  </div>
+                ` : ''}
+              </div>
+
+              <!-- Price & Location -->
+              <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px;">
+                <div>
+                  <span style="font-size:22px; font-weight:900; color:#0052FF;">${formatUsdPrice(r.budgetUsd)}</span>
+                  <span style="font-size:11.5px; font-weight:700; color:#64748B; margin-left:4px;">${r.paymentMethod}</span>
+                </div>
+                <span style="font-size:11px; color:#0052FF; font-weight:800; background:#EFF6FF; padding:3px 9px; border-radius:99px; display:inline-flex; align-items:center; gap:4px;">
+                  ${uiIcon('pin', 11)}
+                  <span>${escapeHtml(badgeSuburb)}</span>
+                </span>
+              </div>
+
+              <div style="font-size:14px; font-weight:800; color:#0F172A; margin-bottom:4px;">${escapeHtml(r.title)}</div>
+
+              <div style="font-size:11.5px; color:#475569; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
+                <span style="font-weight:700; color:#0F172A;">📍 ${escapeHtml(displayLocation)}</span>
+                <span>•</span>
+                <span>${escapeHtml(r.customerName)}</span>
+              </div>
+
+              ${r.description ? `
+                <div style="font-size:11.5px; color:#64748B; font-style:italic; margin-bottom:8px;">
+                  "${escapeHtml(r.description)}"
+                </div>
+              ` : ''}
+
+              <!-- Action Bid Grid -->
+              ${isOfferPending ? `
+                <div style="background:#EFF6FF; border:1px solid #BFDBFE; border-radius:10px; padding:8px 10px; display:flex; justify-content:space-between; align-items:center;">
+                  <span style="font-size:12px; font-weight:800; color:#1D4ED8;">Offered ${formatUsdPrice(myExistingOffer.priceUsd)} • Waiting for client</span>
+                  <button type="button" class="btn-dark-sec" style="height:28px; padding:0 8px; font-size:11px; font-weight:800;" onclick="promptProviderCustomBid('${r.id}', ${r.budgetUsd})">Change</button>
+                </div>
+              ` : `
+                <div class="provider-bid-grid" style="gap:5px;">
+                  <button
+                    class="btn-primary-blue"
+                    ${surpassesWallet ? 'disabled style="height:36px; font-size:11.5px; opacity:0.42;"' : `style="height:36px; font-size:11.5px; font-weight:800;" onclick="providerSubmitBid('${r.id}', ${r.budgetUsd})"`}
+                  >
+                    ${surpassesWallet ? `Need $${requiredCommUsd.toFixed(2)}` : `Accept ${formatUsdPrice(r.budgetUsd)}`}
+                  </button>
+                  <button
+                    class="btn-dark-sec"
+                    ${bid1Surpasses ? 'disabled style="height:36px; font-size:11.5px; opacity:0.42;"' : `style="height:36px; font-size:11.5px; font-weight:800;" onclick="providerSubmitBid('${r.id}', ${bid1Usd})"`}
+                  >
+                    ${formatUsdPrice(bid1Usd)}
+                  </button>
+                  <button
+                    class="btn-dark-sec"
+                    ${bid2Surpasses ? 'disabled style="height:36px; font-size:11.5px; opacity:0.42;"' : `style="height:36px; font-size:11.5px; font-weight:800;" onclick="providerSubmitBid('${r.id}', ${bid2Usd})"`}
+                  >
+                    ${formatUsdPrice(bid2Usd)}
+                  </button>
+                  <button
+                    class="btn-dark-sec"
+                    ${surpassesWallet ? 'disabled style="height:36px; font-size:11.5px; opacity:0.42;"' : `style="height:36px; font-size:11.5px; font-weight:800;" onclick="promptProviderCustomBid('${r.id}', ${r.budgetUsd})"`}
+                  >
+                    Custom $
+                  </button>
+                </div>
+              `}
+            </div>
+          </div>
+        `;
+      })() : `
+        <div style="position:absolute; bottom:80px; left:20px; right:20px; text-align:center; background:#FFFFFF; border-radius:14px; padding:18px; box-shadow:0 4px 20px rgba(0,0,0,0.12); pointer-events:auto;">
+          <div style="font-size:14px; font-weight:800; color:#0F172A; margin-bottom:6px;">No Open Requests on Map</div>
+          <div style="font-size:12px; color:#64748B; margin-bottom:12px;">New customer requests in your categories will appear as pins on this map.</div>
+          <button type="button" class="btn-primary-blue" onclick="setProviderFeedView('LIST')" style="height:36px; font-size:12px; padding:0 16px;">
+            <span>Back to List View</span>
+          </button>
+        </div>
+      `}
+    </div>
+  `;
+}
+
+// ----------------------------------------------------------------------------
 // PROVIDER TAB 2: LIVE HARARE CLIENT REQUESTS FEED (WITH INDRIVE BID BUTTONS)
 // ----------------------------------------------------------------------------
 function renderProviderRequestsFeedTab(prov, openRequests, activeJob) {
@@ -10908,7 +11318,8 @@ function renderProviderRequestsFeedTab(prov, openRequests, activeJob) {
             </div>
           `;
         }
-        return visibleRequests.map((r) => {
+
+        const cardsHtml = visibleRequests.map((r) => {
           const myExistingOffer = (r.offers || []).find((o) => o.providerId === prov.id || (prov.finditId && o.providerFinditId === prov.finditId));
           const isOfferDeclined = Boolean(myExistingOffer && myExistingOffer.status === 'DECLINED');
           const isOfferPending = Boolean(myExistingOffer && (myExistingOffer.status === 'PROPOSED' || myExistingOffer.status === 'COUNTERED'));
@@ -10951,10 +11362,16 @@ function renderProviderRequestsFeedTab(prov, openRequests, activeJob) {
                   <span style="font-size:21px; font-weight:900; color:var(--blue-primary);">${formatUsdPrice(r.budgetUsd)}</span>
                   <span style="font-size:11.5px; font-weight:700; color:var(--text-secondary); margin-left:4px;">${r.paymentMethod}</span>
                 </div>
-                <span style="font-size:11px; color:var(--blue-primary); font-weight:800; background:var(--blue-soft); padding:2px 8px; border-radius:99px; display:inline-flex; align-items:center; gap:4px; max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
-                  ${uiIcon('pin', 11)}
-                  <span>${escapeHtml(badgeSuburb)}</span>
-                </span>
+                <div style="display:flex; align-items:center; gap:6px;">
+                  <button type="button" onclick="showOpportunityOnMap('${r.id}'); event.stopPropagation();" style="border:1px solid #BFDBFE; background:#EFF6FF; color:#1D4ED8; font-size:10.5px; font-weight:800; padding:2px 8px; border-radius:8px; cursor:pointer; display:inline-flex; align-items:center; gap:4px; height:24px;">
+                    ${uiIcon('map', 11)}
+                    <span>Show on Map</span>
+                  </button>
+                  <span style="font-size:11px; color:var(--blue-primary); font-weight:800; background:var(--blue-soft); padding:2px 8px; border-radius:99px; display:inline-flex; align-items:center; gap:4px; max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                    ${uiIcon('pin', 11)}
+                    <span>${escapeHtml(badgeSuburb)}</span>
+                  </span>
+                </div>
               </div>
 
               <div style="font-size:14px; font-weight:800; color:var(--text-main); margin-bottom:4px;">${escapeHtml(r.title)}</div>
@@ -11065,6 +11482,27 @@ function renderProviderRequestsFeedTab(prov, openRequests, activeJob) {
             </div>
           `;
         }).join('');
+
+        return `
+          <!-- Header Bar with Segmented Toggle for List vs Map View -->
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; gap:8px;">
+            <div style="font-size:13px; font-weight:800; color:var(--text-main); display:flex; align-items:center; gap:6px;">
+              <span>Available Opportunities</span>
+              <span style="background:var(--blue-soft); color:var(--blue-primary); font-size:11px; padding:1px 7px; border-radius:99px; font-weight:800;">${visibleRequests.length}</span>
+            </div>
+            <div style="display:inline-flex; background:#F1F5F9; border-radius:10px; padding:3px; gap:3px;">
+              <button type="button" onclick="setProviderFeedView('LIST')" style="border:none; background:${state.providerFeedView !== 'MAP' ? '#FFFFFF' : 'transparent'}; color:${state.providerFeedView !== 'MAP' ? 'var(--blue-primary)' : 'var(--text-secondary)'}; font-size:11px; font-weight:800; padding:5px 12px; border-radius:8px; cursor:pointer; box-shadow:${state.providerFeedView !== 'MAP' ? '0 1px 4px rgba(0,0,0,0.08)' : 'none'}; display:inline-flex; align-items:center; gap:4px;">
+                ${uiIcon('list', 11)}
+                <span>List</span>
+              </button>
+              <button type="button" onclick="setProviderFeedView('MAP')" style="border:none; background:${state.providerFeedView === 'MAP' ? '#FFFFFF' : 'transparent'}; color:${state.providerFeedView === 'MAP' ? 'var(--blue-primary)' : 'var(--text-secondary)'}; font-size:11px; font-weight:800; padding:5px 12px; border-radius:8px; cursor:pointer; box-shadow:${state.providerFeedView === 'MAP' ? '0 1px 4px rgba(0,0,0,0.08)' : 'none'}; display:inline-flex; align-items:center; gap:4px;">
+                ${uiIcon('map', 11)}
+                <span>Map</span>
+              </button>
+            </div>
+          </div>
+          ${cardsHtml}
+        `;
       })()}
 
       <!-- Bottom Category Filter Strip (Positioned Down Next to Tabs as Requested) -->

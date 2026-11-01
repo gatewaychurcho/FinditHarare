@@ -5577,3 +5577,18 @@ html, body {
   background: #F8FAFC;
 }
 
+/* Provider Opportunities Live Map Pin System */
+.fh-opportunity-map-pin {
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform;
+}
+.fh-opportunity-map-pin:hover,
+.fh-opportunity-map-pin.selected {
+  transform: scale(1.12);
+  z-index: 9999 !important;
+}
+.fh-opportunity-map-pin.selected > div:first-child {
+  background: #0052FF !important;
+  box-shadow: 0 4px 18px rgba(0, 82, 255, 0.45) !important;
+}
+
