@@ -960,15 +960,20 @@ async function fetchState(force = false) {
         }
       });
 
-      // Prevent any newly created OPEN or active request from flickering if a poll ever hits a cold container
-      state.db.requests.forEach((localReq) => {
-        if (!localReq || !localReq.id) return;
-        const isRecentActive = (localReq.status === 'OPEN' || isBookedStatus(localReq.status)) &&
-          (!localReq.createdAt || (nowMs - new Date(localReq.createdAt).getTime() < 30 * 60 * 1000));
-        if (isRecentActive && !newDb.requests.some((r) => r.id === localReq.id)) {
-          newDb.requests.unshift(localReq);
-        }
-      });
+      // Only preserve newly submitted OPEN requests created in the last 15 seconds (in-flight network debounce)
+      if (!newDb.resetAt) {
+        state.db.requests.forEach((localReq) => {
+          if (!localReq || !localReq.id) return;
+          const isJustCreatedInFlight = localReq.status === 'OPEN' && localReq.createdAt &&
+            (nowMs - new Date(localReq.createdAt).getTime() < 15 * 1000);
+          if (isJustCreatedInFlight && !newDb.requests.some((r) => r.id === localReq.id)) {
+            newDb.requests.unshift(localReq);
+          }
+        });
+      } else {
+        // If database was reset, clear any local active request pointer immediately
+        state.activeRequestId = null;
+      }
     }
 
     state.db = newDb;
@@ -1542,6 +1547,34 @@ function handleIncomingRealtimeEvent(data) {
     return;
   }
 
+  // 6A. COMPLETION REQUESTED (Specialist finished work, client needs to provide PIN)
+  if (data.eventType === 'COMPLETION_REQUESTED') {
+    const reqId = data.payload?.requestId || data.payload?.request?.id;
+    const reqObj = data.payload?.request;
+    if (state.db?.requests && reqId) {
+      const idx = state.db.requests.findIndex((r) => r.id === reqId);
+      if (idx >= 0) {
+        if (reqObj) state.db.requests[idx] = reqObj;
+        state.db.requests[idx].completionRequested = true;
+        if (data.payload?.completionPinCode) {
+          state.db.requests[idx].completionPinCode = data.payload.completionPinCode;
+        }
+      }
+    }
+    lastUiOverlaySignature = '';
+    triggerHardwareVibration([200, 100, 200]);
+    if (state.role === 'CUSTOMER') {
+      triggerSystemNotification(
+        'Specialist Finished Service!',
+        `Please inspect the work and give Completion PIN #${data.payload?.completionPinCode || ''} to complete.`,
+        `comp_${reqId}`
+      );
+      showToast('Specialist finished work! Please share your Completion PIN.', 'success');
+    }
+    renderAll(true);
+    return;
+  }
+
   // 6B. BOOKING STATUS UPDATED / COMPLETED (By client, provider, or admin)
   if (data.eventType === 'BOOKING_STATUS_UPDATED' || data.eventType === 'STATUS_UPDATED' || data.eventType === 'BOOKING_COMPLETED') {
     const reqId = data.payload?.requestId || data.payload?.request?.id;
@@ -1573,6 +1606,7 @@ function handleIncomingRealtimeEvent(data) {
       lastRenderedModalKey = '';
       if (state.role === 'CUSTOMER') {
         state.screenStep = 'HOME';
+        state.customerTab = 'HOME';
         state.pendingSearchFareUsd = null;
         if (newStatus === 'COMPLETED' && reqId) {
           openRateBookingModal(reqId);
@@ -1582,6 +1616,11 @@ function handleIncomingRealtimeEvent(data) {
       }
       if (state.role === 'PROVIDER') {
         state.providerTab = 'FEED';
+        if (newStatus === 'COMPLETED' && reqId) {
+          openRateBookingModal(reqId);
+          renderAll(true);
+          return;
+        }
       }
       lastUiOverlaySignature = '';
       lastOffersSignature = '';
@@ -5395,26 +5434,67 @@ function renderBookedTrackingOverlay(req) {
   const isArrived = req.status === 'ARRIVED';
   const isInProgress = req.status === 'IN_PROGRESS' || Boolean(req.pinVerifiedByProvider);
 
-  // SCREEN 6: SERVICE IN PROGRESS (Exact implementation from Screenshot 2, Phone 6)
+  // SCREEN 6: SERVICE IN PROGRESS & COMPLETION PIN SHARING
   if (isInProgress) {
+    const completionPin = req.completionPinCode || '7291';
+    const isDoneRequested = Boolean(req.completionRequested);
+
     return `
       <div class="fh-main-screen-container" style="padding-top:14px;">
         <div class="fh-request-form-card" style="text-align:center;">
           <div class="fh-form-header-row" style="margin-bottom:14px; text-align:left;">
-            <div class="fh-form-header-title">Request in Progress</div>
+            <div class="fh-form-header-title">${isDoneRequested ? 'Service Completed' : 'Request in Progress'}</div>
+            ${isDoneRequested
+              ? `<span style="background:#DCFCE7; color:#15803D; font-size:11px; font-weight:800; padding:4px 10px; border-radius:99px; border:1px solid #86EFAC;">Awaiting PIN</span>`
+              : `<span style="background:#EFF6FF; color:#1D4ED8; font-size:11px; font-weight:800; padding:4px 10px; border-radius:99px; border:1px solid #BFDBFE;">In Progress</span>`
+            }
           </div>
-          <div class="fh-in-progress-shield">
-            <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+
+          <div class="fh-in-progress-shield" style="${isDoneRequested ? 'background:#DCFCE7; color:#16A34A;' : ''}">
+            <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="${isDoneRequested ? '#10B981' : 'currentColor'}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
               <polyline points="20 6 9 17 4 12"/>
             </svg>
           </div>
-          <div style="font-size:20px; font-weight:800; color:#0F172A; margin-bottom:4px;">Service in Progress!</div>
-          <div style="font-size:13px; color:#64748B; line-height:1.45; margin-bottom:16px;">
-            <strong>${escapeHtml(prov?.name || 'Your specialist')}</strong> has arrived and is working on your request.
+
+          <div style="font-size:20px; font-weight:900; color:#0F172A; margin-bottom:4px;">
+            ${isDoneRequested ? 'Specialist Finished Work!' : 'Service in Progress!'}
+          </div>
+
+          <div style="font-size:13px; color:#64748B; line-height:1.45; margin-bottom:14px; padding:0 6px;">
+            ${isDoneRequested
+              ? `<strong>${escapeHtml(prov?.name || 'Your specialist')}</strong> has marked the service as done. Inspect the work, then share your <strong>Completion PIN</strong>:`
+              : `<strong>${escapeHtml(prov?.name || 'Your specialist')}</strong> has arrived and is working on your request.`
+            }
+          </div>
+
+          <!-- THE COMPLETION PIN CARD (Prominent in both states, highlighted when done!) -->
+          <div class="fh-completion-pin-card" style="${!isDoneRequested ? 'background:#F8FAFC; border:1.5px dashed #CBD5E1; box-shadow:none;' : ''}">
+            <div class="fh-completion-pin-label" style="${!isDoneRequested ? 'color:#64748B;' : ''}">
+              ${isDoneRequested ? '🎉 Share Completion PIN with Specialist:' : 'Your 4-Digit Completion PIN:'}
+            </div>
+            <div class="fh-completion-pin-value" style="${!isDoneRequested ? 'color:#0F172A;' : ''}" id="clientCompletionPinText">
+              #${completionPin}
+            </div>
+            <div class="fh-completion-pin-hint" style="${!isDoneRequested ? 'color:#64748B;' : ''}">
+              ${isDoneRequested
+                ? `Specialist will enter this code to finalize the job and reconcile payment.`
+                : `Keep safe — share with ${escapeHtml(prov?.name || 'specialist')} after you inspect and approve the finished work.`
+              }
+            </div>
+            <div style="display:flex; gap:8px;">
+              <button type="button" class="fh-pin-action-btn" onclick="copyCompletionPin('${completionPin}')">
+                ${uiIcon('check', 14)}
+                <span id="copyCompletionPinBtnText">Copy PIN</span>
+              </button>
+              <button type="button" class="fh-pin-action-btn" onclick="openChatDrawer('${req.id}', '${prov?.id}')">
+                ${uiIcon('chat', 14)}
+                <span>Send in Chat</span>
+              </button>
+            </div>
           </div>
 
           <button type="button" class="fh-orange-pill-cta" style="margin-bottom:14px;" onclick="openChatDrawer('${req.id}', '${prov?.id}')">
-            <span>Contact Pro</span>
+            <span>Contact ${escapeHtml(prov?.name || 'Pro')}</span>
           </button>
 
           <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:14px; padding:12px 14px; text-align:left; margin-bottom:14px;">
@@ -9686,11 +9766,18 @@ async function completeBooking(requestId) {
 // DRAWER MODE SWITCH & LOGOUT HANDLERS
 // ============================================================================
 function closeModal() {
+  if (state.activeModal === 'RATE_BOOKING_MODAL') {
+    state.activeRequestId = null;
+    state.screenStep = 'HOME';
+    state.customerTab = 'HOME';
+    state.providerTab = 'FEED';
+  }
   stopFaceCameraStream();
   state.activeModal = null;
   state.modalData = null;
   lastRenderedModalKey = '';
   renderModalLayer();
+  renderAll(true);
 }
 
 function openSideDrawerModal() {
@@ -11644,8 +11731,23 @@ async function providerRequestCompletion(requestId) {
   }
 }
 
+function copyCompletionPin(pin) {
+  try {
+    const rawPin = String(pin || '').replace(/\D/g, '');
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(rawPin);
+    }
+    const btn = document.getElementById('copyCompletionPinBtnText');
+    if (btn) btn.innerText = 'Copied!';
+    showToast(`Completion PIN #${rawPin} copied!`, 'success');
+  } catch (e) {
+    showToast(`Completion PIN: #${pin}`, 'info');
+  }
+}
+
 async function handleProviderCompletionPinVerification(pinCode, requestId) {
-  if (!pinCode || pinCode.length !== 4) return;
+  const cleanPin = String(pinCode || '').replace(/\D/g, '').trim();
+  if (!cleanPin || cleanPin.length !== 4) return;
   const input = document.getElementById(`providerCompletionPinInput_${requestId}`);
   const statusEl = document.getElementById(`providerCompletionPinStatus_${requestId}`);
 
@@ -11664,7 +11766,7 @@ async function handleProviderCompletionPinVerification(pinCode, requestId) {
     const reqSnap = (state.db?.requests || []).find((r) => r.id === requestId) || null;
     const res = await apiPost('/api/bookings/verify-completion-pin', {
       requestId,
-      pinCode,
+      pinCode: cleanPin,
       requestSnapshot: reqSnap
     });
 
@@ -14025,10 +14127,18 @@ window.resetApp = async function() {
     await fetchState(true);
     renderAll(true);
   } catch (e) {
-    location.reload();
+    showToast('App reset completed locally.', 'info');
+    renderAll(true);
   }
 };
 
 if (typeof window !== 'undefined' && window.location.search.includes('reset')) {
-  setTimeout(() => window.resetApp(), 300);
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.delete('reset');
+    window.history.replaceState({}, document.title, url.pathname + (url.search ? url.search : ''));
+  } catch (e) {}
+  setTimeout(() => {
+    if (typeof window.resetApp === 'function') window.resetApp();
+  }, 100);
 }

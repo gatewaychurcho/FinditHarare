@@ -2804,6 +2804,7 @@ const server = http.createServer(async (req, res) => {
         : rest;
     };
     const publicPayload = {
+      resetAt: db.resetAt || null,
       categories: db.categories,
       hubServices: db.hubServices,
       changelogs: db.changelogs,
@@ -4981,8 +4982,8 @@ Return ONLY JSON with keys:
       const reqItem = ensureRequestInDb(body.requestId, body.requestSnapshot);
       if (!reqItem) return sendJson(res, 404, { error: 'Booking not found' });
 
-      const providedPin = String(body.pinCode || '').trim();
-      const expectedPin = String(reqItem.completionPinCode || '').trim();
+      const providedPin = String(body.pinCode || '').replace(/\D/g, '').trim();
+      const expectedPin = String(reqItem.completionPinCode || '').replace(/\D/g, '').trim();
       if (providedPin !== expectedPin) {
         return sendJson(res, 400, { error: `Incorrect Completion PIN. Ask the client for their 4-digit Completion PIN (#${expectedPin ? '****' : 'not generated'}).` });
       }
