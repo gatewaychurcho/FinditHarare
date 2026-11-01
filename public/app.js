@@ -4397,6 +4397,19 @@ function getCategoryTileBannerBg(catId) {
   }
 }
 
+function getCategoryDisplayTitle(cat) {
+  if (!cat) return '';
+  const id = cat.id || '';
+  if (id === 'repairs_construction') return 'Home Repairs & Building';
+  if (id === 'beauty_care') return 'Beauty & Personal Care';
+  if (id === 'cleaning_domestic') return 'Cleaning & Domestic';
+  if (id === 'automotive') return 'Automotive Services';
+  if (id === 'solar_power_water') return 'Solar & Electrical Power';
+  if (id === 'gardening_outdoor') return 'Gardening & Outdoor';
+  if (id === 'general_labour') return 'General Labour & More';
+  return cat.shortName || cat.name || '';
+}
+
 function selectCategoryAndOpenRequest(catId) {
   state.selectedCategoryId = catId;
   state.selectedSubServiceIdx = 0;
@@ -4622,7 +4635,7 @@ function renderHomeDiscoveryOverlay() {
                 <div class="fh-category-card-img-overlay"></div>
               </div>
               <div class="fh-category-card-info">
-                <div class="fh-category-card-title">${escapeHtml(cat.name)}</div>
+                <div class="fh-category-card-title">${escapeHtml(getCategoryDisplayTitle(cat))}</div>
               </div>
             </div>
           `;
@@ -5494,75 +5507,123 @@ function renderBookedTrackingOverlay(req) {
     const isDoneRequested = Boolean(req.completionRequested);
 
     return `
-      <div class="fh-main-screen-container" style="padding-top:14px;">
-        <div class="fh-request-form-card" style="text-align:center;">
-          <div class="fh-form-header-row" style="margin-bottom:14px; text-align:left;">
-            <div class="fh-form-header-title">${isDoneRequested ? 'Service Completed' : 'Request in Progress'}</div>
-            ${isDoneRequested
-              ? `<span style="background:#DCFCE7; color:#15803D; font-size:11px; font-weight:800; padding:4px 10px; border-radius:99px; border:1px solid #86EFAC;">Awaiting PIN</span>`
-              : `<span style="background:#EFF6FF; color:#1D4ED8; font-size:11px; font-weight:800; padding:4px 10px; border-radius:99px; border:1px solid #BFDBFE;">In Progress</span>`
-            }
-          </div>
-
-          <div class="fh-in-progress-shield" style="${isDoneRequested ? 'background:#DCFCE7; color:#16A34A;' : ''}">
-            <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="${isDoneRequested ? '#10B981' : 'currentColor'}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="20 6 9 17 4 12"/>
-            </svg>
-          </div>
-
-          <div style="font-size:20px; font-weight:900; color:#0F172A; margin-bottom:4px;">
-            ${isDoneRequested ? 'Specialist Finished Work!' : 'Service in Progress!'}
-          </div>
-
-          <div style="font-size:13px; color:#64748B; line-height:1.45; margin-bottom:14px; padding:0 6px;">
-            ${isDoneRequested
-              ? `<strong>${escapeHtml(prov?.name || 'Your specialist')}</strong> has marked the service as done. Inspect the work, then share your <strong>Completion PIN</strong>:`
-              : `<strong>${escapeHtml(prov?.name || 'Your specialist')}</strong> has arrived and is working on your request.`
-            }
-          </div>
-
-          <!-- THE COMPLETION PIN CARD (Prominent in both states, highlighted when done!) -->
-          <div class="fh-completion-pin-card" style="${!isDoneRequested ? 'background:#F8FAFC; border:1.5px dashed #CBD5E1; box-shadow:none;' : ''}">
-            <div class="fh-completion-pin-label" style="${!isDoneRequested ? 'color:#64748B;' : ''}">
-              ${isDoneRequested ? '🎉 Share Completion PIN with Specialist:' : 'Your 4-Digit Completion PIN:'}
+      <div class="fh-main-screen-container" style="padding-top:14px; max-width:480px; margin:0 auto;">
+        <!-- Clean Compact Service In-Progress Card -->
+        <div class="fh-request-form-card" style="padding:16px 14px; margin-bottom:12px;">
+          <!-- Status Header Badge -->
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+            <div style="display:flex; align-items:center; gap:6px;">
+              <span style="width:8px; height:8px; border-radius:50%; background:${isDoneRequested ? '#10B981' : '#3B82F6'}; animation:pulse 1s infinite; display:inline-block;"></span>
+              <span style="font-size:13px; font-weight:800; color:#0F172A;">
+                ${isDoneRequested ? 'Specialist Completed Work' : 'Service in Progress'}
+              </span>
             </div>
-            <div class="fh-completion-pin-value" style="${!isDoneRequested ? 'color:#0F172A;' : ''}" id="clientCompletionPinText">
+            <span style="font-size:11px; font-weight:800; padding:3px 9px; border-radius:99px; ${isDoneRequested ? 'background:#DCFCE7; color:#15803D; border:1px solid #86EFAC;' : 'background:#EFF6FF; color:#1D4ED8; border:1px solid #BFDBFE;'}">
+              ${isDoneRequested ? 'Awaiting Your PIN' : `~${req.estimatedDurationMinutes || 30}m Est.`}
+            </span>
+          </div>
+
+          <!-- Specialist Row with Direct Call & Chat -->
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; background:#F8FAFC; border:1px solid #E2E8F0; border-radius:14px; padding:10px 12px; margin-bottom:14px;">
+            <div style="display:flex; align-items:center; gap:10px; min-width:0;">
+              <img
+                src="${resolveMediaUrl(avatarUrl)}"
+                onerror="this.onerror=null; this.src='${DEFAULT_AVATAR_FALLBACK}';"
+                style="width:40px; height:40px; border-radius:50%; object-fit:cover; border:2px solid #FFFFFF; box-shadow:0 2px 6px rgba(0,0,0,0.08); flex-shrink:0;"
+                alt="${escapeHtml(prov?.name || 'Specialist')}"
+              />
+              <div style="min-width:0;">
+                <div style="font-size:13.5px; font-weight:800; color:#0F172A; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                  ${escapeHtml(prov?.name || 'Specialist')}
+                </div>
+                <div style="font-size:11px; color:#64748B; display:flex; align-items:center; gap:4px;">
+                  <span>★ ${prov?.rating || '5.0'}</span>
+                  <span>•</span>
+                  <span>${escapeHtml(prov?.brandName || 'Mobile Specialist')}</span>
+                </div>
+              </div>
+            </div>
+            <div style="display:flex; gap:6px; flex-shrink:0;">
+              <button
+                type="button"
+                class="btn-dark-sec"
+                style="height:34px; padding:0 10px; font-size:12px; border-radius:8px;"
+                onclick="startInAppCall('${(prov?.name || 'Pro').replace(/'/g, "\\'")}', '${escapeHtml(req.title)}', 'call_${req.id}', '${prov?.id || ''}')"
+              >
+                ${uiIcon('phone', 13)}
+                <span>Call</span>
+              </button>
+              <button
+                type="button"
+                class="btn-dark-sec"
+                style="height:34px; padding:0 10px; font-size:12px; border-radius:8px;"
+                onclick="openChatDrawer('${req.id}', '${prov?.id}')"
+              >
+                ${uiIcon('chat', 13)}
+                <span>Chat</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Sweet Sleek Completion PIN Box -->
+          <div style="background:${isDoneRequested ? '#F0FDF4' : '#F8FAFC'}; border:1.5px ${isDoneRequested ? 'solid #10B981' : 'dashed #CBD5E1'}; border-radius:14px; padding:14px 12px; text-align:center; margin-bottom:14px; box-shadow:${isDoneRequested ? '0 4px 14px rgba(16,185,129,0.15)' : 'none'};">
+            <div style="font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:0.06em; color:${isDoneRequested ? '#15803D' : '#64748B'}; margin-bottom:3px;">
+              ${isDoneRequested ? '🎉 Share Completion PIN With Specialist:' : 'Your 4-Digit Completion PIN:'}
+            </div>
+            <div style="font-size:32px; font-weight:900; letter-spacing:6px; color:${isDoneRequested ? '#15803D' : '#0F172A'}; margin:4px 0 6px;" id="clientCompletionPinText">
               #${completionPin}
             </div>
-            <div class="fh-completion-pin-hint" style="${!isDoneRequested ? 'color:#64748B;' : ''}">
+            <div style="font-size:11.5px; color:${isDoneRequested ? '#166534' : '#64748B'}; line-height:1.4; margin-bottom:10px; padding:0 6px;">
               ${isDoneRequested
-                ? `Specialist will enter this code to finalize the job and reconcile payment.`
-                : `Keep safe — share with ${escapeHtml(prov?.name || 'specialist')} after you inspect and approve the finished work.`
+                ? 'Specialist has marked the job as done. Inspect the work and share this code to finalize.'
+                : `Keep safe — give this to ${escapeHtml(prov?.name || 'specialist')} only after work is finished to your satisfaction.`
               }
             </div>
-            <div style="display:flex; gap:8px;">
-              <button type="button" class="fh-pin-action-btn" onclick="copyCompletionPin('${completionPin}')">
-                ${uiIcon('check', 14)}
+            <div style="display:flex; justify-content:center; gap:8px;">
+              <button type="button" class="fh-pin-action-btn" style="flex:1; max-width:140px; height:34px; font-size:12px;" onclick="copyCompletionPin('${completionPin}')">
+                ${uiIcon('check', 13)}
                 <span id="copyCompletionPinBtnText">Copy PIN</span>
               </button>
-              <button type="button" class="fh-pin-action-btn" onclick="openChatDrawer('${req.id}', '${prov?.id}')">
-                ${uiIcon('chat', 14)}
+              <button type="button" class="fh-pin-action-btn" style="flex:1; max-width:140px; height:34px; font-size:12px;" onclick="openChatDrawer('${req.id}', '${prov?.id}')">
+                ${uiIcon('chat', 13)}
                 <span>Send in Chat</span>
               </button>
             </div>
           </div>
 
-          <button type="button" class="fh-orange-pill-cta" style="margin-bottom:14px;" onclick="openChatDrawer('${req.id}', '${prov?.id}')">
-            <span>Contact ${escapeHtml(prov?.name || 'Pro')}</span>
-          </button>
-
-          <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:14px; padding:12px 14px; text-align:left; margin-bottom:14px;">
-            <div style="font-size:11px; font-weight:800; color:#64748B; text-transform:uppercase; margin-bottom:6px;">Service Details</div>
-            <div style="font-size:13.5px; font-weight:800; color:#0F172A; margin-bottom:4px;">${escapeHtml(req.title)}</div>
-            <div style="font-size:12px; color:#64748B; margin-bottom:2px;">📍 ${escapeHtml(req.suburbName || 'Harare')}</div>
-            <div style="font-size:13.5px; font-weight:800; color:#0052FF;">Agreed Total: ${formatUsdPrice(agreedPrice)}</div>
+          <!-- Service Details Strip -->
+          <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px; padding:10px 12px; text-align:left; margin-bottom:12px;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <div style="min-width:0;">
+                <div style="font-size:13px; font-weight:800; color:#0F172A; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                  ${escapeHtml(req.title)}
+                </div>
+                <div style="font-size:11px; color:#64748B; margin-top:1px;">
+                  📍 ${escapeHtml(req.suburbName || 'Harare')}
+                </div>
+              </div>
+              <div style="text-align:right; flex-shrink:0;">
+                <div style="font-size:13.5px; font-weight:900; color:#0052FF;">
+                  ${formatUsdPrice(agreedPrice)}
+                </div>
+                <div style="font-size:10px; font-weight:700; color:#64748B;">
+                  ${escapeHtml(req.paymentMethod || 'Cash USD')}
+                </div>
+              </div>
+            </div>
           </div>
 
-          <!-- Dispute only: cancellation blocked once 1st PIN verified -->
-          <button type="button" class="btn-dark-sec" style="color:#DC2626; border-color:#FECACA; background:#FEF2F2;" onclick="openDisputeModal('${req.id}')">
-            ${uiIcon('shield', 14)}
-            <span>Report Dispute / Need Help</span>
-          </button>
+          <!-- Discreet Dispute / Help Link -->
+          <div style="text-align:center; padding-top:2px;">
+            <button
+              type="button"
+              onclick="openDisputeModal('${req.id}')"
+              style="background:none; border:none; color:#DC2626; font-size:12px; font-weight:700; cursor:pointer; padding:6px 12px; display:inline-flex; align-items:center; gap:5px;"
+            >
+              ${uiIcon('shield', 13)}
+              <span>Report Issue / Need Help</span>
+            </button>
+          </div>
         </div>
       </div>
     `;
@@ -5634,25 +5695,25 @@ function renderBookedTrackingOverlay(req) {
 
           if (req.status === 'ARRIVED') {
             return `
-              <div class="pulsating-arrival-banner" style="background:#FEF2F2; border:1.5px solid #FCA5A5; border-radius:12px; padding:10px 12px; margin-bottom:8px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
+              <div style="background:#F0FDF4; border:1.5px solid #86EFAC; border-radius:14px; padding:12px 14px; margin-bottom:10px; display:flex; align-items:center; justify-content:space-between; gap:12px; box-shadow:0 2px 10px rgba(16,185,129,0.12);">
                 <div style="flex:1; min-width:0;">
-                  <div style="font-size:11.5px; font-weight:800; color:#DC2626; text-transform:uppercase; letter-spacing:0.04em; display:flex; align-items:center; gap:5px; margin-bottom:2px;">
-                    <span style="width:7px; height:7px; border-radius:50%; background:#EF4444; display:inline-block;"></span>
-                    <span>${prov?.shortName || prov?.name || 'Specialist'} is Waiting Outside</span>
+                  <div style="font-size:11.5px; font-weight:800; color:#15803D; text-transform:uppercase; letter-spacing:0.04em; display:flex; align-items:center; gap:6px; margin-bottom:2px;">
+                    <span style="width:7px; height:7px; border-radius:50%; background:#16A34A; animation:pulse 1s infinite; display:inline-block;"></span>
+                    <span>${prov?.shortName || prov?.name || 'Specialist'} Waiting Outside</span>
                   </div>
-                  <div style="font-size:11.5px; color:#991B1B; font-weight:600;">
+                  <div style="font-size:11.5px; color:#166534; font-weight:600; line-height:1.35;">
                     Share this Start PIN with your specialist to begin:
                   </div>
                   ${isWithin20m ? `
                     <div style="font-size:10.5px; font-weight:700; color:#059669; margin-top:3px; display:flex; align-items:center; gap:4px;">
                       <span style="width:5px; height:5px; border-radius:50%; background:#10B981;"></span>
-                      <span>Within 20m • Auto-pairs in <span class="proximity-autopair-timer">${autoPairRemaining}s</span></span>
+                      <span>Within 20m • Ready to start</span>
                     </div>
                   ` : ''}
                 </div>
-                <div style="background:#FFFFFF; border:2px solid #EF4444; border-radius:10px; padding:5px 12px; text-align:center; box-shadow:0 2px 8px rgba(239,68,68,0.12); flex-shrink:0;">
-                  <div style="font-size:9px; font-weight:800; color:#DC2626; letter-spacing:0.05em;">START PIN</div>
-                  <div style="font-size:18px; font-weight:900; color:#DC2626; letter-spacing:2px; line-height:1.2;">#${req.startPinCode || '4829'}</div>
+                <div style="background:#FFFFFF; border:2px solid #10B981; border-radius:12px; padding:6px 14px; text-align:center; box-shadow:0 2px 8px rgba(16,185,129,0.18); flex-shrink:0;">
+                  <div style="font-size:9px; font-weight:800; color:#059669; letter-spacing:0.06em;">START PIN</div>
+                  <div style="font-size:20px; font-weight:900; color:#059669; letter-spacing:2px; line-height:1.2;">#${req.startPinCode || '4829'}</div>
                 </div>
               </div>
             `;
@@ -5782,19 +5843,6 @@ function renderBookedTrackingOverlay(req) {
                 <span>Chat ${(req.messages && req.messages.length > 0) ? `(${req.messages.length})` : ''}</span>
               </button>
             </div>
-
-            ${isArrived ? `
-              <div style="background:#EFF6FF; border:1.5px dashed #3B82F6; border-radius:12px; padding:10px 12px; display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px;">
-                <div style="display:flex; align-items:center; gap:8px; min-width:0;">
-                  <span style="display:inline-flex; flex-shrink:0;">${uiIcon('key', 16)}</span>
-                  <div style="min-width:0;">
-                    <div style="font-size:12.5px; font-weight:800; color:#1E40AF;">Share Start PIN with Specialist</div>
-                    <div style="font-size:11px; color:#3B82F6;">Give this code to your specialist so they can start work</div>
-                  </div>
-                </div>
-                <span style="background:#2563EB; color:#FFFFFF; font-size:16px; font-weight:900; letter-spacing:2px; padding:4px 10px; border-radius:8px; flex-shrink:0;">#${req.startPinCode || '4829'}</span>
-              </div>
-            ` : ''}
 
             ${isInProgress ? `
               <div style="background:#F0FDF4; border:1.5px solid #86EFAC; border-radius:12px; padding:10px 12px; margin-bottom:8px;">
@@ -10574,44 +10622,45 @@ function renderProviderActiveVisitTab(prov, activeJob) {
           </div>
         ` : ''}
 
-        <!-- STAGE 2: WAITING OUTSIDE GATE (Provider sees 4-digit PIN input!) -->
+        <!-- STAGE 2: WAITING OUTSIDE GATE (Luxury Auto-Verifying PIN Entry) -->
         ${isArrived ? `
-          <div style="background:#F0FDF4; border:1.5px solid #86EFAC; border-radius:14px; padding:12px; margin-bottom:10px;">
-            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
-              <div style="font-size:12px; font-weight:800; color:#15803D; text-transform:uppercase; display:flex; align-items:center; gap:5px;">
-                <span style="width:7px; height:7px; border-radius:50%; background:#16A34A; animation:pulse 1s infinite;"></span>
-                <span>Specialist Waiting Outside Gate</span>
-              </div>
-              <span style="font-size:11px; font-weight:800; color:#059669; background:#DCFCE7; padding:2px 8px; border-radius:99px;">Client Alerted</span>
+          <div style="background:#F0FDF4; border:1.5px solid #86EFAC; border-radius:16px; padding:16px 14px; margin-bottom:12px; text-align:center;">
+            <div style="display:inline-flex; align-items:center; gap:6px; background:#DCFCE7; border:1px solid #86EFAC; color:#15803D; font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:0.04em; padding:4px 10px; border-radius:99px; margin-bottom:8px;">
+              <span style="width:7px; height:7px; border-radius:50%; background:#16A34A; animation:pulse 1s infinite;"></span>
+              <span>Waiting Outside Gate</span>
             </div>
-            <div style="font-size:11.5px; color:#166534; margin-bottom:8px;">
-              Ask the client for the 4-digit Start PIN displayed on their screen:
+            <div style="font-size:14px; font-weight:800; color:#0F172A; margin-bottom:3px;">
+              Enter Client's 4-Digit Start PIN
             </div>
-            <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+            <div style="font-size:11.5px; color:#166534; margin-bottom:12px;">
+              Ask customer for their code — work starts instantly upon entry:
+            </div>
+            <div style="display:flex; justify-content:center; align-items:center; margin-bottom:10px;">
               <input
                 id="providerPinInput_${activeJob.id}"
                 class="dark-input"
                 type="tel"
                 inputmode="numeric"
                 pattern="[0-9]*"
-                style="height:44px; font-size:20px; font-weight:900; letter-spacing:4px; text-align:center; padding:0 8px; width:110px; flex-shrink:0; border:2px solid #16A34A;"
+                style="height:52px; width:180px; font-size:26px; font-weight:900; letter-spacing:8px; text-align:center; padding:0 12px; border:2.5px solid #10B981; border-radius:14px; background:#FFFFFF; color:#0F172A; box-shadow:0 4px 14px rgba(16,185,129,0.18);"
                 placeholder="••••"
                 maxlength="4"
+                autofocus
                 oninput="if(this.value.length === 4) handleProviderAutoPinVerification(this.value, '${activeJob.id}')"
               />
-              <select id="providerEstSelect_${activeJob.id}" class="dark-input" style="height:44px; font-size:12px; font-weight:700; flex:1;">
-                <option value="15">Est: 15 mins</option>
-                <option value="30" selected>Est: 30 mins</option>
-                <option value="45">Est: 45 mins</option>
-                <option value="60">Est: 1 hour</option>
-                <option value="90">Est: 1.5 hours</option>
-                <option value="120">Est: 2 hours</option>
-              </select>
-              <button type="button" class="btn-primary-blue" style="height:44px; padding:0 14px; font-size:12.5px; font-weight:800; background:#10B981;" onclick="providerVerifyStartPin('${activeJob.id}')">
-                Start Work
-              </button>
             </div>
-            <div id="providerPinStatus_${activeJob.id}"></div>
+            <div style="display:inline-flex; align-items:center; gap:6px; font-size:11.5px; color:#475569; background:#FFFFFF; border:1px solid #E2E8F0; padding:4px 10px; border-radius:10px;">
+              <span style="font-weight:700;">Est. Time:</span>
+              <select id="providerEstSelect_${activeJob.id}" style="border:none; background:transparent; font-size:11.5px; font-weight:800; color:#0F172A; cursor:pointer; outline:none;">
+                <option value="15">15 mins</option>
+                <option value="30" selected>30 mins</option>
+                <option value="45">45 mins</option>
+                <option value="60">1 hour</option>
+                <option value="90">1.5 hrs</option>
+                <option value="120">2 hrs</option>
+              </select>
+            </div>
+            <div id="providerPinStatus_${activeJob.id}" style="margin-top:6px;"></div>
           </div>
         ` : ''}
 
@@ -11722,6 +11771,8 @@ async function handleProviderAutoPinVerification(pinCode, requestId) {
   if (!pinCode || pinCode.length !== 4) return;
   const input = document.getElementById(`providerPinInput_${requestId}`);
   const statusEl = document.getElementById(`providerPinStatus_${requestId}`);
+  const estSelect = document.getElementById(`providerEstSelect_${requestId}`);
+  const estimatedMinutes = estSelect ? Number(estSelect.value) : 30;
 
   if (input) input.disabled = true;
   if (statusEl) {
@@ -11739,6 +11790,7 @@ async function handleProviderAutoPinVerification(pinCode, requestId) {
     const res = await apiPost('/api/bookings/verify-pin', {
       requestId,
       pinCode,
+      estimatedMinutes,
       requestSnapshot: reqSnap
     });
 
