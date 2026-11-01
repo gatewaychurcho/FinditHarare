@@ -2699,17 +2699,43 @@ html, body {
 .provider-order-card {
   background: #FFFFFF;
   border: 1.5px solid var(--blue-border);
-  border-radius: 18px;
-  padding: 13px;
+  border-radius: 16px;
+  padding: 12px 14px;
   margin-bottom: 10px;
-  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.05);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.04);
+  box-sizing: border-box;
 }
 
 .provider-bid-grid {
   display: grid;
-  grid-template-columns: 1.3fr 1fr 1fr 1fr;
-  gap: 6px;
-  margin-top: 10px;
+  grid-template-columns: 1.35fr 1fr 1fr 1fr;
+  gap: 5px;
+  margin-top: 8px;
+  align-items: center;
+}
+
+.provider-bid-grid button {
+  height: 36px !important;
+  min-height: 36px !important;
+  max-height: 36px !important;
+  padding: 0 4px !important;
+  font-size: 11.5px !important;
+  font-weight: 800 !important;
+  border-radius: 9px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  box-sizing: border-box !important;
+}
+
+@media (max-width: 360px) {
+  .provider-bid-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
 }
 
 .provider-step-bar {

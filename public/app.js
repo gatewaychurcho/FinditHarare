@@ -3713,20 +3713,48 @@ function renderAll(force = true) {
 function getCustomerActiveRequest() {
   if (!state.db || !state.currentUser || !state.isAuthenticated) return null;
   const reqs = Array.isArray(state.db.requests) ? state.db.requests : [];
+  
+  // Find all requests belonging to the logged-in client
+  const myReqs = reqs.filter(
+    (r) => (r.customerId === state.currentUser.id || (state.currentUser.phone && r.customerPhone === state.currentUser.phone))
+  );
+  if (myReqs.length === 0) return null;
+
+  // Sort descending by newest update or creation timestamp
+  myReqs.sort((a, b) => {
+    const tA = Number(a.updatedAt || new Date(a.createdAt || 0).getTime() || 0);
+    const tB = Number(b.updatedAt || new Date(b.createdAt || 0).getTime() || 0);
+    return tB - tA;
+  });
+
+  // 1. ABSOLUTE PRIORITY: Active booked visit (CONFIRMED, ARRIVED, IN_PROGRESS)
+  // A customer with an active specialist on route or at their gate MUST NEVER be demoted back to searching!
+  const activeBooked = myReqs.find((r) => isBookedStatus(r.status));
+  if (activeBooked) {
+    state.activeRequestId = activeBooked.id;
+    return activeBooked;
+  }
+
+  // 2. Return current active OPEN request if set
   if (state.activeRequestId) {
-    const found = reqs.find(
-      (r) => r.id === state.activeRequestId && (r.status === 'OPEN' || isBookedStatus(r.status))
-    );
+    const found = myReqs.find((r) => r.id === state.activeRequestId && r.status === 'OPEN');
     if (found) return found;
   }
-  const myOpen = reqs.find(
-    (r) => (r.customerId === state.currentUser.id || (state.currentUser.phone && r.customerPhone === state.currentUser.phone)) &&
-           (r.status === 'OPEN' || isBookedStatus(r.status))
-  );
-  if (myOpen) {
-    state.activeRequestId = myOpen.id;
-    return myOpen;
+
+  // 3. Return newest OPEN request
+  const newestOpen = myReqs.find((r) => r.status === 'OPEN');
+  if (newestOpen) {
+    state.activeRequestId = newestOpen.id;
+    return newestOpen;
   }
+
+  // 4. Return recently completed visit if client still needs to rate
+  const recentCompleted = myReqs.find((r) => r.status === 'COMPLETED' && (!r.clientRating || !r.clientRating.score));
+  if (recentCompleted) {
+    state.activeRequestId = recentCompleted.id;
+    return recentCompleted;
+  }
+
   return null;
 }
 
@@ -4033,7 +4061,23 @@ function renderUiOverlay(force = true) {
     } else {
       // HOME TAB
       if (activeReq && isBookedStatus(activeReq.status)) {
-        contentHtml = renderBookedTrackingOverlay(activeReq);
+        try {
+          contentHtml = renderBookedTrackingOverlay(activeReq);
+        } catch (overlayErr) {
+          console.error('[Findit] Error in renderBookedTrackingOverlay:', overlayErr);
+          contentHtml = `
+            <div class="fh-main-screen-container" style="padding-top:16px;">
+              <div class="fh-request-form-card" style="padding:18px; text-align:center;">
+                <div style="font-size:16px; font-weight:800; color:#0F172A; margin-bottom:6px;">Specialist Active (${escapeHtml(activeReq.status)})</div>
+                <div style="font-size:12px; color:#64748B; margin-bottom:12px;">Start PIN: #${activeReq.startPinCode || '4829'} • Total: ${formatUsdPrice(activeReq.agreedTotalUsd || activeReq.budgetUsd)}</div>
+                <div style="display:flex; gap:8px;">
+                  <button class="btn-dark-sec" style="flex:1;" onclick="openChatDrawer('${activeReq.id}')">Open Chat</button>
+                  <button class="btn-primary-blue" style="flex:1;" onclick="renderAll(true)">Refresh Screen</button>
+                </div>
+              </div>
+            </div>
+          `;
+        }
       } else if (activeReq && activeReq.status === 'OPEN') {
         contentHtml = renderSearchingRadarOverlay(activeReq);
       } else if (state.screenStep === 'CONFIGURE') {
@@ -5537,6 +5581,7 @@ function renderBookedTrackingOverlay(req) {
   const agreedPrice = acceptedOffer?.priceUsd || req.agreedTotalUsd || req.budgetUsd;
   const isArrived = req.status === 'ARRIVED';
   const isInProgress = req.status === 'IN_PROGRESS' || Boolean(req.pinVerifiedByProvider);
+  const isCompleted = req.status === 'COMPLETED';
 
   // SCREEN 6: SERVICE IN PROGRESS & COMPLETION PIN SHARING
   if (isInProgress) {
@@ -10815,29 +10860,7 @@ function renderProviderRequestsFeedTab(prov, openRequests, activeJob) {
         </div>
       ` : ''}
 
-      <!-- Provider Break & Availability Notice (Status controls moved to Side Panel Drawer) -->
-      ${(prov.status === 'ON_BREAK' || prov.status === 'LUNCH') ? `
-        <div style="background:#EFF6FF; border:1px solid #BFDBFE; border-radius:14px; padding:10px 14px; margin-bottom:12px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
-          <div style="font-size:12px; font-weight:700; color:#1E40AF; display:flex; align-items:center; gap:6px;">
-            <span style="width:7px; height:7px; border-radius:50%; background:#3B82F6;"></span>
-            <span>${prov.status === 'LUNCH' ? 'Lunch Break Active' : 'Break Active'} — Job alerts paused</span>
-          </div>
-          <button type="button" class="small-pill-btn" style="background:#10B981; color:#fff; border:none; font-weight:800; padding:4px 12px; font-size:11px;" onclick="setProviderStatus('AVAILABLE')">
-            Resume Available
-          </button>
-        </div>
-      ` : (prov.status === 'OFFLINE' || prov.isOnline === false) ? `
-        <div style="background:#F1F5F9; border:1px solid #CBD5E1; border-radius:14px; padding:10px 14px; margin-bottom:12px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
-          <div style="font-size:12px; font-weight:700; color:#475569; display:flex; align-items:center; gap:6px;">
-            <span style="width:7px; height:7px; border-radius:50%; background:#94A3B8;"></span>
-            <span>You are Offline (Requests paused)</span>
-          </div>
-          <button type="button" class="small-pill-btn" style="background:#10B981; color:#fff; border:none; font-weight:800; padding:4px 12px; font-size:11px;" onclick="setProviderStatus('AVAILABLE')">
-            Go Online
-          </button>
-        </div>
-      ` : ''}
-
+      <!-- Provider Break & Availability Notice -->
       ${(prov.status === 'ON_BREAK' || prov.status === 'LUNCH') ? `
         <div style="background:#EFF6FF; border:1.5px solid #3B82F6; border-radius:14px; padding:12px 14px; margin-bottom:12px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
           <div style="display:flex; align-items:center; gap:9px; flex:1; min-width:0;">
@@ -10856,13 +10879,13 @@ function renderProviderRequestsFeedTab(prov, openRequests, activeJob) {
             <span>Resume Now</span>
           </button>
         </div>
-      ` : prov.isOnline === false || prov.status === 'OFFLINE' ? `
+      ` : (prov.isOnline === false || prov.status === 'OFFLINE') ? `
         <div style="background:#FFFBEB; border:1.5px solid #F59E0B; border-radius:14px; padding:12px 14px; margin-bottom:12px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
           <div style="display:flex; align-items:center; gap:9px; flex:1; min-width:0;">
             <div style="width:10px; height:10px; border-radius:50%; background:#F59E0B; box-shadow:0 0 0 3px rgba(245,158,11,0.25); flex-shrink:0;"></div>
             <div>
               <div style="font-size:13px; font-weight:800; color:#92400E;">You are currently Offline</div>
-              <div style="font-size:11.5px; color:#B45309; font-weight:600;">You are hidden from clients. Go Online to receive live job posts and bids.</div>
+              <div style="font-size:11.5px; color:#B45309; font-weight:600;">Go Online to receive live job posts and bids.</div>
             </div>
           </div>
           <button
