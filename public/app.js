@@ -2469,7 +2469,7 @@ function resolveNearestHarareThoroughfare(lat, lng) {
 // ============================================================================
 const liveNavState = {
   active: false,
-  voiceEnabled: true,
+  voiceEnabled: false, // Voice navigation is optional and turned OFF by default
   steps: [],
   currentStepIdx: 0,
   totalDistanceMeters: 0,
@@ -2702,6 +2702,8 @@ function stopNavigationHud() {
   liveNavState.active = false;
   liveNavState.isActive = false;
   liveNavState.steps = [];
+  liveNavState.voiceEnabled = false;
+  liveNavState.lastSpokenText = '';
   if (window.speechSynthesis) {
     try { window.speechSynthesis.cancel(); } catch (e) {}
   }
@@ -4290,6 +4292,35 @@ function renderMainHubOverlay() {
 // ----------------------------------------------------------------------------
 // NEW FORM & DESIGN SYSTEM HELPERS (PHONE 1 & 2 MOCKUP TRANSFORMATION)
 // ----------------------------------------------------------------------------
+function getCategoryTileImageUrl(catId) {
+  const norm = String(catId || '').toLowerCase();
+  if (norm.includes('repair') || norm.includes('build') || norm.includes('handy') || norm.includes('plumb')) {
+    return '/assets/categories/cat_repairs.jpg';
+  }
+  if (norm.includes('beauty') || norm.includes('hair') || norm.includes('salon') || norm.includes('barber')) {
+    return '/assets/categories/cat_beauty.jpg';
+  }
+  if (norm.includes('clean') || norm.includes('maid') || norm.includes('wash') || norm.includes('laundry')) {
+    return '/assets/categories/cat_cleaning.jpg';
+  }
+  if (norm.includes('auto') || norm.includes('car') || norm.includes('mechanic') || norm.includes('vehicle')) {
+    return '/assets/categories/cat_automotive.jpg';
+  }
+  if (norm.includes('solar') || norm.includes('inverter') || norm.includes('energy') || norm.includes('battery')) {
+    return '/assets/categories/cat_solar.jpg';
+  }
+  if (norm.includes('electr') || norm.includes('wiring') || norm.includes('power')) {
+    return '/assets/categories/cat_electrical.jpg';
+  }
+  if (norm.includes('garden') || norm.includes('yard') || norm.includes('landscap') || norm.includes('lawn')) {
+    return '/assets/categories/cat_gardening.jpg';
+  }
+  if (norm.includes('labour') || norm.includes('labor') || norm.includes('mover') || norm.includes('shift') || norm.includes('transport')) {
+    return '/assets/categories/cat_labour.jpg';
+  }
+  return '/assets/categories/cat_repairs.jpg';
+}
+
 function getCategoryTileBannerBg(catId) {
   switch (catId) {
     case 'repairs_construction': return 'bg-repairs';
@@ -4491,6 +4522,21 @@ function renderGlobalBottomNavDock() {
 // HOME DISCOVERY SCREEN (PHONE 1 & SCREEN 1: BRAND HEADER, SEARCH, CATEGORY GRID, FLOATING CTA)
 // ----------------------------------------------------------------------------
 function renderHomeDiscoveryOverlay() {
+  if (state.isSheetMinimized) {
+    return `
+      <div class="minimized-map-restore-bar" onclick="toggleSheetMinimize(false)">
+        <div class="minimized-map-suburb-chip">
+          <span class="live-pulse-dot" style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#0052FF;"></span>
+          <span>📍 Harare Map View (${escapeHtml(state.customSuburbLabel ? state.customSuburbLabel.split(',')[0] : 'Avondale')})</span>
+        </div>
+        <button type="button" class="minimized-restore-btn" onclick="toggleSheetMinimize(false); event.stopPropagation();">
+          <span>Show Services</span>
+          ${uiIcon('chevronUp', 14)}
+        </button>
+      </div>
+    `;
+  }
+
   const categories = state.db.categories || [];
   const topServices = getPersonalizedAndTopServices();
 
@@ -4501,7 +4547,7 @@ function renderHomeDiscoveryOverlay() {
       <!-- inDrive Map / Services Switch Bar -->
       <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; gap:8px;">
         <div style="font-size:13px; font-weight:800; color:#0F172A; display:flex; align-items:center; gap:6px;">
-          <span>What do you need?</span>
+          <span>What service do you need?</span>
         </div>
         <div style="display:flex; align-items:center; gap:6px;">
           <button type="button" class="sheet-collapse-pill" onclick="toggleSheetMinimize(true)" title="View Full Street Map">
@@ -4514,20 +4560,19 @@ function renderHomeDiscoveryOverlay() {
         </div>
       </div>
 
-      <!-- 8 Photographic / Illustrated Category Cards Grid -->
+      <!-- 8 Real Photographic Category Cards Grid -->
       <div class="fh-category-grid">
         ${categories.map((cat) => {
           const isSelected = cat.id === state.selectedCategoryId;
-          const bgClass = getCategoryTileBannerBg(cat.id);
+          const imgUrl = getCategoryTileImageUrl(cat.id);
           return `
             <div
               class="fh-category-card ${isSelected ? 'selected' : ''}"
               onclick="selectCategoryAndOpenRequest('${cat.id}')"
             >
-              <div class="fh-category-card-banner ${bgClass}">
-                <div class="fh-category-icon-circle">
-                  ${getCategoryVectorSvg(cat.id, true)}
-                </div>
+              <div class="fh-category-card-img-wrap">
+                <img src="${imgUrl}" class="fh-category-card-real-img" alt="${escapeHtml(cat.name)}" loading="lazy" />
+                <div class="fh-category-card-img-overlay"></div>
               </div>
               <div class="fh-category-card-info">
                 <div class="fh-category-card-title">${escapeHtml(cat.name)}</div>
@@ -4561,7 +4606,7 @@ function renderHomeDiscoveryOverlay() {
         `).join('')}
       </div>
 
-      <!-- Floating Bottom Vibrant Orange CTA Button -->
+      <!-- Floating Bottom Vibrant Orange CTA Button Pinned at Bottom -->
       <div class="fh-floating-orange-cta-wrap">
         <button type="button" class="fh-orange-pill-cta" onclick="openConfigureStep(0)">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -4581,6 +4626,21 @@ function selectTopServiceShortcut(catId, subIdx) {
 // REQUEST A SERVICE SCREEN (PHONE 2 & SCREEN 2: CLEAN FORM CARD)
 // ----------------------------------------------------------------------------
 function renderConfigureFareOverlay() {
+  if (state.isSheetMinimized) {
+    return `
+      <div class="minimized-map-restore-bar" onclick="toggleSheetMinimize(false)">
+        <div class="minimized-map-suburb-chip">
+          <span class="live-pulse-dot" style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#10B981;"></span>
+          <span>📍 Pin Location on Harare Map (${escapeHtml(state.customSuburbLabel ? state.customSuburbLabel.split(',')[0] : 'Avondale')})</span>
+        </div>
+        <button type="button" class="minimized-restore-btn" onclick="toggleSheetMinimize(false); event.stopPropagation();" style="background:#0052FF; color:#FFFFFF;">
+          <span>Set Location</span>
+          ${uiIcon('chevronUp', 14)}
+        </button>
+      </div>
+    `;
+  }
+
   const categories = state.db.categories || [];
   const activeCat = categories.find((c) => c.id === state.selectedCategoryId) || categories[0];
   const subServices = activeCat?.subServices || [];
@@ -4641,11 +4701,20 @@ function renderConfigureFareOverlay() {
           </div>
         </div>
 
-        <!-- Location Suburb Selector -->
+        <!-- Location Suburb Selector with Live GPS & Map Pick -->
         <div class="fh-form-group">
           <div class="fh-form-label-row">
             <span class="fh-form-label">Location</span>
-            <span style="font-size:11px; color:#10B981; font-weight:700;">Harare Suburb</span>
+            <div style="display:flex; align-items:center; gap:6px;">
+              <button type="button" class="small-pill-btn" onclick="useBrowserGeolocation(false)" style="background:#EFF6FF; color:#0052FF; border:1px solid #BFDBFE; font-size:11px; padding:3px 8px;" title="Use Live GPS">
+                ${uiIcon('crosshair', 12)}
+                <span>Live GPS</span>
+              </button>
+              <button type="button" class="small-pill-btn" onclick="toggleSheetMinimize(true)" style="background:#F0FDF4; color:#15803D; border:1px solid #BBF7D0; font-size:11px; padding:3px 8px;" title="Pick on Map">
+                ${uiIcon('map', 12)}
+                <span>Pick on Map</span>
+              </button>
+            </div>
           </div>
           <div class="fh-form-select-card" onclick="openSuburbPickerModal()">
             <div style="display:flex; align-items:center; gap:8px;">
@@ -4676,25 +4745,53 @@ function renderConfigureFareOverlay() {
             </div>
           `}
 
-          <!-- Voice Note -->
+          <!-- WhatsApp Voice Note UX -->
           ${state.draftVoiceNoteUrl ? `
-            <div class="fh-media-card" style="border-style:solid; border-color:#10B981; background:#F0FDF4;" onclick="playAudioFromUrl('${state.draftVoiceNoteUrl}')">
-              <span style="color:#10B981;">${uiIcon('sparkle', 22)}</span>
-              <div style="font-size:11px; font-weight:800; color:#15803D;">Voice Note Ready</div>
-              <span style="font-size:10px; color:#DC2626;" onclick="event.stopPropagation(); state.draftVoiceNoteUrl=null; state.draftVoiceNoteDuration=0; renderAll(true);">Remove</span>
+            <div class="fh-wa-voice-player-bar">
+              <button type="button" class="fh-wa-voice-btn" style="background:#10B981; color:#FFF; width:32px; height:32px;" onclick="playAudioFromUrl('${state.draftVoiceNoteUrl}')" title="Play Voice Note">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 3 20 12 6 21 6 3"/></svg>
+              </button>
+              <div style="flex:1; min-width:0;">
+                <div style="font-size:11.5px; font-weight:800; color:#15803D;">Voice Note Attached</div>
+                <div style="font-size:10px; color:#166534;">${formatVoiceSeconds(state.draftVoiceNoteDuration || 5)} • Ready to send</div>
+              </div>
+              <button type="button" class="fh-wa-voice-btn" style="color:#DC2626;" onclick="removeDraftVoiceNote()" title="Delete Voice Note">
+                ${uiIcon('trash', 16)}
+              </button>
             </div>
           ` : state.isRecordingVoiceNote ? `
-            <div class="fh-media-card" style="border-style:solid; border-color:#EF4444; background:#FEF2F2;">
-              <span style="color:#DC2626; font-size:11px; font-weight:800;" id="voiceNoteTimerLabel">${formatVoiceSeconds(state.voiceNoteRecordSeconds)}</span>
-              <button type="button" class="small-pill-btn" style="background:#DC2626; color:#FFF; font-size:10px; margin-top:4px;" onclick="stopVoiceNoteRecording(true)">Done</button>
+            <div class="fh-wa-voice-recording-bar">
+              <div class="fh-wa-voice-dot"></div>
+              <span class="fh-wa-voice-timer" id="voiceNoteTimerLabel">${formatVoiceSeconds(state.voiceNoteRecordSeconds)}</span>
+              <div class="fh-wa-voice-waveform">
+                <span class="fh-wa-wave-bar" style="animation-delay:0.1s; height:8px;"></span>
+                <span class="fh-wa-wave-bar" style="animation-delay:0.3s; height:14px;"></span>
+                <span class="fh-wa-wave-bar" style="animation-delay:0.2s; height:18px;"></span>
+                <span class="fh-wa-wave-bar" style="animation-delay:0.4s; height:10px;"></span>
+                <span class="fh-wa-wave-bar" style="animation-delay:0.15s; height:16px;"></span>
+                <span class="fh-wa-wave-bar" style="animation-delay:0.35s; height:6px;"></span>
+                <span class="fh-wa-wave-bar" style="animation-delay:0.25s; height:12px;"></span>
+              </div>
+              <button type="button" class="fh-wa-voice-btn" style="color:#64748B;" onclick="togglePauseResumeVoiceNote()" title="${state.isVoiceNotePaused ? 'Resume' : 'Pause'}">
+                ${state.isVoiceNotePaused
+                  ? `<svg width="18" height="18" viewBox="0 0 24 24" fill="#0052FF"><polygon points="5 3 19 12 5 21 5 3"/></svg>`
+                  : `<svg width="18" height="18" viewBox="0 0 24 24" fill="#64748B"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>`
+                }
+              </button>
+              <button type="button" class="fh-wa-voice-btn" style="color:#DC2626;" onclick="cancelVoiceNoteRecording()" title="Cancel & Delete">
+                ${uiIcon('trash', 18)}
+              </button>
+              <button type="button" class="fh-wa-voice-btn" style="background:#10B981; color:#FFFFFF; width:30px; height:30px;" onclick="stopRecordingVoiceNote()" title="Finish Recording">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+              </button>
             </div>
           ` : `
-            <div class="fh-media-card" onclick="startVoiceNoteRecording()">
+            <div class="fh-media-card" onclick="startRecordingVoiceNote()">
               <div class="fh-media-voice-btn-circle">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
               </div>
-              <div style="font-size:11.5px; font-weight:700; color:#0F172A;">Add Voice Note</div>
-              <div style="font-size:10px; color:#94A3B8;">(Optional)</div>
+              <div style="font-size:11.5px; font-weight:700; color:#0F172A;">Record Voice Note</div>
+              <div style="font-size:10px; color:#94A3B8;">(WhatsApp style)</div>
             </div>
           `}
         </div>
@@ -4713,6 +4810,25 @@ function renderConfigureFareOverlay() {
 // ----------------------------------------------------------------------------
 function renderCompareOffersOverlay(req) {
   if (!req) req = getCustomerActiveRequest();
+
+  // If the booking is already confirmed/accepted, display confirmed state & avoid re-rendering stale bids
+  if (req && (isBookedStatus(req.status) || req.acceptedOfferId)) {
+    return `
+      <div class="fh-main-screen-container" style="padding-top:14px;">
+        <div class="fh-request-form-card" style="text-align:center; padding:28px 18px;">
+          <div style="width:58px; height:58px; border-radius:50%; background:#ECFDF5; color:#10B981; display:flex; align-items:center; justify-content:center; margin:0 auto 14px; font-size:26px;">✓</div>
+          <div style="font-size:17px; font-weight:800; color:#0F172A; margin-bottom:6px;">Offer Accepted!</div>
+          <div style="font-size:13px; color:#64748B; margin-bottom:20px; line-height:1.4;">
+            ${escapeHtml(req.acceptedProviderName || 'Specialist')} is confirmed. Track their route and find your Arrival Start PIN on the Home screen.
+          </div>
+          <button type="button" class="btn-primary-blue" style="width:100%; height:46px; font-weight:800; background:#0052FF;" onclick="switchCustomerTab('HOME')">
+            <span>View Live Tracking &amp; Start PIN</span>
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
   const activeOffers = (req?.offers || []).filter((o) => o.status !== 'DECLINED');
 
   return `
@@ -9326,9 +9442,14 @@ async function acceptOffer(requestId, offerId) {
     state.isSheetMinimized = false;
     state.isOffersMinimized = false;
     state.screenStep = 'BOOKED';
+    state.customerTab = 'HOME';
     state.providerTab = 'ACTIVE_JOB';
     lastUiOverlaySignature = '';
     lastOffersSignature = '';
+
+    const floatingOffersRoot = document.getElementById('floatingOffersOverlayRoot');
+    if (floatingOffersRoot) floatingOffersRoot.innerHTML = '';
+
     renderAll(true);
     showToast('Offer accepted! Live route & chat with your pro started.');
 
@@ -9381,8 +9502,8 @@ async function declineOffer(requestId, offerId) {
 
 function openCancelTaskModal(requestId) {
   const req = (state.db?.requests || []).find((r) => r.id === requestId);
-  if (req && (req.status === 'IN_PROGRESS' || req.startPinVerified || req.pinVerifiedByProvider)) {
-    showToast('This job has already started (Start PIN verified) and cannot be cancelled. Please report a dispute.', 'error', 5000);
+  if (req && (req.status === 'IN_PROGRESS' || req.status === 'ARRIVED' || req.isArrived || req.startPinVerified || req.pinVerifiedByProvider)) {
+    showToast('The specialist has already arrived outside / started (PIN activated). Cancellation is locked. Please report a dispute.', 'error', 5000);
     return;
   }
   state.activeModal = 'CANCEL_TASK';
@@ -9406,9 +9527,9 @@ async function submitCancelTaskWithReason(reason) {
     return;
   }
   const reqSnap = (state.db?.requests || []).find((r) => r.id === requestId) || null;
-  if (reqSnap && (reqSnap.status === 'IN_PROGRESS' || reqSnap.startPinVerified || reqSnap.pinVerifiedByProvider)) {
+  if (reqSnap && (reqSnap.status === 'IN_PROGRESS' || reqSnap.status === 'ARRIVED' || reqSnap.isArrived || reqSnap.startPinVerified || reqSnap.pinVerifiedByProvider)) {
     closeModal();
-    showToast('This job has already started (Start PIN verified) and cannot be cancelled. Please file a dispute.', 'error', 5000);
+    showToast('The specialist has already arrived outside / started (PIN activated). Cancellation is locked. Please file a dispute.', 'error', 5000);
     return;
   }
 
@@ -13856,4 +13977,38 @@ if (typeof window !== 'undefined') {
   window.addEventListener('popstate', (e) => {
     window.handleAndroidBack();
   });
+
+  // Global navigation & modal aliases for profile & media actions
+  window.openWalletTopupModal = openWalletTopupModal;
+  window.openDisputeHistoryModal = openDisputeHistoryModal;
+  window.openSafetyCenterModal = openSafetyCenterModal;
+  window.openWhatsAppDirectSupport = openWhatsAppDirectSupport;
+  window.startVoiceNoteRecording = startVoiceNoteRecording;
+  window.stopVoiceNoteRecording = stopVoiceNoteRecording;
+}
+
+function openWalletTopupModal() {
+  openProviderWalletModal();
+}
+
+function openDisputeHistoryModal(jobId) {
+  openDisputeModal(jobId);
+}
+
+function openSafetyCenterModal() {
+  state.activeModal = 'SAFETY';
+  lastRenderedModalKey = '';
+  renderModalLayer();
+}
+
+function openWhatsAppDirectSupport() {
+  openSupportModal();
+}
+
+function startVoiceNoteRecording() {
+  startRecordingVoiceNote();
+}
+
+function stopVoiceNoteRecording() {
+  stopRecordingVoiceNote();
 }
