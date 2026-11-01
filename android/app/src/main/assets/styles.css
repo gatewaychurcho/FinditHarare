@@ -35,7 +35,7 @@ html, body {
   height: 100%;
   overflow: hidden;
   font-family: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  background: #0F172A;
+  background: #F1F5F9;
   color: var(--text-main);
   -webkit-font-smoothing: antialiased;
   font-variant-numeric: tabular-nums;
@@ -47,13 +47,14 @@ html, body {
 .app-viewport {
   position: relative;
   width: 100%;
-  max-width: 440px;
+  max-width: 480px;
   height: 100dvh;
   margin: 0 auto;
-  background: var(--bg-page);
+  background: #FFFFFF;
   overflow: hidden;
   border: none;
   border-radius: 0;
+  box-shadow: 0 0 40px rgba(0, 0, 0, 0.08);
 }
 
 /* ============================================================================
@@ -4873,12 +4874,13 @@ html, body {
 /* Floating Vibrant Orange CTA Button Pinned Safely Above Bottom Nav */
 .fh-floating-orange-cta-wrap {
   position: fixed;
-  bottom: calc(64px + env(safe-area-inset-bottom, 0px) + 12px);
-  left: 14px;
-  right: 14px;
+  bottom: calc(60px + env(safe-area-inset-bottom, 0px) + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% - 24px);
+  max-width: 440px;
   z-index: 85;
   pointer-events: auto;
-  max-width: 440px;
   margin: 0 auto;
 }
 
@@ -4987,12 +4989,14 @@ html, body {
 .fh-bottom-nav-dock {
   position: fixed;
   bottom: 0;
-  left: 0;
-  right: 0;
-  height: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 480px;
+  height: 60px;
   background: #FFFFFF;
   border-top: 1px solid #E2E8F0;
-  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.05);
   z-index: 90;
   display: grid;
   grid-template-columns: repeat(4, 1fr);

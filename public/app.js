@@ -3735,7 +3735,7 @@ function renderFloatingOffersOverlay(force = false) {
   }
 
   const req = getCustomerActiveRequest();
-  if (!req || req.status !== 'OPEN' || !req.offers || req.offers.length === 0) {
+  if (!req || req.status !== 'OPEN' || req.acceptedOfferId || req.acceptedProviderId || isBookedStatus(req.status) || state.screenStep === 'BOOKED' || !req.offers || req.offers.length === 0) {
     if (root.innerHTML !== '') {
       root.className = 'floating-offers-root';
       root.innerHTML = '';
@@ -4536,7 +4536,19 @@ function renderGlobalBottomNavDock() {
   const isCust = state.role === 'CUSTOMER';
   const req = isCust ? getCustomerActiveRequest() : null;
   const activeOffersCount = (req && req.status === 'OPEN' && req.offers) ? req.offers.filter((o) => o.status !== 'DECLINED').length : 0;
-  const openReqsCount = (state.role === 'PROVIDER' && state.db?.requests) ? state.db.requests.filter((r) => r.status === 'OPEN').length : 0;
+  
+  const prov = state.role === 'PROVIDER' ? (state.currentUser || state.db?.providers?.[0]) : null;
+  const provCatIds = prov ? getProviderCategoryIds(prov) : [];
+  const openReqsCount = (state.role === 'PROVIDER' && state.db?.requests && prov)
+    ? state.db.requests.filter((r) => {
+        if (r.status !== 'OPEN') return false;
+        if (r.acceptedProviderId && r.acceptedProviderId !== prov.id) return false;
+        if (r.acceptedOfferId) return false;
+        if ((state.dismissedJobIds || []).includes(r.id)) return false;
+        const reqCat = normalizeCategoryId(r.categoryId);
+        return provCatIds.includes(reqCat);
+      }).length
+    : 0;
   const provActiveJob = state.role === 'PROVIDER' ? getProviderActiveBooking(state.currentUser?.id) : null;
 
   if (isCust) {
@@ -5687,64 +5699,76 @@ function renderBookedTrackingOverlay(req) {
           </button>
         </div>
 
-        ${(() => {
-          const distMeters = calculateDistanceMeters(prov?.lat, prov?.lng, req.lat, req.lng);
-          const isWithin20m = distMeters <= 20 || req.status === 'ARRIVED';
-          const proximitySec = (state.bookingProximitySeconds && state.bookingProximitySeconds[req.id]) || 0;
-          const autoPairRemaining = Math.max(0, 60 - proximitySec);
+        ${isArrived ? `
+          <!-- UNIFIED SLEEK LUXURY ARRIVAL CARD (CLIENT) -->
+          <div style="background:#F0FDF4; border:1.5px solid #86EFAC; border-radius:14px; padding:12px 14px; margin-bottom:8px;">
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px;">
+              <div style="display:flex; align-items:center; gap:6px;">
+                <span style="width:8px; height:8px; border-radius:50%; background:#16A34A; animation:pulse 1s infinite; display:inline-block;"></span>
+                <div>
+                  <div style="font-size:12px; font-weight:800; color:#15803D; text-transform:uppercase;">Specialist Outside Gate</div>
+                  <div style="font-size:11px; color:#166534;">Share Start PIN with pro to begin:</div>
+                </div>
+              </div>
+              <div style="background:#FFFFFF; border:2px solid #10B981; border-radius:10px; padding:4px 12px; text-align:center; box-shadow:0 2px 8px rgba(16,185,129,0.18);">
+                <span style="font-size:8.5px; font-weight:800; color:#059669; letter-spacing:0.05em; display:block;">START PIN</span>
+                <span style="font-size:20px; font-weight:900; color:#059669; letter-spacing:2px; line-height:1.2;">#${req.startPinCode || '4829'}</span>
+              </div>
+            </div>
 
-          if (req.status === 'ARRIVED') {
-            return `
-              <div style="background:#F0FDF4; border:1.5px solid #86EFAC; border-radius:14px; padding:12px 14px; margin-bottom:10px; display:flex; align-items:center; justify-content:space-between; gap:12px; box-shadow:0 2px 10px rgba(16,185,129,0.12);">
-                <div style="flex:1; min-width:0;">
-                  <div style="font-size:11.5px; font-weight:800; color:#15803D; text-transform:uppercase; letter-spacing:0.04em; display:flex; align-items:center; gap:6px; margin-bottom:2px;">
-                    <span style="width:7px; height:7px; border-radius:50%; background:#16A34A; animation:pulse 1s infinite; display:inline-block;"></span>
-                    <span>${prov?.shortName || prov?.name || 'Specialist'} Waiting Outside</span>
+            <!-- Specialist Row -->
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; background:#FFFFFF; border:1px solid #DCFCE7; border-radius:10px; padding:8px 10px; margin-bottom:8px;">
+              <div style="display:flex; align-items:center; gap:8px; min-width:0;">
+                <img src="${resolveMediaUrl(avatarUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_AVATAR_FALLBACK}';" style="width:36px; height:36px; border-radius:50%; object-fit:cover; flex-shrink:0;" alt="${prov?.name}" />
+                <div style="min-width:0;">
+                  <div style="font-size:13px; font-weight:800; color:#0F172A; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${prov?.name || 'Specialist'}</div>
+                  <div style="font-size:11px; color:#64748B;">★ ${prov?.rating || '5.0'} • ${prov?.brandName || 'Mobile Specialist'}</div>
+                </div>
+              </div>
+              <div style="text-align:right; flex-shrink:0;">
+                <div style="font-size:13.5px; font-weight:900; color:#0052FF;">${formatUsdPrice(agreedPrice)}</div>
+                <div style="font-size:10px; color:#64748B;">${req.paymentMethod}</div>
+              </div>
+            </div>
+
+            <!-- Compact Action Row: Call, Chat, Photo -->
+            <div style="display:flex; gap:6px;">
+              <button type="button" class="btn-dark-sec" style="flex:1; height:34px; font-size:12px; border-radius:8px;" onclick="startInAppCall('${(prov?.name || 'Pro').replace(/'/g, "\\'")}', '${escapeHtml(req.title)}', 'call_${req.id}', '${prov?.id || ''}')">
+                ${uiIcon('phone', 13)}
+                <span>Call</span>
+              </button>
+              <button type="button" class="btn-dark-sec" style="flex:1; height:34px; font-size:12px; border-radius:8px;" onclick="openChatDrawer('${req.id}', '${prov?.id || ''}')">
+                ${uiIcon('chat', 13)}
+                <span>Chat ${(req.messages && req.messages.length > 0) ? `(${req.messages.length})` : ''}</span>
+              </button>
+              ${req.photoUrl ? `
+                <button type="button" class="btn-dark-sec" style="height:34px; font-size:11.5px; border-radius:8px; padding:0 8px;" onclick="openImagePreviewModal('${req.photoUrl}', 'Desired Style Photo')">
+                  <span>Photo</span>
+                </button>
+              ` : ''}
+            </div>
+          </div>
+        ` : `
+          <!-- EN ROUTE VIEW -->
+          ${(() => {
+            const distMeters = calculateDistanceMeters(prov?.lat, prov?.lng, req.lat, req.lng);
+            if (distMeters <= 50 && req.status !== 'IN_PROGRESS') {
+              return `
+                <div style="background:#EFF6FF; border:1px solid #BFDBFE; border-radius:12px; padding:8px 11px; margin-bottom:8px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
+                  <div style="font-size:12px; font-weight:700; color:#1E40AF; display:flex; align-items:center; gap:6px;">
+                    <span style="color:#2563EB;">${uiIcon('pin', 14)}</span>
+                    <span>Specialist approaching (~${distMeters}m away)</span>
                   </div>
-                  <div style="font-size:11.5px; color:#166534; font-weight:600; line-height:1.35;">
-                    Share this Start PIN with your specialist to begin:
-                  </div>
-                  ${isWithin20m ? `
-                    <div style="font-size:10.5px; font-weight:700; color:#059669; margin-top:3px; display:flex; align-items:center; gap:4px;">
-                      <span style="width:5px; height:5px; border-radius:50%; background:#10B981;"></span>
-                      <span>Within 20m • Ready to start</span>
-                    </div>
-                  ` : ''}
+                  <div style="font-size:12px; font-weight:800; color:#2563EB;">PIN #${req.startPinCode || '4829'}</div>
                 </div>
-                <div style="background:#FFFFFF; border:2px solid #10B981; border-radius:12px; padding:6px 14px; text-align:center; box-shadow:0 2px 8px rgba(16,185,129,0.18); flex-shrink:0;">
-                  <div style="font-size:9px; font-weight:800; color:#059669; letter-spacing:0.06em;">START PIN</div>
-                  <div style="font-size:20px; font-weight:900; color:#059669; letter-spacing:2px; line-height:1.2;">#${req.startPinCode || '4829'}</div>
-                </div>
-              </div>
-            `;
-          }
+              `;
+            }
+            return '';
+          })()}
 
-          if (distMeters <= 50 && req.status !== 'IN_PROGRESS') {
-            return `
-              <div style="background:#EFF6FF; border:1px solid #BFDBFE; border-radius:12px; padding:8px 11px; margin-bottom:8px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
-                <div style="font-size:12px; font-weight:700; color:#1E40AF; display:flex; align-items:center; gap:6px;">
-                  <span style="color:#2563EB;">${uiIcon('pin', 14)}</span>
-                  <span>Specialist approaching (~${distMeters}m away)</span>
-                </div>
-                <div style="font-size:12px; font-weight:800; color:#2563EB;">PIN #${req.startPinCode || '4829'}</div>
-              </div>
-            `;
-          }
-          return '';
-        })()}
-
-        <!-- Service Info Row -->
-        <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:8px;">
-          <div>
-            ${req.status === 'ARRIVED' ? `
-              <div style="font-size:14.5px; font-weight:800; color:var(--text-main); display:flex; align-items:center; gap:6px;">
-                <span style="color:var(--blue-primary); display:inline-flex;">${uiIcon('briefcase', 14)}</span>
-                <span>${req.title}</span>
-              </div>
-              <div style="font-size:12px; color:var(--text-secondary); margin-top:1px;">
-                Agreed Fare: <strong style="color:var(--blue-primary);">${formatUsdPrice(agreedPrice)}</strong> (${req.paymentMethod})
-              </div>
-            ` : `
+          <!-- Service Info Row -->
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:8px;">
+            <div>
               <div style="font-size:15px; font-weight:800; color:var(--text-main); display:flex; align-items:center; gap:6px;">
                 <span style="color:var(--blue-primary); display:inline-flex;">${statusIcon}</span>
                 <span>${statusHeadline}</span>
@@ -5752,151 +5776,86 @@ function renderBookedTrackingOverlay(req) {
               <div style="font-size:12px; color:var(--text-secondary); margin-top:2px;">
                 ${req.title} • <strong style="color:var(--blue-primary);">${formatUsdPrice(agreedPrice)}</strong> (${req.paymentMethod})
               </div>
-            `}
-          </div>
-          ${req.status !== 'ARRIVED' ? `
+            </div>
             <div style="background:var(--blue-soft); border:1.5px solid var(--blue-border); padding:5px 10px; border-radius:10px; text-align:center; flex-shrink:0;">
               <div style="font-size:9px; color:var(--blue-primary); font-weight:800;">START PIN</div>
               <div style="font-size:15px; font-weight:800; color:var(--blue-primary); letter-spacing:1.5px;">${req.startPinCode || '4829'}</div>
             </div>
-          ` : ''}
-        </div>
-
-        ${req.photoUrl ? `
-          <div style="display:inline-flex; align-items:center; gap:7px; background:#F0FDF4; border:1px solid #BBF7D0; border-radius:8px; padding:3px 9px; margin-bottom:8px; cursor:pointer;" onclick="openImagePreviewModal('${req.photoUrl}', 'Desired Style Photo')">
-            <img src="${resolveMediaUrl(req.photoUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_TASK_PHOTO_FALLBACK}';" style="width:20px; height:20px; border-radius:4px; object-fit:cover;" alt="Reference" />
-            <span style="font-size:11px; font-weight:700; color:#15803D;">View Reference Photo</span>
-            ${uiIcon('chevronRight', 10)}
           </div>
-        ` : ''}
 
-        <!-- Accepted Service Provider Card -->
-        <div class="indrive-selected-tier-box" style="margin-bottom:8px; padding:8px 10px;">
-          <div class="offer-pro-row" style="margin-bottom:0;">
-            <div class="offer-avatar-wrap platinum">
-              <img src="${resolveMediaUrl(avatarUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_AVATAR_FALLBACK}';" alt="${prov?.name}" />
-              <div class="platinum-diamond-badge">${uiIcon('diamond', 9)}</div>
+          ${req.photoUrl ? `
+            <div style="display:inline-flex; align-items:center; gap:7px; background:#F0FDF4; border:1px solid #BBF7D0; border-radius:8px; padding:3px 9px; margin-bottom:8px; cursor:pointer;" onclick="openImagePreviewModal('${req.photoUrl}', 'Desired Style Photo')">
+              <img src="${resolveMediaUrl(req.photoUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_TASK_PHOTO_FALLBACK}';" style="width:20px; height:20px; border-radius:4px; object-fit:cover;" alt="Reference" />
+              <span style="font-size:11px; font-weight:700; color:#15803D;">View Reference Photo</span>
+              ${uiIcon('chevronRight', 10)}
             </div>
-            <div class="offer-pro-details">
-              <div class="offer-pro-name-line">
-                <span>${prov?.name || 'Tariro Moyo'}</span>
-                ${formatProRatingAndJobs(prov?.rating, prov?.completedBookings)}
+          ` : ''}
+
+          <!-- Accepted Service Provider Card -->
+          <div class="indrive-selected-tier-box" style="margin-bottom:8px; padding:8px 10px;">
+            <div class="offer-pro-row" style="margin-bottom:0;">
+              <div class="offer-avatar-wrap platinum">
+                <img src="${resolveMediaUrl(avatarUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_AVATAR_FALLBACK}';" alt="${prov?.name}" />
+                <div class="platinum-diamond-badge">${uiIcon('diamond', 9)}</div>
               </div>
-              <div class="offer-pro-kit-line">${prov?.brandName || 'Mobile Service'} • ${req.status === 'ARRIVED' ? '<span style="color:#059669; font-weight:800;">Outside your gate</span>' : (acceptedOffer?.distanceKm ? `${acceptedOffer.distanceKm} km away` : 'En route')}</div>
-              <div class="offer-pro-platinum-line">${prov?.skillTier || 'Platinum pro'}</div>
-              ${prov?.hasOffice ? `
-                <div style="font-size:11px; color:#475569; margin-top:3px; display:flex; align-items:center; gap:4px;">
-                  ${uiIcon('buildingOffice', 11)}
-                  <span>Workshop: <strong>${escapeHtml(prov.officeAddress || prov.officeSuburb)}</strong></span>
+              <div class="offer-pro-details">
+                <div class="offer-pro-name-line">
+                  <span>${prov?.name || 'Tariro Moyo'}</span>
+                  ${formatProRatingAndJobs(prov?.rating, prov?.completedBookings)}
                 </div>
-              ` : ''}
+                <div class="offer-pro-kit-line">${prov?.brandName || 'Mobile Service'} • ${acceptedOffer?.distanceKm ? `${acceptedOffer.distanceKm} km away` : 'En route'}</div>
+                <div class="offer-pro-platinum-line">${prov?.skillTier || 'Platinum pro'}</div>
+              </div>
+              <button class="offer-catalogue-pill" onclick="openProviderCatalogueModal('${prov?.id}')">
+                <span>Catalogue</span>
+                ${uiIcon('chevronRight', 13)}
+              </button>
             </div>
-            <button class="offer-catalogue-pill" onclick="openProviderCatalogueModal('${prov?.id}')">
-              <span>Catalogue</span>
-              ${uiIcon('chevronRight', 13)}
+          </div>
+
+          ${req.delayNotice ? `
+            <div style="background:#FEF3C7; border:1px solid #F59E0B; border-radius:10px; padding:8px 10px; margin-bottom:8px; display:flex; align-items:center; gap:8px;">
+              <span style="font-size:16px;">⏱️</span>
+              <div>
+                <div style="font-size:12px; font-weight:800; color:#B45309;">Specialist Running ~${req.delayNotice.minutes}m Late</div>
+                <div style="font-size:11px; color:#92400E;">${escapeHtml(req.delayNotice.reason)}</div>
+              </div>
+            </div>
+          ` : ''}
+
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px;">
+            <button class="btn-dark-sec" onclick="startInAppCall('${(prov?.name || 'Pro').replace(/'/g, "\\'")}', '${escapeHtml(req.title)}', 'call_${req.id}', '${prov?.id || ''}')">
+              ${uiIcon('phone', 14)}
+              <span>Call</span>
+            </button>
+            <button class="btn-dark-sec" onclick="openChatDrawer('${req.id}', '${prov?.id || ''}')">
+              ${uiIcon('chat', 14)}
+              <span>Chat ${(req.messages && req.messages.length > 0) ? `(${req.messages.length})` : ''}</span>
             </button>
           </div>
-        </div>
+        `}
 
-        ${req.delayNotice ? `
-          <div style="background:#FEF3C7; border:1px solid #F59E0B; border-radius:10px; padding:8px 10px; margin-bottom:8px; display:flex; align-items:center; gap:8px;">
-            <span style="font-size:16px;">⏱️</span>
-            <div>
-              <div style="font-size:12px; font-weight:800; color:#B45309;">Specialist Running ~${req.delayNotice.minutes}m Late</div>
-              <div style="font-size:11px; color:#92400E;">${escapeHtml(req.delayNotice.reason)}</div>
-            </div>
+        ${isCompleted ? `
+          <button class="btn-primary-blue" style="width:100%; height:44px; font-size:14px; font-weight:800; background:#10B981; box-shadow:0 4px 14px rgba(16,185,129,0.35); margin-bottom:8px;" onclick="openRateBookingModal('${req.id}')">
+            <span>Rate Specialist &amp; Finish</span>
+          </button>
+        ` : (isInProgress || isArrived) ? `
+          <div style="text-align:center; margin-top:6px;">
+            <button type="button" style="background:none; border:none; color:#DC2626; font-size:11.5px; font-weight:700; cursor:pointer; padding:4px 8px; display:inline-flex; align-items:center; gap:4px;" onclick="openDisputeModal('${req.id}')">
+              ${uiIcon('shield', 12)}
+              <span>Report Dispute / Need Help</span>
+            </button>
           </div>
-        ` : ''}
-
-        ${req.bookingFor === 'SOMEONE_ELSE' ? `
-          <div style="font-size:11.5px; font-weight:700; color:#1E40AF; background:#DBEAFE; padding:6px 10px; border-radius:8px; margin-bottom:8px;">
-            ${uiIcon('users', 14)} Ordered for: <strong>${escapeHtml(req.recipientName || 'Recipient')}</strong> ${req.recipientPhone ? `(${escapeHtml(req.recipientPhone)})` : ''}
+        ` : `
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
+            <button class="btn-dark-sec" style="font-size:11.5px; color:#DC2626; border-color:rgba(220,38,38,0.3); justify-content:center; font-weight:700;" onclick="openDisputeModal('${req.id}')">
+              <span>Report Dispute</span>
+            </button>
+            <button class="cancel-request-red-pill" style="justify-content:center; font-weight:700;" onclick="openCancelTaskModal('${req.id}')">
+              <span>Cancel Job</span>
+            </button>
           </div>
-        ` : ''}
-
-        <!-- Latest Message Snippet Pill (if messages exist) -->
-        ${(req.messages && req.messages.length > 0) ? `
-          <div class="chat-preview-pill" style="margin-bottom:8px;" onclick="openChatDrawer('${req.id}', '${prov?.id}')">
-            <div class="chat-preview-dot"></div>
-            <div class="chat-preview-text">
-              <span class="chat-preview-sender">${req.messages[req.messages.length - 1].senderName}:</span>
-              ${req.messages[req.messages.length - 1].text}
-            </div>
-            <span class="chat-preview-action">Reply ${uiIcon('chevronRight', 12)}</span>
-          </div>
-        ` : ''}
-
-        <!-- Action Buttons: Masked Call, Full Screen Chat, and Completion Stage -->
-        ${(() => {
-          const isArrived = req.status === 'ARRIVED';
-          const isInProgress = req.status === 'IN_PROGRESS' || Boolean(req.pinVerifiedByProvider);
-          const isCompleted = req.status === 'COMPLETED';
-
-          return `
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px;">
-              <button class="btn-dark-sec" onclick="startInAppCall('${(prov?.name || 'Pro').replace(/'/g, "\\'")}', '${escapeHtml(req.title)}', 'call_${req.id}', '${prov?.id || ''}')">
-                ${uiIcon('phone', 14)}
-                <span>Call</span>
-              </button>
-              <button class="btn-dark-sec" onclick="openChatDrawer('${req.id}', '${prov?.id || ''}')">
-                ${uiIcon('chat', 14)}
-                <span>Chat ${(req.messages && req.messages.length > 0) ? `(${req.messages.length})` : ''}</span>
-              </button>
-            </div>
-
-            ${isInProgress ? `
-              <div style="background:#F0FDF4; border:1.5px solid #86EFAC; border-radius:12px; padding:10px 12px; margin-bottom:8px;">
-                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:4px;">
-                  <div style="font-size:12px; font-weight:800; color:#15803D; display:flex; align-items:center; gap:5px;">
-                    <span style="display:inline-block; width:7px; height:7px; border-radius:50%; background:#16A34A; animation:pulse 1s infinite;"></span>
-                    <span>Service In Progress</span>
-                  </div>
-                  <div style="font-size:11.5px; font-weight:700; color:#166534;">
-                    ~${req.estimatedDurationMinutes || 30}m estimated duration
-                  </div>
-                </div>
-                <div style="font-size:11px; color:#166534;">
-                  Specialist is working at your home. When finished, they will mark done and you will provide your Completion PIN.
-                </div>
-
-                ${req.completionRequested ? `
-                  <div style="margin-top:8px; background:#FFFFFF; border:2px solid #16A34A; border-radius:10px; padding:10px; text-align:center;">
-                    <div style="font-size:12px; font-weight:800; color:#15803D; margin-bottom:3px;">
-                      🎉 Specialist Finished Work! Check work and give Completion PIN:
-                    </div>
-                    <div style="font-size:22px; font-weight:900; color:#15803D; letter-spacing:3px; margin:4px 0;">
-                      #${req.completionPinCode || '7291'}
-                    </div>
-                    <div style="font-size:10.5px; color:#475569;">
-                      Specialist must enter this code to complete job and reconcile payment.
-                    </div>
-                  </div>
-                ` : ''}
-              </div>
-            ` : ''}
-
-            ${isCompleted ? `
-              <button class="btn-primary-blue" style="width:100%; height:44px; font-size:14px; font-weight:800; background:#10B981; box-shadow:0 4px 14px rgba(16,185,129,0.35); margin-bottom:8px;" onclick="openRateBookingModal('${req.id}')">
-                <span>Rate Specialist &amp; Finish</span>
-              </button>
-            ` : (isInProgress || isArrived) ? `
-              <div style="margin-top:4px;">
-                <button class="btn-dark-sec" style="width:100%; font-size:12.5px; color:#DC2626; border-color:rgba(220,38,38,0.3); justify-content:center; padding:10px; font-weight:700;" onclick="openDisputeModal('${req.id}')">
-                  <span>Report a Dispute</span>
-                </button>
-              </div>
-            ` : `
-              <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
-                <button class="btn-dark-sec" style="font-size:11.5px; color:#DC2626; border-color:rgba(220,38,38,0.3); justify-content:center; font-weight:700;" onclick="openDisputeModal('${req.id}')">
-                  <span>Report Dispute</span>
-                </button>
-                <button class="cancel-request-red-pill" style="justify-content:center; font-weight:700;" onclick="openCancelTaskModal('${req.id}')">
-                  <span>Cancel Job</span>
-                </button>
-              </div>
-            `}
-          `;
-        })()}
+        `}
       </div>
     `}
   `;
@@ -9657,8 +9616,11 @@ async function acceptOffer(requestId, offerId) {
     lastUiOverlaySignature = '';
     lastOffersSignature = '';
 
-    const floatingOffersRoot = document.getElementById('floatingOffersOverlayRoot');
-    if (floatingOffersRoot) floatingOffersRoot.innerHTML = '';
+    const floatingOffersRoot = document.getElementById('floatingOffersRoot');
+    if (floatingOffersRoot) {
+      floatingOffersRoot.className = 'floating-offers-root';
+      floatingOffersRoot.innerHTML = '';
+    }
 
     renderAll(true);
     showToast('Offer accepted! Live route & chat with your pro started.');
@@ -10889,24 +10851,6 @@ function renderProviderRequestsFeedTab(prov, openRequests, activeJob) {
         </div>
       ` : ''}
 
-      <div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center; justify-content:space-between; margin-bottom:10px;">
-        <div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
-          <span style="font-size:11px; font-weight:700; color:var(--text-secondary);">Showing jobs in:</span>
-          ${getProviderCategoryIds(prov).map((cid) => {
-            const c = (state.db.categories || []).find((x) => x.id === cid);
-            return `<span style="font-size:11px; font-weight:800; background:var(--blue-soft); color:var(--blue-primary); padding:3px 9px; border-radius:99px;">${escapeHtml(c ? (c.name || c.fullName) : cid)}</span>`;
-          }).join('')}
-        </div>
-        <button
-          type="button"
-          onclick="openAccountSettingsModal()"
-          style="border:1px solid var(--blue-border); background:#FFFFFF; color:var(--blue-primary); font-size:11px; font-weight:800; padding:4px 9px; border-radius:99px; cursor:pointer; display:inline-flex; align-items:center; gap:4px;"
-        >
-          ${uiIcon('edit', 11)}
-          <span>Edit Categories</span>
-        </button>
-      </div>
-
       ${(() => {
         const visibleRequests = openRequests.filter((r) => !(state.dismissedJobIds || []).includes(r.id));
         if (visibleRequests.length === 0) {
@@ -10953,49 +10897,36 @@ function renderProviderRequestsFeedTab(prov, openRequests, activeJob) {
           }
 
           return `
-            <div class="provider-order-card" id="prov_card_${r.id}">
-              <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px;">
+            <div class="provider-order-card" id="prov_card_${r.id}" style="padding:12px 14px; margin-bottom:10px; border-radius:14px;">
+              <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px;">
                 <div>
-                  <span style="font-size:23px; font-weight:800; color:var(--blue-primary);">${formatUsdPrice(r.budgetUsd)}</span>
-                  <span style="font-size:12px; font-weight:700; color:var(--text-secondary); margin-left:6px;">${r.paymentMethod}</span>
+                  <span style="font-size:21px; font-weight:900; color:var(--blue-primary);">${formatUsdPrice(r.budgetUsd)}</span>
+                  <span style="font-size:11.5px; font-weight:700; color:var(--text-secondary); margin-left:4px;">${r.paymentMethod}</span>
                 </div>
-                <span style="font-size:11.5px; color:var(--blue-primary); font-weight:800; background:var(--blue-soft); padding:3px 9px; border-radius:99px; display:inline-flex; align-items:center; gap:4px; max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
-                  ${uiIcon('pin', 12)}
+                <span style="font-size:11px; color:var(--blue-primary); font-weight:800; background:var(--blue-soft); padding:2px 8px; border-radius:99px; display:inline-flex; align-items:center; gap:4px; max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                  ${uiIcon('pin', 11)}
                   <span>${escapeHtml(badgeSuburb)}</span>
                 </span>
               </div>
 
-              <div style="font-size:15px; font-weight:800; color:var(--text-main); margin-bottom:4px;">${escapeHtml(r.title)}</div>
+              <div style="font-size:14px; font-weight:800; color:var(--text-main); margin-bottom:4px;">${escapeHtml(r.title)}</div>
 
-              <!-- Client Real Street Address Card -->
-              <div style="display:flex; align-items:flex-start; gap:6px; font-size:12px; color:#0F172A; font-weight:700; margin-bottom:8px; background:rgba(0,102,255,0.06); border:1px solid rgba(0,102,255,0.14); padding:6px 9px; border-radius:8px;">
-                <span style="color:var(--blue-primary); flex-shrink:0; margin-top:2px;">${uiIcon('pin', 13)}</span>
-                <div style="flex:1; min-width:0; line-height:1.4;">
-                  <span style="font-weight:800; color:var(--text-main);">${escapeHtml(displayLocation)}</span>
-                </div>
-              </div>
-
-              <div style="font-size:12px; color:var(--text-secondary); margin-bottom:8px; display:flex; align-items:center; gap:5px; flex-wrap:wrap;">
-                ${uiIcon('user', 13)}
-                <span>${escapeHtml(r.customerName)}</span>
-                <span style="display:inline-flex; align-items:center; gap:2px;">
-                  ${(Number(r.customerRating) || 0) > 0 ? `(${uiIcon('star', 11)} ${r.customerRating})` : '(New Client)'}
-                </span>
+              <div style="font-size:11.5px; color:#475569; margin-bottom:6px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                <span style="font-weight:700; color:#0F172A;">📍 ${escapeHtml(displayLocation)}</span>
+                <span>•</span>
+                <span>${escapeHtml(r.customerName)} ${(Number(r.customerRating) || 0) > 0 ? `★ ${r.customerRating}` : ''}</span>
               </div>
 
               ${r.description ? `
-                <div style="font-size:12px; color:var(--text-main); background:rgba(0,0,0,0.03); border-radius:8px; padding:6px 9px; margin-bottom:8px;">
-                  <strong>Client note:</strong> ${r.description}
+                <div style="font-size:11.5px; color:var(--text-secondary); font-style:italic; margin-bottom:6px;">
+                  "${escapeHtml(r.description)}"
                 </div>
               ` : ''}
 
               ${r.photoUrl ? `
-                <div style="display:flex; align-items:center; gap:9px; background:var(--blue-soft); border:1px solid var(--blue-border); border-radius:10px; padding:6px 10px; margin-bottom:8px;">
-                  <img src="${resolveMediaUrl(r.photoUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_TASK_PHOTO_FALLBACK}';" style="width:44px; height:44px; border-radius:8px; object-fit:cover; cursor:pointer;" onclick="openImagePreviewModal('${r.photoUrl}', 'Desired Style Photo')" alt="Client Reference Photo" />
-                  <div style="flex:1; min-width:0;">
-                    <div style="font-size:12px; font-weight:800; color:var(--blue-primary);">Desired Style Photo Attached</div>
-                    <div style="font-size:11px; color:var(--text-secondary); cursor:pointer;" onclick="openImagePreviewModal('${r.photoUrl}', 'Desired Style Photo')">Tap to inspect style before bidding</div>
-                  </div>
+                <div style="display:inline-flex; align-items:center; gap:6px; background:#F0FDF4; border:1px solid #BBF7D0; border-radius:8px; padding:3px 8px; margin-bottom:8px; cursor:pointer;" onclick="openImagePreviewModal('${r.photoUrl}', 'Desired Style Photo')">
+                  <img src="${resolveMediaUrl(r.photoUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_TASK_PHOTO_FALLBACK}';" style="width:20px; height:20px; border-radius:4px; object-fit:cover;" alt="Photo" />
+                  <span style="font-size:11px; font-weight:700; color:#15803D;">Inspect Desired Style Photo</span>
                 </div>
               ` : ''}
 
@@ -11006,56 +10937,44 @@ function renderProviderRequestsFeedTab(prov, openRequests, activeJob) {
               ` : ''}
 
               ${isOfferDeclined ? `
-                <!-- inDrive Style Declined & Counter-Bid Box -->
-                <div style="background:#FFF1F2; border:1.5px solid #FDA4AF; border-radius:12px; padding:10px 12px; margin-bottom:10px;">
-                  <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:4px;">
-                    <div style="display:flex; align-items:center; gap:6px;">
-                      <span style="display:inline-flex;">${uiIcon('close', 14)}</span>
-                      <span style="font-size:12.5px; font-weight:800; color:#BE123C;">Offer Declined ($${declinedPrice})</span>
-                    </div>
-                    <button type="button" onclick="providerDismissJob('${r.id}')" style="background:transparent; border:none; color:#9F1239; font-size:11px; font-weight:800; cursor:pointer; text-decoration:underline;">
-                      Dismiss
-                    </button>
+                <div style="background:#FFF1F2; border:1px solid #FDA4AF; border-radius:10px; padding:8px 10px; margin-bottom:8px;">
+                  <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:3px;">
+                    <span style="font-size:11.5px; font-weight:800; color:#BE123C;">Offer Declined ($${declinedPrice})</span>
+                    <button type="button" onclick="providerDismissJob('${r.id}')" style="background:transparent; border:none; color:#9F1239; font-size:10.5px; font-weight:800; cursor:pointer;">Dismiss</button>
                   </div>
-                  <div style="font-size:11.5px; color:#9F1239; margin-bottom:8px; line-height:1.4;">
-                    Client declined your offer. You can re-bid with a lower rate, accept their budget, or dismiss.
-                  </div>
-                  <div style="display:flex; gap:6px; flex-wrap:wrap;">
-                    <button class="btn-primary-blue" style="height:34px; padding:0 12px; font-size:12px; font-weight:800; flex:1;" onclick="providerSubmitBid('${r.id}', ${r.budgetUsd})">
-                      Accept Budget ${formatUsdPrice(r.budgetUsd)}
+                  <div style="display:flex; gap:6px;">
+                    <button class="btn-primary-blue" style="height:32px; padding:0 10px; font-size:11.5px; font-weight:800; flex:1;" onclick="providerSubmitBid('${r.id}', ${r.budgetUsd})">
+                      Accept ${formatUsdPrice(r.budgetUsd)}
                     </button>
                     ${counterMidUsd ? `
-                      <button class="btn-dark-sec" style="height:34px; padding:0 10px; font-size:12px; font-weight:800;" onclick="providerSubmitBid('${r.id}', ${counterMidUsd})">
+                      <button class="btn-dark-sec" style="height:32px; padding:0 8px; font-size:11.5px; font-weight:800;" onclick="providerSubmitBid('${r.id}', ${counterMidUsd})">
                         Counter ${formatUsdPrice(counterMidUsd)}
                       </button>
                     ` : ''}
-                    <button class="btn-dark-sec" style="height:34px; padding:0 10px; font-size:12px; font-weight:800;" onclick="promptProviderCustomBid('${r.id}', ${r.budgetUsd})">
+                    <button class="btn-dark-sec" style="height:32px; padding:0 8px; font-size:11.5px; font-weight:800;" onclick="promptProviderCustomBid('${r.id}', ${r.budgetUsd})">
                       Custom $
                     </button>
                   </div>
                 </div>
               ` : isOfferPending ? `
-                <div style="background:var(--blue-soft); border:1.5px solid var(--blue-border); border-radius:12px; padding:10px 12px; display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                  <div>
-                    <div style="font-size:12.5px; font-weight:800; color:var(--blue-primary); display:flex; align-items:center; gap:5px;">
-                      <span style="display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--blue-primary); animation:pulse 1.4s infinite;"></span>
-                      <span>Offered ${formatUsdPrice(myExistingOffer.priceUsd)}</span>
-                    </div>
-                    <div style="font-size:11px; color:var(--text-secondary); margin-top:2px;">Waiting for client response...</div>
+                <div style="background:var(--blue-soft); border:1px solid var(--blue-border); border-radius:10px; padding:8px 10px; display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                  <div style="font-size:12px; font-weight:800; color:var(--blue-primary); display:flex; align-items:center; gap:5px;">
+                    <span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--blue-primary); animation:pulse 1.4s infinite;"></span>
+                    <span>Offered ${formatUsdPrice(myExistingOffer.priceUsd)} • Waiting for client</span>
                   </div>
-                  <button type="button" class="btn-dark-sec" style="height:32px; padding:0 10px; font-size:11.5px; font-weight:800;" onclick="promptProviderCustomBid('${r.id}', ${r.budgetUsd})">
-                    Change Price
+                  <button type="button" class="btn-dark-sec" style="height:28px; padding:0 8px; font-size:11px; font-weight:800;" onclick="promptProviderCustomBid('${r.id}', ${r.budgetUsd})">
+                    Change
                   </button>
                 </div>
               ` : ''}
 
               ${surpassesWallet ? `
-                <div style="background:#FFFBEB; border:1px solid #FDE68A; border-radius:10px; padding:7px 10px; margin-bottom:8px; display:flex; align-items:center; justify-content:space-between; gap:8px;">
-                  <span style="font-size:11.5px; font-weight:700; color:#92400E;">Requires $${requiredCommUsd.toFixed(2)} USD wallet balance</span>
+                <div style="background:#FFFBEB; border:1px solid #FDE68A; border-radius:8px; padding:6px 9px; margin-bottom:6px; display:flex; align-items:center; justify-content:space-between; gap:6px;">
+                  <span style="font-size:11px; font-weight:700; color:#92400E;">Requires $${requiredCommUsd.toFixed(2)} wallet balance</span>
                   <button
                     type="button"
                     onclick="state.walletTopupAmount=${suggestedTopUpUsd}; state.providerTab='WALLET'; renderUiOverlay();"
-                    style="height:28px; padding:0 10px; border-radius:7px; border:none; background:#D97706; color:#FFFFFF; font-size:11px; font-weight:800; cursor:pointer;"
+                    style="height:26px; padding:0 8px; border-radius:6px; border:none; background:#D97706; color:#FFFFFF; font-size:10.5px; font-weight:800; cursor:pointer;"
                   >
                     Top Up +$${suggestedTopUpUsd}
                   </button>
@@ -11063,39 +10982,33 @@ function renderProviderRequestsFeedTab(prov, openRequests, activeJob) {
               ` : ''}
 
               ${activeJob ? `
-                <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:8px 12px; display:flex; align-items:center; justify-content:space-between; gap:8px;">
-                  <span style="font-size:12px; font-weight:700; color:#64748B;">Complete active visit to bid</span>
-                  <button
-                    type="button"
-                    onclick="state.providerTab='ACTIVE_JOB'; renderUiOverlay();"
-                    style="border:none; background:#0F172A; color:#FFFFFF; font-size:11px; font-weight:800; padding:5px 12px; border-radius:99px; cursor:pointer; flex-shrink:0;"
-                  >
-                    View Job
-                  </button>
+                <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:6px 10px; display:flex; align-items:center; justify-content:space-between;">
+                  <span style="font-size:11.5px; font-weight:700; color:#64748B;">Complete active visit to bid</span>
+                  <button type="button" onclick="state.providerTab='ACTIVE_JOB'; renderUiOverlay();" style="border:none; background:#0F172A; color:#FFFFFF; font-size:10.5px; font-weight:800; padding:4px 10px; border-radius:99px; cursor:pointer;">View</button>
                 </div>
               ` : isOfferDeclined || isOfferPending ? '' : `
-                <div class="provider-bid-grid">
+                <div class="provider-bid-grid" style="gap:5px;">
                   <button
                     class="btn-primary-blue"
-                    ${surpassesWallet ? 'disabled style="height:38px; font-size:12px; opacity:0.42; cursor:not-allowed; pointer-events:none; filter:grayscale(0.5);"' : `style="height:38px; font-size:12.5px;" onclick="providerSubmitBid('${r.id}', ${r.budgetUsd})"`}
+                    ${surpassesWallet ? 'disabled style="height:35px; font-size:11.5px; opacity:0.42; cursor:not-allowed;"' : `style="height:35px; font-size:12px; font-weight:800;" onclick="providerSubmitBid('${r.id}', ${r.budgetUsd})"`}
                   >
-                    ${surpassesWallet ? `Need ${commPercent}% ($${requiredCommUsd.toFixed(2)})` : `Accept ${formatUsdPrice(r.budgetUsd)}`}
+                    ${surpassesWallet ? `Need $${requiredCommUsd.toFixed(2)}` : `Accept ${formatUsdPrice(r.budgetUsd)}`}
                   </button>
                   <button
                     class="btn-dark-sec"
-                    ${bid1Surpasses ? 'disabled style="padding:7px 6px; font-size:12px; opacity:0.42; cursor:not-allowed; pointer-events:none;"' : `style="padding:7px 6px; font-size:12px;" onclick="providerSubmitBid('${r.id}', ${bid1Usd})"`}
+                    ${bid1Surpasses ? 'disabled style="height:35px; font-size:11.5px; opacity:0.42; cursor:not-allowed;"' : `style="height:35px; font-size:11.5px; font-weight:800;" onclick="providerSubmitBid('${r.id}', ${bid1Usd})"`}
                   >
                     ${formatUsdPrice(bid1Usd)}
                   </button>
                   <button
                     class="btn-dark-sec"
-                    ${bid2Surpasses ? 'disabled style="padding:7px 6px; font-size:12px; opacity:0.42; cursor:not-allowed; pointer-events:none;"' : `style="padding:7px 6px; font-size:12px;" onclick="providerSubmitBid('${r.id}', ${bid2Usd})"`}
+                    ${bid2Surpasses ? 'disabled style="height:35px; font-size:11.5px; opacity:0.42; cursor:not-allowed;"' : `style="height:35px; font-size:11.5px; font-weight:800;" onclick="providerSubmitBid('${r.id}', ${bid2Usd})"`}
                   >
                     ${formatUsdPrice(bid2Usd)}
                   </button>
                   <button
                     class="btn-dark-sec"
-                    ${surpassesWallet ? 'disabled style="padding:7px 6px; font-size:12px; opacity:0.42; cursor:not-allowed; pointer-events:none;"' : `style="padding:7px 6px; font-size:12px;" onclick="promptProviderCustomBid('${r.id}', ${r.budgetUsd})"`}
+                    ${surpassesWallet ? 'disabled style="height:35px; font-size:11.5px; opacity:0.42; cursor:not-allowed;"' : `style="height:35px; font-size:11.5px; font-weight:800;" onclick="promptProviderCustomBid('${r.id}', ${r.budgetUsd})"`}
                   >
                     Custom $
                   </button>
@@ -11105,6 +11018,25 @@ function renderProviderRequestsFeedTab(prov, openRequests, activeJob) {
           `;
         }).join('');
       })()}
+
+      <!-- Bottom Category Filter Strip (Positioned Down Next to Tabs as Requested) -->
+      <div style="margin-top:14px; margin-bottom:12px; padding:8px 12px; background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px; display:flex; align-items:center; justify-content:space-between; gap:8px;">
+        <div style="display:flex; align-items:center; gap:5px; flex-wrap:wrap; font-size:11px; color:#64748B;">
+          <span style="font-weight:700;">Categories:</span>
+          ${getProviderCategoryIds(prov).map((cid) => {
+            const c = (state.db.categories || []).find((x) => x.id === cid);
+            return `<span style="font-size:10.5px; font-weight:800; background:#EFF6FF; color:#1D4ED8; padding:2px 8px; border-radius:99px;">${escapeHtml(c ? (c.shortName || c.name || c.fullName) : cid)}</span>`;
+          }).join('')}
+        </div>
+        <button
+          type="button"
+          onclick="openAccountSettingsModal()"
+          style="border:1px solid #BFDBFE; background:#FFFFFF; color:#0052FF; font-size:11px; font-weight:800; padding:4px 10px; border-radius:99px; cursor:pointer; display:inline-flex; align-items:center; gap:3px; flex-shrink:0;"
+        >
+          ${uiIcon('edit', 10)}
+          <span>Edit</span>
+        </button>
+      </div>
     </div>
   `;
 }
