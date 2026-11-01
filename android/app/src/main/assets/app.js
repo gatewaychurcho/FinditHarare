@@ -1042,12 +1042,14 @@ async function fetchState(force = false) {
     const fp = computeStateFingerprint(state.db);
     if (force || fp !== lastStateFingerprint) {
       lastStateFingerprint = fp;
-      lastUiOverlaySignature = ''; // ALWAYS invalidate overlay signature when database fingerprint changes!
-      lastOffersSignature = '';
+      if (force) {
+        lastUiOverlaySignature = '';
+        lastOffersSignature = '';
+      }
       const activeEl = document.activeElement;
       const isUserTyping = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT');
       if (!isUserTyping || force) {
-        renderAll(true);
+        renderAll(force);
       }
     }
   } catch (err) {
@@ -1152,7 +1154,7 @@ function initRealtimeSync() {
           fetchState(false);
         }
       }
-    }, 1200);
+    }, 3500);
   }
 }
 
@@ -5043,8 +5045,34 @@ function renderCustomerProfileTab() {
         <span style="font-size:18px;">➔</span>
       </div>
 
+      <!-- Direct Android APK Download Card -->
+      <a href="/FinditHarare.apk" download="FinditHarare.apk" style="display:flex; align-items:center; justify-content:space-between; gap:12px; background:linear-gradient(135deg, #059669 0%, #047857 100%); border-radius:16px; padding:13px 16px; color:#FFFFFF; text-decoration:none; margin-bottom:12px; box-shadow:0 4px 14px rgba(5,150,105,0.25);">
+        <div style="display:flex; align-items:center; gap:10px; min-width:0;">
+          <div style="width:38px; height:38px; border-radius:10px; background:rgba(255,255,255,0.2); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
+              <line x1="12" y1="18" x2="12.01" y2="18"/>
+            </svg>
+          </div>
+          <div>
+            <div style="font-size:13.5px; font-weight:800;">Download Android App (.APK)</div>
+            <div style="font-size:11px; opacity:0.9;">Direct install for Android phones • 9.5 MB</div>
+          </div>
+        </div>
+        <span style="background:rgba(255,255,255,0.25); font-size:11.5px; font-weight:800; padding:4px 10px; border-radius:99px; white-space:nowrap;">
+          Download
+        </span>
+      </a>
+
       <!-- Menu Items List -->
       <div class="fh-profile-menu-list">
+        <div class="fh-profile-menu-row" onclick="openSettingsModal()">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span style="color:#0052FF;">${uiIcon('settings', 18)}</span>
+            <span>Account &amp; App Settings</span>
+          </div>
+          ${uiIcon('chevronRight', 16)}
+        </div>
         <div class="fh-profile-menu-row" onclick="openWalletTopupModal()">
           <div style="display:flex; align-items:center; gap:10px;">
             <span style="color:#0052FF;">${uiIcon('wallet', 18)}</span>
@@ -5142,8 +5170,34 @@ function renderProviderProfileTab() {
         <span style="font-size:18px;">➔</span>
       </div>
 
+      <!-- Direct Android APK Download Card -->
+      <a href="/FinditHarare.apk" download="FinditHarare.apk" style="display:flex; align-items:center; justify-content:space-between; gap:12px; background:linear-gradient(135deg, #059669 0%, #047857 100%); border-radius:16px; padding:13px 16px; color:#FFFFFF; text-decoration:none; margin-bottom:12px; box-shadow:0 4px 14px rgba(5,150,105,0.25);">
+        <div style="display:flex; align-items:center; gap:10px; min-width:0;">
+          <div style="width:38px; height:38px; border-radius:10px; background:rgba(255,255,255,0.2); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
+              <line x1="12" y1="18" x2="12.01" y2="18"/>
+            </svg>
+          </div>
+          <div>
+            <div style="font-size:13.5px; font-weight:800;">Download Android App (.APK)</div>
+            <div style="font-size:11px; opacity:0.9;">Direct install for Android phones • 9.5 MB</div>
+          </div>
+        </div>
+        <span style="background:rgba(255,255,255,0.25); font-size:11.5px; font-weight:800; padding:4px 10px; border-radius:99px; white-space:nowrap;">
+          Download
+        </span>
+      </a>
+
       <!-- Menu Items List -->
       <div class="fh-profile-menu-list">
+        <div class="fh-profile-menu-row" onclick="openSettingsModal()">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span style="color:#0052FF;">${uiIcon('settings', 18)}</span>
+            <span>Account &amp; Job Categories Settings</span>
+          </div>
+          ${uiIcon('chevronRight', 16)}
+        </div>
         <div class="fh-profile-menu-row" onclick="openWalletTopupModal()">
           <div style="display:flex; align-items:center; gap:10px;">
             <span style="color:#0052FF;">${uiIcon('wallet', 18)}</span>
@@ -5579,7 +5633,6 @@ function renderBookedTrackingOverlay(req) {
           const autoPairRemaining = Math.max(0, 60 - proximitySec);
 
           if (req.status === 'ARRIVED') {
-            speakNavigationDirection(`${prov?.shortName || 'Your specialist'} has arrived outside your location. Share your start PIN to begin.`);
             return `
               <div class="pulsating-arrival-banner" style="background:#FEF2F2; border:1.5px solid #FCA5A5; border-radius:12px; padding:10px 12px; margin-bottom:8px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
                 <div style="flex:1; min-width:0;">
@@ -8112,6 +8165,27 @@ function renderModalLayer() {
               </select>
             </div>
 
+            <!-- Navigation GPS Voice Direction Setting -->
+            <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:14px; padding:12px; margin-top:2px;">
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span style="color:#0052FF;">${uiIcon('navigation', 17)}</span>
+                  <div>
+                    <div style="font-size:12.5px; font-weight:800; color:#0F172A;">GPS Voice Navigation</div>
+                    <div style="font-size:11px; color:#64748B;">Spoken audio directions during active transit</div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  class="small-pill-btn"
+                  onclick="toggleNavVoice(); renderModalLayer();"
+                  style="height:32px; padding:0 12px; font-size:11.5px; font-weight:800; background:${liveNavState.voiceEnabled ? '#10B981' : '#F1F5F9'}; color:${liveNavState.voiceEnabled ? '#FFFFFF' : '#0F172A'}; border:1px solid ${liveNavState.voiceEnabled ? '#10B981' : '#CBD5E1'}; cursor:pointer;"
+                >
+                  ${liveNavState.voiceEnabled ? '🔊 Active (ON)' : '🔈 Muted (Default OFF)'}
+                </button>
+              </div>
+            </div>
+
             <button type="button" class="btn-primary-blue" style="margin-top:4px; height:44px;" onclick="saveAccountSettingsChanges()">
               ${uiIcon('check', 16)}
               <span>${isProvider ? 'Save Account & Job Categories' : 'Save Account Settings'}</span>
@@ -8120,6 +8194,16 @@ function renderModalLayer() {
 
           <!-- Quick Actions & Platform Links -->
           <div style="display:flex; flex-direction:column; gap:2px;">
+            <a href="/FinditHarare.apk" download="FinditHarare.apk" class="indrive-cancel-row" style="text-decoration:none; color:inherit; background:#ECFDF5; border:1px solid #A7F3D0; border-radius:12px; margin:4px 0;">
+              <div class="cancel-row-left">
+                <span style="color:#059669;">${uiIcon('phone', 18)}</span>
+                <div>
+                  <div style="font-weight:800; color:#065F46; font-size:13px;">Download Android App (.APK)</div>
+                  <div style="font-size:11px; color:#047857;">Direct install file for Android • v2.4 (9.5 MB)</div>
+                </div>
+              </div>
+              <span style="font-size:11px; font-weight:800; color:#059669; background:#D1FAE5; padding:3px 8px; border-radius:99px;">Get APK</span>
+            </a>
             ${isProvider ? `
               <div class="indrive-cancel-row" onclick="openProviderOfficeModal()">
                 <div class="cancel-row-left">
@@ -10469,9 +10553,20 @@ function renderProviderActiveVisitTab(prov, activeJob) {
 
         <!-- STAGE 1: EN ROUTE (Provider sees "I'm Outside Gate" — PIN input is hidden!) -->
         ${isEnRoute ? `
-          <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:14px; padding:12px; margin-bottom:10px; text-align:center;">
-            <div style="font-size:12px; color:var(--text-secondary); font-weight:600; margin-bottom:10px; line-height:1.4;">
-              You are en route with turn-by-turn audio directions. Tap below when you pull up outside the client's residence:
+          <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:14px; padding:12px; margin-bottom:10px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; padding:8px 10px; background:#FFFFFF; border:1px solid #E2E8F0; border-radius:10px;">
+              <div style="display:flex; align-items:center; gap:6px;">
+                <span style="font-size:12px; font-weight:800; color:#0F172A;">Voice Directions:</span>
+                <span style="font-size:11px; font-weight:800; padding:2px 8px; border-radius:99px; background:${liveNavState.voiceEnabled ? '#DCFCE7' : '#F1F5F9'}; color:${liveNavState.voiceEnabled ? '#15803D' : '#64748B'};">
+                  ${liveNavState.voiceEnabled ? 'ON' : 'OFF (Default)'}
+                </span>
+              </div>
+              <button type="button" class="small-pill-btn" onclick="toggleNavVoice(); renderUiOverlay(true);" style="height:30px; padding:0 10px; font-size:11.5px; font-weight:800; background:${liveNavState.voiceEnabled ? '#10B981' : '#F1F5F9'}; color:${liveNavState.voiceEnabled ? '#FFFFFF' : '#0F172A'}; border:1px solid ${liveNavState.voiceEnabled ? '#10B981' : '#CBD5E1'};">
+                ${liveNavState.voiceEnabled ? '🔊 Mute' : '🔈 Turn On'}
+              </button>
+            </div>
+            <div style="font-size:12px; color:var(--text-secondary); font-weight:600; margin-bottom:10px; line-height:1.4; text-align:center;">
+              You are navigating to client residence. Tap below when you arrive outside:
             </div>
             <button type="button" class="luxury-action-btn-primary luxury-action-btn-arrived" onclick="providerMarkArrived('${activeJob.id}')">
               <span>I'm Outside Gate</span>
@@ -11253,24 +11348,29 @@ function renderProviderCatalogueTab(prov, myPendingApprovals) {
         </div>
       </div>
 
-      <div style="margin-bottom:12px; display:flex; justify-content:space-between; align-items:center; gap:6px; flex-wrap:wrap;">
+      <!-- Primary Actions Bar -->
+      <div style="margin-bottom:14px; display:flex; flex-direction:column; gap:8px;">
+        <button class="btn-primary-blue" style="height:44px; font-size:13.5px; font-weight:800; border-radius:12px; width:100%; display:flex; align-items:center; justify-content:center; gap:8px;" onclick="openAddServiceModal()">
+          ${uiIcon('plus', 16)}
+          <span>Add New Service Offering</span>
+        </button>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+          <button class="btn-dark-sec" style="height:38px; font-size:12px; font-weight:700; border-radius:10px; width:100%;" onclick="openEditBioModal()">
+            ${uiIcon('notes', 14)}
+            <span>Edit Bio &amp; About</span>
+          </button>
+          <button class="btn-dark-sec" style="height:38px; font-size:12px; font-weight:700; border-radius:10px; width:100%;" onclick="openUploadCatalogueModal()">
+            ${uiIcon('image', 14)}
+            <span>+ Upload Photo</span>
+          </button>
+        </div>
+      </div>
+
+      <div style="margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
         <div style="font-size:12px; color:var(--text-secondary); font-weight:800; display:inline-flex; align-items:center; gap:5px;">
           ${uiIcon('check', 14)}
           <span>${(prov.portfolio || []).length} Active Offering(s)</span>
-        </div>
-        <div style="display:flex; gap:6px; flex-wrap:wrap;">
-          <button class="btn-dark-sec" style="height:34px; padding:0 10px; font-size:11.5px;" onclick="openEditBioModal()">
-            ${uiIcon('notes', 13)}
-            <span>Bio</span>
-          </button>
-          <button class="btn-dark-sec" style="height:34px; padding:0 10px; font-size:11.5px;" onclick="openUploadCatalogueModal()">
-            ${uiIcon('image', 13)}
-            <span>+ Photo</span>
-          </button>
-          <button class="btn-primary-blue" style="width:auto; height:34px; padding:0 12px; font-size:11.5px;" onclick="openAddServiceModal()">
-            ${uiIcon('plus', 13)}
-            <span>+ Add Service</span>
-          </button>
         </div>
       </div>
 
@@ -14097,6 +14197,13 @@ function openDisputeHistoryModal(jobId) {
 
 function openSafetyCenterModal() {
   state.activeModal = 'SAFETY';
+  lastRenderedModalKey = '';
+  renderModalLayer();
+}
+
+function openSettingsModal() {
+  state.activeModal = 'SETTINGS';
+  initSettingsDraftFromUser();
   lastRenderedModalKey = '';
   renderModalLayer();
 }

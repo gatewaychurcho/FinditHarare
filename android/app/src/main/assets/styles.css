@@ -2014,6 +2014,7 @@ html, body {
 
 .dark-input {
   width: 100%;
+  box-sizing: border-box;
   background: var(--bg-card);
   border: 1.5px solid var(--border-light);
   border-radius: 13px;
@@ -2023,23 +2024,26 @@ html, body {
   font-size: 14px;
   font-weight: 600;
   outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .dark-input:focus {
   border-color: var(--blue-primary);
   background: #FFFFFF;
+  box-shadow: 0 0 0 3px rgba(0, 102, 255, 0.12);
 }
 
 .btn-primary-blue {
   width: 100%;
-  height: 41px;
+  box-sizing: border-box;
+  height: 44px;
   border-radius: 12px;
   background: var(--blue-primary);
   color: #FFFFFF;
   border: none;
   font-family: inherit;
-  font-size: 13.5px;
-  font-weight: 700;
+  font-size: 14px;
+  font-weight: 800;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2054,20 +2058,23 @@ html, body {
 }
 
 .btn-dark-sec {
+  box-sizing: border-box;
   background: var(--bg-elevated);
   color: var(--text-main);
   border: 1px solid var(--border-light);
   border-radius: 11px;
-  padding: 7px 11px;
+  height: 38px;
+  padding: 0 12px;
   font-family: inherit;
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 700;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 5px;
+  gap: 6px;
   cursor: pointer;
   transition: all 0.14s ease;
+}
 }
 
 .btn-dark-sec:hover {
