@@ -7477,7 +7477,7 @@ function renderModalLayer() {
               Why is a top-up needed?
             </div>
             <div style="font-size:12px; color:#78350F; line-height:1.5;">
-              Every provider receives a <strong>$5.00 Welcome Balance</strong> upon joining. As you work, an <strong>${commPercent}% platform commission</strong> ($${commFee.toFixed(2)} USD) is deducted upon successful job completion. Your wallet reserve cannot fall below <strong>$${minReserve.toFixed(2)} USD</strong>.
+              As you work, a <strong>${commPercent}% platform commission</strong> ($${commFee.toFixed(2)} USD) is deducted upon successful job completion. Your wallet reserve cannot fall below <strong>$${minReserve.toFixed(2)} USD</strong> (at least $${(commFee + minReserve).toFixed(2)} USD balance required to place this bid).
             </div>
           </div>
 
@@ -7499,18 +7499,18 @@ function renderModalLayer() {
               <span style="font-weight:700; color:#0F172A;">$${commFee.toFixed(2)} USD</span>
             </div>
             <div style="display:flex; justify-content:space-between; font-size:13.5px; border-top:1px solid #CBD5E1; padding-top:8px;">
-              <span style="font-weight:800; color:#0F172A;">Required Top-Up:</span>
+              <span style="font-weight:800; color:#0F172A;">Suggested Top-Up:</span>
               <span style="font-weight:900; color:#16A34A; font-size:15px;">+$${reqTopUp.toFixed(2)} USD</span>
             </div>
           </div>
 
           <div style="font-size:11.5px; color:#64748B; line-height:1.45; margin-bottom:16px;">
-            <strong>Top-up Rule:</strong> Top up at least <strong>$${reqTopUp.toFixed(2)} USD</strong> (11% of bid = $${commFee.toFixed(2)} USD. If the 11% figure is below $5.00, minimum top-up is $5.00; if 11% is above $5.00, top up the exact 11% figure).
+            <strong>Bidding Rule:</strong> Below $${minReserve.toFixed(2)} in your wallet, or a balance less than the commission ($${commFee.toFixed(2)}) + $${minReserve.toFixed(2)} reserve will disable bidding until you top up.
           </div>
 
-          <button class="btn-primary-blue" style="height:48px; font-size:14.5px; font-weight:800; background:#10B981; margin-bottom:8px;" onclick="triggerEcoCashTopUp(${reqTopUp})">
+          <button class="btn-primary-blue" style="height:48px; font-size:14.5px; font-weight:800; background:#10B981; margin-bottom:8px;" onclick="closeModal(); state.walletTopupAmount=${reqTopUp}; openProviderWalletModal();">
             ${uiIcon('wallet', 18)}
-            <span>Top Up $${reqTopUp.toFixed(2)} USD via EcoCash</span>
+            <span>Top Up Wallet Now</span>
           </button>
 
           <button class="btn-dark-sec" style="height:40px; font-size:13px; font-weight:700;" onclick="closeModal()">
@@ -11240,17 +11240,19 @@ function renderProviderOpportunitiesMapOverlay(prov, openRequests) {
         const myExistingOffer = (r.offers || []).find((o) => o.providerId === prov.id || (prov.finditId && o.providerFinditId === prov.finditId));
         const isOfferDeclined = Boolean(myExistingOffer && myExistingOffer.status === 'DECLINED');
         const isOfferPending = Boolean(myExistingOffer && (myExistingOffer.status === 'PROPOSED' || myExistingOffer.status === 'COUNTERED'));
-        const commPercent = Number(state.db?.settings?.commissionPercent || 11);
+        const reqCat = normalizeCategoryId(r.categoryId);
+        const commPercent = Number(state.db?.settings?.categoryCommissions?.[reqCat] ?? (state.db?.settings?.commissionPercent || 10));
         const minReserve = Number(state.db?.settings?.minWalletBalanceUsd || 2.0);
-        const isPromo = Boolean(state.db?.settings?.launchPromoActive);
         const jobBudgetUsd = Number(r.budgetUsd || 0);
         const requiredCommUsd = Math.round(jobBudgetUsd * (commPercent / 100) * 100) / 100;
         const walletBalUsd = Number(prov.walletBalanceUsd || 0);
-        const surpassesWallet = !isPromo && (walletBalUsd < requiredCommUsd || walletBalUsd < minReserve || (walletBalUsd - requiredCommUsd) < minReserve);
+        const surpassesWallet = (walletBalUsd < minReserve || walletBalUsd < requiredCommUsd || (walletBalUsd - requiredCommUsd) < minReserve);
         const bid1Usd = Number((jobBudgetUsd + 2).toFixed(2));
         const bid2Usd = Number((jobBudgetUsd + 3.5).toFixed(2));
-        const bid1Surpasses = !isPromo && (walletBalUsd < Math.round(bid1Usd * (commPercent / 100) * 100) / 100);
-        const bid2Surpasses = !isPromo && (walletBalUsd < Math.round(bid2Usd * (commPercent / 100) * 100) / 100);
+        const bid1CommUsd = Math.round(bid1Usd * (commPercent / 100) * 100) / 100;
+        const bid2CommUsd = Math.round(bid2Usd * (commPercent / 100) * 100) / 100;
+        const bid1Surpasses = (walletBalUsd < minReserve || walletBalUsd < bid1CommUsd || (walletBalUsd - bid1CommUsd) < minReserve);
+        const bid2Surpasses = (walletBalUsd < minReserve || walletBalUsd < bid2CommUsd || (walletBalUsd - bid2CommUsd) < minReserve);
 
         let displayLocation = r.exactAddress || r.clientLiveAddress || r.suburbName || 'Harare';
         let badgeSuburb = r.suburbName || (displayLocation.split(',')[0] || 'Harare').trim();
@@ -11313,23 +11315,23 @@ function renderProviderOpportunitiesMapOverlay(prov, openRequests) {
                     class="btn-primary-blue"
                     ${surpassesWallet ? 'disabled style="height:36px; font-size:11.5px; opacity:0.42;"' : `style="height:36px; font-size:11.5px; font-weight:800;" onclick="providerSubmitBid('${r.id}', ${r.budgetUsd})"`}
                   >
-                    ${surpassesWallet ? `Need $${requiredCommUsd.toFixed(2)}` : `Accept ${formatUsdPrice(r.budgetUsd)}`}
+                    ${surpassesWallet ? (walletBalUsd < minReserve ? 'Need $2 Bal' : `Need $${(requiredCommUsd + minReserve).toFixed(2)}`) : `Accept ${formatUsdPrice(r.budgetUsd)}`}
                   </button>
                   <button
                     class="btn-dark-sec"
                     ${bid1Surpasses ? 'disabled style="height:36px; font-size:11.5px; opacity:0.42;"' : `style="height:36px; font-size:11.5px; font-weight:800;" onclick="providerSubmitBid('${r.id}', ${bid1Usd})"`}
                   >
-                    ${formatUsdPrice(bid1Usd)}
+                    ${bid1Surpasses ? (walletBalUsd < minReserve ? 'Need $2' : `Need $${(bid1CommUsd + minReserve).toFixed(2)}`) : formatUsdPrice(bid1Usd)}
                   </button>
                   <button
                     class="btn-dark-sec"
                     ${bid2Surpasses ? 'disabled style="height:36px; font-size:11.5px; opacity:0.42;"' : `style="height:36px; font-size:11.5px; font-weight:800;" onclick="providerSubmitBid('${r.id}', ${bid2Usd})"`}
                   >
-                    ${formatUsdPrice(bid2Usd)}
+                    ${bid2Surpasses ? (walletBalUsd < minReserve ? 'Need $2' : `Need $${(bid2CommUsd + minReserve).toFixed(2)}`) : formatUsdPrice(bid2Usd)}
                   </button>
                   <button
                     class="btn-dark-sec"
-                    ${surpassesWallet ? 'disabled style="height:36px; font-size:11.5px; opacity:0.42;"' : `style="height:36px; font-size:11.5px; font-weight:800;" onclick="promptProviderCustomBid('${r.id}', ${r.budgetUsd})"`}
+                    ${walletBalUsd < minReserve ? 'disabled style="height:36px; font-size:11.5px; opacity:0.42;"' : `style="height:36px; font-size:11.5px; font-weight:800;" onclick="promptProviderCustomBid('${r.id}', ${r.budgetUsd})"`}
                   >
                     Custom $
                   </button>
@@ -11434,20 +11436,20 @@ function renderProviderRequestsFeedTab(prov, openRequests, activeJob) {
           const myExistingOffer = (r.offers || []).find((o) => o.providerId === prov.id || (prov.finditId && o.providerFinditId === prov.finditId));
           const isOfferDeclined = Boolean(myExistingOffer && myExistingOffer.status === 'DECLINED');
           const isOfferPending = Boolean(myExistingOffer && (myExistingOffer.status === 'PROPOSED' || myExistingOffer.status === 'COUNTERED'));
-          const commPercent = Number(state.db?.settings?.commissionPercent || 11);
+          const reqCat = normalizeCategoryId(r.categoryId);
+          const commPercent = Number(state.db?.settings?.categoryCommissions?.[reqCat] ?? (state.db?.settings?.commissionPercent || 10));
           const minReserve = Number(state.db?.settings?.minWalletBalanceUsd || 2.0);
-          const isPromo = Boolean(state.db?.settings?.launchPromoActive);
           const jobBudgetUsd = Number(r.budgetUsd || 0);
           const requiredCommUsd = Math.round(jobBudgetUsd * (commPercent / 100) * 100) / 100;
           const walletBalUsd = Number(prov.walletBalanceUsd || 0);
-          const surpassesWallet = !isPromo && (walletBalUsd < requiredCommUsd || walletBalUsd < minReserve || (walletBalUsd - requiredCommUsd) < minReserve);
-          const suggestedTopUpUsd = Math.max(5, Math.ceil(requiredCommUsd));
+          const surpassesWallet = (walletBalUsd < minReserve || walletBalUsd < requiredCommUsd || (walletBalUsd - requiredCommUsd) < minReserve);
+          const suggestedTopUpUsd = Math.max(5, Math.ceil(requiredCommUsd + minReserve - walletBalUsd));
           const bid1Usd = Number((jobBudgetUsd + 2).toFixed(2));
           const bid2Usd = Number((jobBudgetUsd + 3.5).toFixed(2));
           const bid1CommUsd = Math.round(bid1Usd * (commPercent / 100) * 100) / 100;
           const bid2CommUsd = Math.round(bid2Usd * (commPercent / 100) * 100) / 100;
-          const bid1Surpasses = !isPromo && (walletBalUsd < bid1CommUsd || (walletBalUsd - bid1CommUsd) < minReserve);
-          const bid2Surpasses = !isPromo && (walletBalUsd < bid2CommUsd || (walletBalUsd - bid2CommUsd) < minReserve);
+          const bid1Surpasses = (walletBalUsd < minReserve || walletBalUsd < bid1CommUsd || (walletBalUsd - bid1CommUsd) < minReserve);
+          const bid2Surpasses = (walletBalUsd < minReserve || walletBalUsd < bid2CommUsd || (walletBalUsd - bid2CommUsd) < minReserve);
 
           let displayLocation = r.exactAddress || r.clientLiveAddress || r.suburbName || 'Harare';
           displayLocation = displayLocation
@@ -11519,15 +11521,15 @@ function renderProviderRequestsFeedTab(prov, openRequests, activeJob) {
                     <button type="button" onclick="providerDismissJob('${r.id}')" style="background:transparent; border:none; color:#9F1239; font-size:10.5px; font-weight:800; cursor:pointer;">Dismiss</button>
                   </div>
                   <div style="display:flex; gap:6px;">
-                    <button class="btn-primary-blue" style="height:32px; padding:0 10px; font-size:11.5px; font-weight:800; flex:1;" onclick="providerSubmitBid('${r.id}', ${r.budgetUsd})">
-                      Accept ${formatUsdPrice(r.budgetUsd)}
+                    <button class="btn-primary-blue" ${surpassesWallet ? 'disabled style="height:32px; padding:0 10px; font-size:11.5px; opacity:0.42; cursor:not-allowed;"' : `style="height:32px; padding:0 10px; font-size:11.5px; font-weight:800; flex:1;" onclick="providerSubmitBid('${r.id}', ${r.budgetUsd})"`}>
+                      ${surpassesWallet ? (walletBalUsd < minReserve ? 'Need $2 Bal' : `Need $${(requiredCommUsd + minReserve).toFixed(2)}`) : `Accept ${formatUsdPrice(r.budgetUsd)}`}
                     </button>
                     ${counterMidUsd ? `
-                      <button class="btn-dark-sec" style="height:32px; padding:0 8px; font-size:11.5px; font-weight:800;" onclick="providerSubmitBid('${r.id}', ${counterMidUsd})">
+                      <button class="btn-dark-sec" ${(walletBalUsd < minReserve || walletBalUsd < Math.round(counterMidUsd * (commPercent / 100) * 100) / 100 || (walletBalUsd - Math.round(counterMidUsd * (commPercent / 100) * 100) / 100) < minReserve) ? 'disabled style="height:32px; padding:0 8px; font-size:11.5px; opacity:0.42; cursor:not-allowed;"' : `style="height:32px; padding:0 8px; font-size:11.5px; font-weight:800;" onclick="providerSubmitBid('${r.id}', ${counterMidUsd})"`}>
                         Counter ${formatUsdPrice(counterMidUsd)}
                       </button>
                     ` : ''}
-                    <button class="btn-dark-sec" style="height:32px; padding:0 8px; font-size:11.5px; font-weight:800;" onclick="promptProviderCustomBid('${r.id}', ${r.budgetUsd})">
+                    <button class="btn-dark-sec" ${walletBalUsd < minReserve ? 'disabled style="height:32px; padding:0 8px; font-size:11.5px; opacity:0.42; cursor:not-allowed;"' : `style="height:32px; padding:0 8px; font-size:11.5px; font-weight:800;" onclick="promptProviderCustomBid('${r.id}', ${r.budgetUsd})"`}>
                       Custom $
                     </button>
                   </div>
@@ -11546,13 +11548,15 @@ function renderProviderRequestsFeedTab(prov, openRequests, activeJob) {
 
               ${surpassesWallet ? `
                 <div style="background:#FFFBEB; border:1px solid #FDE68A; border-radius:8px; padding:6px 9px; margin-bottom:6px; display:flex; align-items:center; justify-content:space-between; gap:6px;">
-                  <span style="font-size:11px; font-weight:700; color:#92400E;">Requires $${requiredCommUsd.toFixed(2)} wallet balance</span>
+                  <span style="font-size:11px; font-weight:700; color:#92400E;">
+                    ${walletBalUsd < minReserve ? `Wallet balance ($${walletBalUsd.toFixed(2)}) is below $${minReserve.toFixed(2)} reserve` : `Requires $${(requiredCommUsd + minReserve).toFixed(2)} wallet balance ($${requiredCommUsd.toFixed(2)} comm. + $${minReserve.toFixed(2)} reserve)`}
+                  </span>
                   <button
                     type="button"
-                    onclick="state.walletTopupAmount=${suggestedTopUpUsd}; state.providerTab='WALLET'; renderUiOverlay();"
+                    onclick="openProviderWalletModal();"
                     style="height:26px; padding:0 8px; border-radius:6px; border:none; background:#D97706; color:#FFFFFF; font-size:10.5px; font-weight:800; cursor:pointer;"
                   >
-                    Top Up +$${suggestedTopUpUsd}
+                    Top Up
                   </button>
                 </div>
               ` : ''}
@@ -11568,23 +11572,23 @@ function renderProviderRequestsFeedTab(prov, openRequests, activeJob) {
                     class="btn-primary-blue"
                     ${surpassesWallet ? 'disabled style="height:35px; font-size:11.5px; opacity:0.42; cursor:not-allowed;"' : `style="height:35px; font-size:12px; font-weight:800;" onclick="providerSubmitBid('${r.id}', ${r.budgetUsd})"`}
                   >
-                    ${surpassesWallet ? `Need $${requiredCommUsd.toFixed(2)}` : `Accept ${formatUsdPrice(r.budgetUsd)}`}
+                    ${surpassesWallet ? (walletBalUsd < minReserve ? 'Need $2 Bal' : `Need $${(requiredCommUsd + minReserve).toFixed(2)}`) : `Accept ${formatUsdPrice(r.budgetUsd)}`}
                   </button>
                   <button
                     class="btn-dark-sec"
                     ${bid1Surpasses ? 'disabled style="height:35px; font-size:11.5px; opacity:0.42; cursor:not-allowed;"' : `style="height:35px; font-size:11.5px; font-weight:800;" onclick="providerSubmitBid('${r.id}', ${bid1Usd})"`}
                   >
-                    ${formatUsdPrice(bid1Usd)}
+                    ${bid1Surpasses ? (walletBalUsd < minReserve ? 'Need $2' : `Need $${(bid1CommUsd + minReserve).toFixed(2)}`) : formatUsdPrice(bid1Usd)}
                   </button>
                   <button
                     class="btn-dark-sec"
                     ${bid2Surpasses ? 'disabled style="height:35px; font-size:11.5px; opacity:0.42; cursor:not-allowed;"' : `style="height:35px; font-size:11.5px; font-weight:800;" onclick="providerSubmitBid('${r.id}', ${bid2Usd})"`}
                   >
-                    ${formatUsdPrice(bid2Usd)}
+                    ${bid2Surpasses ? (walletBalUsd < minReserve ? 'Need $2' : `Need $${(bid2CommUsd + minReserve).toFixed(2)}`) : formatUsdPrice(bid2Usd)}
                   </button>
                   <button
                     class="btn-dark-sec"
-                    ${surpassesWallet ? 'disabled style="height:35px; font-size:11.5px; opacity:0.42; cursor:not-allowed;"' : `style="height:35px; font-size:11.5px; font-weight:800;" onclick="promptProviderCustomBid('${r.id}', ${r.budgetUsd})"`}
+                    ${walletBalUsd < minReserve ? 'disabled style="height:35px; font-size:11.5px; opacity:0.42; cursor:not-allowed;"' : `style="height:35px; font-size:11.5px; font-weight:800;" onclick="promptProviderCustomBid('${r.id}', ${r.budgetUsd})"`}
                   >
                     Custom $
                   </button>
@@ -12830,6 +12834,21 @@ async function submitDisputeFromModal(jobId) {
 }
 
 function promptProviderCustomBid(requestId, baseUsd) {
+  const prov = state.currentUser || state.db?.providers?.[0];
+  const walletBalUsd = Number(prov?.walletBalanceUsd || 0);
+  const minReserve = Number(state.db?.settings?.minWalletBalanceUsd || 2.0);
+  if (walletBalUsd < minReserve) {
+    openLowBalanceExplanatoryModal({
+      currentBalanceUsd: walletBalUsd,
+      minReserveUsd: minReserve,
+      commissionPercent: Number(state.db?.settings?.commissionPercent || 10),
+      bidPriceUsd: Number(baseUsd),
+      requiredBalanceUsd: minReserve,
+      requiredTopUpUsd: Math.max(5.00, Math.ceil(minReserve - walletBalUsd)),
+      requestId
+    });
+    return;
+  }
   const val = prompt('Enter your offer price in USD ($):', String(Number(baseUsd) + 2));
   if (val && !isNaN(Number(val))) {
     providerSubmitBid(requestId, Number(val));
@@ -12917,18 +12936,25 @@ async function providerSubmitBid(requestId, priceUsd) {
   }
   const currentBalance = Number(prov.walletBalanceUsd || 0);
   const minReserve = Number(state.db?.settings?.minWalletBalanceUsd || 2.00);
-  const commPercent = Number(state.db?.settings?.commissionPercent || 11);
+  const reqSnap = (state.db?.requests || []).find((r) => r.id === requestId) || null;
+  const reqCat = reqSnap ? normalizeCategoryId(reqSnap.categoryId) : null;
+  const commPercent = Number(state.db?.settings?.categoryCommissions?.[reqCat] ?? (state.db?.settings?.commissionPercent || 10));
   const commFee = Math.round(Number(priceUsd) * (commPercent / 100) * 100) / 100;
-  const reqTopUp = Math.max(5.00, commFee);
+  const requiredBalanceUsd = Math.round((commFee + minReserve) * 100) / 100;
+  const reqTopUp = Math.max(5.00, Math.max(0, Math.round((requiredBalanceUsd - currentBalance) * 100) / 100));
 
-  // Proactive wallet balance and 11% commission check
-  if (!state.db?.settings?.launchPromoActive && (currentBalance < commFee || currentBalance < minReserve || (currentBalance - commFee) < minReserve)) {
+  // Strict wallet balance and commission check:
+  // 1. Below $2 no bidding (currentBalance < minReserve)
+  // 2. No bidding if amount in wallet is less than commission (currentBalance < commFee)
+  // 3. No bidding if balance after commission leaves less than $2 reserve ((currentBalance - commFee) < minReserve)
+  if (currentBalance < minReserve || currentBalance < commFee || (currentBalance - commFee) < minReserve) {
     openLowBalanceExplanatoryModal({
       currentBalanceUsd: currentBalance,
       minReserveUsd: minReserve,
       commissionPercent: commPercent,
       bidPriceUsd: Number(priceUsd),
       commissionFeeUsd: commFee,
+      requiredBalanceUsd,
       requiredTopUpUsd: reqTopUp,
       requestId
     });

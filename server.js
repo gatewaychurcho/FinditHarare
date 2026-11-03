@@ -4692,24 +4692,28 @@ Return ONLY JSON with keys:
 
       const priceUsd = Number(body.priceUsd);
       const minReserveUsd = Number(db.settings.minWalletBalanceUsd || 2.00);
-      const commissionPercent = Number(db.settings.commissionPercent || 11);
-      const commissionFeeUsd = Math.round(priceUsd * (commissionPercent / 100) * 100) / 100;
+      const categoryRate = db.settings?.categoryCommissions?.[reqCat] ?? Number(db.settings.commissionPercent || 10);
+      const commissionFeeUsd = Math.round(priceUsd * (categoryRate / 100) * 100) / 100;
       const currentBalanceUsd = Number(provider.walletBalanceUsd || 0);
+      const requiredBalanceUsd = Math.round((commissionFeeUsd + minReserveUsd) * 100) / 100;
+      const requiredTopUpUsd = Math.max(5.00, Math.max(0, Math.round((requiredBalanceUsd - currentBalanceUsd) * 100) / 100));
 
-      // Top-up calculation: at least $5 or 11% of bid amount (whichever is higher)
-      const requiredTopUpUsd = Math.max(5.00, commissionFeeUsd);
-
-      if (!db.settings.launchPromoActive && (currentBalanceUsd < commissionFeeUsd || currentBalanceUsd < minReserveUsd || (currentBalanceUsd - commissionFeeUsd) < minReserveUsd)) {
+      // Strict Wallet & Commission Enforcement:
+      // 1. Balance must be >= $2.00 (below $2 no bidding)
+      // 2. Balance must be >= commission fee (no bidding if amount in wallet is less than commission)
+      // 3. Balance after commission cannot leave less than $2.00 reserve
+      if (currentBalanceUsd < minReserveUsd || currentBalanceUsd < commissionFeeUsd || (currentBalanceUsd - commissionFeeUsd) < minReserveUsd) {
         return sendJson(res, 402, {
           code: 'LOW_WALLET_BALANCE',
-          error: `To accept this $${priceUsd} job with higher funds, you must have at least ${commissionPercent}% of the amount ($${commissionFeeUsd.toFixed(2)} USD commission + $${minReserveUsd.toFixed(2)} reserve). Please top up your account balance.`,
+          error: `Insufficient wallet balance to bid on this $${priceUsd} job. You need at least $${requiredBalanceUsd.toFixed(2)} USD ($${commissionFeeUsd.toFixed(2)} commission + $${minReserveUsd.toFixed(2)} reserve). Your current balance is $${currentBalanceUsd.toFixed(2)} USD. Please top up your wallet.`,
           currentBalanceUsd,
           minReserveUsd,
-          commissionPercent,
+          commissionPercent: categoryRate,
           bidPriceUsd: priceUsd,
           commissionFeeUsd,
+          requiredBalanceUsd,
           requiredTopUpUsd,
-          explanation: `To accept this $${priceUsd} job with higher funds, you have to have at least ${commissionPercent}% of the amount ($${commissionFeeUsd.toFixed(2)} USD) plus the $${minReserveUsd.toFixed(2)} minimum reserve. Your current balance is $${currentBalanceUsd.toFixed(2)} USD. Please top up your account balance to proceed.`
+          explanation: `To place a bid on this $${priceUsd} job, your wallet must cover the $${commissionFeeUsd.toFixed(2)} USD (${categoryRate}%) commission while maintaining the $${minReserveUsd.toFixed(2)} USD minimum reserve (total $${requiredBalanceUsd.toFixed(2)} USD required). Your current balance is $${currentBalanceUsd.toFixed(2)} USD. Please top up your wallet to proceed.`
         });
       }
 

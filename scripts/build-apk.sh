@@ -18,10 +18,26 @@ if [ -d "/opt/homebrew/share/android-commandlinetools/build-tools/36.0.0" ]; the
   ANDROID_TOOLS="/opt/homebrew/share/android-commandlinetools/build-tools/36.0.0"
   ANDROID_JAR="/opt/homebrew/share/android-commandlinetools/platforms/android-36/android.jar"
 else
-  SDK_ROOT="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
-  ANDROID_TOOLS="$(ls -d "$SDK_ROOT"/build-tools/* | sort -V | tail -n 1)"
-  ANDROID_JAR="$(ls "$SDK_ROOT"/platforms/android-*/android.jar | sort -V | tail -n 1)"
+  SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+  if [ ! -d "$SDK_ROOT" ] && [ -d "$HOME/Library/Android/sdk" ]; then
+    SDK_ROOT="$HOME/Library/Android/sdk"
+  fi
+  ANDROID_TOOLS="$(ls -d "$SDK_ROOT"/build-tools/* 2>/dev/null | sort -V | tail -n 1)"
+  ANDROID_JAR="$(ls "$SDK_ROOT"/platforms/android-*/android.jar 2>/dev/null | sort -V | tail -n 1)"
 fi
+
+if [ -z "$ANDROID_TOOLS" ] || [ ! -d "$ANDROID_TOOLS" ]; then
+  echo "Error: Android build-tools not found under SDK_ROOT ($SDK_ROOT)"
+  exit 1
+fi
+
+if [ -z "$ANDROID_JAR" ] || [ ! -f "$ANDROID_JAR" ]; then
+  echo "Error: android.jar platform not found under SDK_ROOT ($SDK_ROOT)"
+  exit 1
+fi
+
+echo "Using Android Build Tools: $ANDROID_TOOLS"
+echo "Using Android Jar: $ANDROID_JAR"
 
 BUILD_DIR="build-android"
 OUTPUT_APK="FinditHarare.apk"

@@ -19,11 +19,11 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
       - name: Build Signed APK via SDK Build Tools
+        env:
+          ANDROID_HOME: /usr/local/lib/android/sdk
         run: |
+          chmod +x scripts/build-apk.sh
           bash scripts/build-apk.sh
 
       - name: Upload APK Artifact
