@@ -25,7 +25,7 @@ try {
   }
 } catch (e) {}
 
-const PORT = process.env.PORT || 3030;
+const PORT = process.env.PORT || 3000;
 const DATA_DIR = path.join(__dirname, 'data');
 const DB_FILE = path.join(DATA_DIR, 'db.json');
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -6737,7 +6737,7 @@ Return ONLY valid JSON with key: "reply" (string).`;
 setupWebSocketServer(server);
 
 if (require.main === module) {
-  server.listen(PORT, () => {
+  server.listen(PORT, '0.0.0.0', () => {
     console.log(`Findit Harare App running at http://localhost:${PORT}`);
     console.log(`Findit Harare Admin Dashboard running at http://localhost:${PORT}/admin`);
 

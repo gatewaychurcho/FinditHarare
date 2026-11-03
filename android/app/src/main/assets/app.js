@@ -5,8 +5,7 @@
 const SESSION_KEY = 'findit_harare_session_v3';
 
 // Hybrid APK & Web Native API Base:
-// When running compiled inside Android APK (file:///android_asset/), dynamically connect to cloud backend
-const API_BASE = (typeof window !== 'undefined' && (window.location.protocol === 'file:' || !window.location.origin || window.location.origin === 'null' || (window.location.hostname === 'localhost' && window.location.port !== '3030')))
+const API_BASE = (typeof window !== 'undefined' && (window.location.protocol === 'file:' || !window.location.origin || window.location.origin === 'null'))
   ? 'https://finditharare.vercel.app'
   : '';
 
@@ -48,6 +47,8 @@ const state = {
   customSuburbLabel: 'Live Location, Harare',
   isCustomAddressSelected: false,
   entranceNote: 'Main Gate',
+  userLiveGpsLat: -17.7955,
+  userLiveGpsLng: 31.0365,
   pinnedLat: -17.7955,
   pinnedLng: 31.0365,
 
@@ -2344,6 +2345,33 @@ function initLeafletMap() {
       attributionControl: false
     }).setView([state.pinnedLat, state.pinnedLng], 14);
 
+    // Safeguard flyTo against zero-dimension division-by-zero (e.g. before initial layout) and invalid coordinates
+    const origFlyTo = leafletMap.flyTo.bind(leafletMap);
+    leafletMap.flyTo = function(targetLatLng, zoom, options) {
+      try {
+        this.invalidateSize();
+        const size = this.getSize();
+        let lat = Array.isArray(targetLatLng) ? targetLatLng[0] : (targetLatLng && targetLatLng.lat);
+        let lng = Array.isArray(targetLatLng) ? targetLatLng[1] : (targetLatLng && targetLatLng.lng);
+        lat = Number(lat);
+        lng = Number(lng);
+        if (!isFinite(lat) || !isFinite(lng)) {
+          console.warn('flyTo ignored invalid coordinates:', targetLatLng);
+          return this;
+        }
+        if (!size || size.x <= 0 || size.y <= 0) {
+          return this.setView([lat, lng], zoom);
+        }
+        return origFlyTo([lat, lng], zoom, options);
+      } catch (e) {
+        try {
+          return this.setView(targetLatLng, zoom);
+        } catch (err) {
+          return this;
+        }
+      }
+    };
+
     const osmLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19
     }).addTo(leafletMap);
@@ -3251,8 +3279,14 @@ function useBrowserGeolocation(silent = false) {
   }
 
   const applyGpsPosition = (latitude, longitude, label = 'Harare') => {
-    state.userLiveGpsLat = Number(latitude.toFixed(5));
-    state.userLiveGpsLng = Number(longitude.toFixed(5));
+    let latNum = Number(latitude);
+    let lngNum = Number(longitude);
+    if (!isFinite(latNum) || !isFinite(lngNum)) {
+      latNum = isFinite(Number(state.userLiveGpsLat)) ? Number(state.userLiveGpsLat) : (isFinite(Number(state.pinnedLat)) ? Number(state.pinnedLat) : -17.7955);
+      lngNum = isFinite(Number(state.userLiveGpsLng)) ? Number(state.userLiveGpsLng) : (isFinite(Number(state.pinnedLng)) ? Number(state.pinnedLng) : 31.0365);
+    }
+    state.userLiveGpsLat = Number(latNum.toFixed(5));
+    state.userLiveGpsLng = Number(lngNum.toFixed(5));
     state.pinnedLat = state.userLiveGpsLat;
     state.pinnedLng = state.userLiveGpsLng;
 
@@ -3301,7 +3335,19 @@ function useBrowserGeolocation(silent = false) {
     updateLiveGpsMarker();
     updateMapMarkers(true);
     if (leafletMap) {
-      leafletMap.flyTo([state.userLiveGpsLat, state.userLiveGpsLng], 17, { animate: true, duration: 0.8 });
+      try {
+        leafletMap.invalidateSize();
+        const size = leafletMap.getSize();
+        if (!size || size.x <= 0 || size.y <= 0) {
+          leafletMap.setView([state.userLiveGpsLat, state.userLiveGpsLng], 17);
+        } else {
+          leafletMap.flyTo([state.userLiveGpsLat, state.userLiveGpsLng], 17, { animate: true, duration: 0.8 });
+        }
+      } catch (err) {
+        try {
+          leafletMap.setView([state.userLiveGpsLat, state.userLiveGpsLng], 17);
+        } catch (e) {}
+      }
     }
     if (!silent) {
       showToast(`📍 Live Location: ${state.customAddress}, ${state.customSuburbLabel.split(',')[0]}`, 'success');
@@ -3313,20 +3359,26 @@ function useBrowserGeolocation(silent = false) {
     if (!silent) showToast('📡 Acquiring live GPS...', 'info', 2000);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        applyGpsPosition(pos.coords.latitude, pos.coords.longitude, 'Live GPS');
+        const cLat = pos?.coords?.latitude;
+        const cLng = pos?.coords?.longitude;
+        if (isFinite(Number(cLat)) && isFinite(Number(cLng))) {
+          applyGpsPosition(cLat, cLng, 'Live GPS');
+        } else {
+          applyGpsPosition(-17.7955, 31.0365, 'Harare');
+        }
       },
       (err) => {
         console.warn('Geolocation fallback:', err ? err.message : 'timeout');
         // Graceful fallback to user / Harare center
-        const fallbackLat = state.userLiveGpsLat || state.pinnedLat || -17.8252;
-        const fallbackLng = state.userLiveGpsLng || state.pinnedLng || 31.0335;
+        const fallbackLat = isFinite(Number(state.userLiveGpsLat)) ? state.userLiveGpsLat : (isFinite(Number(state.pinnedLat)) ? state.pinnedLat : -17.8252);
+        const fallbackLng = isFinite(Number(state.userLiveGpsLng)) ? state.userLiveGpsLng : (isFinite(Number(state.pinnedLng)) ? state.pinnedLng : 31.0335);
         applyGpsPosition(fallbackLat, fallbackLng, 'Harare');
       },
       { enableHighAccuracy: true, timeout: 6000, maximumAge: 30000 }
     );
   } else {
-    const fallbackLat = state.pinnedLat || -17.8252;
-    const fallbackLng = state.pinnedLng || 31.0335;
+    const fallbackLat = isFinite(Number(state.pinnedLat)) ? state.pinnedLat : -17.8252;
+    const fallbackLng = isFinite(Number(state.pinnedLng)) ? state.pinnedLng : 31.0335;
     applyGpsPosition(fallbackLat, fallbackLng, 'Harare');
   }
 }

@@ -1,0 +1,8 @@
+{
+  "name": "Findit Harare",
+  "description": "On-demand home and mobile services marketplace in Harare with real-time matchmaking, live chat, GPS map, and instant booking.",
+  "permissions": [],
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
