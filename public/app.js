@@ -1158,13 +1158,12 @@ function initRealtimeSync() {
       if (state.isAuthenticated && state.currentUser && !activeCallPollTimer) {
         try { startActiveCallPolling(); } catch (e) {}
       }
-      // Smooth non-overlapping delta sync when WebSocket is not active
-      // Smooth non-overlapping delta sync when WebSocket is not active
-      if (!isWsConnected && !isFetchingState) {
+      // Reliable multi-device delta sync heartbeat (runs seamlessly alongside WebSockets)
+      if (!isFetchingState) {
         const activeEl = document.activeElement;
         const isUserTyping = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT');
-        // Never interrupt active typing, open modals, or chat drawer with background polls
-        if (!isUserTyping && !state.activeModal && !state.chatDrawerOpen) {
+        // Never interrupt active typing with background delta syncs
+        if (!isUserTyping && !state.activeModal) {
           const activeReq = getCustomerActiveRequest();
           if (state.screenStep === 'SEARCHING' || (activeReq && activeReq.status === 'OPEN')) {
             startFastLiveOffersPoll(activeReq?.id);
@@ -1172,7 +1171,7 @@ function initRealtimeSync() {
           fetchState(false);
         }
       }
-    }, 5000);
+    }, 3000);
   }
 }
 
@@ -1446,7 +1445,8 @@ function handleIncomingRealtimeEvent(data) {
     else state.db.requests.unshift(req);
     lastUiOverlaySignature = ''; // Invalidate signature cache so card appears without delay!
     const myCats = state.role === 'PROVIDER' ? getProviderCategoryIds(state.currentUser) : [];
-    const matchesMe = myCats.length === 0 || myCats.includes(req.categoryId);
+    const reqCat = normalizeCategoryId(req.categoryId);
+    const matchesMe = myCats.length === 0 || myCats.includes(reqCat);
     if (state.role === 'PROVIDER' && matchesMe) {
       // Auto-expand provider sheet if idle/on home so new job card displays
       if (!state.providerTab || state.providerTab === 'HOME') {
@@ -10667,7 +10667,7 @@ function renderProviderModeOverlay() {
     if (r.acceptedProviderId && r.acceptedProviderId !== prov.id) return false;
     if (r.acceptedOfferId) return false;
     const reqCat = normalizeCategoryId(r.categoryId);
-    return myCategoryIds.includes(reqCat);
+    return myCategoryIds.length === 0 || myCategoryIds.includes(reqCat);
   });
   if (prov && prov.isOnline !== false && !prov.isBanned) {
     reportProviderViewingRequests(prov.id, openRequests.map((r) => r.id));

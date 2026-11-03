@@ -138,6 +138,21 @@ async function verifyPassword(plainText, storedHash) {
   return false;
 }
 
+function normalizeCategoryId(catId) {
+  const map = {
+    braiding: 'beauty_care',
+    barber: 'beauty_care',
+    nails: 'beauty_care',
+    makeup: 'beauty_care',
+    wigs: 'beauty_care',
+    lashes: 'beauty_care',
+    cleaning: 'cleaning_domestic',
+    handyman: 'repairs_construction',
+    plumbing: 'repairs_construction'
+  };
+  return map[catId] || catId || 'repairs_construction';
+}
+
 // Admin Security: Argon2id / bcrypt / PBKDF2 Password Hashing
 const ADMIN_SALT = process.env.ADMIN_SALT || 'findit_harare_admin_salt_#2026';
 const ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH || '1e1adeb42af47e89ef0d871d0c8551332b6a653c6f5e0f4257b13f2595eec988';
@@ -4649,8 +4664,11 @@ Return ONLY JSON with keys:
         return sendJson(res, 403, { error: `Your account (${provider.finditId}) is suspended: ${provider.banReason}` });
       }
 
-      const provCatIds = (Array.isArray(provider.categoryIds) && provider.categoryIds.length ? provider.categoryIds : [provider.categoryId]).filter(Boolean);
-      if (reqItem.categoryId && provCatIds.length && !provCatIds.includes(reqItem.categoryId)) {
+      const provCatIds = (Array.isArray(provider.categoryIds) && provider.categoryIds.length ? provider.categoryIds : [provider.categoryId])
+        .filter(Boolean)
+        .map(normalizeCategoryId);
+      const reqCat = normalizeCategoryId(reqItem.categoryId);
+      if (reqCat && provCatIds.length && !provCatIds.includes(reqCat)) {
         return sendJson(res, 403, { code: 'CATEGORY_MISMATCH', error: 'This job is outside your registered business categories.' });
       }
 
