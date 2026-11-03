@@ -939,6 +939,12 @@ async function fetchState(force = false) {
               }
             }
           });
+          newReq.offers.sort((a, b) => {
+            const timeA = Number(a.updatedAt || new Date(a.createdAt || 0).getTime() || 0);
+            const timeB = Number(b.updatedAt || new Date(b.createdAt || 0).getTime() || 0);
+            if (timeB !== timeA) return timeB - timeA;
+            return String(a.id || '').localeCompare(String(b.id || ''));
+          });
         }
 
         // 2. Preserve local chat messages & read ticks
@@ -1106,16 +1112,27 @@ function startFastLiveOffersPoll(requestId) {
         }
         if (Array.isArray(res.offers)) {
           const prevCount = (activeReq.offers || []).length;
+          res.offers.sort((a, b) => {
+            const timeA = Number(a.updatedAt || new Date(a.createdAt || 0).getTime() || 0);
+            const timeB = Number(b.updatedAt || new Date(b.createdAt || 0).getTime() || 0);
+            if (timeB !== timeA) return timeB - timeA;
+            return String(a.id || '').localeCompare(String(b.id || ''));
+          });
           activeReq.offers = res.offers;
           if (Array.isArray(res.activeViewerIds)) {
             activeReq.activeViewerIds = res.activeViewerIds;
           }
-          if (res.offers.length > prevCount || res.offers.length !== lastPolledOffersCount) {
+          if (res.offers.length > prevCount) {
             lastPolledOffersCount = res.offers.length;
-            lastOffersSignature = '';
-            lastUiOverlaySignature = '';
-            renderFloatingOffersOverlay(true);
-            playIncomingMessageSoundAndVibrate({ senderName: 'Service Provider', text: 'New pro offer received!' });
+            renderFloatingOffersOverlay(false);
+            const newestOffer = res.offers[0];
+            if (newestOffer && newestOffer.id !== state.lastAnnouncedOfferId) {
+              state.lastAnnouncedOfferId = newestOffer.id;
+              playIncomingMessageSoundAndVibrate({ senderName: newestOffer.providerName || 'Service Provider', text: `New pro offer received: $${newestOffer.priceUsd}` });
+            }
+          } else if (res.offers.length !== lastPolledOffersCount) {
+            lastPolledOffersCount = res.offers.length;
+            renderFloatingOffersOverlay(false);
           }
         }
       }
@@ -2195,22 +2212,7 @@ async function tickCountdowns() {
     if (fillEl) {
       fillEl.style.width = `${pct}%`;
     }
-
-    if (remMs <= 0) {
-      expiredOffers.push(offer);
-    }
   });
-
-  if (expiredOffers.length > 0) {
-    for (const exp of expiredOffers) {
-      await apiPost('/api/offers/decline', {
-        requestId: activeReq.id,
-        offerId: exp.id,
-        reason: 'AUTO_EXPIRED_120S'
-      });
-    }
-    await fetchState();
-  }
 }
 
 async function apiGet(url, retries = 2) {
@@ -3953,7 +3955,7 @@ function renderFloatingOffersOverlay(force = false) {
   }
 
   const req = getCustomerActiveRequest();
-  if (!req || req.status !== 'OPEN' || req.acceptedOfferId || req.acceptedProviderId || isBookedStatus(req.status) || state.screenStep === 'BOOKED' || !req.offers || req.offers.length === 0) {
+  if (!req || req.status !== 'OPEN' || req.acceptedOfferId || req.acceptedProviderId || isBookedStatus(req.status) || state.screenStep === 'BOOKED' || !req.offers || req.offers.length === 0 || state.customerTab === 'OFFERS') {
     if (root.innerHTML !== '') {
       root.className = 'floating-offers-root';
       root.innerHTML = '';
@@ -3967,6 +3969,13 @@ function renderFloatingOffersOverlay(force = false) {
     if (o.status === 'DECLINED') return false;
     const exp = o.expiresAt || (new Date(o.createdAt).getTime() + 120 * 1000);
     return exp > nowMs;
+  });
+
+  activeOffers.sort((a, b) => {
+    const timeA = Number(a.updatedAt || new Date(a.createdAt || 0).getTime() || 0);
+    const timeB = Number(b.updatedAt || new Date(b.createdAt || 0).getTime() || 0);
+    if (timeB !== timeA) return timeB - timeA;
+    return String(a.id || '').localeCompare(String(b.id || ''));
   });
 
   if (activeOffers.length === 0) {
@@ -4007,6 +4016,7 @@ function renderFloatingOffersOverlay(force = false) {
     return;
   }
 
+  const prevScrollTop = root.scrollTop;
   root.className = 'floating-offers-root active-backdrop';
   root.innerHTML = `
     <div class="choose-pro-top-bar">
@@ -4088,6 +4098,9 @@ function renderFloatingOffersOverlay(force = false) {
       `;
     }).join('')}
   `;
+  if (prevScrollTop > 0) {
+    root.scrollTop = prevScrollTop;
+  }
 }
 
 // ============================================================================
@@ -5122,6 +5135,12 @@ function renderCompareOffersOverlay(req) {
   }
 
   const activeOffers = (req?.offers || []).filter((o) => o.status !== 'DECLINED');
+  activeOffers.sort((a, b) => {
+    const timeA = Number(a.updatedAt || new Date(a.createdAt || 0).getTime() || 0);
+    const timeB = Number(b.updatedAt || new Date(b.createdAt || 0).getTime() || 0);
+    if (timeB !== timeA) return timeB - timeA;
+    return String(a.id || '').localeCompare(String(b.id || ''));
+  });
 
   return `
     <div class="fh-main-screen-container" style="padding-top:14px;">
@@ -9825,6 +9844,9 @@ async function toggleActiveRequestAutoAccept(requestId) {
 }
 
 async function acceptOffer(requestId, offerId) {
+  if (state.isAcceptingOffer) return;
+  state.isAcceptingOffer = true;
+  stopFastLiveOffersPoll();
   try {
     markLocalStateMutation();
     const reqSnap = (state.db?.requests || []).find((r) => r.id === requestId) || null;
@@ -9857,6 +9879,11 @@ async function acceptOffer(requestId, offerId) {
       floatingOffersRoot.innerHTML = '';
     }
 
+    if (activeMapOpportunityMarkers && typeof leafletMarkersLayer !== 'undefined' && leafletMarkersLayer) {
+      activeMapOpportunityMarkers.forEach((m) => { try { leafletMarkersLayer.removeLayer(m); } catch (e) {} });
+      activeMapOpportunityMarkers.clear();
+    }
+
     renderAll(true);
     showToast('Offer accepted! Live route & chat with your pro started.');
 
@@ -9874,6 +9901,8 @@ async function acceptOffer(requestId, offerId) {
     renderAll(true);
   } catch (err) {
     showToast(err.message, 'error');
+  } finally {
+    state.isAcceptingOffer = false;
   }
 }
 
@@ -11036,6 +11065,8 @@ function setProviderFeedView(view) {
         } catch (e) {}
       }, 80);
     }
+  } else {
+    state.isSheetMinimized = false;
   }
   lastUiOverlaySignature = '';
   renderAll(true);

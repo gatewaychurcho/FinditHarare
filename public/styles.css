@@ -2736,6 +2736,9 @@ html, body {
     grid-template-columns: 1fr 1fr;
     gap: 6px;
   }
+  .provider-bid-grid button:first-child {
+    grid-column: span 2;
+  }
 }
 
 .provider-step-bar {
