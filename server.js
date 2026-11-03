@@ -365,6 +365,9 @@ if (DATABASE_URL) {
       connectionString: DATABASE_URL,
       ssl: { rejectUnauthorized: false }
     });
+    pgClient.on('error', (err) => {
+      console.warn('PostgreSQL pool background error:', err.message);
+    });
   } catch (e) {
     pgClient = null;
   }

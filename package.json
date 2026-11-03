@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "node server.js",
     "start": "node server.js",
-    "build": "node -e 'console.log(\"Build ready\")'"
+    "build": "node -e 'console.log(\"Build ready\")'",
+    "lint": "node --check server.js && node --check public/app.js"
   },
   "engines": {
     "node": ">=18.0.0"
