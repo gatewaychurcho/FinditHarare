@@ -379,6 +379,8 @@ let leafletMap = null;
 let leafletMarkersLayer = null;
 let leafletRoutePolyline = null;
 let leafletRoutePolylineCasing = null;
+let lastFittedRouteKey = '';
+let currentRouteCoordsKey = '';
 let userLiveGpsMarker = null;
 let callInterval = null;
 let offerCountdownInterval = null;
@@ -943,9 +945,9 @@ async function fetchState(force = false) {
       if (!newDb.resetAt) {
         state.db.requests.forEach((localReq) => {
           if (!localReq || !localReq.id) return;
-          const isJustCreatedInFlight = localReq.status === 'OPEN' && localReq.createdAt &&
-            (nowMs - new Date(localReq.createdAt).getTime() < 15 * 1000);
-          if (isJustCreatedInFlight && !newDb.requests.some((r) => r.id === localReq.id)) {
+          const isRecentInFlight = (localReq.status === 'OPEN' || isBookedStatus(localReq.status)) && localReq.createdAt &&
+            (nowMs - new Date(localReq.createdAt).getTime() < 30 * 1000);
+          if (isRecentInFlight && !newDb.requests.some((r) => r.id === localReq.id)) {
             newDb.requests.unshift(localReq);
           }
         });
@@ -2145,20 +2147,6 @@ let lastBackgroundSyncTime = Date.now();
 async function tickCountdowns() {
   checkProximityAutoPairTick();
 
-  // Multi-device real-time sync every 3s during active search, active booking, or provider job feed
-  if (Date.now() - lastBackgroundSyncTime > 3000) {
-    lastBackgroundSyncTime = Date.now();
-    const activeEl = document.activeElement;
-    const isUserTyping = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT');
-    if (!isUserTyping && state.activeModal !== 'SIGNUP_FLOW') {
-      const needsSync = (state.role === 'CUSTOMER' && (state.screenStep === 'SEARCHING' || state.screenStep === 'BOOKED')) ||
-                        (state.role === 'PROVIDER' && state.providerTab === 'FEED');
-      if (needsSync) {
-        fetchState();
-      }
-    }
-  }
-
   if (!state.db || !state.isAuthenticated || state.role !== 'CUSTOMER') return;
   const activeReq = getCustomerActiveRequest();
   if (!activeReq || activeReq.status !== 'OPEN') return;
@@ -3014,23 +3002,41 @@ async function drawRoadRouteOnMap(lat1, lng1, lat2, lng2, color = '#0066FF', wei
   }
 
   // inDrive Dual-Layer Route Polyline (Dark Casing + Glowing Blue Active Polyline)
-  if (leafletRoutePolylineCasing) {
-    leafletMap.removeLayer(leafletRoutePolylineCasing);
-  }
-  leafletRoutePolylineCasing = L.polyline(coords, {
-    color: '#0F172A',
-    weight: weight + 3,
-    opacity: 0.35
-  }).addTo(leafletMap);
+  if (leafletRoutePolyline && leafletRoutePolylineCasing && currentRouteCoordsKey === key) {
+    // Already rendered for this exact route segment — keep existing layer without flicker
+  } else if (leafletRoutePolyline && leafletRoutePolylineCasing) {
+    // Smoothly update existing polylines without removing/re-adding DOM layers
+    try {
+      leafletRoutePolylineCasing.setLatLngs(coords);
+      leafletRoutePolyline.setLatLngs(coords);
+      currentRouteCoordsKey = key;
+    } catch (e) {
+      try { leafletMap.removeLayer(leafletRoutePolylineCasing); } catch (err) {}
+      try { leafletMap.removeLayer(leafletRoutePolyline); } catch (err) {}
+      leafletRoutePolylineCasing = L.polyline(coords, { color: '#0F172A', weight: weight + 3, opacity: 0.35 }).addTo(leafletMap);
+      leafletRoutePolyline = L.polyline(coords, { color, weight, opacity: 0.95 }).addTo(leafletMap);
+      currentRouteCoordsKey = key;
+    }
+  } else {
+    if (leafletRoutePolylineCasing) {
+      try { leafletMap.removeLayer(leafletRoutePolylineCasing); } catch (e) {}
+    }
+    leafletRoutePolylineCasing = L.polyline(coords, {
+      color: '#0F172A',
+      weight: weight + 3,
+      opacity: 0.35
+    }).addTo(leafletMap);
 
-  if (leafletRoutePolyline) {
-    leafletMap.removeLayer(leafletRoutePolyline);
+    if (leafletRoutePolyline) {
+      try { leafletMap.removeLayer(leafletRoutePolyline); } catch (e) {}
+    }
+    leafletRoutePolyline = L.polyline(coords, {
+      color,
+      weight,
+      opacity: 0.95
+    }).addTo(leafletMap);
+    currentRouteCoordsKey = key;
   }
-  leafletRoutePolyline = L.polyline(coords, {
-    color,
-    weight,
-    opacity: 0.95
-  }).addTo(leafletMap);
 
   if (isNav && state.role === 'PROVIDER') {
     liveNavState.active = true;
@@ -3047,10 +3053,16 @@ async function drawRoadRouteOnMap(lat1, lng1, lat2, lng2, color = '#0066FF', wei
     speakNavigationDirection(initialSpeech);
   }
 
-  // Automatically zoom and center the map so the full route is visible
-  if (coords && coords.length > 1) {
+  // Automatically zoom and center the map so the full route is visible (ONLY ONCE per route, not on every background poll)
+  if (coords && coords.length > 1 && lastFittedRouteKey !== key) {
+    lastFittedRouteKey = key;
     try {
-      leafletMap.fitBounds(L.latLngBounds(coords), { padding: [70, 70], maxZoom: 16 });
+      leafletMap.invalidateSize();
+      const sz = leafletMap.getSize();
+      const validCoords = coords.filter((c) => Array.isArray(c) && isFinite(Number(c[0])) && isFinite(Number(c[1])));
+      if (sz && sz.x > 0 && sz.y > 0 && validCoords.length > 1) {
+        leafletMap.fitBounds(L.latLngBounds(validCoords), { padding: [70, 70], maxZoom: 16 });
+      }
     } catch (e) {}
   }
 }
@@ -3415,8 +3427,16 @@ function updateLiveGpsMarker() {
   });
 
   if (userLiveGpsMarker) {
-    userLiveGpsMarker.setLatLng([lat, lng]);
-    userLiveGpsMarker.setIcon(gpsIcon);
+    const curPos = userLiveGpsMarker.getLatLng();
+    if (curPos.lat !== lat || curPos.lng !== lng) {
+      userLiveGpsMarker.setLatLng([lat, lng]);
+    }
+    const currentAddr = state.customAddress || 'Harare';
+    if (userLiveGpsMarker._isSearching !== isSearching || userLiveGpsMarker._address !== currentAddr) {
+      userLiveGpsMarker.setIcon(gpsIcon);
+      userLiveGpsMarker._isSearching = isSearching;
+      userLiveGpsMarker._address = currentAddr;
+    }
     if (!userLiveGpsMarker.dragging.enabled()) {
       userLiveGpsMarker.dragging.enable();
     }
@@ -3426,6 +3446,8 @@ function updateLiveGpsMarker() {
       zIndexOffset: 1200,
       draggable: true
     }).addTo(leafletMap);
+    userLiveGpsMarker._isSearching = isSearching;
+    userLiveGpsMarker._address = state.customAddress || 'Harare';
 
     userLiveGpsMarker.on('dragend', function(e) {
       const pos = e.target.getLatLng();
@@ -3519,6 +3541,8 @@ function updateMapMarkers(force = false) {
       try { leafletMap.removeLayer(leafletRoutePolylineCasing); } catch (e) {}
       leafletRoutePolylineCasing = null;
     }
+    lastFittedRouteKey = '';
+    currentRouteCoordsKey = '';
   }
 
   const onlinePros = (state.db.providers || []).filter((p) => p.isOnline !== false);
@@ -3561,6 +3585,8 @@ function updateMapMarkers(force = false) {
     try { leafletMap.removeLayer(leafletRoutePolylineCasing); } catch (e) {}
     leafletRoutePolylineCasing = null;
   }
+  lastFittedRouteKey = '';
+  currentRouteCoordsKey = '';
 
   stopNavigationHud();
 
@@ -3775,9 +3801,13 @@ function drawProviderAndClientRouteMarkers(prov, req) {
 
   if (activeRouteProviderMarker) {
     activeRouteProviderMarker.setLatLng([prov.lat, prov.lng]);
-    activeRouteProviderMarker.setIcon(provIcon);
+    if (activeRouteProviderMarker._categoryId !== prov.categoryId) {
+      activeRouteProviderMarker.setIcon(provIcon);
+      activeRouteProviderMarker._categoryId = prov.categoryId;
+    }
   } else {
     activeRouteProviderMarker = L.marker([prov.lat, prov.lng], { icon: provIcon }).addTo(leafletMarkersLayer);
+    activeRouteProviderMarker._categoryId = prov.categoryId;
   }
 
   // 2. Client Live Location Destination Marker (Vector SVG Pin with Live GPS Dot — NO photos)
@@ -3804,10 +3834,17 @@ function drawProviderAndClientRouteMarkers(prov, req) {
   });
 
   if (activeRouteClientMarker) {
-    activeRouteClientMarker.setLatLng([req.lat, req.lng]);
-    activeRouteClientMarker.setIcon(clientIcon);
+    const curPos = activeRouteClientMarker.getLatLng();
+    if (curPos.lat !== req.lat || curPos.lng !== req.lng) {
+      activeRouteClientMarker.setLatLng([req.lat, req.lng]);
+    }
+    if (activeRouteClientMarker._customerName !== clientFirstName) {
+      activeRouteClientMarker.setIcon(clientIcon);
+      activeRouteClientMarker._customerName = clientFirstName;
+    }
   } else {
     activeRouteClientMarker = L.marker([req.lat, req.lng], { icon: clientIcon }).addTo(leafletMarkersLayer);
+    activeRouteClientMarker._customerName = clientFirstName;
   }
 
   // 3. Real Street Route & Live Turn-by-Turn GPS Navigation
@@ -3885,11 +3922,14 @@ function renderAll(force = true) {
       if (state.pendingSearchFareUsd === null) {
         state.pendingSearchFareUsd = Number(activeReq.budgetUsd);
       }
+      startFastLiveOffersPoll(activeReq.id);
     } else if (activeReq && isBookedStatus(activeReq.status)) {
+      stopFastLiveOffersPoll();
       if (state.screenStep !== 'CONFIGURE') {
         state.screenStep = 'BOOKED';
       }
     } else {
+      stopFastLiveOffersPoll();
       if (state.screenStep === 'SEARCHING' || state.screenStep === 'BOOKED') {
         state.screenStep = 'HOME';
       }
@@ -4222,12 +4262,22 @@ function renderUiOverlay(force = true) {
     state.currentUser?.walletBalanceUsd,
     state.currentUser?.activeWarnings?.length || 0,
     (state.db?.changelogs || []).map((c) => `${c.id}:${c.title}:${c.version}`).join(','),
-    activeReq ? `${activeReq.id}:${activeReq.status}:${activeReq.budgetUsd}:${activeReq.startPinVerified}:${(activeReq.activeViewerIds || []).join(',')}:${(activeReq.offers || []).length}` : 'NO_REQ',
+    activeReq ? `${activeReq.id}:${activeReq.status}:${activeReq.budgetUsd}:${activeReq.startPinVerified}:${(activeReq.activeViewerIds || []).length}:${(activeReq.offers || []).length}` : 'NO_REQ',
     provRequestsSig,
     provActiveJobSig
   ].join('|');
 
   if (!force && overlaySig === lastUiOverlaySignature) {
+    // If we are on SEARCHING screen and only viewer pros count updated, smoothly update text
+    if (state.role === 'CUSTOMER' && state.screenStep === 'SEARCHING' && activeReq && activeReq.status === 'OPEN') {
+      const viewingLabelEl = document.getElementById('viewingProsText');
+      if (viewingLabelEl) {
+        const vCount = Math.max(1, (activeReq.activeViewerIds || []).length);
+        viewingLabelEl.textContent = vCount <= 1
+          ? `${vCount} verified pro active nearby • Broadcasting live`
+          : `${vCount} verified pros active nearby • Broadcasting live`;
+      }
+    }
     return;
   }
   lastUiOverlaySignature = overlaySig;
@@ -5603,7 +5653,6 @@ function renderProviderHomeTab(prov, openRequests, activeJob) {
 // SEARCHING / RADAR SHEET ("6 pros are viewing your request" + -0.50 / +0.50 + Raise fare)
 // ----------------------------------------------------------------------------
 function renderSearchingRadarOverlay(req) {
-  startFastLiveOffersPoll(req.id);
   const viewerIdSet = new Set([
     ...(Array.isArray(req.activeViewerIds) ? req.activeViewerIds : []),
     ...((req.offers || []).map((o) => o.providerId).filter(Boolean))
@@ -5654,7 +5703,7 @@ function renderSearchingRadarOverlay(req) {
     ` : `
       <div class="indrive-dark-sheet">
         <div class="viewing-pros-banner">
-          <span class="viewing-pros-text">${viewingLabel}</span>
+          <span class="viewing-pros-text" id="viewingProsText">${viewingLabel}</span>
           <div style="display:flex; align-items:center; gap:8px;">
             ${viewingPros.length > 0 ? `
               <div class="viewing-avatars-stack">
