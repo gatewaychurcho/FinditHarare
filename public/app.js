@@ -521,34 +521,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   initRealtimeSync();
   startOfferCountdownLoop();
 
-  // Mobile & Android Hardware Back Button Handler: Exit modals/steps smoothly rather than leaving app
-  window.addEventListener('popstate', () => {
-    if (state.incomingCall) {
-      declineIncomingCall();
-      return;
-    }
-    if (state.activeCall) {
-      endInAppCall();
-      return;
-    }
-    if (state.chatDrawerOpen) {
-      closeChatDrawer();
-      return;
-    }
-    if (state.activeModal) {
-      closeModal();
-      return;
-    }
-    if (state.screenStep === 'CONFIGURE') {
-      state.screenStep = 'HOME';
-      renderAll();
-      return;
-    }
-    if (state.isOffersMinimized) {
-      toggleOffersMinimize(false);
-      return;
-    }
-  });
 });
 
 function pushNavState(label) {
@@ -1185,11 +1157,12 @@ function initRealtimeSync() {
         try { startActiveCallPolling(); } catch (e) {}
       }
       // Smooth non-overlapping delta sync when WebSocket is not active
+      // Smooth non-overlapping delta sync when WebSocket is not active
       if (!isWsConnected && !isFetchingState) {
         const activeEl = document.activeElement;
         const isUserTyping = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT');
-        // Never interrupt active typing modals with background polls
-        if (!isUserTyping) {
+        // Never interrupt active typing, open modals, or chat drawer with background polls
+        if (!isUserTyping && !state.activeModal && !state.chatDrawerOpen) {
           const activeReq = getCustomerActiveRequest();
           if (state.screenStep === 'SEARCHING' || (activeReq && activeReq.status === 'OPEN')) {
             startFastLiveOffersPoll(activeReq?.id);
@@ -1197,7 +1170,7 @@ function initRealtimeSync() {
           fetchState(false);
         }
       }
-    }, 3500);
+    }, 5000);
   }
 }
 
@@ -1473,9 +1446,11 @@ function handleIncomingRealtimeEvent(data) {
     const myCats = state.role === 'PROVIDER' ? getProviderCategoryIds(state.currentUser) : [];
     const matchesMe = myCats.length === 0 || myCats.includes(req.categoryId);
     if (state.role === 'PROVIDER' && matchesMe) {
-      // Auto-expand provider sheet if folded/minimized so the new job card displays immediately
-      state.isSheetMinimized = false;
-      state.providerTab = 'FEED';
+      // Auto-expand provider sheet if idle/on home so new job card displays
+      if (!state.providerTab || state.providerTab === 'HOME') {
+        state.isSheetMinimized = false;
+        state.providerTab = 'FEED';
+      }
 
       playNewMessageChime();
 
@@ -1490,8 +1465,10 @@ function handleIncomingRealtimeEvent(data) {
       if ('vibrate' in navigator) {
         try { navigator.vibrate([120, 60, 120]); } catch (e) {}
       }
+      renderAll(false);
+    } else if (state.role === 'CUSTOMER' && state.currentUser && req.customerId === state.currentUser.id) {
+      renderAll(false);
     }
-    renderAll();
     return;
   }
 
@@ -3902,12 +3879,16 @@ function renderAll(force = true) {
   if (state.isAuthenticated && state.role === 'CUSTOMER') {
     const activeReq = getCustomerActiveRequest();
     if (activeReq && activeReq.status === 'OPEN') {
-      state.screenStep = 'SEARCHING';
+      if (state.screenStep !== 'CONFIGURE') {
+        state.screenStep = 'SEARCHING';
+      }
       if (state.pendingSearchFareUsd === null) {
         state.pendingSearchFareUsd = Number(activeReq.budgetUsd);
       }
     } else if (activeReq && isBookedStatus(activeReq.status)) {
-      state.screenStep = 'BOOKED';
+      if (state.screenStep !== 'CONFIGURE') {
+        state.screenStep = 'BOOKED';
+      }
     } else {
       if (state.screenStep === 'SEARCHING' || state.screenStep === 'BOOKED') {
         state.screenStep = 'HOME';
@@ -3965,13 +3946,6 @@ function getCustomerActiveRequest() {
   if (newestOpen) {
     state.activeRequestId = newestOpen.id;
     return newestOpen;
-  }
-
-  // 4. Return recently completed visit if client still needs to rate
-  const recentCompleted = myReqs.find((r) => r.status === 'COMPLETED' && (!r.clientRating || !r.clientRating.score));
-  if (recentCompleted) {
-    state.activeRequestId = recentCompleted.id;
-    return recentCompleted;
   }
 
   return null;
@@ -4164,10 +4138,15 @@ function renderUiOverlay(force = true) {
   const overlay = document.getElementById('uiOverlay');
   if (!overlay) return;
 
-  // Never clobber an active input field inside uiOverlay during background polling
-  if (!force && document.activeElement && overlay.contains(document.activeElement)) {
-    const tag = document.activeElement.tagName;
-    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
+  // Never clobber an active input field or active modal/drawer during background polling
+  if (!force) {
+    if (document.activeElement && overlay.contains(document.activeElement)) {
+      const tag = document.activeElement.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
+        return;
+      }
+    }
+    if (state.activeModal || state.chatDrawerOpen || state.activeCall) {
       return;
     }
   }
@@ -14708,19 +14687,23 @@ window.handleAndroidBack = function() {
     renderUiOverlay();
     return true;
   }
-  if (state.screenStep === 'CONFIGURE') {
-    state.screenStep = 'HOME';
-    renderAll();
+  if (state.isOffersMinimized) {
+    toggleOffersMinimize(false);
     return true;
   }
-  if (state.hubView === 'MARKETPLACE' && state.role !== 'PROVIDER') {
-    state.hubView = 'HUB';
+  if (state.screenStep === 'CONFIGURE') {
     state.screenStep = 'HOME';
     renderAll();
     return true;
   }
   if (state.role === 'CUSTOMER' && state.screenStep === 'SEARCHING') {
     cancelActiveCustomerRequest();
+    return true;
+  }
+  if (state.hubView === 'MARKETPLACE' && state.role !== 'PROVIDER' && state.screenStep === 'HOME' && state.customerTab === 'HOME') {
+    state.hubView = 'HUB';
+    lastUiOverlaySignature = '';
+    renderAll();
     return true;
   }
   return false;

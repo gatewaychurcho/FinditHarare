@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <meta name="theme-color" content="#0066FF" />
   <title>Findit Harare — Your Price. Your Pro. At Your Door.</title>
+  <meta name="description" content="On-demand home and mobile services marketplace in Harare with real-time matchmaking, live chat, GPS map, and instant booking." />
+  <meta property="og:title" content="Findit Harare" />
+  <meta property="og:description" content="On-demand home and mobile services marketplace in Harare with real-time matchmaking, live chat, GPS map, and instant booking." />
   <link rel="manifest" href="manifest.json" />
   <!-- Inter & Plus Jakarta Sans Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -117,13 +120,18 @@
   <script src="vendor/pusher.min.js"></script>
   <script>
     if ('serviceWorker' in navigator && (window.location.protocol === 'http:' || window.location.protocol === 'https:')) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js').then((reg) => {
-          reg.update().catch(() => {});
-        }).catch((err) => {
-          console.warn('SW register notice:', err);
+      const isDevOrPreview = window.location.hostname === 'localhost' || window.location.hostname.includes('.run.app');
+      if (isDevOrPreview) {
+        navigator.serviceWorker.getRegistrations().then((regs) => {
+          for (const reg of regs) reg.unregister();
+        }).catch(() => {});
+      } else {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').catch((err) => {
+            console.warn('SW register notice:', err);
+          });
         });
-      });
+      }
     }
   </script>
   <script src="app.js?v=5.0.0"></script>
