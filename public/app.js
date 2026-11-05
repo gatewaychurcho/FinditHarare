@@ -49,6 +49,8 @@ const state = {
   entranceNote: 'Main Gate',
   userLiveGpsLat: -17.7955,
   userLiveGpsLng: 31.0365,
+  gpsAccuracyMeters: null,
+  isLiveGpsActive: false,
   pinnedLat: -17.7955,
   pinnedLng: 31.0365,
 
@@ -519,7 +521,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   loadSavedSession();
   await fetchState(true);
   initLeafletMap();
-  useBrowserGeolocation(true);
   initRealtimeSync();
   startOfferCountdownLoop();
 
@@ -554,13 +555,8 @@ function loadSavedSession() {
       } else if (parsed.accountId) {
         state.role = parsed.role || 'CUSTOMER';
         state.savedAccountId = parsed.accountId;
-        state.currentUser = {
-          id: parsed.accountId,
-          name: 'Verified User',
-          phone: '',
-          role: state.role
-        };
-        state.isAuthenticated = true;
+        state.currentUser = null;
+        state.isAuthenticated = false;
       }
     } else {
       state.isAuthenticated = false;
@@ -989,15 +985,33 @@ async function fetchState(force = false) {
           found.avatarUrl = localAvatar;
         }
       } else {
-        list.push(state.currentUser);
+        state.isAuthenticated = false;
+        state.currentUser = null;
+        state.savedAccountId = null;
+        state.role = 'CUSTOMER';
+        state.customerTab = 'HOME';
+        state.hubView = 'HUB';
+        state.screenStep = 'HOME';
+        localStorage.removeItem(SESSION_KEY);
       }
-      state.isAuthenticated = true;
+      if (found) {
+        state.isAuthenticated = true;
+      }
     } else if (state.savedAccountId) {
       const list = state.role === 'PROVIDER' ? (state.db.providers || []) : (state.db.customers || []);
       const found = list.find((item) => item.id === state.savedAccountId);
       if (found) {
         state.currentUser = found;
         state.isAuthenticated = true;
+      } else {
+        state.isAuthenticated = false;
+        state.currentUser = null;
+        state.savedAccountId = null;
+        state.role = 'CUSTOMER';
+        state.customerTab = 'HOME';
+        state.hubView = 'HUB';
+        state.screenStep = 'HOME';
+        localStorage.removeItem(SESSION_KEY);
       }
     }
 
@@ -3093,6 +3107,8 @@ function startProviderLiveLocationWatcher() {
   providerLocationWatchId = navigator.geolocation.watchPosition(
     (pos) => {
       const { latitude, longitude } = pos.coords;
+      state.gpsAccuracyMeters = Number.isFinite(pos.coords.accuracy) ? pos.coords.accuracy : null;
+      state.isLiveGpsActive = true;
       const rawLat = Number(latitude.toFixed(5));
       const rawLng = Number(longitude.toFixed(5));
 
@@ -3178,6 +3194,8 @@ function startClientLiveLocationWatcher() {
   clientLocationWatchId = navigator.geolocation.watchPosition(
     (pos) => {
       const { latitude, longitude } = pos.coords;
+      state.gpsAccuracyMeters = Number.isFinite(pos.coords.accuracy) ? pos.coords.accuracy : null;
+      state.isLiveGpsActive = true;
       const rawLat = Number(latitude.toFixed(5));
       const rawLng = Number(longitude.toFixed(5));
 
@@ -3258,8 +3276,8 @@ window.addEventListener('offline', () => {
 
 function useBrowserGeolocation(silent = false) {
   state.userHasManuallyDraggedPin = false;
-  state.isCustomAddressSelected = true;
-  state.isLiveGpsActive = true;
+  state.isLiveGpsActive = false;
+  state.gpsAccuracyMeters = null;
 
   if (state.role === 'PROVIDER') {
     startProviderLiveLocationWatcher();
@@ -3267,17 +3285,19 @@ function useBrowserGeolocation(silent = false) {
     startClientLiveLocationWatcher();
   }
 
-  const applyGpsPosition = (latitude, longitude, label = 'Harare') => {
+  const applyGpsPosition = (latitude, longitude, accuracyMeters) => {
     let latNum = Number(latitude);
     let lngNum = Number(longitude);
     if (!isFinite(latNum) || !isFinite(lngNum)) {
-      latNum = isFinite(Number(state.userLiveGpsLat)) ? Number(state.userLiveGpsLat) : (isFinite(Number(state.pinnedLat)) ? Number(state.pinnedLat) : -17.7955);
-      lngNum = isFinite(Number(state.userLiveGpsLng)) ? Number(state.userLiveGpsLng) : (isFinite(Number(state.pinnedLng)) ? Number(state.pinnedLng) : 31.0365);
+      throw new Error('The device returned invalid GPS coordinates.');
     }
     state.userLiveGpsLat = Number(latNum.toFixed(5));
     state.userLiveGpsLng = Number(lngNum.toFixed(5));
     state.pinnedLat = state.userLiveGpsLat;
     state.pinnedLng = state.userLiveGpsLng;
+    state.gpsAccuracyMeters = Number.isFinite(accuracyMeters) ? accuracyMeters : null;
+    state.isLiveGpsActive = true;
+    state.isCustomAddressSelected = false;
 
     // Immediately resolve nearest suburb from local db so response is instant
     if (state.db && Array.isArray(state.db.suburbs)) {
@@ -3339,36 +3359,38 @@ function useBrowserGeolocation(silent = false) {
       }
     }
     if (!silent) {
-      showToast(`📍 Live Location: ${state.customAddress}, ${state.customSuburbLabel.split(',')[0]}`, 'success');
+      const accuracyLabel = state.gpsAccuracyMeters === null ? '' : ` (±${Math.round(state.gpsAccuracyMeters)} m accuracy)`;
+      showToast(`📍 Live Location${accuracyLabel}: ${state.customAddress}, ${state.customSuburbLabel.split(',')[0]}`, 'success');
+    }
+    renderUiOverlay();
+  };
+
+  const handleLocationError = (err) => {
+    state.isLiveGpsActive = false;
+    state.gpsAccuracyMeters = null;
+    console.warn('Geolocation unavailable:', err ? err.message : 'GPS returned no fix');
+    if (!silent) {
+      showToast('Could not get a live GPS fix. Allow location access or confirm a map pin, suburb, or geocoded address.', 'error');
     }
     renderUiOverlay();
   };
 
   if ('geolocation' in navigator) {
-    if (!silent) showToast('📡 Acquiring live GPS...', 'info', 2000);
+    if (!silent) showToast('Acquiring a fresh high-accuracy GPS fix...', 'info', 2000);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const cLat = pos?.coords?.latitude;
         const cLng = pos?.coords?.longitude;
         if (isFinite(Number(cLat)) && isFinite(Number(cLng))) {
-          applyGpsPosition(cLat, cLng, 'Live GPS');
+          applyGpsPosition(cLat, cLng, pos.coords.accuracy);
         } else {
-          applyGpsPosition(-17.7955, 31.0365, 'Harare');
+          handleLocationError(new Error('GPS returned invalid coordinates.'));
         }
-      },
-      (err) => {
-        console.warn('Geolocation fallback:', err ? err.message : 'timeout');
-        // Graceful fallback to user / Harare center
-        const fallbackLat = isFinite(Number(state.userLiveGpsLat)) ? state.userLiveGpsLat : (isFinite(Number(state.pinnedLat)) ? state.pinnedLat : -17.8252);
-        const fallbackLng = isFinite(Number(state.userLiveGpsLng)) ? state.userLiveGpsLng : (isFinite(Number(state.pinnedLng)) ? state.pinnedLng : 31.0335);
-        applyGpsPosition(fallbackLat, fallbackLng, 'Harare');
-      },
-      { enableHighAccuracy: true, timeout: 6000, maximumAge: 30000 }
+      }, handleLocationError,
+      { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
     );
   } else {
-    const fallbackLat = isFinite(Number(state.pinnedLat)) ? state.pinnedLat : -17.8252;
-    const fallbackLng = isFinite(Number(state.pinnedLng)) ? state.pinnedLng : 31.0335;
-    applyGpsPosition(fallbackLat, fallbackLng, 'Harare');
+    handleLocationError(new Error('Geolocation is not supported by this browser.'));
   }
 }
 
@@ -3459,6 +3481,8 @@ function updateLiveGpsMarker() {
       state.userLiveGpsLng = newLng;
       state.userHasManuallyDraggedPin = true;
       state.isCustomAddressSelected = true;
+      state.isLiveGpsActive = false;
+      state.gpsAccuracyMeters = null;
       reverseGeocodeHararePin(newLat, newLng);
       updateLiveGpsMarker();
       renderUiOverlay(false);
@@ -4192,9 +4216,10 @@ function renderUiOverlay(force = true) {
   }
 
   if (state.role === 'PROVIDER' && !state.isAuthenticated) {
-    overlay.innerHTML = renderNativeAuthScreen();
-    lastUiOverlaySignature = 'UNAUTH_PROV';
-    return;
+    state.role = 'CUSTOMER';
+    state.customerTab = 'HOME';
+    state.hubView = 'HUB';
+    state.screenStep = 'HOME';
   }
 
   // Account Suspension Check (Admin Ban Enforcement)
@@ -4757,12 +4782,21 @@ function handleDraftNotesInput(textarea) {
 
 function handleManualAddressInput(val) {
   state.customAddress = String(val || '').trim();
-  state.isCustomAddressSelected = true;
-  state.userHasManuallyDraggedPin = true;
+  state.isCustomAddressSelected = false;
+  state.isLiveGpsActive = false;
+  state.gpsAccuracyMeters = null;
+  state.userHasManuallyDraggedPin = false;
 }
 
 function switchCustomerTab(tabName) {
+  if (!state.isAuthenticated && (tabName === 'REQUESTS' || tabName === 'OFFERS')) {
+    openSignInRoleChoiceModal();
+    return;
+  }
   state.customerTab = tabName;
+  if (tabName !== 'HOME') {
+    state.hubView = 'MARKETPLACE';
+  }
   state.isSheetMinimized = false;
   if (tabName !== 'HOME') {
     state.screenStep = 'HOME';
@@ -4771,6 +4805,10 @@ function switchCustomerTab(tabName) {
 }
 
 function switchProviderTab(tabName) {
+  if (!state.isAuthenticated) {
+    openSignInRoleChoiceModal();
+    return;
+  }
   state.providerTab = tabName;
   state.isSheetMinimized = false;
   renderAll(true);
@@ -4862,6 +4900,25 @@ function renderCurvedBrandHeader(role = 'CUSTOMER') {
 
 function renderGlobalBottomNavDock() {
   const isCust = state.role === 'CUSTOMER';
+  if (isCust && !state.isAuthenticated) {
+    const cur = state.customerTab || 'HOME';
+    return `
+      <div class="fh-bottom-nav-dock">
+        <button type="button" class="fh-nav-tab-btn ${cur === 'HOME' ? 'active' : ''}" onclick="switchCustomerTab('HOME')">
+          <div class="fh-nav-tab-icon">${uiIcon('home', 20)}</div>
+          <span class="fh-nav-tab-label">Browse</span>
+        </button>
+        <button type="button" class="fh-nav-tab-btn ${cur === 'PROFILE' ? 'active' : ''}" onclick="switchCustomerTab('PROFILE')">
+          <div class="fh-nav-tab-icon">${uiIcon('user', 20)}</div>
+          <span class="fh-nav-tab-label">Guest Profile</span>
+        </button>
+        <button type="button" class="fh-nav-tab-btn" onclick="openSignInRoleChoiceModal()">
+          <div class="fh-nav-tab-icon">${uiIcon('user', 20)}</div>
+          <span class="fh-nav-tab-label">Sign In</span>
+        </button>
+      </div>
+    `;
+  }
   const req = isCust ? getCustomerActiveRequest() : null;
   const activeOffersCount = (req && req.status === 'OPEN' && req.offers) ? req.offers.filter((o) => o.status !== 'DECLINED').length : 0;
   
@@ -5081,7 +5138,13 @@ function renderConfigureFareOverlay() {
         <div class="fh-form-group">
           <div class="fh-form-label-row">
             <span class="fh-form-label">Service Location</span>
-            <span style="font-size:11px; color:#10B981; font-weight:700;">Harare GPS</span>
+            <span style="font-size:11px; color:${state.isLiveGpsActive ? '#059669' : '#64748B'}; font-weight:700;">
+              ${state.isCustomAddressSelected
+                ? 'Selected location'
+                : state.isLiveGpsActive
+                  ? (state.gpsAccuracyMeters === null ? 'Live GPS fix' : `GPS accuracy ±${Math.round(state.gpsAccuracyMeters)} m`)
+                  : 'Location not confirmed'}
+            </span>
           </div>
           <div class="fh-location-card">
             <div class="fh-loc-input-line">
@@ -5092,7 +5155,7 @@ function renderConfigureFareOverlay() {
                 type="text"
                 id="requestServiceLocationInput"
                 class="fh-loc-text-field"
-                placeholder="Enter street address or tap Live GPS..."
+                placeholder="Enter address details; confirm with GPS, map, or suburb"
                 value="${escapeHtml(state.customAddress && state.customAddress !== 'Current Live Location' ? `${state.customAddress}, ${state.customSuburbLabel ? state.customSuburbLabel.split(',')[0] : 'Avondale'}` : (state.customSuburbLabel || 'Avondale, Harare'))}"
                 oninput="handleManualAddressInput(this.value)"
               />
@@ -5360,6 +5423,24 @@ function renderCustomerRequestsTab() {
 // CUSTOMER PROFILE TAB
 // ----------------------------------------------------------------------------
 function renderCustomerProfileTab() {
+  if (!state.isAuthenticated) {
+    return `
+      <div class="fh-main-screen-container" style="padding-top:14px;">
+        <div class="fh-profile-card" style="margin-bottom:12px; text-align:center; padding:24px 18px;">
+          <div class="drawer-avatar-circle" style="width:60px; height:60px; margin:0 auto 12px; border-radius:50%; background:#EFF6FF; color:#0052FF; display:flex; align-items:center; justify-content:center;">
+            ${uiIcon('user', 26)}
+          </div>
+          <div style="font-size:18px; font-weight:800; color:#0F172A; margin-bottom:6px;">Guest Profile</div>
+          <div style="font-size:13px; color:#64748B; line-height:1.5;">
+            You are browsing Findit Harare as a guest. Explore services and provider profiles; sign in or create an account to request services, manage bookings, or access account features.
+          </div>
+          <button type="button" class="btn-primary-blue" style="margin-top:16px; height:44px;" onclick="openSignInRoleChoiceModal('LOGIN')">Sign In</button>
+          <button type="button" class="btn-dark-sec" style="margin-top:8px; height:42px;" onclick="openSignInRoleChoiceModal('SIGNUP')">Create Account</button>
+        </div>
+        <button type="button" class="btn-dark-sec" style="width:100%;" onclick="switchCustomerTab('HOME')">Continue Browsing</button>
+      </div>
+    `;
+  }
   const user = state.currentUser;
   const rating = user?.rating ? Number(user.rating).toFixed(1) : '5.0';
   const visits = user?.completedBookings || 0;
@@ -7102,16 +7183,6 @@ function setSignInModalData(patch) {
   renderModalLayer();
 }
 
-function quickFillTestUser(role, phone, pwd) {
-  state.loginPhone = '+263 ' + phone.replace(/^0/, '');
-  state.loginPassword = pwd;
-  setSignInModalData({ loginRole: role, notice: null });
-  const pInput = document.getElementById('loginPhoneInput');
-  if (pInput) pInput.value = phone.replace(/^0/, '');
-  const pwdInput = document.getElementById('loginPasswordInput');
-  if (pwdInput) pwdInput.value = pwd;
-}
-
 async function submitExistingAccountLogin() {
   const md = state.modalData || {};
   const role = md.loginRole || 'CUSTOMER';
@@ -7370,28 +7441,6 @@ function renderModalLayer() {
       <button type="button" class="btn-primary-blue" style="height:48px; font-size:15px; font-weight:800;" onclick="submitExistingAccountLogin()">
         <span>Log In as ${loginRole === 'PROVIDER' ? 'Service Provider' : 'Client'}</span>
       </button>
-
-      <!-- Quick Test Accounts 1-Tap Fill -->
-      <div style="margin-top:14px; padding:10px 12px; background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px; text-align:left;">
-        <div style="font-size:11px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:8px;">
-          Quick Test Logins (Tap to Autofill)
-        </div>
-        <div style="display:flex; flex-direction:column; gap:6px;">
-          <div style="font-size:10.5px; font-weight:700; color:#2563EB;">Clients (Password: test1234):</div>
-          <div style="display:flex; gap:5px; flex-wrap:wrap;">
-            <button type="button" class="btn-dark-sec" style="height:26px; padding:0 8px; font-size:11px;" onclick="quickFillTestUser('CUSTOMER', '0771110001', 'test1234')">Tapiwa (Avondale)</button>
-            <button type="button" class="btn-dark-sec" style="height:26px; padding:0 8px; font-size:11px;" onclick="quickFillTestUser('CUSTOMER', '0771110002', 'test1234')">Ruvimbo (Borrowdale)</button>
-            <button type="button" class="btn-dark-sec" style="height:26px; padding:0 8px; font-size:11px;" onclick="quickFillTestUser('CUSTOMER', '0771110003', 'test1234')">Farai (Eastlea)</button>
-            <button type="button" class="btn-dark-sec" style="height:26px; padding:0 8px; font-size:11px;" onclick="quickFillTestUser('CUSTOMER', '0771110004', 'test1234')">Nyasha (Mt Pleasant)</button>
-          </div>
-          <div style="font-size:10.5px; font-weight:700; color:#059669; margin-top:2px;">Providers (Password: test1234):</div>
-          <div style="display:flex; gap:5px; flex-wrap:wrap;">
-            <button type="button" class="btn-dark-sec" style="height:26px; padding:0 8px; font-size:11px;" onclick="quickFillTestUser('PROVIDER', '0772220001', 'test1234')">Kuda (Plumbing/Repairs)</button>
-            <button type="button" class="btn-dark-sec" style="height:26px; padding:0 8px; font-size:11px;" onclick="quickFillTestUser('PROVIDER', '0772220002', 'test1234')">Tariro (Hair &amp; Beauty)</button>
-            <button type="button" class="btn-dark-sec" style="height:26px; padding:0 8px; font-size:11px;" onclick="quickFillTestUser('PROVIDER', '0772220003', 'test1234')">Simba (Auto Mechanics)</button>
-          </div>
-        </div>
-      </div>
 
       <div style="font-size:11.5px; color:var(--text-secondary); text-align:center; margin-top:10px; line-height:1.45;">
         One phone number can hold both a Client and a Provider profile. You can switch modes anytime from the side menu.
@@ -9712,6 +9761,10 @@ async function submitServiceRequest() {
     showToast('Please verify your WhatsApp first to find offers');
     return;
   }
+  if (!state.isLiveGpsActive && !state.isCustomAddressSelected) {
+    showToast('Confirm your location with Live GPS, the map pin, a suburb, or a geocoded address before requesting.', 'error');
+    return;
+  }
   try {
     markLocalStateMutation();
     const cat = state.db.categories.find((c) => c.id === state.selectedCategoryId) || state.db.categories[0];
@@ -10229,6 +10282,10 @@ function openSideDrawerModal() {
 }
 
 async function toggleClientAndProviderMode() {
+  if (!state.isAuthenticated || !state.currentUser) {
+    openSignInRoleChoiceModal();
+    return;
+  }
   closeModal();
   state.isSheetMinimized = false;
   if (state.role === 'CUSTOMER') {
@@ -10269,19 +10326,12 @@ async function toggleClientAndProviderMode() {
       showToast('Switched to Client Mode');
       renderAll();
     } else {
-      const clientUser = {
-        id: 'cust_' + (state.currentUser?.id || Date.now().toString().slice(-4)),
-        finditId: 'FH-USR-' + Math.floor(100000 + Math.random() * 900000),
-        name: state.currentUser?.name || 'Findit Client',
-        phone: state.currentUser?.phone || '+263 77 ',
-        avatarUrl: state.currentUser?.avatarUrl || null,
-        suburbName: state.currentUser?.suburbName || 'Avondale'
-      };
-      if (state.db && state.db.customers) state.db.customers.push(clientUser);
       state.role = 'CUSTOMER';
-      state.currentUser = clientUser;
-      saveSession('CUSTOMER', clientUser, false);
-      showToast('Switched to Client Mode');
+      state.currentUser = null;
+      state.isAuthenticated = false;
+      state.customerTab = 'HOME';
+      saveSession(null, null, true);
+      openSignInRoleChoiceModal();
       renderAll();
     }
   }
@@ -10291,6 +10341,11 @@ function logoutCurrentAccount() {
   closeModal();
   state.isAuthenticated = false;
   state.currentUser = null;
+  state.role = 'CUSTOMER';
+  state.customerTab = 'HOME';
+  state.providerTab = 'FEED';
+  state.hubView = 'HUB';
+  state.screenStep = 'HOME';
   state.authStep = 'PHONE';
   saveSession(null, null, true);
   renderAll();
@@ -10516,13 +10571,14 @@ function selectLiveLocationDefault() {
   closeModal();
   useBrowserGeolocation(false);
   renderAll(true);
-  showToast('Using your Live GPS Location');
 }
 
 function selectGeocodedLocation(idx) {
   const item = (state.locationSearchResults || [])[idx];
   if (!item) return;
   state.isCustomAddressSelected = true;
+  state.isLiveGpsActive = false;
+  state.gpsAccuracyMeters = null;
   const suburbs = state.db?.suburbs || [];
   let nearestSub = suburbs[0];
   let minD = Infinity;
@@ -10548,6 +10604,8 @@ function selectGeocodedLocation(idx) {
 
 function startMapPinPickMode() {
   state.isCustomAddressSelected = true;
+  state.isLiveGpsActive = false;
+  state.gpsAccuracyMeters = null;
   closeModal();
   state.isSheetMinimized = true;
   renderAll();
@@ -10561,6 +10619,8 @@ function selectSuburbLocation(suburbId) {
   const s = (state.db.suburbs || []).find((item) => item.id === suburbId);
   if (!s) return;
   state.isCustomAddressSelected = true;
+  state.isLiveGpsActive = false;
+  state.gpsAccuracyMeters = null;
   const typedStreet = (state.locationSearchQuery || '').trim();
   state.selectedSuburbId = s.id;
   state.customAddress = (typedStreet && typedStreet.toLowerCase() !== s.name.toLowerCase())

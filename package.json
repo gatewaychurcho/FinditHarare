@@ -7,7 +7,8 @@
     "dev": "node server.js",
     "start": "node server.js",
     "build": "node -e 'console.log(\"Build ready\")'",
-    "lint": "node --check server.js && node --check public/app.js"
+    "lint": "node --check server.js && node --check public/app.js && node --check api/index.js && node --check \"api/[...route].js\" && node --check scripts/test_new_features.js && node --check scripts/seed_supabase.js && node --check scripts/generate_overview_doc.js && node --check scripts/generate-clean-icons.js",
+    "test": "node --test"
   },
   "engines": {
     "node": ">=18.0.0"

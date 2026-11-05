@@ -11,6 +11,7 @@ Findit Harare is an inDrive-inspired peer-to-peer home services marketplace conn
 1. **Client Fare Bidding & Negotiation**:
    - Customers propose their budget in USD ($) and can raise or lower offers with a single tap.
    - 120s real-time radar broadcasts requests to nearby verified pros.
+   - Guests can browse the marketplace and provider profiles; sign-in is required to request services or use account features.
 2. **Provider Offers & Work Catalogue**:
    - Service providers can submit counter-offers with estimated arrival times.
    - Comprehensive catalogue management: providers can **Add, Edit, and Delete** services with custom pricing and portfolio photos.
@@ -50,6 +51,9 @@ npm start
 
 - App runs at: `http://localhost:3030`
 - Admin Dashboard runs at: `http://localhost:3030/admin`
+- Run JavaScript syntax checks with `npm run lint`.
+- Run the local HTTP, API privacy, and real-time stream smoke tests with `npm test`.
+- Set `PORT` to use a different local port.
 
 ---
 
