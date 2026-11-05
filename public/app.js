@@ -125,7 +125,7 @@ const state = {
 
   authStep: 'PHONE', // 'PHONE' | 'OTP' | 'PROFILE'
   authRole: 'CUSTOMER', // 'CUSTOMER' | 'PROVIDER'
-  authPhone: '+263 77 ',
+  authPhone: '',
   authOtpDigits: ['', '', '', ''],
   authName: '',
   authSuburbId: 'avondale',
@@ -736,13 +736,34 @@ function markLocalStateMutation() {
   stateMutationEpoch++;
 }
 
+function getCatalogStateSignature(db) {
+  const categorySig = JSON.stringify((db?.categories || []).map((category) => ({
+    id: category.id,
+    status: category.status,
+    name: category.name,
+    tagline: category.tagline,
+    suggestedMinUsd: category.suggestedMinUsd,
+    suggestedMaxUsd: category.suggestedMaxUsd,
+    subServices: (category.subServices || []).map((task) => [task.name, task.defaultUsd, task.duration])
+  })));
+  const hubSig = JSON.stringify((db?.hubServices || []).map((service) => [
+    service.id,
+    service.status,
+    service.name,
+    service.title,
+    service.tagline,
+    service.subtitle
+  ]));
+  return `${categorySig}|${hubSig}`;
+}
+
 function computeStateFingerprint(db) {
   if (!db) return '';
   const reqSig = (db.requests || []).map((r) => `${r.id}:${r.status}:${(r.offers || []).map((o) => `${o.id}:${o.status}:${o.priceUsd}`).join(',')}:${r.acceptedOfferId || ''}:${r.budgetUsd}:${(r.activeViewerIds || []).length}:${(r.messages || []).map((m) => `${m.id}:${m.read ? 1 : 0}`).join(',')}`).join(';');
   const userSig = state.currentUser ? `${state.currentUser.id}:${state.currentUser.walletBalanceUsd}:${state.currentUser.warningsCount || 0}:${state.currentUser.isBanned}:${(state.currentUser.categoryIds || []).join(',')}` : '';
   const provSig = (db.providers || []).map((p) => `${p.id}:${p.isOnline}:${(p.categoryIds || []).join(',')}`).join(';');
   const clSig = (db.changelogs || []).map((c) => c.id).join(',');
-  return `${reqSig}|${userSig}|${provSig}|${clSig}|${state.screenStep}|${state.providerTab}|${state.role}`;
+  return `${reqSig}|${userSig}|${provSig}|${clSig}|${getCatalogStateSignature(db)}|${state.screenStep}|${state.providerTab}|${state.role}`;
 }
 
 const seenNotificationKeys = new Set();
@@ -834,8 +855,8 @@ function resolveProviderByIdOrOffer(provId, req = null, offer = null) {
   const fallbackName = matchedOffer?.providerName || req?.acceptedProviderName || 'Verified Specialist';
   const fallbackShort = matchedOffer?.providerShortName || fallbackName.split(' ')[0];
   return {
-    id: targetId || 'prov_custom',
-    finditId: targetFinditId || 'FH-PRO-VERIFIED',
+    id: targetId || '',
+    finditId: targetFinditId || '',
     name: fallbackName,
     shortName: fallbackShort,
     brandName: matchedOffer?.providerBrand || req?.acceptedProviderBrand || `${fallbackShort} Services`,
@@ -843,8 +864,8 @@ function resolveProviderByIdOrOffer(provId, req = null, offer = null) {
       matchedOffer?.providerAvatarUrl ||
       req?.acceptedProviderAvatarUrl ||
       'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=240&q=80',
-    rating: matchedOffer?.providerRating ?? 5.0,
-    completedBookings: matchedOffer?.providerCompletedJobs ?? 1,
+    rating: matchedOffer?.providerRating ?? 0,
+    completedBookings: matchedOffer?.providerCompletedJobs ?? 0,
     skillTier: matchedOffer?.providerSkillTier || 'Verified pro',
     bio: `${fallbackName} is a verified Findit Harare specialist ready for home visits.`,
     categoryId: req?.categoryId || 'repairs_construction',
@@ -954,6 +975,10 @@ async function fetchState(force = false) {
     }
 
     state.db = newDb;
+    if (state.activeModal === 'COMING_SOON_MODAL' && state.modalData?.category?.id) {
+      const currentCategory = state.db.categories.find((category) => category.id === state.modalData.category.id);
+      if (currentCategory) state.modalData = { ...state.modalData, category: currentCategory };
+    }
     const prevBanned = Boolean(state.currentUser?.isBanned);
     // Rock-solid session & profile retention: NEVER log out or overwrite user's chosen categories/profile with stale defaults!
     if (state.isAuthenticated && state.currentUser) {
@@ -1177,7 +1202,8 @@ function initRealtimeSync() {
         const activeEl = document.activeElement;
         const isUserTyping = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT');
         // Never interrupt active typing with background delta syncs
-        if (!isUserTyping && !state.activeModal) {
+        const catalogModalOpen = state.activeModal === 'SERVICE_PICKER' || state.activeModal === 'COMING_SOON_MODAL';
+        if (!isUserTyping && (!state.activeModal || catalogModalOpen)) {
           const activeReq = getCustomerActiveRequest();
           if (state.screenStep === 'SEARCHING' || (activeReq && activeReq.status === 'OPEN')) {
             startFastLiveOffersPoll(activeReq?.id);
@@ -4287,6 +4313,7 @@ function renderUiOverlay(force = true) {
     state.currentUser?.walletBalanceUsd,
     state.currentUser?.activeWarnings?.length || 0,
     (state.db?.changelogs || []).map((c) => `${c.id}:${c.title}:${c.version}`).join(','),
+    getCatalogStateSignature(state.db),
     activeReq ? `${activeReq.id}:${activeReq.status}:${activeReq.budgetUsd}:${activeReq.startPinVerified}:${(activeReq.activeViewerIds || []).length}:${(activeReq.offers || []).length}` : 'NO_REQ',
     provRequestsSig,
     provActiveJobSig
@@ -4619,7 +4646,7 @@ function getHubServiceVectorBanner(serviceId) {
 }
 
 function renderMainHubOverlay() {
-  const hubServices = [
+  const defaultHubServices = [
     {
       id: 'job_marketplace',
       title: 'Job Marketplace',
@@ -4640,11 +4667,22 @@ function renderMainHubOverlay() {
       id: 'online_shopping',
       title: 'Online Shopping',
       subtitle: 'Harare shops, groceries & express delivery',
-      status: 'COMING_SOON',
+      status: 'ACTIVE',
       badge: 'Coming Soon',
       imageUrl: 'https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=600&q=80'
     }
   ];
+  const storedHubServices = state.db?.hubServices || [];
+  const hubServices = defaultHubServices.map((service) => {
+    const stored = storedHubServices.find((item) => item.id === service.id);
+    const merged = stored ? { ...service, ...stored } : service;
+    return {
+      ...merged,
+      badge: merged.status === 'ACTIVE'
+        ? (service.id === 'job_marketplace' ? `${(state.db?.categories || []).filter((category) => category.status === 'ACTIVE').length} Categories` : 'Active')
+        : 'Coming Soon'
+    };
+  });
 
   return `
     <div class="fh-hub-wrapper">
@@ -4664,8 +4702,8 @@ function renderMainHubOverlay() {
             ${state.currentUser?.avatarInitials || (state.currentUser?.name ? state.currentUser.name.slice(0, 2).toUpperCase() : 'FH')}
           </button>
         ` : `
-          <button class="btn-primary-blue pointer-auto" style="height:34px; padding:0 12px; font-size:12px; border-radius:99px; width:auto; pointer-events:auto;" onclick="openSignInRoleChoiceModal()">
-            <span>Sign In</span>
+          <button class="indrive-circle-btn" onclick="switchCustomerTab('PROFILE')" title="Profile" style="background:var(--blue-soft); color:var(--blue-primary);">
+            ${uiIcon('user', 18)}
           </button>
         `}
       </div>
@@ -4685,17 +4723,17 @@ function renderMainHubOverlay() {
             <div
               class="fh-hub-card"
               style="${isFullWidth ? 'grid-column: span 2;' : ''}"
-              onclick="${isMarketplace ? 'openJobMarketplaceView()' : `openComingSoonServiceModal('${srv.title}', '${srv.subtitle}')`}"
+              onclick="selectHubService('${srv.id}')"
             >
               <div class="fh-hub-card-img-wrap" style="${isFullWidth ? 'height:130px;' : 'height:145px;'}">
-                <img class="fh-hub-card-img" src="${srv.imageUrl}" onerror="this.onerror=null; this.src='${DEFAULT_TASK_PHOTO_FALLBACK}';" alt="${srv.title}" />
+                <img class="fh-hub-card-img" src="${escapeHtml(srv.imageUrl || DEFAULT_TASK_PHOTO_FALLBACK)}" onerror="this.onerror=null; this.src='${DEFAULT_TASK_PHOTO_FALLBACK}';" alt="${escapeHtml(srv.title)}" />
                 <span class="fh-hub-card-badge ${srv.status === 'ACTIVE' ? 'active-pro' : ''}">
                   ${srv.badge || (srv.status === 'ACTIVE' ? 'Active' : 'Coming Soon')}
                 </span>
               </div>
               <div class="fh-hub-card-label">
-                <div class="fh-hub-card-name">${srv.title}</div>
-                <div class="fh-hub-card-sub">${srv.subtitle}</div>
+                <div class="fh-hub-card-name">${escapeHtml(srv.title)}</div>
+                <div class="fh-hub-card-sub">${escapeHtml(srv.subtitle)}</div>
               </div>
             </div>
           `;
@@ -4703,6 +4741,26 @@ function renderMainHubOverlay() {
       </div>
     </div>
   `;
+}
+
+function selectHubService(serviceId) {
+  const service = (state.db?.hubServices || []).find((item) => item.id === serviceId);
+  const fallbackTitles = {
+    job_marketplace: ['Job Marketplace', 'Hire verified local trades & pros'],
+    transport_carriers: ['Transport & Rides', 'Bakkies, trucks, haulage & rides'],
+    online_shopping: ['Online Shopping', 'Harare shops, groceries & express delivery']
+  };
+  const [title, subtitle] = fallbackTitles[serviceId] || ['Service', ''];
+  const active = service ? service.status === 'ACTIVE' : serviceId === 'job_marketplace' || serviceId === 'online_shopping';
+  if (!active) {
+    openComingSoonServiceModal(service?.name || title, service?.tagline || subtitle);
+    return;
+  }
+  if (serviceId === 'job_marketplace') {
+    openJobMarketplaceView();
+    return;
+  }
+  openComingSoonServiceModal(service?.name || title, service?.tagline || subtitle);
 }
 
 // ----------------------------------------------------------------------------
@@ -4764,10 +4822,14 @@ function getCategoryDisplayTitle(cat) {
 }
 
 function selectCategoryAndOpenRequest(catId) {
-  state.selectedCategoryId = catId;
+  const category = (state.db?.categories || []).find((item) => item.id === catId);
+  if (!category || category.status !== 'ACTIVE') {
+    selectHomeCategory(catId);
+    return;
+  }
+  state.selectedCategoryId = category.id;
   state.selectedSubServiceIdx = 0;
-  state.screenStep = 'CONFIGURE';
-  renderAll(true);
+  openConfigureStep(0);
 }
 
 function focusSearchOrConfigure() {
@@ -4794,9 +4856,7 @@ function switchCustomerTab(tabName) {
     return;
   }
   state.customerTab = tabName;
-  if (tabName !== 'HOME') {
-    state.hubView = 'MARKETPLACE';
-  }
+  state.hubView = 'MARKETPLACE';
   state.isSheetMinimized = false;
   if (tabName !== 'HOME') {
     state.screenStep = 'HOME';
@@ -4910,11 +4970,7 @@ function renderGlobalBottomNavDock() {
         </button>
         <button type="button" class="fh-nav-tab-btn ${cur === 'PROFILE' ? 'active' : ''}" onclick="switchCustomerTab('PROFILE')">
           <div class="fh-nav-tab-icon">${uiIcon('user', 20)}</div>
-          <span class="fh-nav-tab-label">Guest Profile</span>
-        </button>
-        <button type="button" class="fh-nav-tab-btn" onclick="openSignInRoleChoiceModal()">
-          <div class="fh-nav-tab-icon">${uiIcon('user', 20)}</div>
-          <span class="fh-nav-tab-label">Sign In</span>
+          <span class="fh-nav-tab-label">Profile</span>
         </button>
       </div>
     `;
@@ -5021,15 +5077,17 @@ function renderHomeDiscoveryOverlay() {
       <div class="fh-category-grid">
         ${categories.map((cat) => {
           const isSelected = cat.id === state.selectedCategoryId;
+          const isActive = cat.status === 'ACTIVE';
           const imgUrl = getCategoryTileImageUrl(cat.id);
           return `
             <div
-              class="fh-category-card ${isSelected ? 'selected' : ''}"
+              class="fh-category-card ${isSelected ? 'selected' : ''} ${isActive ? '' : 'fh-category-inactive'}"
               onclick="selectCategoryAndOpenRequest('${cat.id}')"
             >
               <div class="fh-category-card-img-wrap">
                 <img src="${imgUrl}" class="fh-category-card-real-img" alt="${escapeHtml(cat.name)}" loading="lazy" />
                 <div class="fh-category-card-img-overlay"></div>
+                ${isActive ? '' : '<span class="fh-category-status-badge">Coming Soon</span>'}
               </div>
               <div class="fh-category-card-info">
                 <div class="fh-category-card-title">${escapeHtml(getCategoryDisplayTitle(cat))}</div>
@@ -5051,6 +5109,11 @@ function renderHomeDiscoveryOverlay() {
 }
 
 function selectTopServiceShortcut(catId, subIdx) {
+  const category = (state.db?.categories || []).find((item) => item.id === catId);
+  if (!category || category.status !== 'ACTIVE') {
+    selectHomeCategory(catId);
+    return;
+  }
   state.selectedCategoryId = catId;
   openConfigureStep(subIdx);
 }
@@ -5075,9 +5138,24 @@ function renderConfigureFareOverlay() {
   }
 
   const categories = state.db.categories || [];
-  const activeCat = categories.find((c) => c.id === state.selectedCategoryId) || categories[0];
+  const activeCat = categories.find((c) => c.id === state.selectedCategoryId && c.status === 'ACTIVE')
+    || categories.find((c) => c.status === 'ACTIVE');
+  if (!activeCat) {
+    return `
+      <div class="fh-main-screen-container" style="padding-top:14px;">
+        <div class="fh-profile-card" style="text-align:center; padding:24px 18px;">
+          <div style="font-size:15px; font-weight:800; color:#0F172A;">No active service categories</div>
+          <div style="font-size:13px; color:#64748B; margin-top:6px;">Please check back when a service category is enabled.</div>
+          <button type="button" class="btn-dark-sec" style="margin-top:14px;" onclick="backToHomeStep()">Back to Browse</button>
+        </div>
+      </div>
+    `;
+  }
   const subServices = activeCat?.subServices || [];
-  const currentSub = subServices[state.selectedSubServiceIdx] || subServices[0] || { name: activeCat.fullName, defaultUsd: 25, duration: '2 hrs' };
+  const currentSub = subServices[state.selectedSubServiceIdx] || subServices[0] || {
+    name: activeCat.fullName || activeCat.name,
+    defaultUsd: activeCat.suggestedMinUsd
+  };
 
   return `
     <div class="fh-main-screen-container" style="padding-top:14px;">
@@ -5097,7 +5175,7 @@ function renderConfigureFareOverlay() {
               <div style="color:#0052FF;">${getCategoryVectorSvg(activeCat.id, false)}</div>
               <div>
                 <div style="font-size:14px; font-weight:800; color:#0F172A;">${escapeHtml(currentSub.name)}</div>
-                <div style="font-size:11.5px; color:#64748B;">${escapeHtml(activeCat.name)} • ~${currentSub.duration || '2 hrs'}</div>
+                <div style="font-size:11.5px; color:#64748B;">${escapeHtml(activeCat.name)}${currentSub.duration ? ` • ~${escapeHtml(currentSub.duration)}` : ''}</div>
               </div>
             </div>
             <span style="color:#64748B;">${uiIcon('chevronDown', 16)}</span>
@@ -5430,14 +5508,10 @@ function renderCustomerProfileTab() {
           <div class="drawer-avatar-circle" style="width:60px; height:60px; margin:0 auto 12px; border-radius:50%; background:#EFF6FF; color:#0052FF; display:flex; align-items:center; justify-content:center;">
             ${uiIcon('user', 26)}
           </div>
-          <div style="font-size:18px; font-weight:800; color:#0F172A; margin-bottom:6px;">Guest Profile</div>
-          <div style="font-size:13px; color:#64748B; line-height:1.5;">
-            You are browsing Findit Harare as a guest. Explore services and provider profiles; sign in or create an account to request services, manage bookings, or access account features.
-          </div>
-          <button type="button" class="btn-primary-blue" style="margin-top:16px; height:44px;" onclick="openSignInRoleChoiceModal('LOGIN')">Sign In</button>
+          <div style="font-size:18px; font-weight:800; color:#0F172A; margin-bottom:6px;">Profile</div>
+          <button type="button" class="btn-primary-blue" style="margin-top:8px; height:44px;" onclick="openSignInRoleChoiceModal('LOGIN')">Sign In</button>
           <button type="button" class="btn-dark-sec" style="margin-top:8px; height:42px;" onclick="openSignInRoleChoiceModal('SIGNUP')">Create Account</button>
         </div>
-        <button type="button" class="btn-dark-sec" style="width:100%;" onclick="switchCustomerTab('HOME')">Continue Browsing</button>
       </div>
     `;
   }
@@ -5459,8 +5533,8 @@ function renderCustomerProfileTab() {
           </div>
           <div style="flex:1; min-width:0;">
             <div style="font-size:16px; font-weight:800; color:#0F172A;">${escapeHtml(user?.name || 'Findit Client')}</div>
-            <div style="font-size:12px; color:#64748B; font-weight:600;">${escapeHtml(user?.phone || '+263 77')} • ${escapeHtml(user?.suburbName || 'Avondale')}</div>
-            <div style="font-size:11px; font-weight:800; color:#0052FF; margin-top:2px;">ID: ${user?.finditId || 'FH-USR-VERIFIED'}</div>
+            <div style="font-size:12px; color:#64748B; font-weight:600;">${user?.phone ? `${escapeHtml(user.phone)} • ` : ''}${escapeHtml(user?.suburbName || 'Avondale')}</div>
+            ${user?.finditId ? `<div style="font-size:11px; font-weight:800; color:#0052FF; margin-top:2px;">ID: ${escapeHtml(user.finditId)}</div>` : ''}
           </div>
         </div>
 
@@ -5584,8 +5658,8 @@ function renderProviderProfileTab() {
               <span>${escapeHtml(prov?.name || 'Specialist')}</span>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="#0052FF"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
             </div>
-            <div style="font-size:12px; color:#64748B;">${escapeHtml(prov?.phone || '+263 77')}</div>
-            <div style="font-size:11px; font-weight:800; color:#0052FF; margin-top:2px;">ID: ${prov?.finditId || 'FH-PRO-VERIFIED'}</div>
+            ${prov?.phone ? `<div style="font-size:12px; color:#64748B;">${escapeHtml(prov.phone)}</div>` : ''}
+            ${prov?.finditId ? `<div style="font-size:11px; font-weight:800; color:#0052FF; margin-top:2px;">ID: ${escapeHtml(prov.finditId)}</div>` : ''}
           </div>
         </div>
 
@@ -6281,6 +6355,8 @@ function renderBookedTrackingOverlay(req) {
 // ============================================================================
 function openSignUpWizardModal() {
   state.authStep = 'PHONE';
+  state.savedAccountId = null;
+  state.currentUser = null;
   state.activeModal = 'SIGNUP_FLOW';
   renderModalLayer();
 }
@@ -6365,7 +6441,7 @@ function renderSignUpWizardInnerHtml(isFullScreen = false) {
                   type="tel"
                   class="dark-input"
                   style="font-size:15px; font-weight:800; flex:1;"
-                  placeholder="77 200 1001"
+                  placeholder="Enter your number"
                   value="${(state.authPhone || '').replace(/^\+?263\s*/, '')}"
                   oninput="state.authPhone = '+263 ' + this.value"
                 />
@@ -7364,6 +7440,8 @@ function renderModalLayer() {
                   ? `NOTIFICATIONS_${(getRelevantNotifications() || []).length}_${getUnreadNotificationsCount()}`
                   : state.activeModal === 'RATE_BOOKING_MODAL'
                     ? `RATE_BOOKING_${state.modalData?.requestId}_${state.ratingStars}_${(state.ratingTags || []).join(',')}`
+                    : state.activeModal === 'SERVICE_PICKER'
+                      ? `SERVICE_PICKER_${state.selectedCategoryId}_${getCatalogStateSignature(state.db)}`
                     : `${state.activeModal}_${JSON.stringify(state.modalData || {})}`;
 
   if (modalKey === lastRenderedModalKey && root.firstElementChild) {
@@ -7395,7 +7473,7 @@ function renderModalLayer() {
             <div style="background:var(--blue-soft); border:1.5px solid var(--blue-border); border-radius:12px; padding:10px 12px; font-weight:800; color:var(--blue-primary); display:inline-flex; align-items:center; gap:6px; white-space:nowrap; font-size:13px;">
               ${uiIcon('zwFlag', 18)}<span>+263</span>
             </div>
-            <input id="loginPhoneInput" type="tel" class="dark-input" style="font-size:15px; font-weight:800; flex:1;" placeholder="77 200 1001"
+            <input id="loginPhoneInput" type="tel" class="dark-input" style="font-size:15px; font-weight:800; flex:1;" placeholder="Enter your number"
               value="${escapeHtml((state.loginPhone || '').replace(/^\+?263\s*/, ''))}" oninput="state.loginPhone = '+263 ' + this.value" />
           </div>
         </div>
@@ -7587,7 +7665,6 @@ function renderModalLayer() {
   if (state.activeModal === 'COMING_SOON_SERVICE') {
     const srvTitle = state.modalData?.title || 'Coming Soon';
     const srvDesc = state.modalData?.desc || 'This service is currently expanding to Harare.';
-    const suburbs = state.db?.suburbs || [];
     root.innerHTML = `
       <div class="modal-backdrop" onclick="closeModal()">
         <div class="indrive-modal-sheet" onclick="event.stopPropagation()">
@@ -7595,28 +7672,22 @@ function renderModalLayer() {
             <div style="display:flex; align-items:center; gap:10px;">
               <span style="color:var(--blue-primary);">${uiIcon('sparkle', 22)}</span>
               <div>
-                <div class="cancel-sheet-title">${srvTitle}</div>
-                <div style="font-size:11.5px; color:#D97706; font-weight:800;">Harare Early-Access Priority List</div>
+                <div class="cancel-sheet-title">${escapeHtml(srvTitle)}</div>
+                <div style="font-size:11.5px; color:#D97706; font-weight:800;">Service availability</div>
               </div>
             </div>
             <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
           </div>
 
           <div style="font-size:13px; color:var(--text-secondary); line-height:1.5; margin-bottom:14px;">
-            ${srvDesc} Join the priority waitlist to get notified via WhatsApp the moment we go live in your Harare area!
+            ${escapeHtml(srvDesc)} This service is not available for bookings yet. Browse active services or check back later.
           </div>
 
           <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:14px;">
-            <input id="serviceWaitlistPhone" class="dark-input" value="${state.currentUser?.phone || '+263 77 200 1001'}" placeholder="Your WhatsApp (+263...)" />
-            <select id="serviceWaitlistSuburb" class="dark-input">
-              ${suburbs.map((s) => `<option value="${s.name}" ${s.id === state.selectedSuburbId ? 'selected' : ''}>Harare Area: ${s.name}</option>`).join('')}
-            </select>
+            <div style="font-size:12px; color:var(--text-secondary);">This service is not available for bookings yet. Browse active services or check back later.</div>
           </div>
 
-          <button class="btn-primary-blue" onclick="showToast('You have been added to the priority list! We will WhatsApp you upon launch.', 'success'); closeModal();">
-            ${uiIcon('check', 16)}
-            <span>Join Early Access List</span>
-          </button>
+          <button class="btn-primary-blue" onclick="closeModal()">Close</button>
         </div>
       </div>
     `;
@@ -7661,6 +7732,7 @@ function renderModalLayer() {
   if (state.activeModal === 'COMING_SOON_MODAL') {
     const cat = state.modalData?.category || {};
     const suburbs = state.db.suburbs || [];
+    const categoryIsActive = cat.status === 'ACTIVE';
     root.innerHTML = `
       <div class="modal-backdrop" onclick="closeModal()">
         <div class="indrive-modal-sheet" onclick="event.stopPropagation()">
@@ -7669,27 +7741,31 @@ function renderModalLayer() {
               <div class="history-icon-circle">${getCategoryVectorSvg(cat.id || 'cleaning', false)}</div>
               <div>
                 <div class="cancel-sheet-title">${cat.fullName || cat.name || 'Coming Soon'}</div>
-                <div style="font-size:12px; color:#B45309; font-weight:800;">Launching Soon in Harare • ${cat.waitlistCount || 140} on waitlist</div>
+                <div style="font-size:12px; color:#B45309; font-weight:800;">${categoryIsActive ? 'Available now' : `Launching Soon in Harare${Number(cat.waitlistCount) > 0 ? ` • ${Number(cat.waitlistCount)} on waitlist` : ''}`}</div>
               </div>
             </div>
             <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
           </div>
 
           <div style="font-size:13px; color:var(--text-secondary); line-height:1.5; margin-bottom:14px;">
-            We are currently verifying Harare specialists for <strong>${cat.fullName || cat.name}</strong> (National ID, biometric face liveness, and work catalogue inspection). Join the priority waitlist to get notified first!
+            ${categoryIsActive
+              ? `<strong>${escapeHtml(cat.fullName || cat.name || 'This category')}</strong> is active. You can describe the work you need and send a request.`
+              : `We are currently verifying Harare specialists for <strong>${escapeHtml(cat.fullName || cat.name || 'this category')}</strong>. Join the priority waitlist to get notified first!`}
           </div>
 
-          <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:14px;">
-            <input id="waitlistPhoneInput" class="dark-input" value="${state.currentUser?.phone || '+263 77 200 1001'}" placeholder="Your WhatsApp Number (+263...)" />
+          ${categoryIsActive ? '' : `<div style="display:flex; flex-direction:column; gap:10px; margin-bottom:14px;">
+            <input id="waitlistPhoneInput" class="dark-input" value="${escapeHtml(state.currentUser?.phone || '')}" placeholder="Your phone number" type="tel" required />
             <select id="waitlistSuburbSelect" class="dark-input">
               ${suburbs.map((s) => `<option value="${s.name}" ${s.id === state.selectedSuburbId ? 'selected' : ''}>Suburb: ${s.name}, Harare</option>`).join('')}
             </select>
-          </div>
+          </div>`}
 
-          <button class="btn-primary-blue" onclick="submitCategoryWaitlist('${cat.id}')">
-            ${uiIcon('sparkle', 16)}
-            <span>Join Priority Waitlist</span>
-          </button>
+          ${categoryIsActive
+            ? `<button class="btn-primary-blue" onclick="selectCategoryAndOpenRequest('${cat.id}')">Browse category</button>`
+            : `<button class="btn-primary-blue" onclick="submitCategoryWaitlist('${cat.id}')">
+                ${uiIcon('sparkle', 16)}
+                <span>Join Priority Waitlist</span>
+              </button>`}
         </div>
       </div>
     `;
@@ -7899,7 +7975,7 @@ function renderModalLayer() {
                     <span>${ratingNum || '5.00'} (${jobCount})</span>
                   </div>
                   <div style="font-size:11px; font-family:monospace; font-weight:800; color:var(--blue-primary); margin-top:2px;">
-                    ID: ${user.finditId || (isProvider ? 'FH-PRO-VERIFIED' : 'FH-USR-VERIFIED')}
+                    ${user.finditId ? `ID: ${escapeHtml(user.finditId)}` : ''}
                   </div>
                 </div>
                 <span style="color:var(--text-secondary); display:inline-flex;">${uiIcon('chevronRight', 14)}</span>
@@ -8395,7 +8471,7 @@ function renderModalLayer() {
                   ${escapeHtml(draft.name || currentUser.name || 'Verified Member')}
                 </div>
                 <div style="font-size:11.5px; color:#475569; font-weight:700; font-family:monospace;">
-                  ${currentUser.finditId || (isProvider ? 'FH-PRO-849201' : 'FH-USR-392810')} • ${escapeHtml(currentUser.phone || '+263 77 200 1001')}
+                  ${currentUser.finditId ? `${escapeHtml(currentUser.finditId)} • ` : ''}${currentUser.phone ? escapeHtml(currentUser.phone) : ''}
                 </div>
                 <div style="display:flex; align-items:center; gap:6px; margin-top:4px; flex-wrap:wrap;">
                   <span style="background:#DCFCE7; color:#15803D; font-size:10.5px; font-weight:800; padding:2px 7px; border-radius:99px; display:inline-flex; align-items:center; gap:3px;">
@@ -9041,24 +9117,40 @@ function renderModalLayer() {
 
   // SUB-SERVICE PICKER MODAL
   if (state.activeModal === 'SERVICE_PICKER') {
-    const activeCat = state.db.categories.find((c) => c.id === state.selectedCategoryId) || state.db.categories[0];
+    const categories = state.db?.categories || [];
+    const activeCat = categories.find((c) => c.id === state.selectedCategoryId && c.status === 'ACTIVE')
+      || categories.find((c) => c.status === 'ACTIVE');
+    if (!activeCat) {
+      root.innerHTML = `
+        <div class="modal-backdrop" onclick="closeModal()">
+          <div class="indrive-modal-sheet" onclick="event.stopPropagation()">
+            <div class="cancel-sheet-header">
+              <div class="cancel-sheet-title">No active categories</div>
+              <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
+            </div>
+            <div style="padding:18px 4px; color:var(--text-secondary); font-size:13px;">There are no active service categories right now.</div>
+          </div>
+        </div>
+      `;
+      return;
+    }
     const subServices = activeCat?.subServices || [];
     root.innerHTML = `
       <div class="modal-backdrop" onclick="closeModal()">
         <div class="indrive-modal-sheet" onclick="event.stopPropagation()">
           <div class="cancel-sheet-header">
-            <div class="cancel-sheet-title">${activeCat.fullName || activeCat.name}</div>
+            <div class="cancel-sheet-title">${escapeHtml(activeCat?.fullName || activeCat?.name || 'Services')}</div>
             <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
           </div>
-          ${subServices.map((sub, idx) => `
+            ${subServices.length === 0 ? '<div style="padding:18px 4px; color:var(--text-secondary); font-size:13px;">No specific tasks have been added yet. You can describe the service you need in your request.</div>' : subServices.map((sub, idx) => `
             <div class="indrive-cancel-row" onclick="pickSubService(${idx})">
               <div class="cancel-row-left">
                 <div>
-                  <div style="font-weight:700;">${sub.name}</div>
-                  <div style="font-size:12px; color:var(--text-secondary);">~${sub.duration}</div>
+                    <div style="font-weight:700;">${escapeHtml(sub.name || 'Service')}</div>
+                    <div style="font-size:12px; color:var(--text-secondary);">${sub.duration ? `~${escapeHtml(sub.duration)}` : 'Service task'}</div>
                 </div>
               </div>
-              <div style="font-weight:800; color:var(--blue-primary);">$${sub.defaultUsd}</div>
+                <div style="font-weight:800; color:var(--blue-primary);">${Number.isFinite(Number(sub.defaultUsd)) ? formatUsdPrice(sub.defaultUsd) : ''}</div>
             </div>
           `).join('')}
         </div>
@@ -9606,7 +9698,7 @@ function getCancelReasonSvg(type) {
 // USER ACTIONS, WAITLIST, SPECIAL INSTRUCTIONS & FARE NEGOTIATION HANDLERS
 // ============================================================================
 function selectHomeCategory(catId) {
-  const cat = state.db.categories.find((c) => c.id === catId);
+  const cat = (state.db?.categories || []).find((c) => c.id === catId);
   if (!cat) return;
   if (cat.status !== 'ACTIVE') {
     state.activeModal = 'COMING_SOON_MODAL';
@@ -9622,12 +9714,18 @@ function selectHomeCategory(catId) {
 }
 
 async function submitCategoryWaitlist(categoryId) {
-  const phone = document.getElementById('waitlistPhoneInput')?.value.trim() || '+263 77 200 1001';
+  const phone = document.getElementById('waitlistPhoneInput')?.value.trim() || '';
+  if (!phone) {
+    showToast('Enter your phone number to join the waitlist.', 'error');
+    return;
+  }
   const suburb = document.getElementById('waitlistSuburbSelect')?.value || 'Avondale';
   try {
     const res = await apiPost('/api/waitlist', { categoryId, phone, suburb });
     closeModal();
-    showToast(`Added to ${res.category?.fullName || 'category'} priority waitlist (#${res.waitlistCount})!`);
+    showToast(res.duplicate
+      ? `You are already on the ${res.category?.fullName || 'service'} waitlist.`
+      : `Added to the ${res.category?.fullName || 'service'} waitlist (#${res.waitlistCount}).`);
     await fetchState();
   } catch (err) {
     showToast(err.message, 'error');
@@ -9635,6 +9733,16 @@ async function submitCategoryWaitlist(categoryId) {
 }
 
 function openConfigureStep(subIdx = 0) {
+  const categories = state.db?.categories || [];
+  let category = categories.find((item) => item.id === state.selectedCategoryId);
+  if (!category || category.status !== 'ACTIVE') {
+    category = categories.find((item) => item.status === 'ACTIVE');
+  }
+  if (!category) {
+    showToast('There are no active service categories right now.', 'error');
+    return;
+  }
+  state.selectedCategoryId = category.id;
   state.selectedSubServiceIdx = subIdx;
   state.selectedTierKey = 'STANDARD';
   syncRecommendedFare();
@@ -9801,7 +9909,7 @@ async function submitServiceRequest() {
     const optimisticReq = {
       id: reqId,
       customerId: state.currentUser.id,
-      customerFinditId: state.currentUser.finditId || 'FH-USR-391044',
+      customerFinditId: state.currentUser.finditId || '',
       customerName: state.currentUser.name,
       customerRating: state.currentUser.rating || 0,
       customerCompletedVisits: state.currentUser.completedBookings || 0,
@@ -10307,7 +10415,7 @@ async function toggleClientAndProviderMode() {
       state.authRole = 'PROVIDER';
       state.authStep = 'PHONE';
       state.authName = state.currentUser?.name || '';
-      state.authPhone = state.currentUser?.phone || '+263 77 ';
+      state.authPhone = state.currentUser?.phone || '';
       state.activeModal = 'SIGNUP_FLOW';
       renderAll();
       showToast('Please sign in or register as a Service Provider');

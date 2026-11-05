@@ -49,6 +49,8 @@ test('serves public app state without private account fields', async () => {
 
   assert.equal(response.status, 200);
   assert.ok(Array.isArray(state.categories));
+  assert.ok(Array.isArray(state.hubServices));
+  assert.ok(state.hubServices.some((service) => service.id === 'job_marketplace'));
   assert.ok(Array.isArray(state.customers));
   assert.ok(Array.isArray(state.providers));
   for (const account of [...state.customers, ...state.providers]) {

@@ -25,7 +25,7 @@ try {
   }
 } catch (e) {}
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3030;
 const DATA_DIR = path.join(__dirname, 'data');
 const DB_FILE = path.join(DATA_DIR, 'db.json');
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -168,12 +168,12 @@ async function verifyAdminPassword(plaintext) {
       if (bcrypt) return bcrypt.compareSync(plaintext, ADMIN_PASSWORD_HASH);
     }
     const computed = crypto.pbkdf2Sync(plaintext, ADMIN_SALT, 100000, 32, 'sha256').toString('hex');
-    if (crypto.timingSafeEqual(Buffer.from(computed), Buffer.from(ADMIN_PASSWORD_HASH))) return true;
-    if (plaintext === 'finditHarare2026!' || plaintext === process.env.ADMIN_PASSWORD) return true;
+    const expected = Buffer.from(ADMIN_PASSWORD_HASH, 'hex');
+    const actual = Buffer.from(computed, 'hex');
+    return expected.length === actual.length && crypto.timingSafeEqual(actual, expected);
   } catch (e) {
-    if (plaintext === 'finditHarare2026!' || plaintext === process.env.ADMIN_PASSWORD) return true;
+    return false;
   }
-  return false;
 }
 
 function generateAdminToken() {
@@ -429,7 +429,7 @@ function sendRealWhatsAppCloudOtp(toPhone, otpCode) {
   return sendWhatsAppDirectText(toPhone, `Your Findit Harare verification code is: ${otpCode}. Valid for 10 minutes.`);
 }
 
-// Helper: Generate Unique Cryptographic Findit Harare ID (e.g., FH-PRO-849201 or FH-USR-391044)
+// Helper: Generate a unique Findit Harare account ID.
 function generateFinditAppId(role) {
   const prefix = role === 'PROVIDER' ? 'FH-PRO-' : 'FH-USR-';
   const randNum = crypto.randomInt(100000, 999999);
@@ -625,7 +625,7 @@ function makeCatalogueSvgDataUri(bg1, bg2, icon, title, subtitle) {
 }
 
 function getInitialDatabase() {
-  return {
+  const initialDb = {
     settings: {
       platformName: 'Findit Harare',
       currency: 'USD',
@@ -651,29 +651,7 @@ function getInitialDatabase() {
         lashes: 10
       }
     },
-    customers: [
-      {
-        id: 'cust_tapiwa',
-        finditId: 'FH-USR-100201',
-        name: 'Tapiwa Chiwara',
-        phone: '+263 77 100 2001',
-        suburbId: 'avondale',
-        suburbName: 'Avondale',
-        rating: 0,
-        reviewCount: 0,
-        completedBookings: 0,
-        avatarInitials: 'TC',
-        avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=240&q=80',
-        whatsappVerified: true,
-        faceVerified: true,
-        nationalIdNumber: '63-2491028-F-42',
-        isBanned: false,
-        banReason: '',
-        warningsCount: 0,
-        activeWarnings: [],
-        reviews: []
-      }
-    ],
+    customers: [],
     categories: [
       {
         id: 'braiding',
@@ -783,7 +761,7 @@ function getInitialDatabase() {
         icon: 'HC',
         tagline: 'Deep Cleaning, Laundry, Move-In',
         status: 'COMING_SOON',
-        waitlistCount: 142,
+        waitlistCount: 0,
         subServices: []
       },
       {
@@ -794,7 +772,7 @@ function getInitialDatabase() {
         icon: 'HM',
         tagline: 'TV Mounting, Carpentry, Repairs',
         status: 'COMING_SOON',
-        waitlistCount: 98,
+        waitlistCount: 0,
         subServices: []
       },
       {
@@ -805,7 +783,7 @@ function getInitialDatabase() {
         icon: 'PS',
         tagline: 'Geyser, Borehole, Solar & Inverter',
         status: 'COMING_SOON',
-        waitlistCount: 116,
+        waitlistCount: 0,
         subServices: []
       },
       {
@@ -816,320 +794,63 @@ function getInitialDatabase() {
         icon: 'ER',
         tagline: 'Same-Day Harare Bike & Car Runner',
         status: 'COMING_SOON',
-        waitlistCount: 84,
+        waitlistCount: 0,
         subServices: []
       }
     ],
-    providers: [
-      {
-        id: 'prov_tariro',
-        finditId: 'FH-PRO-300401',
-        name: 'Tariro Moyo',
-        shortName: 'Tariro',
-        brandName: 'Tariro Mobile Braids Studio',
-        phone: '+263 77 300 4001',
-        avatarInitials: 'TM',
-        avatarUrl: 'https://images.unsplash.com/photo-1531123897727-8f129e1688ce?auto=format&fit=crop&w=240&q=80',
-        isOnline: true,
-        isBanned: false,
-        banReason: '',
-        warningsCount: 0,
-        activeWarnings: [],
-        acceptedConductRules: true,
-        categoryId: 'braiding',
-        skillTier: 'Platinum pro',
-        isPlatinum: true,
-        experienceYears: 6,
-        suburbId: 'avondale',
-        suburbName: 'Avondale',
-        lat: -17.7885,
-        lng: 31.0415,
-        serviceRadiusKm: 15,
-        startingPriceUsd: 25,
-        rating: 0,
-        reviewCount: 0,
-        completedBookings: 0,
-        bio: 'Platinum mobile braider (6 yrs exp). Clean knotless, boho goddess braids, and neat stitch cornrows at your home in Harare.',
-        badges: { phoneVerified: true, idVerified: true, businessVerified: true, faceVerified: true },
-        walletBalanceUsd: 25.00,
-        walletTransactions: [
-          { id: 'tx_seed_1', date: new Date().toISOString(), type: 'TOPUP', method: 'EcoCash USD (Admin Verified)', amountUsd: 25.00, note: 'Testing credit balance' }
-        ],
-        portfolio: [
-          {
-            id: 'cat_braid_1',
-            title: 'Waist-Length Boho Knotless',
-            priceUsd: 25,
-            duration: '3.5 hrs',
-            tag: 'Platinum Work',
-            approvalStatus: 'APPROVED',
-            imageUrl: 'https://images.unsplash.com/photo-1595476108010-b4d1f102b1b1?auto=format&fit=crop&w=600&q=80'
-          },
-          {
-            id: 'cat_braid_2',
-            title: 'Fulani Tribal Stitch Cornrows',
-            priceUsd: 20,
-            duration: '2 hrs',
-            tag: 'Precision Stitch',
-            approvalStatus: 'APPROVED',
-            imageUrl: 'https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?auto=format&fit=crop&w=600&q=80'
-          }
-        ],
-        reviews: []
-      },
-      {
-        id: 'prov_farai',
-        finditId: 'FH-PRO-400502',
-        name: 'Farai Ndlovu',
-        shortName: 'Farai',
-        brandName: 'FreshFade Harare VIP Mobile Barbers',
-        phone: '+263 77 400 5002',
-        avatarInitials: 'FN',
-        avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=240&q=80',
-        isOnline: true,
-        isBanned: false,
-        banReason: '',
-        warningsCount: 0,
-        activeWarnings: [],
-        acceptedConductRules: true,
-        categoryId: 'barber',
-        skillTier: 'Platinum pro',
-        isPlatinum: true,
-        experienceYears: 5,
-        suburbId: 'borrowdale',
-        suburbName: 'Borrowdale',
-        lat: -17.7550,
-        lng: 31.0920,
-        serviceRadiusKm: 18,
-        startingPriceUsd: 15,
-        rating: 0,
-        reviewCount: 0,
-        completedBookings: 0,
-        bio: 'Executive mobile barber in Harare. Cordless clippers, hot towel shave, beard sculpting at your home.',
-        badges: { phoneVerified: true, idVerified: true, businessVerified: true, faceVerified: true },
-        walletBalanceUsd: 25.00,
-        walletTransactions: [
-          { id: 'tx_seed_2', date: new Date().toISOString(), type: 'TOPUP', method: 'EcoCash USD (Admin Verified)', amountUsd: 25.00, note: 'Testing credit balance' }
-        ],
-        portfolio: [
-          {
-            id: 'cat_barb_1',
-            title: 'VIP Home Skin Fade + Beard Trim',
-            priceUsd: 15,
-            duration: '45 mins',
-            tag: 'Executive Cut',
-            approvalStatus: 'APPROVED',
-            imageUrl: 'https://images.unsplash.com/photo-1503951914875-452162b0f3f1?auto=format&fit=crop&w=600&q=80'
-          }
-        ],
-        reviews: []
-      },
-      {
-        id: 'prov_nyasha',
-        finditId: 'FH-PRO-500603',
-        name: 'Nyasha Gumbo',
-        shortName: 'Nyasha',
-        brandName: 'Glitz Nails & Spa Mobile',
-        phone: '+263 77 500 6003',
-        avatarInitials: 'NG',
-        avatarUrl: 'https://images.unsplash.com/photo-1567532939604-b6b5b0db2604?auto=format&fit=crop&w=240&q=80',
-        isOnline: true,
-        isBanned: false,
-        banReason: '',
-        warningsCount: 0,
-        activeWarnings: [],
-        acceptedConductRules: true,
-        categoryId: 'nails',
-        skillTier: 'Platinum pro',
-        isPlatinum: true,
-        experienceYears: 4,
-        suburbId: 'belgravia',
-        suburbName: 'Belgravia',
-        lat: -17.7980,
-        lng: 31.0450,
-        serviceRadiusKm: 20,
-        startingPriceUsd: 20,
-        rating: 0,
-        reviewCount: 0,
-        completedBookings: 0,
-        bio: 'Mobile nail technician bringing portable dust collector, UV lamps & spa pedicure basin to your home.',
-        badges: { phoneVerified: true, idVerified: true, businessVerified: true, faceVerified: true },
-        walletBalanceUsd: 25.00,
-        walletTransactions: [
-          { id: 'tx_seed_3', date: new Date().toISOString(), type: 'TOPUP', method: 'EcoCash USD (Admin Verified)', amountUsd: 25.00, note: 'Testing credit balance' }
-        ],
-        portfolio: [
-          {
-            id: 'cat_nail_1',
-            title: 'French Tip Acrylic Full Set',
-            priceUsd: 20,
-            duration: '2 hrs',
-            tag: 'Clean Acrylics',
-            approvalStatus: 'APPROVED',
-            imageUrl: 'https://images.unsplash.com/photo-1604654894610-df63bc536371?auto=format&fit=crop&w=600&q=80'
-          }
-        ],
-        reviews: []
-      },
-      {
-        id: 'prov_ruvimbo',
-        finditId: 'FH-PRO-600704',
-        name: 'Ruvimbo Mutasa',
-        shortName: 'Ruvimbo',
-        brandName: 'GlamByRu Mobile Studio',
-        phone: '+263 77 600 7004',
-        avatarInitials: 'RM',
-        avatarUrl: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=240&q=80',
-        isOnline: true,
-        isBanned: false,
-        banReason: '',
-        warningsCount: 0,
-        activeWarnings: [],
-        acceptedConductRules: true,
-        categoryId: 'makeup',
-        skillTier: 'Platinum pro',
-        isPlatinum: true,
-        experienceYears: 5,
-        suburbId: 'mt_pleasant',
-        suburbName: 'Mt Pleasant',
-        lat: -17.7740,
-        lng: 31.0430,
-        serviceRadiusKm: 25,
-        startingPriceUsd: 25,
-        rating: 0,
-        reviewCount: 0,
-        completedBookings: 0,
-        bio: 'Bridal & Roora mobile MUA in Harare. Sweatproof skin-like soft glam with portable ring light & luxury kit.',
-        badges: { phoneVerified: true, idVerified: true, businessVerified: true, faceVerified: true },
-        walletBalanceUsd: 25.00,
-        walletTransactions: [
-          { id: 'tx_seed_4', date: new Date().toISOString(), type: 'TOPUP', method: 'EcoCash USD (Admin Verified)', amountUsd: 25.00, note: 'Testing credit balance' }
-        ],
-        portfolio: [
-          {
-            id: 'cat_mua_1',
-            title: 'Signature Soft Glam + Lashes',
-            priceUsd: 25,
-            duration: '1 hr',
-            tag: 'Bridal Soft Glam',
-            approvalStatus: 'APPROVED',
-            imageUrl: 'https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?auto=format&fit=crop&w=600&q=80'
-          }
-        ],
-        reviews: []
-      }
-    ],
+    providers: [],
     ecocashTopups: [],
     disciplineLogs: [],
     requests: [],
-    kycVerifications: [
-      {
-        id: 'kyc_tapiwa',
-        accountId: 'cust_tapiwa',
-        finditId: 'FH-USR-100201',
-        role: 'CUSTOMER',
-        actorName: 'Tapiwa Chiwara',
-        name: 'Tapiwa Chiwara',
-        phone: '+263 77 100 2001',
-        suburbName: 'Avondale',
-        whatsappVerified: true,
-        faceVerified: true,
-        faceScore: '99.5%',
-        faceMatchScore: 99.5,
-        nationalId: '63-2491028-F-42',
-        nationalIdNumber: '63-2491028-F-42',
-        termsAccepted: true,
-        status: 'APPROVED',
-        submittedAt: new Date().toISOString()
-      },
-      {
-        id: 'kyc_tariro',
-        accountId: 'prov_tariro',
-        finditId: 'FH-PRO-300401',
-        role: 'PROVIDER',
-        actorName: 'Tariro Moyo (Tariro Mobile Braids)',
-        name: 'Tariro Moyo (Tariro Mobile Braids)',
-        phone: '+263 77 300 4001',
-        suburbName: 'Avondale',
-        whatsappVerified: true,
-        faceVerified: true,
-        faceScore: '99.8%',
-        faceMatchScore: 99.8,
-        nationalId: '63-1984312-G-18',
-        nationalIdNumber: '63-1984312-G-18',
-        termsAccepted: true,
-        status: 'APPROVED',
-        submittedAt: new Date().toISOString()
-      },
-      {
-        id: 'kyc_farai',
-        accountId: 'prov_farai',
-        finditId: 'FH-PRO-400502',
-        role: 'PROVIDER',
-        actorName: 'Farai Ndlovu (FreshFade VIP Barbers)',
-        name: 'Farai Ndlovu (FreshFade VIP Barbers)',
-        phone: '+263 77 400 5002',
-        suburbName: 'Borrowdale',
-        whatsappVerified: true,
-        faceVerified: true,
-        faceScore: '99.6%',
-        faceMatchScore: 99.6,
-        nationalId: '63-2819401-H-22',
-        nationalIdNumber: '63-2819401-H-22',
-        termsAccepted: true,
-        status: 'APPROVED',
-        submittedAt: new Date().toISOString()
-      },
-      {
-        id: 'kyc_nyasha',
-        accountId: 'prov_nyasha',
-        finditId: 'FH-PRO-500603',
-        role: 'PROVIDER',
-        actorName: 'Nyasha Gumbo (Glitz Nails & Spa)',
-        name: 'Nyasha Gumbo (Glitz Nails & Spa)',
-        phone: '+263 77 500 6003',
-        suburbName: 'Belgravia',
-        whatsappVerified: true,
-        faceVerified: true,
-        faceScore: '99.7%',
-        faceMatchScore: 99.7,
-        nationalId: '63-3192014-M-34',
-        nationalIdNumber: '63-3192014-M-34',
-        termsAccepted: true,
-        status: 'APPROVED',
-        submittedAt: new Date().toISOString()
-      },
-      {
-        id: 'kyc_ruvimbo',
-        accountId: 'prov_ruvimbo',
-        finditId: 'FH-PRO-600704',
-        role: 'PROVIDER',
-        actorName: 'Ruvimbo Mutasa (GlamByRu Studio)',
-        name: 'Ruvimbo Mutasa (GlamByRu Studio)',
-        phone: '+263 77 600 7004',
-        suburbName: 'Mt Pleasant',
-        whatsappVerified: true,
-        faceVerified: true,
-        faceScore: '99.9%',
-        faceMatchScore: 99.9,
-        nationalId: '63-2948102-F-42',
-        nationalIdNumber: '63-2948102-F-42',
-        termsAccepted: true,
-        status: 'APPROVED',
-        submittedAt: new Date().toISOString()
-      }
-    ],
+    kycVerifications: [],
     cancellationLogs: [],
     approvalQueue: [],
     leakageLogs: [],
     revenueLedger: [],
-    pendingVerifications: []
+    pendingVerifications: [],
+    hubServices: [
+      {
+        id: 'job_marketplace',
+        name: 'Job Marketplace',
+        title: 'Job Marketplace',
+        tagline: 'Hire verified local trades & pros',
+        subtitle: 'Hire verified local trades & pros',
+        status: 'ACTIVE',
+        badge: 'Active',
+        imageUrl: 'https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=800&q=80'
+      },
+      {
+        id: 'online_shopping',
+        name: 'Online Shopping',
+        title: 'Online Shopping',
+        tagline: 'Harare shops & fast delivery',
+        subtitle: 'Harare shops & fast delivery',
+        status: 'COMING_SOON',
+        badge: 'Coming Soon',
+        imageUrl: 'https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=800&q=80'
+      },
+      {
+        id: 'transport_carriers',
+        name: 'Transport & Carriers',
+        title: 'Transport & Carriers',
+        tagline: 'Bakkies, trucks & haulage',
+        subtitle: 'Bakkies, trucks & haulage',
+        status: 'COMING_SOON',
+        badge: 'Coming Soon',
+        imageUrl: 'https://images.unsplash.com/photo-1519003722824-194d4455a60c?auto=format&fit=crop&w=800&q=80'
+      }
+    ]
   };
+  initialDb.customers = [];
+  initialDb.providers = [];
+  initialDb.kycVerifications = [];
+  return initialDb;
 }
 
 // Upgrade existing db records if new collections or fields are missing
 function normalizeDatabase(parsed) {
   const init = getInitialDatabase();
+  if (!Array.isArray(parsed.hubServices)) parsed.hubServices = init.hubServices;
   if (!parsed.ecocashTopups) parsed.ecocashTopups = init.ecocashTopups;
   if (!parsed.disciplineLogs) parsed.disciplineLogs = [];
   if (!parsed.pendingVerifications) parsed.pendingVerifications = [];
@@ -2239,45 +1960,7 @@ function ensureProviderInDb(providerId, providerSnapshot = null) {
       (providerSnapshot && providerSnapshot.id && p.id === providerSnapshot.id) ||
       (providerSnapshot && providerSnapshot.finditId && p.finditId === providerSnapshot.finditId)
   );
-  if (!prov && providerSnapshot && typeof providerSnapshot === 'object') {
-    const cleanName = (providerSnapshot.name || 'Service Provider').trim();
-    const shortName = providerSnapshot.shortName || cleanName.split(' ')[0];
-    const avatarUrl = offloadDataUriToR2Url(providerSnapshot.avatarUrl || providerSnapshot.selfieUrl || '');
-    const catIds = Array.isArray(providerSnapshot.categoryIds) && providerSnapshot.categoryIds.length > 0
-      ? providerSnapshot.categoryIds
-      : [providerSnapshot.categoryId || 'repairs_construction'];
-    prov = {
-      id: providerId || providerSnapshot.id || ('prov_' + Date.now().toString().slice(-6)),
-      finditId: providerSnapshot.finditId || ('FH-PRO-' + Math.floor(100000 + Math.random() * 900000)),
-      name: cleanName,
-      shortName,
-      brandName: providerSnapshot.brandName || `${shortName} Services`,
-      phone: providerSnapshot.phone || '+263 77 000 0000',
-      categoryId: catIds[0],
-      categoryIds: catIds,
-      suburbId: providerSnapshot.suburbId || 'avondale',
-      suburbName: providerSnapshot.suburbName || 'Avondale',
-      lat: Number(providerSnapshot.lat || -17.8024),
-      lng: Number(providerSnapshot.lng || 31.0368),
-      avatarInitials: cleanName.slice(0, 2).toUpperCase(),
-      avatarUrl: avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=240&q=80',
-      selfieUrl: avatarUrl || '',
-      skillTier: providerSnapshot.skillTier || 'Verified pro',
-      rating: Number(providerSnapshot.rating || 5.0),
-      reviewCount: Number(providerSnapshot.reviewCount || 1),
-      completedBookings: Number(providerSnapshot.completedBookings || 1),
-      startingPriceUsd: Number(providerSnapshot.startingPriceUsd || 20),
-      walletBalanceUsd: Number(providerSnapshot.walletBalanceUsd ?? 5.0),
-      isOnline: providerSnapshot.isOnline !== false,
-      isBanned: Boolean(providerSnapshot.isBanned),
-      badges: Array.isArray(providerSnapshot.badges) ? providerSnapshot.badges : ['ID Verified', 'Home Visit Ready'],
-      portfolio: Array.isArray(providerSnapshot.portfolio) ? providerSnapshot.portfolio : [],
-      reviews: Array.isArray(providerSnapshot.reviews) ? providerSnapshot.reviews : [],
-      walletTransactions: Array.isArray(providerSnapshot.walletTransactions) ? providerSnapshot.walletTransactions : [],
-      updatedAt: Date.now()
-    };
-    db.providers.push(prov);
-  } else if (prov && providerSnapshot && typeof providerSnapshot === 'object') {
+  if (prov && providerSnapshot && typeof providerSnapshot === 'object') {
     // Keep provider's real name, brand, avatar, and categories synced across containers
     if (providerSnapshot.name && providerSnapshot.id === prov.id) {
       prov.name = providerSnapshot.name;
@@ -3335,7 +3018,7 @@ const server = http.createServer(async (req, res) => {
       });
       saveDb(db);
 
-      // AUTOMATIC NOTIFICATION TO ADMIN WHATSAPP DM (0713475131)
+      // Automatic notification to the configured admin WhatsApp number.
       const userWaLink = `https://wa.me/${cleanDigits}?text=${encodeURIComponent(
         `Your Findit Harare verification code is: ${otpCode}. Valid for 10 minutes.`
       )}`;
@@ -4368,6 +4051,7 @@ Return ONLY JSON with keys:
     try {
       const body = await parseBody(req);
       const cust = db.customers.find((c) => c.id === body.customerId);
+      if (!cust) return sendJson(res, 401, { error: 'Sign in with a customer account before posting a request.' });
       if (cust && cust.isBanned) {
         return sendJson(res, 403, { error: `Your account (${cust.finditId}) is suspended: ${cust.banReason}` });
       }
@@ -4403,9 +4087,9 @@ Return ONLY JSON with keys:
 
       const newReq = {
         id: body.id || ('req_' + Date.now().toString().slice(-5)),
-        customerId: body.customerId || 'cust_1',
-        customerFinditId: cust?.finditId || 'FH-USR-391044',
-        customerName: body.customerName || cust?.name || 'Client',
+        customerId: cust.id,
+        customerFinditId: cust.finditId || '',
+        customerName: cust.name,
         customerRating: cust?.rating || 0,
         customerCompletedVisits: cust?.completedBookings || 0,
         categoryId: category.id,
@@ -5325,14 +5009,14 @@ Return ONLY JSON with keys:
     try {
       const body = await parseBody(req);
       const prov = ensureProviderInDb(body.providerId, body.providerSnapshot);
-      if (prov && !prov.isBanned) {
-        if (typeof body.lat === 'number' && typeof body.lng === 'number') {
-          prov.lat = Number(body.lat.toFixed(5));
-          prov.lng = Number(body.lng.toFixed(5));
-          prov.lastLocationUpdate = new Date().toISOString();
-          saveDb(db);
-          broadcastUpdate('PROVIDER_MOVED', { providerId: prov.id, lat: prov.lat, lng: prov.lng });
-        }
+      if (!prov) return sendJson(res, 404, { error: 'Provider not found.' });
+      if (prov.isBanned) return sendJson(res, 403, { error: 'Your account is suspended.' });
+      if (typeof body.lat === 'number' && typeof body.lng === 'number') {
+        prov.lat = Number(body.lat.toFixed(5));
+        prov.lng = Number(body.lng.toFixed(5));
+        prov.lastLocationUpdate = new Date().toISOString();
+        saveDb(db);
+        broadcastUpdate('PROVIDER_MOVED', { providerId: prov.id, lat: prov.lat, lng: prov.lng });
       }
       return sendJson(res, 200, { ok: true, lat: prov?.lat, lng: prov?.lng });
     } catch (e) {
@@ -5547,12 +5231,32 @@ Return ONLY JSON with keys:
   if (pathname === '/api/waitlist' && req.method === 'POST') {
     try {
       const body = await parseBody(req);
-      const cat = db.categories.find((c) => c.id === body.categoryId);
+      const cat = (db.categories || []).find((c) => c.id === body.categoryId);
       if (!cat) return sendJson(res, 404, { error: 'Category not found' });
-      cat.waitlistCount = (cat.waitlistCount || 100) + 1;
+      const phone = String(body.phone || '').trim();
+      const phoneDigits = phone.replace(/\D/g, '');
+      if (phoneDigits.length < 9 || phoneDigits.length > 12) {
+        return sendJson(res, 400, { error: 'Enter a valid phone number to join the waitlist.' });
+      }
+      const suburb = String(body.suburb || '').trim();
+      if (!suburb) return sendJson(res, 400, { error: 'Choose a suburb to join the waitlist.' });
+      if (!Array.isArray(db.waitlistEntries)) db.waitlistEntries = [];
+      const duplicate = db.waitlistEntries.find((entry) =>
+        entry.categoryId === cat.id && String(entry.phone || '').replace(/\D/g, '').slice(-9) === phoneDigits.slice(-9)
+      );
+      if (!duplicate) {
+        db.waitlistEntries.push({
+          id: crypto.randomUUID(),
+          categoryId: cat.id,
+          phone,
+          suburb,
+          createdAt: new Date().toISOString()
+        });
+      }
+      cat.waitlistCount = db.waitlistEntries.filter((entry) => entry.categoryId === cat.id).length;
       saveDb(db);
       broadcastUpdate('WAITLIST_JOINED', { categoryId: cat.id, waitlistCount: cat.waitlistCount });
-      return sendJson(res, 200, { category: cat, waitlistCount: cat.waitlistCount });
+      return sendJson(res, 200, { category: cat, waitlistCount: cat.waitlistCount, duplicate: Boolean(duplicate) });
     } catch (e) {
       return sendJson(res, 400, { error: e.message });
     }
@@ -5941,31 +5645,6 @@ Return ONLY valid JSON with key: "reply" (string).`;
         let prov = (db.providers || []).find(
           (p) => p.id === userId || (phoneDigits && String(p.phone || '').replace(/\D/g, '') === phoneDigits)
         );
-        if (!prov && userId) {
-          prov = {
-            id: userId,
-            finditId: body.finditId || ('FH-PRO-' + Math.floor(100000 + Math.random() * 900000)),
-            name: body.name || 'Verified Specialist',
-            shortName: (body.name || 'Specialist').split(' ')[0],
-            brandName: body.brandName || `${body.name || 'Specialist'} Services`,
-            phone: body.phone || '+263 77 000 0000',
-            categoryId: 'repairs_construction',
-            categoryIds: ['repairs_construction'],
-            suburbId: body.suburbId || 'avondale',
-            suburbName: body.suburbName || 'Avondale',
-            lat: -17.7955,
-            lng: 31.0365,
-            startingPriceUsd: Number(body.startingPriceUsd || 20),
-            walletBalanceUsd: Number(body.walletBalanceUsd ?? 5.0),
-            walletTransactions: [],
-            portfolio: [],
-            reviews: [],
-            isOnline: true,
-            isBanned: false,
-            badges: { phoneVerified: true, idVerified: true, businessVerified: true, faceVerified: true }
-          };
-          db.providers.push(prov);
-        }
         if (!prov) return sendJson(res, 404, { error: 'Provider account not found' });
 
         if (body.name && body.name.trim()) {
@@ -6013,20 +5692,6 @@ Return ONLY valid JSON with key: "reply" (string).`;
         let cust = (db.customers || []).find(
           (c) => c.id === userId || (phoneDigits && String(c.phone || '').replace(/\D/g, '') === phoneDigits)
         );
-        if (!cust && userId) {
-          cust = {
-            id: userId,
-            finditId: body.finditId || ('FH-USR-' + Math.floor(100000 + Math.random() * 900000)),
-            name: body.name || 'Findit Client',
-            phone: body.phone || '+263 77 000 0000',
-            suburbId: body.suburbId || 'avondale',
-            suburbName: body.suburbName || 'Avondale',
-            rating: 5.0,
-            completedBookings: 0,
-            isBanned: false
-          };
-          db.customers.push(cust);
-        }
         if (!cust) return sendJson(res, 404, { error: 'Client account not found' });
 
         if (body.name && body.name.trim()) {
@@ -6409,7 +6074,7 @@ Return ONLY valid JSON with key: "reply" (string).`;
         cat.suggestedMaxUsd = 50;
       }
       saveDb(db);
-      broadcastUpdate('CATEGORY_UPDATED', { categoryId: cat.id });
+      broadcastUpdate('CATEGORY_UPDATED', { categoryId: cat.id, category: cat });
       return sendJson(res, 200, { category: cat });
     } catch (e) {
       return sendJson(res, 400, { error: e.message });
@@ -6424,8 +6089,13 @@ Return ONLY valid JSON with key: "reply" (string).`;
       const name = (body.name || '').trim();
       if (!name) return sendJson(res, 400, { error: 'Service category name is required.' });
       const id = (body.id || name.toLowerCase().replace(/[^a-z0-9]/g, '_')).trim();
+      if (!id) return sendJson(res, 400, { error: 'A valid service category ID is required.' });
       const exists = (db.categories || []).find((c) => c.id === id);
       if (exists) return sendJson(res, 400, { error: 'A service category with this ID already exists.' });
+      const requestedStatus = body.status || 'COMING_SOON';
+      if (!['ACTIVE', 'COMING_SOON'].includes(requestedStatus)) {
+        return sendJson(res, 400, { error: 'Category status must be ACTIVE or COMING_SOON.' });
+      }
 
       const newCat = {
         id,
@@ -6434,12 +6104,10 @@ Return ONLY valid JSON with key: "reply" (string).`;
         mapIcon: body.icon || '🛠️',
         icon: body.icon || '🛠️',
         tagline: body.tagline || `Verified mobile ${name} specialists visiting Harare homes`,
-        status: body.status || 'ACTIVE',
+        status: requestedStatus,
         suggestedMinUsd: Number(body.suggestedMinUsd || 15),
         suggestedMaxUsd: Number(body.suggestedMaxUsd || 50),
-        subServices: Array.isArray(body.subServices) && body.subServices.length > 0 ? body.subServices : [
-          { name: `Standard ${name}`, defaultUsd: Number(body.suggestedMinUsd || 15), duration: '1-2 hrs' }
-        ]
+        subServices: Array.isArray(body.subServices) ? body.subServices : []
       };
       if (!db.categories) db.categories = [];
       db.categories.push(newCat);
@@ -6494,12 +6162,17 @@ Return ONLY valid JSON with key: "reply" (string).`;
       const cat = (db.categories || []).find((c) => c.id === body.categoryId);
       if (!cat) return sendJson(res, 404, { error: 'Category not found.' });
       if (!Array.isArray(cat.subServices)) cat.subServices = [];
-      const taskName = (body.name || '').trim();
+      const task = body.task && typeof body.task === 'object' ? body.task : body;
+      const taskName = String(task.name || '').trim();
       if (!taskName) return sendJson(res, 400, { error: 'Task name is required.' });
+      const taskPrice = Number(task.defaultUsd ?? cat.suggestedMinUsd ?? 15);
+      if (!Number.isFinite(taskPrice) || taskPrice <= 0) {
+        return sendJson(res, 400, { error: 'Task price must be a positive number.' });
+      }
       const newTask = {
         name: taskName,
-        defaultUsd: Number(body.defaultUsd || cat.suggestedMinUsd || 15),
-        duration: body.duration || '1-2 hrs'
+        defaultUsd: taskPrice,
+        duration: String(task.duration || '').trim()
       };
       cat.subServices.push(newTask);
       saveDb(db);
@@ -6519,9 +6192,18 @@ Return ONLY valid JSON with key: "reply" (string).`;
       if (!cat) return sendJson(res, 404, { error: 'Category not found.' });
       const idx = Number(body.taskIndex);
       if (!cat.subServices || !cat.subServices[idx]) return sendJson(res, 404, { error: 'Task not found.' });
-      if (body.name) cat.subServices[idx].name = body.name.trim();
-      if (body.defaultUsd !== undefined) cat.subServices[idx].defaultUsd = Number(body.defaultUsd);
-      if (body.duration) cat.subServices[idx].duration = body.duration.trim();
+      const task = body.task && typeof body.task === 'object' ? body.task : body;
+      if (task.name !== undefined) {
+        const name = String(task.name).trim();
+        if (!name) return sendJson(res, 400, { error: 'Task name cannot be empty.' });
+        cat.subServices[idx].name = name;
+      }
+      if (task.defaultUsd !== undefined) {
+        const price = Number(task.defaultUsd);
+        if (!Number.isFinite(price) || price <= 0) return sendJson(res, 400, { error: 'Task price must be a positive number.' });
+        cat.subServices[idx].defaultUsd = price;
+      }
+      if (task.duration !== undefined) cat.subServices[idx].duration = String(task.duration).trim();
       saveDb(db);
       broadcastUpdate('CATEGORY_UPDATED', { categoryId: cat.id });
       return sendJson(res, 200, { success: true, category: cat });

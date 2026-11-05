@@ -434,18 +434,10 @@
             id="adminPasswordInput"
             type="password"
             placeholder="Enter Admin Password"
-            value="finditHarare2026!"
             required
             autocomplete="current-password"
             style="width:100%; height:48px; background:#0F172A; border:1.5px solid #334155; border-radius:14px; padding:0 16px; color:#FFFFFF; font-size:15px; outline:none; transition:border-color 0.2s;"
           />
-        </div>
-        <div style="background:rgba(255,255,255,0.04); border:1px dashed #334155; border-radius:12px; padding:10px 14px; font-size:12px; color:#94A3B8; text-align:left; display:flex; align-items:center; justify-content:space-between;">
-          <div>
-            <div style="font-size:10.5px; color:#64748B; font-weight:700; text-transform:uppercase; letter-spacing:0.05em;">Admin Passkey</div>
-            <code style="color:#38BDF8; font-family:monospace; font-size:12px;">finditHarare2026!</code>
-          </div>
-          <button type="button" onclick="autoFillAdminPass()" style="background:#334155; color:#F8FAFC; border:none; border-radius:8px; padding:6px 12px; font-size:11.5px; font-weight:700; cursor:pointer; transition:background 0.15s;">Auto Fill</button>
         </div>
         <div id="adminLoginError" style="display:none; color:#EF4444; font-size:12.5px; font-weight:700; background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.3); border-radius:10px; padding:8px 12px;"></div>
         <button
@@ -529,7 +521,6 @@
     let providerSuburbFilter = 'ALL';
     let adminSearchQuery = '';
     let lastAdminFingerprint = '';
-    let isInitialSessionChecked = false;
     let selectedSupportUserKey = '';
     let openChatRequestId = null;
     let adminPollingInterval = null;
@@ -636,15 +627,6 @@
       if (lock) lock.style.display = 'none';
     }
 
-    function autoFillAdminPass() {
-      const inp = document.getElementById('adminPasswordInput');
-      if (inp) {
-        inp.value = 'finditHarare2026!';
-        inp.focus();
-      }
-      handleAdminLogin();
-    }
-
     async function handleAdminLogin(e) {
       if (e) e.preventDefault();
       const inp = document.getElementById('adminPasswordInput');
@@ -668,7 +650,6 @@
         const data = await res.json();
         if (res.ok && data.token) {
           setAdminToken(data.token);
-          isInitialSessionChecked = true;
           hideAdminLockScreen();
           await loadAdminData(true);
         } else {
@@ -714,11 +695,25 @@
       const opts = { method, headers };
       if (body) opts.body = JSON.stringify(body);
       const res = await fetch(path, opts);
-      if (res.status === 401 && path.startsWith('/api/admin/')) {
+      let data;
+      try {
+        data = await res.json();
+      } catch (error) {
+        throw new Error(`The server returned an invalid response (${res.status}).`);
+      }
+      if (res.status === 401) {
         setAdminToken(null);
         showAdminLockScreen();
       }
-      return res.json();
+      if (!res.ok) {
+        const error = new Error(data.error || `Request failed (${res.status}).`);
+        error.status = res.status;
+        throw error;
+      }
+      if (path.startsWith('/api/admin/') && data && typeof data === 'object' && !Array.isArray(data) && data.success === undefined) {
+        data.success = data.ok === undefined ? true : Boolean(data.ok);
+      }
+      return data;
     }
 
     // Toast Notifications
@@ -746,41 +741,27 @@
         return;
       }
 
-      // Instant 0ms cache rendering from previous session
-      if (!db) {
-        try {
-          const cached = localStorage.getItem('findit_admin_db_cache');
-          if (cached) {
-            db = JSON.parse(cached);
-            hideAdminLockScreen();
-            renderAdmin();
-          }
-        } catch (e) {}
-      }
-
       try {
         const activeEl = document.activeElement;
         const isTyping = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT');
         if (isTyping && !forceRender) return;
 
-        // Fetch session validation, state and verifications simultaneously in parallel
-        const [sessionCheck, nextDb, pendingRes] = await Promise.all([
-          !isInitialSessionChecked ? api('/api/admin/session').catch(() => null) : Promise.resolve({ authenticated: true }),
-          api('/api/state'),
-          api('/api/admin/pending-verifications').catch(() => [])
-        ]);
-
-        if (sessionCheck && sessionCheck.authenticated === false) {
+        const sessionCheck = await api('/api/admin/session');
+        if (!sessionCheck.authenticated) {
           setAdminToken(null);
           showAdminLockScreen();
           return;
         }
-        isInitialSessionChecked = true;
-        hideAdminLockScreen();
-
-        if (Array.isArray(pendingRes) && nextDb) {
-          nextDb.pendingVerifications = pendingRes;
+        const [nextDb, pendingRes] = await Promise.all([
+          api('/api/state'),
+          api('/api/admin/pending-verifications')
+        ]);
+        if (!nextDb || typeof nextDb !== 'object' || !Array.isArray(pendingRes)) {
+          throw new Error('The server returned incomplete admin data.');
         }
+
+        nextDb.pendingVerifications = pendingRes;
+        hideAdminLockScreen();
 
         const fp = JSON.stringify({
           reqs: (nextDb.requests || []).map(r => `${r.id}:${r.status}:${r.acceptedProviderId}:${r.pinVerifiedByProvider}`),
@@ -798,9 +779,6 @@
         });
 
         db = nextDb;
-        try {
-          localStorage.setItem('findit_admin_db_cache', JSON.stringify(nextDb));
-        } catch (e) {}
 
         if (forceRender || fp !== lastAdminFingerprint) {
           lastAdminFingerprint = fp;
@@ -808,10 +786,12 @@
           if (openChatRequestId) renderJobChatModal();
         }
       } catch (err) {
-        console.warn('Admin background sync notice:', err);
-        if (err && (err.status === 401 || String(err).includes('401'))) {
+        console.error('Admin data sync failed:', err);
+        if (err && err.status === 401) {
           setAdminToken(null);
           showAdminLockScreen();
+        } else {
+          showAdminToast(err.message || 'Unable to load admin data.', 'error');
         }
       }
     }
@@ -1085,7 +1065,7 @@
 
       try {
         const res = await api('/api/admin/job/action', 'POST', { requestId, action, note });
-        if (res && res.ok) {
+        if (res && res.success) {
           showAdminToast(`Job action ${action} executed successfully!`, 'success');
           await loadAdminData(true);
         } else {
@@ -1105,7 +1085,7 @@
 
       try {
         const res = await api('/api/admin/provider/shift', 'POST', { providerId, workStartTime: start, workEndTime: end });
-        if (res && res.ok) {
+        if (res && res.success) {
           showAdminToast('Provider working shift updated!', 'success');
           await loadAdminData(true);
         } else {
@@ -1119,7 +1099,7 @@
     async function adminToggleProviderOnline(providerId, currentOnline) {
       try {
         const res = await api('/api/admin/provider/shift', 'POST', { providerId, isOnline: !currentOnline });
-        if (res && res.ok) {
+        if (res && res.success) {
           showAdminToast(!currentOnline ? 'Provider marked ONLINE' : 'Provider marked OFFLINE', 'success');
           await loadAdminData(true);
         } else {
@@ -1166,7 +1146,7 @@
       if (!confirm(`Force terminate voice call channel "${channelId}"? Audio will disconnect immediately.`)) return;
       try {
         const res = await api('/api/admin/calls/end', 'POST', { channelId });
-        if (res && res.ok) {
+        if (res && res.success) {
           showAdminToast('Voice call channel terminated', 'success');
           await loadAdminData(true);
         } else {
@@ -1182,7 +1162,7 @@
       if (!confirm('Are you sure you want to delete this review? The user average star rating will be recalculated immediately.')) return;
       try {
         const res = await api('/api/admin/reviews/delete', 'POST', { targetId, reviewIndex });
-        if (res && res.ok) {
+        if (res && res.success) {
           showAdminToast('Review deleted and rating updated!', 'success');
           await loadAdminData(true);
         } else {
@@ -1373,7 +1353,7 @@
           action,
           reason
         });
-        if (res && res.ok) {
+        if (res && res.success) {
           showAdminToast(`Action ${action} completed successfully!`, 'success');
           await loadAdminData(true);
         } else {
@@ -1389,7 +1369,7 @@
       const reason = action === 'REJECT' ? (prompt('Reason for rejection (e.g. phone number in flyer):', 'Flyer / Phone number detected') || 'Flyer / Watermark violation') : '';
       try {
         const res = await api('/api/admin/approvals', 'POST', { approvalId, action, rejectionReason: reason });
-        if (res && res.ok) {
+        if (res && res.success) {
           showAdminToast(`Catalogue item ${action.toLowerCase()}d`, 'success');
           await loadAdminData(true);
         }
@@ -1401,7 +1381,7 @@
     async function moderateKycItem(kycId, action) {
       try {
         const res = await api('/api/admin/kyc', 'POST', { kycId, action });
-        if (res && res.ok) {
+        if (res && res.success) {
           showAdminToast(`KYC verification ${action.toLowerCase()}d`, 'success');
           await loadAdminData(true);
         }
@@ -1414,7 +1394,7 @@
     async function adminDirectApproveCode(phoneDigits) {
       try {
         const res = await api('/api/admin/verify-code-direct', 'POST', { phoneDigits });
-        if (res && res.ok) {
+        if (res && res.success) {
           showAdminToast('WhatsApp login code approved directly!', 'success');
           await loadAdminData(true);
         } else {
@@ -1447,13 +1427,23 @@
     }
 
     async function toggleCategoryStatus(catId) {
-      await api('/api/admin/category-status', 'POST', { categoryId: catId });
-      await loadAdminData(true);
+      try {
+        await api('/api/admin/category-status', 'POST', { categoryId: catId });
+        showAdminToast('Category status updated.', 'success');
+        await loadAdminData(true);
+      } catch (err) {
+        showAdminToast(err.message, 'error');
+      }
     }
 
     async function toggleHubServiceStatus(id, newStatus) {
-      await api('/api/admin/hub/update', 'POST', { id, status: newStatus });
-      await loadAdminData(true);
+      try {
+        await api('/api/admin/hub/update', 'POST', { id, status: newStatus });
+        showAdminToast('Hub service status updated.', 'success');
+        await loadAdminData(true);
+      } catch (err) {
+        showAdminToast(err.message, 'error');
+      }
     }
 
     // Categories & Tasks Management
@@ -1465,12 +1455,14 @@
       const icon = prompt('Emoji Icon:', '⚡') || '🛠️';
       try {
         const res = await api('/api/admin/categories/create', 'POST', { name, tagline, suggestedMinUsd: minUsd, icon });
-        if (res && res.ok) {
+        if (res && res.success) {
           showAdminToast('Category added successfully!', 'success');
           await loadAdminData(true);
+        } else {
+          throw new Error(res?.error || 'The category was not created.');
         }
       } catch (e) {
-        showAdminToast(e.message, 'error');
+        showAdminToast(e.message || 'Unable to create the category.', 'error');
       }
     }
 
@@ -1485,12 +1477,14 @@
       const icon = prompt('Icon Emoji:', c.icon || '🛠️') || c.icon;
       try {
         const res = await api('/api/admin/categories/update', 'POST', { categoryId: catId, name, tagline, suggestedMinUsd: minUsd, icon });
-        if (res && res.ok) {
+        if (res && res.success) {
           showAdminToast('Category updated!', 'success');
           await loadAdminData(true);
+        } else {
+          throw new Error(res?.error || 'The category was not updated.');
         }
       } catch (e) {
-        showAdminToast(e.message, 'error');
+        showAdminToast(e.message || 'Unable to update the category.', 'error');
       }
     }
 
@@ -1499,12 +1493,14 @@
       if (!confirm(`Delete category "${c?.name || catId}"?`)) return;
       try {
         const res = await api('/api/admin/categories/delete', 'POST', { categoryId: catId });
-        if (res && res.ok) {
+        if (res && res.success) {
           showAdminToast('Category deleted', 'success');
           await loadAdminData(true);
+        } else {
+          throw new Error(res?.error || 'The category was not deleted.');
         }
       } catch (e) {
-        showAdminToast(e.message, 'error');
+        showAdminToast(e.message || 'Unable to delete the category.', 'error');
       }
     }
 
@@ -1516,12 +1512,14 @@
       const duration = prompt('Typical Duration:', '1-2 hours') || '1 hour';
       try {
         const res = await api('/api/admin/categories/task/add', 'POST', { categoryId: catId, task: { name: taskName, defaultUsd, duration } });
-        if (res && res.ok) {
+        if (res && res.success) {
           showAdminToast('Task added!', 'success');
           await loadAdminData(true);
+        } else {
+          throw new Error(res?.error || 'The task was not added.');
         }
       } catch (e) {
-        showAdminToast(e.message, 'error');
+        showAdminToast(e.message || 'Unable to add the task.', 'error');
       }
     }
 
@@ -1535,12 +1533,14 @@
       const duration = prompt('Duration:', task.duration || '1 hour') || task.duration;
       try {
         const res = await api('/api/admin/categories/task/update', 'POST', { categoryId: catId, taskIndex, task: { name, defaultUsd, duration } });
-        if (res && res.ok) {
+        if (res && res.success) {
           showAdminToast('Task updated!', 'success');
           await loadAdminData(true);
+        } else {
+          throw new Error(res?.error || 'The task was not updated.');
         }
       } catch (e) {
-        showAdminToast(e.message, 'error');
+        showAdminToast(e.message || 'Unable to update the task.', 'error');
       }
     }
 
@@ -1550,7 +1550,7 @@
       if (!confirm(`Delete task "${task?.name || 'Task'}"?`)) return;
       try {
         const res = await api('/api/admin/categories/task/delete', 'POST', { categoryId: catId, taskIndex });
-        if (res && res.ok) {
+        if (res && res.success) {
           showAdminToast('Task deleted', 'success');
           await loadAdminData(true);
         }
@@ -1625,7 +1625,7 @@
       if (!confirm('Are you sure you want to delete this announcement?')) return;
       try {
         const res = await api('/api/admin/changelogs/delete', 'POST', { id });
-        if (res && res.ok) {
+        if (res && res.success) {
           showAdminToast('Announcement removed', 'success');
           await loadAdminData(true);
         } else {
@@ -1731,7 +1731,7 @@
     async function enforceAiCommission(requestId) {
       try {
         const res = await api('/api/admin/ai-enforce-commission', 'POST', { requestId });
-        if (res && res.ok) {
+        if (res && res.success) {
           showAdminToast('11% Platform Commission deducted & protected!', 'success');
           await loadAdminData(true);
         } else {
@@ -1757,7 +1757,7 @@
       input.value = '';
       try {
         const res = await api('/api/support/admin-reply', 'POST', { userKey: selectedSupportUserKey, text });
-        if (res && res.ok) {
+        if (res && res.success) {
           showAdminToast('Human reply sent to ' + selectedSupportUserKey, 'success');
           await loadAdminData(true);
         } else {
@@ -1804,7 +1804,7 @@
           title,
           message
         });
-        if (res && res.ok) {
+        if (res && res.success) {
           showAdminToast('Notification dispatched successfully!', 'success');
           if (titleInput) titleInput.value = '';
           if (msgInput) msgInput.value = '';
@@ -3792,8 +3792,8 @@
               ${hub.map(hs => `
                 <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px; padding:12px; display:flex; justify-content:space-between; align-items:center;">
                   <div>
-                    <div style="font-weight:800; font-size:13.5px;">${hs.icon} ${escapeHtml(hs.name)}</div>
-                    <div style="font-size:11.5px; color:var(--muted); margin-top:2px;">${escapeHtml(hs.tagline)}</div>
+                    <div style="font-weight:800; font-size:13.5px;">${escapeHtml(hs.icon || '')} ${escapeHtml(hs.name || hs.title || 'Service')}</div>
+                    <div style="font-size:11.5px; color:var(--muted); margin-top:2px;">${escapeHtml(hs.tagline || hs.subtitle || '')}</div>
                   </div>
                   <button class="btn-outline" onclick="toggleHubServiceStatus('${hs.id}', '${hs.status === 'ACTIVE' ? 'COMING_SOON' : 'ACTIVE'}')">
                     ${hs.status === 'ACTIVE' ? '🟢 Active' : '🟡 Coming Soon'}
@@ -3843,7 +3843,7 @@
                 <div style="background:#F8FAFC; border:1.5px solid #E2E8F0; border-radius:14px; padding:14px;">
                   <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
                     <div>
-                      <span style="font-size:20px; vertical-align:middle; margin-right:6px;">${c.icon}</span>
+                      <span style="font-size:20px; vertical-align:middle; margin-right:6px;">${escapeHtml(c.icon || '🛠️')}</span>
                       <strong style="font-size:15px; color:#0F172A;">${escapeHtml(c.name)}</strong>
                       <span style="font-size:11px; color:#059669; font-weight:800; margin-left:8px;">Min: $${c.suggestedMinUsd || 15} USD</span>
                       <div style="font-size:12px; color:var(--muted); margin-top:2px;">${escapeHtml(c.tagline || '')}</div>
@@ -3859,11 +3859,12 @@
                   <div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:8px;">
                     ${(c.subServices || []).map((t, idx) => `
                       <div style="background:#FFFFFF; border:1px solid #CBD5E1; border-radius:8px; padding:6px 10px; font-size:12px; display:inline-flex; align-items:center; gap:6px;">
-                        <span><strong>${escapeHtml(t.name)}</strong>: $${t.defaultUsd} (${t.duration || '1h'})</span>
+                        <span><strong>${escapeHtml(t.name || 'Service task')}</strong>: ${Number.isFinite(Number(t.defaultUsd)) ? `$${Number(t.defaultUsd)}` : 'Price on request'} (${escapeHtml(t.duration || 'Duration not set')})</span>
                         <span style="cursor:pointer; color:#0066FF;" onclick="promptEditTask('${c.id}', ${idx})">✏️</span>
                         <span style="cursor:pointer; color:#DC2626;" onclick="promptDeleteTask('${c.id}', ${idx})">&times;</span>
                       </div>
                     `).join('')}
+                    ${!(c.subServices || []).length ? '<span style="font-size:12px; color:var(--muted);">No sub-tasks yet. Add tasks before activating this category.</span>' : ''}
                   </div>
                 </div>
               `).join('')}
@@ -3968,7 +3969,7 @@
 
               <div id="notifSpecificUserGroup" style="display:none;">
                 <label style="font-size:12px; font-weight:700; color:#475569; display:block; margin-bottom:4px;">User ID or Phone</label>
-                <input id="notifRecipientId" type="text" placeholder="e.g. FH-PRO-849201 or 0772001001" style="width:100%; height:40px; border:1.5px solid #CBD5E1; border-radius:10px; padding:0 12px; font-size:13px;" />
+                <input id="notifRecipientId" type="text" placeholder="Findit ID or verified phone number" style="width:100%; height:40px; border:1.5px solid #CBD5E1; border-radius:10px; padding:0 12px; font-size:13px;" />
               </div>
 
               <div>
