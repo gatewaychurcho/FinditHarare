@@ -5979,10 +5979,72 @@ Return ONLY valid JSON with key: "reply" (string).`;
           ...body.categoryCommissions
         };
       }
+      if (body.paidVerificationBadgeEnabled !== undefined) {
+        db.settings.paidVerificationBadgeEnabled = Boolean(body.paidVerificationBadgeEnabled);
+      }
+      if (body.paidVerificationBadgePriceUsd !== undefined) {
+        db.settings.paidVerificationBadgePriceUsd = Math.max(1, Number(body.paidVerificationBadgePriceUsd));
+      }
       db.settings.updatedAt = Date.now();
       saveDb(db);
       broadcastUpdate('SETTINGS_UPDATED', { settings: db.settings });
       return sendJson(res, 200, { settings: db.settings });
+    } catch (e) {
+      return sendJson(res, 400, { error: e.message });
+    }
+  }
+
+  // Purchasable Verification Badge Endpoints (Kept Idle/Hidden by Default until Enabled in Admin)
+  if (pathname === '/api/providers/buy-verification-badge' && req.method === 'POST') {
+    try {
+      const body = await parseBody(req);
+      if (!db.settings?.paidVerificationBadgeEnabled) {
+        return sendJson(res, 403, { error: 'Verification badge purchases are currently not active.' });
+      }
+      const prov = (db.providers || []).find((p) => p.id === body.providerId);
+      if (!prov) return sendJson(res, 404, { error: 'Provider not found' });
+      if (prov.hasPaidVerificationBadge) {
+        return sendJson(res, 400, { error: 'Your account already has an active Verification Badge.' });
+      }
+      const badgePrice = Math.max(1, Number(db.settings?.paidVerificationBadgePriceUsd || 15));
+      const bal = Number(prov.walletBalanceUsd || 0);
+      if (bal < badgePrice) {
+        return sendJson(res, 402, {
+          error: `Insufficient wallet balance ($${bal.toFixed(2)} USD). Please top up at least $${badgePrice.toFixed(2)} USD to purchase the Verification Badge.`
+        });
+      }
+      prov.walletBalanceUsd = Math.round((bal - badgePrice) * 100) / 100;
+      prov.hasPaidVerificationBadge = true;
+      prov.paidVerificationBadgePurchasedAt = new Date().toISOString();
+      if (!Array.isArray(prov.walletTransactions)) prov.walletTransactions = [];
+      prov.walletTransactions.unshift({
+        id: 'tx_badge_' + Date.now(),
+        type: 'BADGE_PURCHASE',
+        amountUsd: -badgePrice,
+        balanceAfterUsd: prov.walletBalanceUsd,
+        note: 'Verified Pro Badge Purchase',
+        timestamp: new Date().toISOString()
+      });
+      saveDb(db);
+      broadcastUpdate('PROVIDER_UPDATED', { provider: prov });
+      return sendJson(res, 200, { ok: true, provider: prov });
+    } catch (e) {
+      return sendJson(res, 400, { error: e.message });
+    }
+  }
+
+  if (pathname === '/api/admin/providers/verification-badge' && req.method === 'POST') {
+    try {
+      const body = await parseBody(req);
+      const prov = (db.providers || []).find((p) => p.id === body.providerId);
+      if (!prov) return sendJson(res, 404, { error: 'Provider not found' });
+      prov.hasPaidVerificationBadge = Boolean(body.hasPaidVerificationBadge);
+      if (prov.hasPaidVerificationBadge && !prov.paidVerificationBadgePurchasedAt) {
+        prov.paidVerificationBadgePurchasedAt = new Date().toISOString();
+      }
+      saveDb(db);
+      broadcastUpdate('PROVIDER_UPDATED', { provider: prov });
+      return sendJson(res, 200, { ok: true, provider: prov });
     } catch (e) {
       return sendJson(res, 400, { error: e.message });
     }

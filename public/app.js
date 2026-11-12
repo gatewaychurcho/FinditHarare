@@ -16,16 +16,20 @@ function resolveMediaUrl(url, type = 'avatar') {
   if (!url || typeof url !== 'string' || url === 'undefined' || url === 'null') {
     return type === 'task' ? DEFAULT_TASK_PHOTO_FALLBACK : DEFAULT_AVATAR_FALLBACK;
   }
-  if (url.includes('tinashe_selfie.png')) {
+  const raw = url.trim();
+  if (raw.includes('tinashe_selfie.png')) {
     return type === 'task' ? DEFAULT_TASK_PHOTO_FALLBACK : DEFAULT_AVATAR_FALLBACK;
   }
-  if (url.startsWith('data:image/')) {
-    return url;
+  if (raw.startsWith('data:image/')) {
+    return raw;
   }
-  if (url.startsWith('/api/')) {
-    return (API_BASE || '') + url;
+  if (raw.startsWith('/assets/') || raw.startsWith('assets/') || raw.startsWith('/icons/') || raw.startsWith('icons/') || raw === '/favicon.png' || raw === 'favicon.png') {
+    return raw.replace(/^\/+/, '');
   }
-  return url;
+  if (raw.startsWith('/api/')) {
+    return (API_BASE || '') + raw;
+  }
+  return raw;
 }
 const WS_RELAY_HOST = (typeof window !== 'undefined' && window.FINDIT_WS_HOST) ? window.FINDIT_WS_HOST : '';
 
@@ -87,7 +91,12 @@ const state = {
 
   activeRequestId: null,
   customerTab: 'HOME', // 'HOME' | 'REQUESTS' | 'OFFERS' | 'PROFILE'
-  providerTab: 'FEED', // 'HOME' | 'FEED' | 'ACTIVE_JOB' | 'PROFILE'
+  providerTab: 'FEED', // 'HOME' | 'FEED' | 'ACTIVE_JOB' | 'EARNINGS' | 'PROFILE'
+  selectedOpportunityId: null,
+  isOpportunityListExpanded: false,
+  earningsPeriod: 'WEEK', // 'TODAY' | 'WEEK' | 'MONTH'
+  earningsSubView: 'SUMMARY', // 'SUMMARY' | 'WALLET'
+  lastCompletedJobSummary: null,
 
   // Service Provider Wallet Top-Up State
   walletTopupMethod: 'EcoCash USD',
@@ -677,7 +686,7 @@ function renderOnboardingLayer() {
 
         <div class="onboarding-graphic-container">
           <div class="onboarding-hero-image-wrap">
-            <img src="/assets/splash_slide1.jpg" alt="Findit Harare Client Screen" class="onboarding-hero-splash-img" />
+            <img src="assets/splash_slide1.jpg" alt="Findit Harare Client Screen" class="onboarding-hero-splash-img" />
           </div>
         </div>
 
@@ -708,7 +717,7 @@ function renderOnboardingLayer() {
 
         <div class="onboarding-graphic-container">
           <div class="onboarding-hero-image-wrap">
-            <img src="/assets/splash_slide2.jpg" alt="Findit Harare Provider Screen" class="onboarding-hero-splash-img" />
+            <img src="assets/splash_slide2.jpg" alt="Findit Harare Provider Screen" class="onboarding-hero-splash-img" />
           </div>
         </div>
 
@@ -774,7 +783,7 @@ function getCatalogStateSignature(db) {
 
 function computeStateFingerprint(db) {
   if (!db) return '';
-  const reqSig = (db.requests || []).map((r) => `${r.id}:${r.status}:${(r.offers || []).map((o) => `${o.id}:${o.status}:${o.priceUsd}`).join(',')}:${r.acceptedOfferId || ''}:${r.budgetUsd}:${(r.activeViewerIds || []).length}:${(r.messages || []).map((m) => `${m.id}:${m.read ? 1 : 0}`).join(',')}`).join(';');
+  const reqSig = (db.requests || []).map((r) => `${r.id}:${r.status}:${r.pinVerifiedByProvider ? 1 : 0}:${r.completionRequested ? 1 : 0}:${(r.offers || []).map((o) => `${o.id}:${o.status}:${o.priceUsd}`).join(',')}:${r.acceptedOfferId || ''}:${r.budgetUsd}:${(r.messages || []).map((m) => `${m.id}:${m.read ? 1 : 0}`).join(',')}`).join(';');
   const userSig = state.currentUser ? `${state.currentUser.id}:${state.currentUser.walletBalanceUsd}:${state.currentUser.warningsCount || 0}:${state.currentUser.isBanned}:${(state.currentUser.categoryIds || []).join(',')}` : '';
   const provSig = (db.providers || []).map((p) => `${p.id}:${p.isOnline}:${(p.categoryIds || []).join(',')}`).join(';');
   const clSig = (db.changelogs || []).map((c) => c.id).join(',');
@@ -826,8 +835,8 @@ function triggerSystemNotification(title, body, notifKey = '') {
             if (reg && typeof reg.showNotification === 'function') {
               reg.showNotification(String(title || 'Findit Harare'), {
                 body: String(body || ''),
-                icon: '/assets/logo-icon.svg',
-                badge: '/assets/logo-icon.svg',
+                icon: 'assets/logo-icon.svg',
+                badge: 'assets/logo-icon.svg',
                 tag: key,
                 vibrate: [180, 80, 180]
               });
@@ -837,7 +846,7 @@ function triggerSystemNotification(title, body, notifKey = '') {
       } else {
         new Notification(String(title || 'Findit Harare'), {
           body: String(body || ''),
-          icon: '/assets/logo-icon.svg',
+          icon: 'assets/logo-icon.svg',
           tag: key
         });
       }
@@ -1917,6 +1926,15 @@ function handleIncomingRealtimeEvent(data) {
         if (exactAddress) activeJob.exactAddress = exactAddress;
         updateMapMarkers(true);
       }
+    }
+    return;
+  }
+
+  // Ignore ephemeral viewer heartbeat events so they never trigger full fetchState() re-render loops
+  if (data.eventType === 'REQUEST_VIEWERS_UPDATED') {
+    if (data.payload?.requestId && Array.isArray(data.payload?.viewerIds) && state.db?.requests) {
+      const r = state.db.requests.find((x) => x.id === data.payload.requestId);
+      if (r) r.activeViewerIds = data.payload.viewerIds;
     }
     return;
   }
@@ -3800,6 +3818,21 @@ function updateMapMarkers(force = false) {
         activeMapOpportunityMarkers.set(r.id, m);
       }
     });
+
+    // Draw live street route on the map from Provider to the selected/active Client Request before accepting!
+    const previewReq = openRequests.find((r) => r.id === state.selectedOpportunityId) || openRequests[0];
+    if (previewReq && prov) {
+      let cLat = Number(previewReq.clientLiveLat || previewReq.lat);
+      let cLng = Number(previewReq.clientLiveLng || previewReq.lng);
+      if (!cLat || !cLng || isNaN(cLat) || isNaN(cLng)) {
+        const coords = resolveHarareSuburbCoords(previewReq.suburbName || previewReq.exactAddress);
+        cLat = coords[0];
+        cLng = coords[1];
+      }
+      const pLat = Number(prov.lat) || -17.7948;
+      const pLng = Number(prov.lng) || 31.0372;
+      drawRoadRouteOnMap([pLat, pLng], [cLat, cLng], previewReq.routeCoordinates, previewReq.id);
+    }
   } else {
     activeMapOpportunityMarkers.forEach((m) => { try { leafletMarkersLayer.removeLayer(m); } catch (e) {} });
     activeMapOpportunityMarkers.clear();
@@ -4125,14 +4158,19 @@ function renderFloatingOffersOverlay(force = false) {
         <span>Cancel request</span>
       </button>
 
-      <button class="sheet-collapse-pill" style="background:#FFFFFF; color:#0F172A; height:42px; padding:0 14px; border-radius:14px; font-size:12.5px;" onclick="toggleOffersMinimize(true)">
-        ${uiIcon('map', 15)}
-        <span>Full Map</span>
-        ${uiIcon('chevronDown', 14)}
+      <button class="sheet-collapse-pill" style="background:#FFFFFF; color:#0F172A; height:40px; padding:0 14px; border-radius:999px; font-size:12px; font-weight:800;" onclick="toggleOffersMinimize(true)">
+        ${uiIcon('map', 14)}
+        <span>Map</span>
       </button>
     </div>
 
-    <div class="choose-pro-heading">Choose a pro (${activeOffers.length})</div>
+    <div style="margin-bottom:10px; padding:0 4px;">
+      <div class="choose-pro-heading" style="margin-bottom:3px;">Choose a specialist</div>
+      <div style="display:inline-flex; align-items:center; gap:6px; font-size:12.5px; font-weight:700; color:#E2E8F0;">
+        <span style="display:inline-flex; width:16px; height:16px; border-radius:4px; background:#0052FF; color:#FFFFFF; align-items:center; justify-content:center;">${uiIcon('check', 11)}</span>
+        <span>All specialists are verified</span>
+      </div>
+    </div>
 
     ${activeOffers.map((offer) => {
       const prov = resolveProviderByIdOrOffer(offer.providerId, req, offer);
@@ -4323,7 +4361,13 @@ function renderUiOverlay(force = true) {
     state.pendingSearchFareUsd,
     state.walletTopupAmount,
     state.walletTopupMethod,
+    state.selectedOpportunityId,
+    state.isOpportunityListExpanded ? 1 : 0,
+    state.earningsPeriod,
+    state.earningsSubView,
+    state.lastCompletedJobSummary ? state.lastCompletedJobSummary.id : '',
     state.currentUser?.id,
+    state.currentUser?.isOnline ? 1 : 0,
     state.currentUser?.walletBalanceUsd,
     state.currentUser?.activeWarnings?.length || 0,
     (state.db?.changelogs || []).map((c) => `${c.id}:${c.title}:${c.version}`).join(','),
@@ -4384,11 +4428,11 @@ function renderUiOverlay(force = true) {
     // CUSTOMER MODE
     const curCustTab = state.customerTab || 'HOME';
     if (curCustTab === 'PROFILE') {
-      contentHtml = renderCurvedBrandHeader('CUSTOMER') + renderCustomerProfileTab();
+      contentHtml = renderCustomerProfileTab();
     } else if (curCustTab === 'REQUESTS') {
-      contentHtml = renderCurvedBrandHeader('CUSTOMER') + renderCustomerRequestsTab();
+      contentHtml = renderCustomerRequestsTab();
     } else if (curCustTab === 'OFFERS') {
-      contentHtml = renderCurvedBrandHeader('CUSTOMER') + renderCompareOffersOverlay(activeReq);
+      contentHtml = renderCompareOffersOverlay(activeReq);
     } else {
       // HOME TAB
       if (activeReq && isBookedStatus(activeReq.status)) {
@@ -4422,7 +4466,15 @@ function renderUiOverlay(force = true) {
   // Native Bottom Dock
   contentHtml += renderGlobalBottomNavDock();
 
+  const prevSheetEl = overlay.querySelector('.dg-half-sheet, .fh-main-screen-container');
+  const prevScrollTop = prevSheetEl ? prevSheetEl.scrollTop : 0;
+
   overlay.innerHTML = warningBannerHtml + contentHtml;
+
+  if (prevScrollTop > 0) {
+    const nextSheetEl = overlay.querySelector('.dg-half-sheet, .fh-main-screen-container');
+    if (nextSheetEl) nextSheetEl.scrollTop = prevScrollTop;
+  }
 }
 
 async function acknowledgeAdminWarning(warningId) {
@@ -4673,7 +4725,7 @@ function renderMainHubOverlay() {
       subtitle: 'Hire verified local trades & pros',
       status: 'ACTIVE',
       badge: '7 Categories',
-      imageUrl: '/assets/hub/marketplace.jpg',
+      imageUrl: 'assets/hub/marketplace.jpg',
       legacyImageUrlPrefix: 'https://images.unsplash.com/photo-1581578731548-c64695cc6952'
     },
     {
@@ -4682,7 +4734,7 @@ function renderMainHubOverlay() {
       subtitle: 'Bakkies, trucks, haulage & rides',
       status: 'COMING_SOON',
       badge: 'Coming Soon',
-      imageUrl: '/assets/hub/transport.jpg',
+      imageUrl: 'assets/hub/transport.jpg',
       legacyImageUrlPrefix: 'https://images.unsplash.com/photo-1519003722824-194d4455a60c'
     },
     {
@@ -4691,7 +4743,7 @@ function renderMainHubOverlay() {
       subtitle: 'Harare shops, groceries & express delivery',
       status: 'ACTIVE',
       badge: 'Coming Soon',
-      imageUrl: '/assets/hub/shopping.jpg',
+      imageUrl: 'assets/hub/shopping.jpg',
       legacyImageUrlPrefix: 'https://images.unsplash.com/photo-1483985988355-763728e1935b'
     }
   ];
@@ -4722,7 +4774,7 @@ function renderMainHubOverlay() {
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
         </button>
         <div class="fh-discovery-brand">
-          <img src="/assets/logo-icon.svg" width="28" height="28" style="border-radius:8px;" alt="" />
+          <img src="assets/logo-icon.svg" width="28" height="28" style="border-radius:8px;" alt="" />
           <span>Findit <strong>Harare</strong></span>
         </div>
         ${state.isAuthenticated ? `
@@ -4781,8 +4833,9 @@ function renderMainHubOverlay() {
 
       ${(() => {
         const marketplace = hubServices.find((service) => service.id === 'job_marketplace');
+        const resolvedMarketImg = resolveMediaUrl(marketplace?.imageUrl || 'assets/hub/marketplace.jpg', 'task');
         return marketplace ? `
-          <button class="fh-marketplace-feature" onclick="selectHubService('job_marketplace')" style="--fh-marketplace-image:url('${escapeHtml(marketplace.imageUrl || '')}')">
+          <button class="fh-marketplace-feature" onclick="selectHubService('job_marketplace')" style="--fh-marketplace-image:url('${escapeHtml(resolvedMarketImg)}')">
             <span class="fh-marketplace-feature-shade"></span>
             <span class="fh-marketplace-feature-content">
               <span class="fh-marketplace-feature-kicker">${escapeHtml(marketplace.badge || 'Local services')}</span>
@@ -4804,7 +4857,7 @@ function renderMainHubOverlay() {
         ${hubServices.filter((service) => service.id !== 'job_marketplace').map((service) => `
           <button class="fh-discovery-service-row" onclick="selectHubService('${service.id}')">
             <span class="fh-discovery-service-image">
-              <img src="${escapeHtml(service.imageUrl || DEFAULT_TASK_PHOTO_FALLBACK)}" onerror="this.onerror=null; this.src='${DEFAULT_TASK_PHOTO_FALLBACK}';" alt="" />
+              <img src="${escapeHtml(resolveMediaUrl(service.imageUrl || DEFAULT_TASK_PHOTO_FALLBACK, 'task'))}" onerror="this.onerror=null; this.src='${DEFAULT_TASK_PHOTO_FALLBACK}';" alt="" />
             </span>
             <span class="fh-discovery-service-copy">
               <span class="fh-discovery-service-name">${escapeHtml(service.title)}</span>
@@ -4855,30 +4908,30 @@ function selectHubService(serviceId) {
 function getCategoryTileImageUrl(catId) {
   const norm = String(catId || '').toLowerCase();
   if (norm.includes('repair') || norm.includes('build') || norm.includes('handy') || norm.includes('plumb')) {
-    return '/assets/categories/cat_repairs.jpg';
+    return 'assets/categories/cat_repairs.jpg';
   }
   if (norm.includes('beauty') || norm.includes('hair') || norm.includes('salon') || norm.includes('barber')) {
-    return '/assets/categories/cat_beauty.jpg';
+    return 'assets/categories/cat_beauty.jpg';
   }
   if (norm.includes('clean') || norm.includes('maid') || norm.includes('wash') || norm.includes('laundry')) {
-    return '/assets/categories/cat_cleaning.jpg';
+    return 'assets/categories/cat_cleaning.jpg';
   }
   if (norm.includes('auto') || norm.includes('car') || norm.includes('mechanic') || norm.includes('vehicle')) {
-    return '/assets/categories/cat_automotive.jpg';
+    return 'assets/categories/cat_automotive.jpg';
   }
   if (norm.includes('solar') || norm.includes('inverter') || norm.includes('energy') || norm.includes('battery')) {
-    return '/assets/categories/cat_solar.jpg';
+    return 'assets/categories/cat_solar.jpg';
   }
   if (norm.includes('electr') || norm.includes('wiring') || norm.includes('power')) {
-    return '/assets/categories/cat_electrical.jpg';
+    return 'assets/categories/cat_electrical.jpg';
   }
   if (norm.includes('garden') || norm.includes('yard') || norm.includes('landscap') || norm.includes('lawn')) {
-    return '/assets/categories/cat_gardening.jpg';
+    return 'assets/categories/cat_gardening.jpg';
   }
   if (norm.includes('labour') || norm.includes('labor') || norm.includes('mover') || norm.includes('shift') || norm.includes('transport')) {
-    return '/assets/categories/cat_labour.jpg';
+    return 'assets/categories/cat_labour.jpg';
   }
-  return '/assets/categories/cat_repairs.jpg';
+  return 'assets/categories/cat_repairs.jpg';
 }
 
 function getCategoryTileBannerBg(catId) {
@@ -4980,7 +5033,7 @@ function renderCurvedBrandHeader(role = 'CUSTOMER', showSearch = true) {
       <div class="fh-curved-brand-header fh-modern-header fh-modern-header-customer">
         <div class="fh-header-top-row">
           <div class="fh-header-logo-badge" onclick="switchCustomerTab('PROFILE')" title="Findit Harare">
-            <img src="/assets/brand-logo-full.png" onerror="this.onerror=null; this.src='/assets/logo.png';" alt="Findit Logo" />
+            <img src="assets/brand-logo-full.png" onerror="this.onerror=null; this.src='assets/logo.png';" alt="Findit Logo" />
           </div>
           <div class="fh-header-actions">
             <button type="button" class="fh-header-bell-btn" onclick="openNotificationCenterModal()" title="Notifications">
@@ -5127,6 +5180,10 @@ function renderGlobalBottomNavDock() {
           </div>
           <span class="fh-nav-tab-label">My Jobs</span>
         </button>
+        <button type="button" class="fh-nav-tab-btn ${cur === 'EARNINGS' ? 'active' : ''}" onclick="switchProviderTab('EARNINGS')">
+          <div class="fh-nav-tab-icon">${uiIcon('wallet', 20)}</div>
+          <span class="fh-nav-tab-label">Earnings</span>
+        </button>
         <button type="button" class="fh-nav-tab-btn ${cur === 'PROFILE' ? 'active' : ''}" onclick="switchProviderTab('PROFILE')">
           <div class="fh-nav-tab-icon">${uiIcon('user', 20)}</div>
           <span class="fh-nav-tab-label">Profile</span>
@@ -5137,15 +5194,46 @@ function renderGlobalBottomNavDock() {
 }
 
 // ----------------------------------------------------------------------------
-// HOME DISCOVERY SCREEN (PHONE 1 & SCREEN 1: BRAND HEADER, SEARCH, CATEGORY GRID, FLOATING CTA)
+// HOME DISCOVERY SCREEN (SCREENSHOT 1 LEFT: OVER LIVE MAP, CLEAN, UNCROWDED)
 // ----------------------------------------------------------------------------
+function selectQuickHarareSuburbChip(suburbId, suburbName, lat, lng) {
+  state.selectedSuburbId = suburbId;
+  state.customSuburbLabel = `${suburbName}, Harare`;
+  state.customAddress = suburbName;
+  state.isCustomAddressSelected = true;
+  state.pinnedLat = lat;
+  state.pinnedLng = lng;
+  if (leafletMap) {
+    try { leafletMap.flyTo([lat, lng], 14, { duration: 0.6 }); } catch (e) {}
+  }
+  const lbl = document.getElementById('centerPinLabel');
+  if (lbl) lbl.textContent = `${suburbName}, Harare`;
+  lastUiOverlaySignature = '';
+  renderUiOverlay(true);
+}
+
+function selectQualityTierOnConfigure(tierKey) {
+  state.selectedTierKey = tierKey;
+  const categories = state.db?.categories || [];
+  const activeCat = categories.find((c) => c.id === state.selectedCategoryId) || categories[0];
+  const subServices = activeCat?.subServices || [];
+  const currentSub = subServices[state.selectedSubServiceIdx] || subServices[0] || { defaultUsd: 20 };
+  const baseUsd = Number(currentSub.defaultUsd || activeCat?.suggestedMinUsd || 20);
+  const multiplier = tierKey === 'PLATINUM' ? 1.4 : tierKey === 'COMFORT' ? 1.2 : 1.0;
+  const recUsd = Math.max(5, Math.round(baseUsd * multiplier));
+  state.recommendedFareUsd = recUsd;
+  state.draftFareUsd = recUsd;
+  lastUiOverlaySignature = '';
+  renderUiOverlay(true);
+}
+
 function renderHomeDiscoveryOverlay() {
   if (state.isSheetMinimized) {
     return `
       <div class="minimized-map-restore-bar" onclick="toggleSheetMinimize(false)">
         <div class="minimized-map-suburb-chip">
           <span class="live-pulse-dot" style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#0052FF;"></span>
-          <span style="display:inline-flex; align-items:center; gap:4px;">${uiIcon('pin', 13)} <span>Harare Map View (${escapeHtml(state.customSuburbLabel ? state.customSuburbLabel.split(',')[0] : 'Avondale')})</span></span>
+          <span style="display:inline-flex; align-items:center; gap:4px;">${uiIcon('pin', 13)} <span>${escapeHtml(state.customSuburbLabel ? state.customSuburbLabel.split(',')[0] : 'Avondale')}, Harare</span></span>
         </div>
         <button type="button" class="minimized-restore-btn" onclick="toggleSheetMinimize(false); event.stopPropagation();">
           <span>Show Services</span>
@@ -5155,111 +5243,98 @@ function renderHomeDiscoveryOverlay() {
     `;
   }
 
-  const categories = state.db?.categories || [];
-  const activeCategories = categories.filter((category) => category.status === 'ACTIVE');
-  const currentCat = activeCategories.find((c) => c.id === state.selectedCategoryId) || activeCategories[0] || categories[0];
-  const currentSub = (currentCat?.subServices || [])[state.selectedSubServiceIdx] || (currentCat?.subServices || [])[0] || {
-    name: currentCat?.fullName || currentCat?.name || 'Home Service',
-    defaultUsd: currentCat?.suggestedMinUsd || 25,
-    duration: '1.5 hrs'
-  };
-  const onlineProsCount = Math.max(1, (state.db?.providers || []).filter((p) => p.isOnline !== false && !p.isBanned).length);
-  const currentSuburbLabel = state.customAddress && state.customAddress !== 'Current Live Location'
-    ? `${state.customAddress}, ${state.customSuburbLabel ? state.customSuburbLabel.split(',')[0] : 'Avondale'}`
-    : (state.customSuburbLabel || 'Avondale, Harare');
+  const categories = (state.db?.categories || []).filter((c) => c.status === 'ACTIVE');
+  const user = state.currentUser;
+  const initials = user?.avatarInitials || (user?.name ? user.name.slice(0, 2).toUpperCase() : 'FH');
+  const activeSuburbShort = (state.customSuburbLabel || 'Avondale').split(',')[0].trim();
+
+  const quickLocations = [
+    { id: 'avondale', label: 'Avondale', lat: -17.7955, lng: 31.0365 },
+    { id: 'borrowdale', label: 'Borrowdale', lat: -17.7530, lng: 31.0880 },
+    { id: 'mt_pleasant', label: 'Mt Pleasant', lat: -17.7680, lng: 31.0450 },
+    { id: 'harare_cbd', label: 'Harare CBD', lat: -17.8292, lng: 31.0522 },
+    { id: 'eastlea', label: 'Eastlea', lat: -17.8190, lng: 31.0810 }
+  ];
 
   return `
-    ${renderCurvedBrandHeader('CUSTOMER', false)}
+    <div class="dg-screen-over-map">
+      <!-- Top Floating Bar over Live Harare Map (Screenshot 1 Left: Blank, Sweet, Smart & Simple) -->
+      <div class="dg-top-area">
+        <div class="dg-search-top-row">
+          <button type="button" class="dg-avatar-circle-btn" onclick="returnToMainHub()" title="Back to Hub">
+            ${user?.avatarUrl
+              ? `<img src="${resolveMediaUrl(user.avatarUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_AVATAR_FALLBACK}';" style="width:100%; height:100%; object-fit:cover;" alt="Me" />`
+              : `<span>${escapeHtml(initials)}</span>`
+            }
+          </button>
 
-    <div class="fh-main-screen-container fh-marketplace-discovery">
-      <!-- DriveGo Screen 01 Top Search Pill & Live Radar Strip -->
-      <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:10px;">
-        <div style="display:inline-flex; align-items:center; gap:6px; background:#EBF3FF; border:1px solid #BFDBFE; color:#0052FF; padding:5px 11px; border-radius:99px; font-size:11.5px; font-weight:800;">
-          <span style="width:7px; height:7px; border-radius:50%; background:#10B981; box-shadow:0 0 0 3px rgba(16,185,129,0.22); display:inline-block;"></span>
-          <span>${onlineProsCount} verified pro${onlineProsCount === 1 ? '' : 's'} online in Harare</span>
-        </div>
-        <button type="button" class="sheet-collapse-pill" style="background:#FFFFFF; border:1px solid #E2E8F0; color:#0F172A; height:30px; padding:0 10px; border-radius:99px; font-size:11.5px; font-weight:800; display:inline-flex; align-items:center; gap:4px; cursor:pointer;" onclick="toggleSheetMinimize(true)">
-          ${uiIcon('map', 12)}
-          <span>Map Radar</span>
-        </button>
-      </div>
+          <button type="button" class="dg-where-to-pill" onclick="focusSearchOrConfigure()">
+            <span style="color:#0F172A; display:inline-flex;">${uiIcon('search', 18)}</span>
+            <span>What service do you need?</span>
+          </button>
 
-      <button type="button" class="fh-marketplace-search" onclick="focusSearchOrConfigure()" style="margin-bottom:12px; border:1.5px solid #CBD5E1; box-shadow:0 6px 18px rgba(15,23,42,0.06);">
-        <span style="color:#0052FF; display:inline-flex;">${uiIcon('search', 19)}</span>
-        <span style="font-weight:800; color:#0F172A;">What service do you need?</span>
-        <span class="fh-marketplace-search-shortcut" style="background:#0052FF; color:#FFFFFF;">${uiIcon('arrowRight', 16)}</span>
-      </button>
-
-      <!-- DriveGo Screen 01 2-Row Route-Style Quick Request Card -->
-      <div style="background:#FFFFFF; border:1.5px solid #E2E8F0; border-radius:18px; padding:12px 14px; margin-bottom:14px; box-shadow:0 8px 24px rgba(15,23,42,0.05);">
-        <div style="position:relative; display:flex; flex-direction:column; gap:10px;">
-          <div style="position:absolute; left:9px; top:20px; bottom:20px; width:2px; background:linear-gradient(180deg, #0052FF 0%, #0F172A 100%); opacity:0.25;"></div>
-
-          <!-- Row 1: Services in Selected Category -->
-          <div onclick="openConfigureStep(state.selectedSubServiceIdx || 0)" style="display:flex; align-items:center; justify-content:space-between; gap:10px; background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px; padding:9px 11px; cursor:pointer;">
-            <div style="display:flex; align-items:center; gap:10px; min-width:0;">
-              <span style="width:10px; height:10px; border-radius:50%; background:#0052FF; box-shadow:0 0 0 3px rgba(0,82,255,0.18); flex-shrink:0;"></span>
-              <div style="min-width:0;">
-                <div style="font-size:10px; font-weight:800; color:#0052FF; text-transform:uppercase; letter-spacing:0.04em;">1. Selected Category &amp; Task</div>
-                <div style="font-size:13.5px; font-weight:800; color:#0F172A; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(currentSub.name)}</div>
-                <div style="font-size:11px; color:#64748B;">${escapeHtml(currentCat?.name || 'Service')} • Est. ${formatUsdPrice(state.draftFareUsd || currentSub.defaultUsd || 25)}</div>
-              </div>
-            </div>
-            <span style="color:#0052FF; display:inline-flex;">${uiIcon('chevronRight', 15)}</span>
-          </div>
-
-          <!-- Row 2: Service Location & Task Details -->
-          <div onclick="openConfigureStep(state.selectedSubServiceIdx || 0)" style="display:flex; align-items:center; justify-content:space-between; gap:10px; background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px; padding:9px 11px; cursor:pointer;">
-            <div style="display:flex; align-items:center; gap:10px; min-width:0;">
-              <span style="width:10px; height:10px; border-radius:2px; background:#0F172A; box-shadow:0 0 0 3px rgba(15,23,42,0.14); flex-shrink:0;"></span>
-              <div style="min-width:0;">
-                <div style="font-size:10px; font-weight:800; color:#64748B; text-transform:uppercase; letter-spacing:0.04em;">2. Service Location &amp; Task Details</div>
-                <div style="font-size:13px; font-weight:800; color:#0F172A; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(currentSuburbLabel)}</div>
-                <div style="font-size:11px; color:#64748B;">Add task note, photo or WhatsApp voice note</div>
-              </div>
-            </div>
-            <span style="color:#64748B; display:inline-flex;">${uiIcon('sliders', 15)}</span>
-          </div>
+          <button type="button" class="dg-map-circle-btn" onclick="useBrowserGeolocation(false)" title="My GPS Location">
+            ${uiIcon('crosshair', 18)}
+          </button>
         </div>
       </div>
 
-      <div class="fh-marketplace-section-head">
-        <div>
-          <div class="fh-marketplace-section-title">Select a service category</div>
-          <div class="fh-marketplace-section-subtitle">${activeCategories.length} verified specialist categories in Harare</div>
+      <!-- Half-Screen White Bottom Sheet over Live Map (Screenshot 1 Left) -->
+      <div class="dg-half-sheet">
+        <div class="dg-sheet-handle" onclick="toggleSheetMinimize(true)"></div>
+
+        <!-- Quick Location / Suburb Chips Row -->
+        <div class="dg-suburb-chips-row">
+          <button type="button" class="dg-suburb-chip" onclick="openSuburbPickerModal()">
+            <span style="color:#0052FF; display:inline-flex;">${uiIcon('pin', 14)}</span>
+            <span>${escapeHtml(activeSuburbShort)}</span>
+          </button>
+          ${quickLocations.map((loc) => {
+            const isSel = activeSuburbShort.toLowerCase() === loc.label.toLowerCase();
+            return `
+              <button
+                type="button"
+                class="dg-suburb-chip ${isSel ? 'is-active' : ''}"
+                onclick="selectQuickHarareSuburbChip('${loc.id}', '${loc.label}', ${loc.lat}, ${loc.lng})"
+              >
+                <span>${escapeHtml(loc.label)}</span>
+              </button>
+            `;
+          }).join('')}
         </div>
-      </div>
 
-      <div class="fh-category-grid fh-category-grid-modern">
-        ${categories.map((cat) => {
-          const isSelected = cat.id === state.selectedCategoryId;
-          const isActive = cat.status === 'ACTIVE';
-          const imgUrl = getCategoryTileImageUrl(cat.id);
-          return `
-            <div
-              class="fh-category-card ${isSelected ? 'selected' : ''} ${isActive ? '' : 'fh-category-inactive'}"
-              onclick="selectCategoryAndOpenRequest('${cat.id}')"
-            >
-              <div class="fh-category-card-img-wrap">
-                <img src="${imgUrl}" class="fh-category-card-real-img" alt="${escapeHtml(cat.name)}" loading="lazy" />
-                <div class="fh-category-card-img-overlay"></div>
-                ${isActive ? '' : '<span class="fh-category-status-badge">Coming Soon</span>'}
-              </div>
-              <div class="fh-category-card-info">
-                <div class="fh-category-card-title">${escapeHtml(getCategoryDisplayTitle(cat))}</div>
-                <span class="fh-category-card-arrow">${uiIcon('arrowRight', 14)}</span>
-              </div>
-            </div>
-          `;
-        }).join('')}
-      </div>
+        <!-- Clean Service Category Cards (Smart Vector Cards — Completely Different From Old Photo Grid) -->
+        <div class="dg-section-header">
+          <span class="dg-section-title">Service</span>
+          <button type="button" onclick="openConfigureStep(0)" style="background:none; border:none; color:#0052FF; font-size:12.5px; font-weight:800; cursor:pointer; padding:0;">
+            Find offers &rarr;
+          </button>
+        </div>
 
-      <div class="fh-floating-orange-cta-wrap">
-        <button type="button" class="fh-orange-pill-cta" onclick="openConfigureStep(0)">
-          ${uiIcon('briefcase', 18)}
-          <span>Find offers</span>
-          ${uiIcon('arrowRight', 17)}
-        </button>
+        <div class="dg-service-cards-scroll">
+          ${categories.map((cat) => {
+            const isSelected = cat.id === state.selectedCategoryId;
+            const taskCount = (cat.subServices || []).length || 5;
+            return `
+              <button
+                type="button"
+                class="dg-service-card ${isSelected ? 'is-selected' : ''}"
+                onclick="selectCategoryAndOpenRequest('${cat.id}')"
+              >
+                <div class="dg-service-card-icon">
+                  ${getCategoryVectorSvg(cat.id, isSelected)}
+                </div>
+                <div>
+                  <div class="dg-service-card-name">${escapeHtml(getCategoryDisplayTitle(cat))}</div>
+                  <div class="dg-service-card-meta" style="margin-top:4px;">
+                    <span>${taskCount} tasks • From $${cat.suggestedMinUsd || 15}</span>
+                    <span>&rsaquo;</span>
+                  </div>
+                </div>
+              </button>
+            `;
+          }).join('')}
+        </div>
       </div>
     </div>
   `;
@@ -5276,7 +5351,7 @@ function selectTopServiceShortcut(catId, subIdx) {
 }
 
 // ----------------------------------------------------------------------------
-// REQUEST A SERVICE SCREEN (DRIVEGO SCREEN 01 TWIN + FINDIT HARARE FEATURES)
+// FIND OFFERS / CONFIGURE SCREEN (SCREENSHOT 1 CENTER: HALF-SCREEN OVER LIVE MAP)
 // ----------------------------------------------------------------------------
 function renderConfigureFareOverlay() {
   if (state.isSheetMinimized) {
@@ -5284,283 +5359,237 @@ function renderConfigureFareOverlay() {
       <div class="minimized-map-restore-bar" onclick="toggleSheetMinimize(false)">
         <div class="minimized-map-suburb-chip">
           <span class="live-pulse-dot" style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#10B981;"></span>
-          <span style="display:inline-flex; align-items:center; gap:4px;">${uiIcon('pin', 13)} <span>Pin Location on Harare Map (${escapeHtml(state.customSuburbLabel ? state.customSuburbLabel.split(',')[0] : 'Avondale')})</span></span>
+          <span style="display:inline-flex; align-items:center; gap:4px;">${uiIcon('pin', 13)} <span>${escapeHtml(state.customSuburbLabel ? state.customSuburbLabel.split(',')[0] : 'Avondale')}, Harare</span></span>
         </div>
         <button type="button" class="minimized-restore-btn" onclick="toggleSheetMinimize(false); event.stopPropagation();" style="background:#0052FF; color:#FFFFFF;">
-          <span>Set Location</span>
+          <span>Done</span>
           ${uiIcon('chevronUp', 14)}
         </button>
       </div>
     `;
   }
 
-  const categories = state.db.categories || [];
+  const categories = state.db?.categories || [];
   const activeCategories = categories.filter((c) => c.status === 'ACTIVE');
   const activeCat = activeCategories.find((c) => c.id === state.selectedCategoryId) || activeCategories[0];
   if (!activeCat) {
     return `
-      <div class="fh-main-screen-container" style="padding-top:14px;">
-        <div class="fh-profile-card" style="text-align:center; padding:24px 18px;">
-          <div style="font-size:15px; font-weight:800; color:#0F172A;">No active service categories</div>
-          <div style="font-size:13px; color:#64748B; margin-top:6px;">Please check back when a service category is enabled.</div>
-          <button type="button" class="btn-dark-sec" style="margin-top:14px;" onclick="backToHomeStep()">Back to Browse</button>
+      <div class="dg-screen-over-map">
+        <div></div>
+        <div class="dg-half-sheet">
+          <div style="text-align:center; padding:20px;">
+            <div style="font-size:15px; font-weight:800; color:#0F172A;">No active service categories</div>
+            <button type="button" class="btn-dark-sec" style="margin-top:12px;" onclick="backToHomeStep()">Back</button>
+          </div>
         </div>
       </div>
     `;
   }
-  const subServices = activeCat?.subServices || [];
+
+  const subServices = activeCat.subServices || [];
   const currentSub = subServices[state.selectedSubServiceIdx] || subServices[0] || {
     name: activeCat.fullName || activeCat.name,
-    defaultUsd: activeCat.suggestedMinUsd
+    defaultUsd: activeCat.suggestedMinUsd || 20,
+    duration: '1.5 hrs'
   };
 
-  return `
-    <div class="fh-main-screen-container" style="padding-top:10px;">
-      <div class="fh-request-form-card" style="padding:14px;">
-        <!-- DriveGo Screen 01 Top Search Bar Header -->
-        <div class="fh-form-header-row" style="justify-content:space-between; margin-bottom:10px;">
-          <div style="display:flex; align-items:center; gap:8px; flex:1; min-width:0;">
-            <button type="button" class="fh-form-back-btn" onclick="backToHomeStep()" title="Back">
-              ${uiIcon('arrowLeft', 18)}
-            </button>
-            <button type="button" onclick="openServicePickerModal()" style="flex:1; display:flex; align-items:center; justify-content:space-between; gap:8px; background:#F8FAFC; border:1.5px solid #E2E8F0; border-radius:99px; padding:7px 12px; cursor:pointer; text-align:left; min-width:0;">
-              <span style="display:flex; align-items:center; gap:7px; min-width:0;">
-                <span style="color:#0052FF; display:inline-flex;">${uiIcon('search', 15)}</span>
-                <span style="font-size:12.5px; font-weight:800; color:#0F172A; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">What service do you need?</span>
-              </span>
-              <span style="font-size:10.5px; font-weight:800; color:#0052FF; background:#EBF3FF; padding:2px 8px; border-radius:99px; flex-shrink:0;">Tasks</span>
-            </button>
+  const baseRecUsd = Number(currentSub.defaultUsd || activeCat.suggestedMinUsd || 20);
+  const currentTier = ['STANDARD', 'COMFORT', 'PLATINUM'].includes(state.selectedTierKey) ? state.selectedTierKey : 'STANDARD';
+
+  const tiers = [
+    {
+      key: 'STANDARD',
+      title: 'Standard Pro',
+      subtitle: 'Verified Harare specialist at a fair price',
+      estUsd: baseRecUsd
+    },
+    {
+      key: 'COMFORT',
+      title: 'Priority Fast Pro',
+      subtitle: 'Top-rated rapid response & full mobile kit',
+      estUsd: Math.round(baseRecUsd * 1.2)
+    },
+    {
+      key: 'PLATINUM',
+      title: 'Platinum Master',
+      subtitle: 'Senior master specialist • 5+ yrs experience',
+      estUsd: Math.round(baseRecUsd * 1.4)
+    }
+  ];
+
+  const locationDisplay = state.customAddress && state.customAddress !== 'Current Live Location'
+    ? `${state.customAddress}, ${(state.customSuburbLabel || 'Avondale').split(',')[0]}`
+    : (state.customSuburbLabel || 'Avondale, Harare');
+
+  const renderTierOption = (t) => {
+    const isSel = t.key === currentTier;
+    if (!isSel) {
+      return `
+        <div class="dg-tier-row-compact" onclick="selectQualityTierOnConfigure('${t.key}')">
+          <div style="display:flex; align-items:center; gap:12px; min-width:0;">
+            <div class="dg-tier-icon-wrap" style="width:36px; height:36px; background:#F8FAFC; color:#0F172A;">
+              ${getCategoryVectorSvg(activeCat.id, false)}
+            </div>
+            <div style="min-width:0;">
+              <div style="font-size:14px; font-weight:800; color:#0F172A;">${escapeHtml(t.title)}</div>
+              <div style="font-size:11.5px; color:#64748B; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(t.subtitle)}</div>
+            </div>
           </div>
-          <button type="button" class="sheet-collapse-pill" style="height:34px; padding:0 10px; border-radius:99px; background:#F8FAFC; border:1px solid #E2E8F0; color:#0F172A; font-size:11px; font-weight:800; flex-shrink:0;" onclick="toggleSheetMinimize(true)">
-            ${uiIcon('map', 12)}
-            <span>Map</span>
-          </button>
+          <div style="font-size:14px; font-weight:800; color:#0F172A; flex-shrink:0;">~$${t.estUsd.toFixed(2)}</div>
         </div>
+      `;
+    }
 
-        <!-- Horizontal Service Category Strip (DriveGo Vehicle/Service Selector Twin) -->
-        <div style="display:flex; gap:6px; overflow-x:auto; padding-bottom:8px; margin-bottom:10px; scrollbar-width:none;">
-          ${activeCategories.map((cat) => {
-            const isSel = cat.id === activeCat.id;
-            return `
-              <button
-                type="button"
-                onclick="selectHomeCategory('${cat.id}')"
-                style="display:inline-flex; align-items:center; gap:6px; padding:6px 11px; border-radius:12px; border:1.5px solid ${isSel ? '#0052FF' : '#E2E8F0'}; background:${isSel ? '#0052FF' : '#F8FAFC'}; color:${isSel ? '#FFFFFF' : '#0F172A'}; font-size:11.5px; font-weight:800; white-space:nowrap; cursor:pointer; flex-shrink:0; transition:all 0.15s ease;"
-              >
-                <span style="display:inline-flex; transform:scale(0.78);">${getCategoryVectorSvg(cat.id, isSel)}</span>
-                <span>${escapeHtml(cat.shortName || cat.name)}</span>
-              </button>
-            `;
-          }).join('')}
-        </div>
-
-        <!-- DriveGo 2-Row Route Box: (1) Services in Selected Category & (2) Service & Task Details -->
-        <div style="position:relative; background:#F8FAFC; border:1.5px solid #E2E8F0; border-radius:16px; padding:10px 12px; margin-bottom:12px;">
-          <div style="position:absolute; left:21px; top:32px; bottom:56px; width:2px; background:linear-gradient(180deg, #0052FF 0%, #0F172A 100%); opacity:0.25; pointer-events:none;"></div>
-
-          <!-- ROW 1: Services in Selected Category -->
-          <div class="fh-form-select-card" onclick="openServicePickerModal()" style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:12px; padding:10px 12px; margin-bottom:8px; cursor:pointer;">
-            <div style="display:flex; align-items:center; gap:10px; min-width:0;">
-              <span style="width:10px; height:10px; border-radius:50%; background:#0052FF; box-shadow:0 0 0 3px rgba(0,82,255,0.2); flex-shrink:0;"></span>
-              <div style="color:#0052FF; display:inline-flex; flex-shrink:0;">${getCategoryVectorSvg(activeCat.id, false)}</div>
-              <div style="min-width:0;">
-                <div style="font-size:10px; font-weight:800; color:#0052FF; text-transform:uppercase; letter-spacing:0.04em;">Services in ${escapeHtml(activeCat.name)}</div>
-                <div style="font-size:14px; font-weight:800; color:#0F172A; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(currentSub.name)}</div>
-                <div style="font-size:11px; color:#64748B;">${currentSub.duration ? `~${escapeHtml(currentSub.duration)} • ` : ''}Recommended ${formatUsdPrice(currentSub.defaultUsd || state.recommendedFareUsd)}</div>
-              </div>
-            </div>
-            <span style="color:#0052FF; font-size:11px; font-weight:800; display:inline-flex; align-items:center; gap:3px; flex-shrink:0;">
-              <span>Change</span>
-              ${uiIcon('chevronDown', 14)}
-            </span>
+    return `
+      <div class="dg-tier-box-selected">
+        <div class="dg-tier-header-row">
+          <div class="dg-tier-icon-wrap">
+            ${getCategoryVectorSvg(activeCat.id, false)}
           </div>
-
-          <!-- ROW 2: Service Location & Task Details -->
-          <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:12px; padding:10px 12px;">
-            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
-              <div style="display:flex; align-items:center; gap:8px;">
-                <span style="width:10px; height:10px; border-radius:2px; background:#0F172A; box-shadow:0 0 0 3px rgba(15,23,42,0.14); flex-shrink:0;"></span>
-                <span style="font-size:10px; font-weight:800; color:#0F172A; text-transform:uppercase; letter-spacing:0.04em;">Service Location &amp; Task Details</span>
-              </div>
-              <span style="font-size:10.5px; color:${state.isLiveGpsActive ? '#059669' : '#0052FF'}; font-weight:800;">
-                ${state.isCustomAddressSelected
-                  ? 'Selected location'
-                  : state.isLiveGpsActive
-                    ? (state.gpsAccuracyMeters === null ? 'Live GPS fix' : `GPS ±${Math.round(state.gpsAccuracyMeters)}m`)
-                    : 'Set location'}
-              </span>
+          <div style="flex:1; min-width:0;">
+            <div style="display:flex; align-items:center; justify-content:space-between;">
+              <span style="font-size:14.5px; font-weight:800; color:#0F172A;">${escapeHtml(t.title)}</span>
+              <span style="font-size:11px; font-weight:800; color:#0052FF; background:#EFF6FF; padding:2px 8px; border-radius:99px;">${escapeHtml(currentSub.duration || 'ASAP')}</span>
             </div>
-
-            <div class="fh-loc-input-line" style="margin-bottom:8px;">
-              <span style="color:#0052FF; display:flex; align-items:center;">
-                ${uiIcon('pin', 17)}
-              </span>
-              <input
-                type="text"
-                id="requestServiceLocationInput"
-                class="fh-loc-text-field"
-                placeholder="Enter Harare address or suburb"
-                value="${escapeHtml(state.customAddress && state.customAddress !== 'Current Live Location' ? `${state.customAddress}, ${state.customSuburbLabel ? state.customSuburbLabel.split(',')[0] : 'Avondale'}` : (state.customSuburbLabel || 'Avondale, Harare'))}"
-                oninput="handleManualAddressInput(this.value)"
-              />
-            </div>
-
-            <div class="fh-loc-actions-bar" style="margin-bottom:8px;">
-              <button type="button" class="fh-loc-pill-btn ${state.isLiveGpsActive ? 'active-gps' : ''}" onclick="useBrowserGeolocation(false)" title="Use Live GPS">
-                <span class="live-pulse-dot" style="width:7px; height:7px; background:#10B981; border-radius:50%; display:inline-block;"></span>
-                <span>Live GPS</span>
-              </button>
-              <button type="button" class="fh-loc-pill-btn" onclick="toggleSheetMinimize(true)" title="Pick on Map">
-                ${uiIcon('map', 13)}
-                <span>Pick on Map</span>
-              </button>
-              <button type="button" class="fh-loc-pill-btn" onclick="openSuburbPickerModal()" title="Choose Suburb">
-                ${uiIcon('suburb', 13)}
-                <span>Suburbs</span>
-              </button>
-            </div>
-
-            <!-- Inline Task Description & Quick Preset Modal Trigger -->
-            <div style="border-top:1px dashed #E2E8F0; padding-top:8px;">
-              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                <span style="font-size:11px; font-weight:800; color:#475569;">Task Instructions &amp; Notes</span>
-                <div style="display:flex; align-items:center; gap:8px;">
-                  <button type="button" onclick="openNotesModal()" style="background:none; border:none; color:#0052FF; font-size:11px; font-weight:800; cursor:pointer; padding:0;">+ Preset chips</button>
-                  <span class="fh-form-counter" id="descCharCounter" style="font-size:10.5px;">${(state.draftNotes || '').length}/500</span>
-                </div>
-              </div>
-              <textarea
-                class="fh-form-textarea"
-                rows="2"
-                style="min-height:54px; padding:8px 10px; font-size:12.5px;"
-                placeholder="Describe your task (e.g. Fix leaking kitchen tap, bring tools)..."
-                maxlength="500"
-                oninput="handleDraftNotesInput(this)"
-              >${escapeHtml(state.draftNotes || '')}</textarea>
-            </div>
+            <div style="font-size:11.5px; color:#64748B;">${escapeHtml(t.subtitle)}</div>
           </div>
         </div>
 
-        <!-- Media Attachments Row: Photo + WhatsApp Voice Note Chips -->
-        <div class="fh-media-row" style="margin-bottom:10px;">
-          <input type="file" id="stylePhotoInput" accept="image/*" style="display:none;" onchange="handleDraftStylePhotoUpload(this)" />
+        <!-- Fare Stepper (- $20.00 +) matching Screenshot 1 Center -->
+        <div class="dg-fare-stepper-row">
+          <button type="button" class="dg-fare-step-btn" onclick="adjustDraftFare(-1)">&minus;</button>
+          <div class="dg-fare-center-display">
+            <div class="dg-fare-amount-txt">$ ${Number(state.draftFareUsd || baseRecUsd).toFixed(2)}</div>
+            <div class="dg-fare-rec-sub">Recommended fare • $${Number(state.recommendedFareUsd || baseRecUsd).toFixed(2)}</div>
+          </div>
+          <button type="button" class="dg-fare-step-btn" onclick="adjustDraftFare(1)">+</button>
+        </div>
+
+        <!-- Optional Compact Media & Note Chips inside Selected Quality Box -->
+        <input type="file" id="stylePhotoInput" accept="image/*" style="display:none;" onchange="handleDraftStylePhotoUpload(this)" />
+        <div class="dg-media-mini-chips">
           ${state.draftPhotoUrl ? `
-            <div class="fh-media-card" style="border-style:solid; border-color:#0052FF; background:#EFF6FF;" onclick="openImagePreviewModal('${state.draftPhotoUrl}', 'Attached Photo')">
-              <img src="${resolveMediaUrl(state.draftPhotoUrl, 'task')}" onerror="this.onerror=null; this.src='${DEFAULT_TASK_PHOTO_FALLBACK}';" style="width:34px; height:34px; border-radius:8px; object-fit:cover;" alt="Photo" />
-              <div style="font-size:11px; font-weight:800; color:#0052FF;">Photo Attached</div>
-              <span style="font-size:10px; color:#DC2626;" onclick="event.stopPropagation(); removeDraftStylePhoto();">Remove</span>
-            </div>
+            <button type="button" class="dg-media-mini-chip has-value" onclick="openImagePreviewModal('${state.draftPhotoUrl}', 'Attached Photo')">
+              ${uiIcon('camera', 13)}
+              <span>Photo added</span>
+              <span style="color:#DC2626; margin-left:3px;" onclick="event.stopPropagation(); removeDraftStylePhoto();">&times;</span>
+            </button>
           ` : `
-            <div class="fh-media-card" onclick="document.getElementById('stylePhotoInput').click()">
-              <span style="color:#0052FF;">${uiIcon('camera', 20)}</span>
-              <div style="font-size:11.5px; font-weight:700; color:#0F172A;">Add Photo</div>
-              <div style="font-size:10px; color:#94A3B8;">Task / Style Ref</div>
-            </div>
+            <button type="button" class="dg-media-mini-chip" onclick="document.getElementById('stylePhotoInput').click()">
+              ${uiIcon('camera', 13)}
+              <span>Add photo (optional)</span>
+            </button>
           `}
 
           ${state.draftVoiceNoteUrl ? `
-            <div class="fh-wa-voice-player-bar">
-              <button type="button" class="fh-wa-voice-btn" style="background:#10B981; color:#FFF; width:32px; height:32px;" onclick="playAudioFromUrl('${state.draftVoiceNoteUrl}')" title="Play Voice Note">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 3 20 12 6 21 6 3"/></svg>
-              </button>
-              <div style="flex:1; min-width:0;">
-                <div style="font-size:11.5px; font-weight:800; color:#15803D;">Voice Note Attached</div>
-                <div style="font-size:10px; color:#166534;">${formatVoiceSeconds(state.draftVoiceNoteDuration || 5)} • Ready to send</div>
-              </div>
-              <button type="button" class="fh-wa-voice-btn" style="color:#DC2626;" onclick="removeDraftVoiceNote()" title="Delete Voice Note">
-                ${uiIcon('trash', 16)}
-              </button>
-            </div>
-          ` : state.isRecordingVoiceNote ? `
-            <div class="fh-wa-voice-recording-bar">
-              <div class="fh-wa-voice-dot"></div>
-              <span class="fh-wa-voice-timer" id="voiceNoteTimerLabel">${formatVoiceSeconds(state.voiceNoteRecordSeconds)}</span>
-              <div class="fh-wa-voice-waveform">
-                <span class="fh-wa-wave-bar" style="animation-delay:0.1s; height:8px;"></span>
-                <span class="fh-wa-wave-bar" style="animation-delay:0.3s; height:14px;"></span>
-                <span class="fh-wa-wave-bar" style="animation-delay:0.2s; height:18px;"></span>
-                <span class="fh-wa-wave-bar" style="animation-delay:0.4s; height:10px;"></span>
-                <span class="fh-wa-wave-bar" style="animation-delay:0.15s; height:16px;"></span>
-                <span class="fh-wa-wave-bar" style="animation-delay:0.35s; height:6px;"></span>
-                <span class="fh-wa-wave-bar" style="animation-delay:0.25s; height:12px;"></span>
-              </div>
-              <button type="button" class="fh-wa-voice-btn" style="color:#64748B;" onclick="togglePauseResumeVoiceNote()" title="${state.isVoiceNotePaused ? 'Resume' : 'Pause'}">
-                ${state.isVoiceNotePaused
-                  ? `<svg width="18" height="18" viewBox="0 0 24 24" fill="#0052FF"><polygon points="5 3 19 12 5 21 5 3"/></svg>`
-                  : `<svg width="18" height="18" viewBox="0 0 24 24" fill="#64748B"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>`
-                }
-              </button>
-              <button type="button" class="fh-wa-voice-btn" style="color:#DC2626;" onclick="cancelVoiceNoteRecording()" title="Cancel & Delete">
-                ${uiIcon('trash', 18)}
-              </button>
-              <button type="button" class="fh-wa-voice-btn" style="background:#10B981; color:#FFFFFF; width:30px; height:30px;" onclick="stopRecordingVoiceNote()" title="Finish Recording">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
-              </button>
-            </div>
-          ` : `
-            <div class="fh-media-card" onclick="startRecordingVoiceNote()">
-              <div class="fh-media-voice-btn-circle">
-                ${uiIcon('mic', 17)}
-              </div>
-              <div style="font-size:11.5px; font-weight:700; color:#0F172A;">Voice Note</div>
-              <div style="font-size:10px; color:#94A3B8;">WhatsApp Style</div>
-            </div>
-          `}
-        </div>
-
-        <!-- DriveGo Screen 01 Fare Stepper (- $25.00 +) & Payment Pill -->
-        <div class="fh-form-group" style="margin-bottom:10px;">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-            <span class="fh-form-label">Offer your fare (USD)</span>
-            <button type="button" onclick="openPaymentModal()" style="display:inline-flex; align-items:center; gap:5px; background:#EBF3FF; border:1px solid #BFDBFE; color:#0052FF; padding:3px 10px; border-radius:99px; font-size:11px; font-weight:800; cursor:pointer;">
-              ${uiIcon('wallet', 12)}
-              <span>${escapeHtml(state.draftPaymentMethod || 'Cash USD')}</span>
-              ${uiIcon('chevronDown', 11)}
+            <button type="button" class="dg-media-mini-chip has-value" onclick="playAudioFromUrl('${state.draftVoiceNoteUrl}')">
+              ${uiIcon('mic', 13)}
+              <span>Voice (${formatVoiceSeconds(state.draftVoiceNoteDuration || 5)})</span>
+              <span style="color:#DC2626; margin-left:3px;" onclick="event.stopPropagation(); removeDraftVoiceNote();">&times;</span>
             </button>
+          ` : state.isRecordingVoiceNote ? `
+            <button type="button" class="dg-media-mini-chip has-value" style="background:#FEF2F2; border-color:#FECACA; color:#DC2626;" onclick="stopRecordingVoiceNote()">
+              <span style="width:7px; height:7px; border-radius:50%; background:#DC2626; display:inline-block;"></span>
+              <span id="voiceNoteTimerLabel">${formatVoiceSeconds(state.voiceNoteRecordSeconds)}</span>
+              <span>• Tap to stop</span>
+            </button>
+          ` : `
+            <button type="button" class="dg-media-mini-chip" onclick="startRecordingVoiceNote()">
+              ${uiIcon('mic', 13)}
+              <span>Voice note (optional)</span>
+            </button>
+          `}
+
+          <button type="button" class="dg-media-mini-chip ${state.draftNotes ? 'has-value' : ''}" onclick="openNotesModal()">
+            ${uiIcon('notes', 13)}
+            <span>${state.draftNotes ? 'Note added' : 'Task note'}</span>
+          </button>
+        </div>
+      </div>
+    `;
+  };
+
+  return `
+    <div class="dg-screen-over-map">
+      <!-- Top Floating Location & Route Card Over Map + Back Button (Screenshot 1 Center) -->
+      <div class="dg-top-area">
+        <div class="dg-route-top-card">
+          <div class="dg-route-top-row" onclick="openSuburbPickerModal()" style="cursor:pointer;">
+            <span style="width:9px; height:9px; border-radius:50%; background:#0052FF; flex-shrink:0;"></span>
+            <span style="flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(locationDisplay)}</span>
+            <span style="font-size:11px; color:#0052FF; font-weight:800;">Location</span>
           </div>
-          <div class="fh-budget-input-wrap">
-            <button type="button" class="fh-budget-adjust-btn" onclick="adjustDraftFare(-1)">−</button>
-            <div class="fh-budget-amount-box">
-              <div class="fh-budget-amount-val">${formatUsdPrice(state.draftFareUsd)}</div>
-              <div class="fh-budget-rec-text">Recommended: ${formatUsdPrice(state.recommendedFareUsd)}</div>
-            </div>
-            <button type="button" class="fh-budget-adjust-btn" onclick="adjustDraftFare(1)">+</button>
+          <div class="dg-route-top-divider"></div>
+          <div class="dg-route-top-row" onclick="openServicePickerModal()" style="cursor:pointer;">
+            <span style="width:9px; height:9px; border-radius:2px; background:#0F172A; flex-shrink:0;"></span>
+            <span style="flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(currentSub.name)}</span>
+            <span style="font-size:11px; color:#64748B; font-weight:700;">${escapeHtml(activeCat.shortName || activeCat.name)} &rsaquo;</span>
           </div>
         </div>
 
-        <!-- Submit / Find Offers CTA -->
-        <button type="button" class="fh-orange-pill-cta" style="margin-top:4px;" onclick="submitServiceRequest()">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <button type="button" class="dg-map-circle-btn" onclick="backToHomeStep()" title="Back">
+            ${uiIcon('arrowLeft', 18)}
+          </button>
+          <button type="button" class="dg-map-circle-btn" onclick="toggleSheetMinimize(true)" title="View Full Map">
+            ${uiIcon('map', 17)}
+          </button>
+        </div>
+      </div>
+
+      <!-- Half-Screen White Bottom Sheet over Live Harare Map (Screenshot 1 Center) -->
+      <div class="dg-half-sheet">
+        <div class="dg-sheet-handle" onclick="toggleSheetMinimize(true)"></div>
+
+        <!-- Sub-Service Quick Pills -->
+        ${subServices.length > 1 ? `
+          <div class="dg-suburb-chips-row">
+            ${subServices.map((sub, idx) => {
+              const isSubSel = idx === (state.selectedSubServiceIdx || 0);
+              return `
+                <button
+                  type="button"
+                  class="dg-suburb-chip ${isSubSel ? 'is-active' : ''}"
+                  onclick="pickSubService(${idx})"
+                >
+                  <span>${escapeHtml(sub.name)}</span>
+                </button>
+              `;
+            }).join('')}
+          </div>
+        ` : ''}
+
+        <!-- Quality Tiers (Selected Box + Compact Rows) -->
+        <div style="display:flex; flex-direction:column; gap:6px;">
+          ${tiers.map((t) => renderTierOption(t)).join('')}
+        </div>
+
+        <!-- Primary Dark "Find offers" Button (Screenshot 1 Center) -->
+        <button type="button" class="dg-primary-dark-btn" onclick="submitServiceRequest()">
           <span>Find offers</span>
-          ${uiIcon('arrowRight', 17)}
         </button>
+
+        <!-- Clean Payment Label at Bottom (No Schedule for Later) -->
+        <div style="text-align:center;">
+          <button type="button" onclick="openPaymentModal()" style="background:none; border:none; color:#64748B; font-size:12px; font-weight:700; cursor:pointer; display:inline-flex; align-items:center; gap:5px; padding:2px 8px;">
+            ${uiIcon('wallet', 13)}
+            <span>${escapeHtml(state.draftPaymentMethod || 'Cash USD')} payment</span>
+            ${uiIcon('chevronDown', 11)}
+          </button>
+        </div>
       </div>
     </div>
   `;
 }
 
 // ----------------------------------------------------------------------------
-// OFFERS RECEIVED SCREEN (DRIVEGO SCREEN 02 TWIN: COMPARE OFFERS WITH DECLINE & ACCEPT)
+// OFFERS RECEIVED SCREEN (SCREENSHOT 2 CENTER: FLOATING OVER LIVE MAP)
 // ----------------------------------------------------------------------------
 function renderCompareOffersOverlay(req) {
   if (!req) req = getCustomerActiveRequest();
 
   if (req && (isBookedStatus(req.status) || req.acceptedOfferId)) {
-    return `
-      <div class="fh-main-screen-container" style="padding-top:14px;">
-        <div class="fh-request-form-card" style="text-align:center; padding:28px 18px;">
-          <div style="width:58px; height:58px; border-radius:50%; background:#ECFDF5; color:#10B981; display:flex; align-items:center; justify-content:center; margin:0 auto 14px;">
-            ${uiIcon('check', 28)}
-          </div>
-          <div style="font-size:17px; font-weight:800; color:#0F172A; margin-bottom:6px;">Offer Accepted!</div>
-          <div style="font-size:13px; color:#64748B; margin-bottom:20px; line-height:1.4;">
-            ${escapeHtml(req.acceptedProviderName || 'Specialist')} is confirmed. Track their route and find your Arrival Start PIN on the Home screen.
-          </div>
-          <button type="button" class="btn-primary-blue" style="width:100%; height:46px; font-weight:800; background:#0052FF;" onclick="switchCustomerTab('HOME')">
-            <span>View Live Tracking &amp; Start PIN</span>
-          </button>
-        </div>
-      </div>
-    `;
+    return renderBookedTrackingOverlay(req);
   }
 
   const activeOffers = (req?.offers || []).filter((o) => o.status !== 'DECLINED');
@@ -5572,82 +5601,89 @@ function renderCompareOffersOverlay(req) {
   });
 
   return `
-    <div class="fh-main-screen-container" style="padding-top:14px;">
-      <!-- Header -->
-      <div class="fh-form-header-row" style="margin-bottom:12px;">
-        <button type="button" class="fh-form-back-btn" onclick="switchCustomerTab('HOME')" title="Back">
-          ${uiIcon('arrowLeft', 18)}
-        </button>
-        <div>
-          <div class="fh-form-header-title">Offers Received</div>
-          <div style="font-size:12px; color:#64748B; font-weight:600;">${activeOffers.length} offer${activeOffers.length !== 1 ? 's' : ''} for this request</div>
+    <div class="dg-screen-over-map" style="background:rgba(15,23,42,0.38); pointer-events:auto;">
+      <div class="dg-top-area" style="gap:12px;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          ${req ? `
+            <button type="button" class="cancel-request-red-pill" onclick="openCancelTaskModal('${req.id}')">
+              ${uiIcon('close', 14)}
+              <span>Cancel request</span>
+            </button>
+          ` : `
+            <button type="button" class="dg-map-circle-btn" onclick="switchCustomerTab('HOME')">
+              ${uiIcon('arrowLeft', 18)}
+            </button>
+          `}
         </div>
-      </div>
 
-      ${req ? `
-        <!-- Request Summary Banner -->
-        <div class="fh-request-summary-banner" style="margin-bottom:14px;">
-          <div class="fh-request-summary-thumb" style="display:flex; align-items:center; justify-content:center; color:#0052FF;">
-            ${getCategoryVectorSvg(req.categoryId, false)}
+        <div style="padding:0 4px;">
+          <div style="font-size:24px; font-weight:900; color:#FFFFFF; letter-spacing:-0.02em;">Choose a specialist</div>
+          <div style="display:inline-flex; align-items:center; gap:6px; font-size:13px; font-weight:700; color:#E2E8F0; margin-top:4px;">
+            <span style="display:inline-flex; width:16px; height:16px; border-radius:4px; background:#0052FF; color:#FFFFFF; align-items:center; justify-content:center;">${uiIcon('check', 11)}</span>
+            <span>All specialists are verified</span>
           </div>
-          <div style="flex:1; min-width:0;">
-            <div style="font-size:14px; font-weight:800; color:#0F172A;">${escapeHtml(req.title)}</div>
-            <div style="font-size:12px; color:#64748B; display:flex; align-items:center; gap:4px; margin-top:2px;">
-              <span style="display:inline-flex; align-items:center; gap:3px;">${uiIcon('pin', 12)} <span>${escapeHtml(req.suburbName || 'Harare')}</span></span>
-              <span>•</span>
-              <span style="font-weight:700; color:#0052FF;">$${req.budgetUsd}</span>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:10px; max-height:68vh; overflow-y:auto; padding-bottom:84px;">
+          ${activeOffers.length === 0 ? `
+            <div class="dg-floating-request-card" style="text-align:center; padding:24px 18px;">
+              <div style="font-size:15.5px; font-weight:800; color:#0F172A;">Waiting for specialist offers...</div>
+              <div style="font-size:12.5px; color:#64748B; margin-top:4px;">Nearby verified Harare specialists are reviewing your request on the live map.</div>
+              <button type="button" class="dg-primary-blue-btn" style="height:42px; font-size:13.5px; margin-top:10px;" onclick="switchCustomerTab('HOME')">
+                <span>Back to Live Radar</span>
+              </button>
             </div>
-          </div>
-        </div>
-      ` : ''}
-
-      ${activeOffers.length === 0 ? `
-        <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:18px; padding:32px 16px; text-align:center;">
-          <div style="font-size:15px; font-weight:800; color:#0F172A; margin-bottom:6px;">No offers yet</div>
-          <div style="font-size:12.5px; color:#64748B; max-width:260px; margin:0 auto 16px;">Nearby Harare specialists are reviewing your request. Offers will appear here in real time.</div>
-          <button type="button" class="btn-primary-blue" style="width:auto; height:36px; padding:0 18px; margin:0 auto;" onclick="switchCustomerTab('HOME')">View Live Radar</button>
-        </div>
-      ` : `
-        <div class="fh-offers-container">
-          ${activeOffers.map((offer) => {
+          ` : activeOffers.map((offer) => {
             const prov = resolveProviderByIdOrOffer(offer.providerId, req, offer);
-            const distKm = (offer.distanceKm || calculateDistanceKm(prov?.lat, prov?.lng, req.lat, req.lng) || 2.4).toFixed(1);
-            const isYourFare = Number(offer.priceUsd) <= Number(req.budgetUsd);
+            const fullName = offer.providerName || prov?.name || 'Verified Specialist';
+            const brandLabel = offer.providerBrand || prov?.brandName || 'Verified Home Service';
+            const ratingVal = Number(offer.providerRating ?? prov?.rating ?? 5.0).toFixed(1);
+            const jobsVal = offer.providerCompletedJobs ?? prov?.completedBookings ?? 1;
+            const etaMins = offer.etaMinutes || 4;
             return `
-              <div class="fh-provider-offer-card">
-                <div class="fh-offer-card-top">
-                  <div class="fh-offer-provider-left">
-                    <img
-                      src="${resolveMediaUrl(prov?.avatarUrl)}"
-                      onerror="this.onerror=null; this.src='${DEFAULT_AVATAR_FALLBACK}';"
-                      class="fh-offer-avatar"
-                      alt="${escapeHtml(offer.providerName || prov?.name || 'Pro')}"
-                    />
-                    <div style="min-width:0; flex:1;">
-                      <div class="fh-offer-name-row">
-                        <span class="fh-offer-name">${escapeHtml(offer.providerName || prov?.name || 'Harare Pro')}</span>
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="#0052FF"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
-                      </div>
-                      <div class="fh-offer-meta-row">
-                        ${formatProRatingAndJobs(offer.providerRating ?? prov?.rating, offer.providerCompletedJobs ?? prov?.completedBookings)}
-                      </div>
-                      <div style="font-size:11px; color:#10B981; font-weight:700; margin-top:2px; display:flex; align-items:center; gap:5px;">
-                        <span>● Available Today • ${distKm} km • ~${offer.etaMinutes || 5} min</span>
-                        ${isYourFare ? `<span style="background:#ECFDF5; color:#059669; border:1px solid #A7F3D0; padding:1px 6px; border-radius:99px; font-size:10px; font-weight:800;">Your fare</span>` : ''}
-                      </div>
-                    </div>
+              <div class="dg-floating-request-card">
+                <div style="display:flex; align-items:baseline; justify-content:space-between;">
+                  <div style="display:flex; align-items:baseline; gap:8px;">
+                    <span style="font-size:24px; font-weight:900; color:#0F172A;">$ ${Number(offer.priceUsd).toFixed(2)}</span>
+                    <span style="font-size:15px; font-weight:700; color:#64748B;">${etaMins} min</span>
                   </div>
-                  <div class="fh-offer-price-tag">$${offer.priceUsd}</div>
+                  <button type="button" onclick="openProviderPortfolioModal('${prov?.id || offer.providerId}')" style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:99px; padding:4px 10px; font-size:11px; font-weight:800; color:#0052FF; cursor:pointer;">
+                    Catalogue &rsaquo;
+                  </button>
                 </div>
 
-                <div class="fh-offer-actions-row" style="display:grid; grid-template-columns:0.9fr 1fr 1.2fr; gap:8px;">
-                  <button type="button" class="fh-btn-ghost" style="color:#DC2626; border-color:#FECACA; background:#FFF1F2;" onclick="declineOffer('${req.id}', '${offer.id}')">
+                <div style="display:flex; align-items:center; gap:10px;">
+                  <img
+                    src="${resolveMediaUrl(prov?.avatarUrl)}"
+                    onerror="this.onerror=null; this.src='${DEFAULT_AVATAR_FALLBACK}';"
+                    style="width:42px; height:42px; border-radius:50%; object-fit:cover; border:1.5px solid #E2E8F0; flex-shrink:0;"
+                    alt="${escapeHtml(fullName)}"
+                  />
+                  <div style="min-width:0; flex:1;">
+                    <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                      <span style="font-size:14.5px; font-weight:800; color:#0F172A;">${escapeHtml(fullName)}</span>
+                      <span style="font-size:12.5px; font-weight:800; color:#0F172A; display:inline-flex; align-items:center; gap:2px;">
+                        <span style="color:#0052FF;">&#9733;</span> ${ratingVal}
+                      </span>
+                      <span style="font-size:12px; color:#64748B; font-weight:600;">${jobsVal} jobs</span>
+                    </div>
+                    <div style="font-size:12px; color:#64748B; font-weight:600;">${escapeHtml(brandLabel)}</div>
+                  </div>
+                </div>
+
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:2px;">
+                  <button
+                    type="button"
+                    onclick="declineOffer('${req.id}', '${offer.id}')"
+                    style="height:44px; border-radius:12px; border:none; background:#F1F5F9; color:#0F172A; font-size:14px; font-weight:800; cursor:pointer;"
+                  >
                     Decline
                   </button>
-                  <button type="button" class="fh-btn-ghost" onclick="openProviderPortfolioModal('${prov?.id || offer.providerId}')">
-                    Portfolio
-                  </button>
-                  <button type="button" class="fh-btn-orange" onclick="acceptOffer('${req.id}', '${offer.id}')">
+                  <button
+                    type="button"
+                    onclick="acceptOffer('${req.id}', '${offer.id}')"
+                    style="height:44px; border-radius:12px; border:none; background:#0052FF; color:#FFFFFF; font-size:14px; font-weight:800; cursor:pointer; box-shadow:0 6px 16px rgba(0,82,255,0.28);"
+                  >
                     Accept
                   </button>
                 </div>
@@ -5655,7 +5691,8 @@ function renderCompareOffersOverlay(req) {
             `;
           }).join('')}
         </div>
-      `}
+      </div>
+      <div></div>
     </div>
   `;
 }
@@ -5668,38 +5705,41 @@ function renderCustomerRequestsTab() {
   const pastRequests = (state.db?.requests || []).filter((r) => r.customerId === state.currentUser?.id && r.status === 'COMPLETED');
 
   return `
-    <div class="fh-main-screen-container" style="padding-top:14px;">
-      <div style="font-size:18px; font-weight:800; color:#0F172A; margin-bottom:12px;">My Requests</div>
+    <div class="fh-main-screen-container" style="padding-top:calc(env(safe-area-inset-top, 12px) + 14px);">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
+        <div style="font-size:22px; font-weight:900; color:#0F172A;">Activity</div>
+        <button type="button" class="btn-dark-sec" style="height:34px; padding:0 12px; font-size:12px;" onclick="switchCustomerTab('HOME')">+ New Request</button>
+      </div>
 
       ${req ? `
-        <div class="fh-request-form-card" style="border:1.5px solid #0052FF; margin-bottom:16px;">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-            <span style="background:#EFF6FF; color:#0052FF; font-size:11px; font-weight:800; padding:3px 10px; border-radius:99px;">Active: ${req.status}</span>
-            <span style="font-size:15px; font-weight:800; color:#0052FF;">$${req.budgetUsd}</span>
+        <div style="background:#FFFFFF; border:2px solid #0052FF; border-radius:18px; padding:14px 16px; margin-bottom:16px; box-shadow:0 6px 20px rgba(0,82,255,0.08);">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <span style="background:#EFF6FF; color:#0052FF; font-size:11px; font-weight:800; padding:3px 10px; border-radius:99px;">Active • ${escapeHtml(req.status)}</span>
+            <span style="font-size:16px; font-weight:900; color:#0F172A;">$${Number(req.agreedTotalUsd || req.budgetUsd).toFixed(2)}</span>
           </div>
-          <div style="font-size:15px; font-weight:800; color:#0F172A; margin-bottom:2px;">${escapeHtml(req.title)}</div>
-          <div style="font-size:12px; color:#64748B; margin-bottom:12px; display:flex; align-items:center; gap:4px;">${uiIcon('pin', 12)} <span>${escapeHtml(req.suburbName || 'Harare')}</span></div>
-          <button type="button" class="fh-orange-pill-cta" style="height:40px; font-size:13px;" onclick="switchCustomerTab('HOME')">
-            View Live Status
+          <div style="font-size:15px; font-weight:800; color:#0F172A;">${escapeHtml(req.title)}</div>
+          <div style="font-size:12px; color:#64748B; margin:4px 0 12px; display:flex; align-items:center; gap:4px;">${uiIcon('pin', 12)} <span>${escapeHtml(req.exactAddress || req.suburbName || 'Harare')}</span></div>
+          <button type="button" class="dg-primary-blue-btn" style="height:42px; font-size:13.5px;" onclick="switchCustomerTab('HOME')">
+            <span>Open Live Map Tracking</span>
           </button>
         </div>
       ` : ''}
 
-      <div style="font-size:13px; font-weight:800; color:#64748B; text-transform:uppercase; margin-bottom:8px;">Past Visits</div>
+      <div style="font-size:12px; font-weight:800; color:#64748B; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:8px;">Completed Visits</div>
 
       ${pastRequests.length === 0 ? `
-        <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:16px; padding:24px; text-align:center; color:#64748B; font-size:13px;">
-          No past completed requests yet.
+        <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:18px; padding:28px 16px; text-align:center; color:#64748B; font-size:13px;">
+          No completed service visits yet.
         </div>
       ` : `
         <div style="display:flex; flex-direction:column; gap:8px;">
           ${pastRequests.map((r) => `
-            <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:14px; padding:12px 14px; display:flex; justify-content:space-between; align-items:center;">
+            <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:16px; padding:13px 15px; display:flex; justify-content:space-between; align-items:center;">
               <div>
-                <div style="font-size:13.5px; font-weight:800; color:#0F172A;">${escapeHtml(r.title)}</div>
-                <div style="font-size:11.5px; color:#64748B; display:flex; align-items:center; gap:4px;">${uiIcon('pin', 11)} <span>${escapeHtml(r.suburbName || 'Harare')} • Completed</span></div>
+                <div style="font-size:14px; font-weight:800; color:#0F172A;">${escapeHtml(r.title)}</div>
+                <div style="font-size:12px; color:#64748B; margin-top:2px;">${escapeHtml(r.acceptedProviderName || 'Specialist')} • ${escapeHtml(r.suburbName || 'Harare')}</div>
               </div>
-              <div style="font-size:14px; font-weight:800; color:#0052FF;">$${r.agreedTotalUsd || r.budgetUsd}</div>
+              <div style="font-size:15px; font-weight:900; color:#0F172A;">$${Number(r.agreedTotalUsd || r.budgetUsd).toFixed(2)}</div>
             </div>
           `).join('')}
         </div>
@@ -5709,19 +5749,20 @@ function renderCustomerRequestsTab() {
 }
 
 // ----------------------------------------------------------------------------
-// CUSTOMER PROFILE TAB
+// CUSTOMER PROFILE TAB (CLEAN, MODERN, UNCROWDED)
 // ----------------------------------------------------------------------------
 function renderCustomerProfileTab() {
   if (!state.isAuthenticated) {
     return `
-      <div class="fh-main-screen-container" style="padding-top:14px;">
-        <div class="fh-profile-card" style="margin-bottom:12px; text-align:center; padding:24px 18px;">
-          <div class="drawer-avatar-circle" style="width:60px; height:60px; margin:0 auto 12px; border-radius:50%; background:#EFF6FF; color:#0052FF; display:flex; align-items:center; justify-content:center;">
-            ${uiIcon('user', 26)}
+      <div class="fh-main-screen-container" style="padding-top:calc(env(safe-area-inset-top, 12px) + 20px);">
+        <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:22px; padding:28px 20px; text-align:center; box-shadow:0 8px 24px rgba(15,23,42,0.06);">
+          <div style="width:64px; height:64px; margin:0 auto 12px; border-radius:50%; background:#EFF6FF; color:#0052FF; display:flex; align-items:center; justify-content:center;">
+            ${uiIcon('user', 28)}
           </div>
-          <div style="font-size:18px; font-weight:800; color:#0F172A; margin-bottom:6px;">Profile</div>
-          <button type="button" class="btn-primary-blue" style="margin-top:8px; height:44px;" onclick="openSignInRoleChoiceModal('LOGIN')">Sign In</button>
-          <button type="button" class="btn-dark-sec" style="margin-top:8px; height:42px;" onclick="openSignInRoleChoiceModal('SIGNUP')">Create Account</button>
+          <div style="font-size:20px; font-weight:900; color:#0F172A; margin-bottom:4px;">Sign in to Findit Harare</div>
+          <div style="font-size:13px; color:#64748B; margin-bottom:18px;">Book verified home specialists or offer your services in Harare.</div>
+          <button type="button" class="dg-primary-blue-btn" style="margin-bottom:10px;" onclick="openSignInRoleChoiceModal('LOGIN')">Sign In</button>
+          <button type="button" class="btn-dark-sec" style="width:100%; height:46px; border-radius:999px; font-weight:800;" onclick="openSignInRoleChoiceModal('SIGNUP')">Create Account</button>
         </div>
       </div>
     `;
@@ -5729,107 +5770,77 @@ function renderCustomerProfileTab() {
   const user = state.currentUser;
   const rating = user?.rating ? Number(user.rating).toFixed(1) : '5.0';
   const visits = user?.completedBookings || 0;
-  const walletBal = Number(user?.walletBalanceUsd || 0).toFixed(2);
 
   return `
-    <div class="fh-main-screen-container" style="padding-top:14px;">
-      <!-- Profile Card -->
-      <div class="fh-profile-card" style="margin-bottom:12px;">
-        <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
-          <div class="drawer-avatar-circle" style="width:52px; height:52px; border-radius:50%; background:#EFF6FF; color:#0052FF; font-size:18px; font-weight:800; display:flex; align-items:center; justify-content:center;">
+    <div class="fh-main-screen-container" style="padding-top:calc(env(safe-area-inset-top, 12px) + 14px);">
+      <div style="font-size:24px; font-weight:900; color:#0F172A; margin-bottom:14px;">Account</div>
+
+      <!-- Clean Executive Profile Header Card -->
+      <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:22px; padding:18px; margin-bottom:12px; box-shadow:0 6px 20px rgba(15,23,42,0.05);">
+        <div style="display:flex; align-items:center; gap:14px;">
+          <div style="width:58px; height:58px; border-radius:50%; background:#0F172A; color:#FFFFFF; font-size:20px; font-weight:800; display:flex; align-items:center; justify-content:center; overflow:hidden; flex-shrink:0;">
             ${user?.avatarUrl
-              ? `<img src="${resolveMediaUrl(user.avatarUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_AVATAR_FALLBACK}';" style="width:100%; height:100%; border-radius:50%; object-fit:cover;" alt="Avatar" />`
-              : `<span>${user?.avatarInitials || (user?.name ? user.name.slice(0, 2).toUpperCase() : 'FH')}</span>`
+              ? `<img src="${resolveMediaUrl(user.avatarUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_AVATAR_FALLBACK}';" style="width:100%; height:100%; object-fit:cover;" alt="Avatar" />`
+              : `<span>${escapeHtml(user?.avatarInitials || (user?.name ? user.name.slice(0, 2).toUpperCase() : 'FH'))}</span>`
             }
           </div>
           <div style="flex:1; min-width:0;">
-            <div style="font-size:16px; font-weight:800; color:#0F172A;">${escapeHtml(user?.name || 'Findit Client')}</div>
-            <div style="font-size:12px; color:#64748B; font-weight:600;">${user?.phone ? `${escapeHtml(user.phone)} • ` : ''}${escapeHtml(user?.suburbName || 'Avondale')}</div>
-            ${user?.finditId ? `<div style="font-size:11px; font-weight:800; color:#0052FF; margin-top:2px;">ID: ${escapeHtml(user.finditId)}</div>` : ''}
+            <div style="font-size:18px; font-weight:900; color:#0F172A; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(user?.name || 'Findit Client')}</div>
+            <div style="font-size:13px; color:#64748B; font-weight:600; margin-top:2px;">${escapeHtml(user?.phone || '')} • ${escapeHtml(user?.suburbName || 'Harare')}</div>
           </div>
+          <button type="button" class="dg-map-circle-btn" style="width:38px; height:38px; box-shadow:none; background:#F8FAFC;" onclick="openSettingsModal()" title="Edit">
+            ${uiIcon('edit', 15)}
+          </button>
         </div>
 
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; padding-top:10px; border-top:1px solid #F1F5F9;">
-          <div style="background:#F8FAFC; border-radius:12px; padding:8px 10px; text-align:center;">
-            <div style="font-size:11px; color:#64748B; font-weight:600;">Rating</div>
-            <div style="font-size:15px; font-weight:800; color:#0F172A; display:inline-flex; align-items:center; gap:4px;">${uiIcon('star', 14)} <span>${rating}</span></div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:14px; padding-top:14px; border-top:1px solid #F1F5F9;">
+          <div style="background:#F8FAFC; border-radius:14px; padding:10px; text-align:center;">
+            <div style="font-size:17px; font-weight:900; color:#0F172A;">&#9733; ${rating}</div>
+            <div style="font-size:11px; color:#64748B; font-weight:700; margin-top:2px;">Client Rating</div>
           </div>
-          <div style="background:#F8FAFC; border-radius:12px; padding:8px 10px; text-align:center;">
-            <div style="font-size:11px; color:#64748B; font-weight:600;">Completed</div>
-            <div style="font-size:15px; font-weight:800; color:#0F172A;">${visits} visits</div>
+          <div style="background:#F8FAFC; border-radius:14px; padding:10px; text-align:center;">
+            <div style="font-size:17px; font-weight:900; color:#0F172A;">${visits}</div>
+            <div style="font-size:11px; color:#64748B; font-weight:700; margin-top:2px;">Completed Visits</div>
           </div>
         </div>
       </div>
 
-      <!-- Mode Switch Card -->
-      <div class="fh-role-switch-banner" onclick="toggleClientAndProviderMode()">
+      <!-- Switch to Provider Mode Banner -->
+      <div class="fh-role-switch-banner" onclick="toggleClientAndProviderMode()" style="border-radius:18px; margin-bottom:12px;">
         <div>
-          <div style="font-size:14px; font-weight:800;">Switch to Service Provider</div>
-          <div style="font-size:11.5px; opacity:0.85;">Offer services in Harare &amp; earn your price</div>
+          <div style="font-size:14.5px; font-weight:800;">Switch to Provider Mode</div>
+          <div style="font-size:12px; opacity:0.85;">Receive live service requests &amp; earn in Harare</div>
         </div>
         <span style="display:inline-flex;">${uiIcon('arrowRight', 18)}</span>
       </div>
 
-      <!-- Direct Android APK Download Card -->
-      <a href="/FinditHarare.apk" download="FinditHarare.apk" style="display:flex; align-items:center; justify-content:space-between; gap:12px; background:linear-gradient(135deg, #059669 0%, #047857 100%); border-radius:16px; padding:13px 16px; color:#FFFFFF; text-decoration:none; margin-bottom:12px; box-shadow:0 4px 14px rgba(5,150,105,0.25);">
-        <div style="display:flex; align-items:center; gap:10px; min-width:0;">
-          <div style="width:38px; height:38px; border-radius:10px; background:rgba(255,255,255,0.2); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
-              <line x1="12" y1="18" x2="12.01" y2="18"/>
-            </svg>
-          </div>
-          <div>
-            <div style="font-size:13.5px; font-weight:800;">Download Android App (.APK)</div>
-            <div style="font-size:11px; opacity:0.9;">Direct install for Android phones • 9.5 MB</div>
-          </div>
-        </div>
-        <span style="background:rgba(255,255,255,0.25); font-size:11.5px; font-weight:800; padding:4px 10px; border-radius:99px; white-space:nowrap;">
-          Download
-        </span>
-      </a>
-
-      <!-- Menu Items List -->
-      <div class="fh-profile-menu-list">
+      <!-- Clean Uncrowded Settings List -->
+      <div class="fh-profile-menu-list" style="border-radius:20px; overflow:hidden;">
         <div class="fh-profile-menu-row" onclick="openSettingsModal()">
           <div style="display:flex; align-items:center; gap:10px;">
             <span style="color:#0052FF;">${uiIcon('settings', 18)}</span>
-            <span>Account &amp; App Settings</span>
+            <span>Account Settings</span>
           </div>
           ${uiIcon('chevronRight', 16)}
-        </div>
-        <div class="fh-profile-menu-row" onclick="openWalletTopupModal()">
-          <div style="display:flex; align-items:center; gap:10px;">
-            <span style="color:#0052FF;">${uiIcon('wallet', 18)}</span>
-            <span>Wallet &amp; EcoCash Balance</span>
-          </div>
-          <span style="color:#0052FF; font-weight:800;">$${walletBal}</span>
         </div>
         <div class="fh-profile-menu-row" onclick="switchCustomerTab('REQUESTS')">
           <div style="display:flex; align-items:center; gap:10px;">
             <span style="color:#0052FF;">${uiIcon('notes', 18)}</span>
-            <span>My Service History</span>
-          </div>
-          ${uiIcon('chevronRight', 16)}
-        </div>
-        <div class="fh-profile-menu-row" onclick="openDisputeHistoryModal()">
-          <div style="display:flex; align-items:center; gap:10px;">
-            <span style="color:#0052FF;">${uiIcon('shield', 18)}</span>
-            <span>Dispute &amp; Resolution Center</span>
+            <span>Service History</span>
           </div>
           ${uiIcon('chevronRight', 16)}
         </div>
         <div class="fh-profile-menu-row" onclick="openSafetyCenterModal()">
           <div style="display:flex; align-items:center; gap:10px;">
             <span style="color:#0052FF;">${uiIcon('shield', 18)}</span>
-            <span>Safety Center &amp; Emergency SOS</span>
+            <span>Safety &amp; Emergency SOS</span>
           </div>
           ${uiIcon('chevronRight', 16)}
         </div>
         <div class="fh-profile-menu-row" onclick="openWhatsAppDirectSupport()">
           <div style="display:flex; align-items:center; gap:10px;">
             <span style="color:#10B981;">${uiIcon('whatsapp', 18)}</span>
-            <span>WhatsApp Support</span>
+            <span>Support Helpdesk</span>
           </div>
           ${uiIcon('chevronRight', 16)}
         </div>
@@ -5845,109 +5856,132 @@ function renderCustomerProfileTab() {
 }
 
 // ----------------------------------------------------------------------------
-// PROVIDER PROFILE TAB
+// PROVIDER PROFILE TAB (CLEAN, MODERN, NO VERIFICATION BADGE, HIDDEN PAID BADGE HOOK)
 // ----------------------------------------------------------------------------
+async function purchaseProviderVerificationBadge() {
+  const prov = state.currentUser || state.db?.providers?.[0];
+  if (!prov) return;
+  try {
+    const res = await apiPost('/api/providers/buy-verification-badge', {
+      providerId: prov.id,
+      paymentMethod: 'WALLET'
+    });
+    if (res?.provider && state.currentUser) {
+      Object.assign(state.currentUser, res.provider);
+      saveSession(state.role, state.currentUser, false);
+    }
+    showToast('Verification Badge activated!', 'success');
+    await fetchState(true);
+    renderAll(true);
+  } catch (err) {
+    showToast(err.message || 'Could not purchase verification badge', 'error');
+  }
+}
+
 function renderProviderProfileTab() {
   const prov = state.currentUser || state.db?.providers?.[0];
   const walletBal = Number(prov?.walletBalanceUsd || 0).toFixed(2);
   const completed = prov?.completedBookings ?? 0;
   const rating = (completed > 0 && prov?.rating) ? Number(prov.rating).toFixed(1) : 'New';
+  const paidBadgeFeatureEnabled = Boolean(state.db?.settings?.paidVerificationBadgeEnabled);
+  const paidBadgePriceUsd = Number(state.db?.settings?.paidVerificationBadgePriceUsd ?? 15);
+  const hasPaidBadge = Boolean(prov?.badges?.paidVerifiedBadge);
 
   return `
-    <div class="fh-main-screen-container" style="padding-top:14px;">
-      <!-- Profile Card -->
-      <div class="fh-profile-card" style="margin-bottom:12px;">
-        <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
-          <div class="drawer-avatar-circle" style="width:52px; height:52px; border-radius:50%; background:#EFF6FF; color:#0052FF; font-size:18px; font-weight:800; display:flex; align-items:center; justify-content:center;">
+    <div class="fh-main-screen-container" style="padding-top:calc(env(safe-area-inset-top, 12px) + 14px);">
+      <div style="font-size:24px; font-weight:900; color:#0F172A; margin-bottom:14px;">Account</div>
+
+      <!-- Clean Provider Header Card (NO Verification Badge on Header as Requested) -->
+      <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:22px; padding:18px; margin-bottom:12px; box-shadow:0 6px 20px rgba(15,23,42,0.05);">
+        <div style="display:flex; align-items:center; gap:14px;">
+          <div style="width:58px; height:58px; border-radius:50%; background:#0F172A; color:#FFFFFF; font-size:20px; font-weight:800; display:flex; align-items:center; justify-content:center; overflow:hidden; flex-shrink:0;">
             ${prov?.avatarUrl
-              ? `<img src="${resolveMediaUrl(prov.avatarUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_AVATAR_FALLBACK}';" style="width:100%; height:100%; border-radius:50%; object-fit:cover;" alt="Avatar" />`
-              : `<span>${prov?.avatarInitials || (prov?.name ? prov.name.slice(0, 2).toUpperCase() : 'FH')}</span>`
+              ? `<img src="${resolveMediaUrl(prov.avatarUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_AVATAR_FALLBACK}';" style="width:100%; height:100%; object-fit:cover;" alt="Avatar" />`
+              : `<span>${escapeHtml(prov?.avatarInitials || (prov?.name ? prov.name.slice(0, 2).toUpperCase() : 'FH'))}</span>`
             }
           </div>
           <div style="flex:1; min-width:0;">
-            <div style="font-size:16px; font-weight:800; color:#0F172A; display:flex; align-items:center; gap:6px;">
-              <span>${escapeHtml(prov?.name || 'Specialist')}</span>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="#0052FF"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+            <div style="font-size:18px; font-weight:900; color:#0F172A; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+              ${escapeHtml(prov?.name || 'Specialist')}
             </div>
-            ${prov?.phone ? `<div style="font-size:12px; color:#64748B;">${escapeHtml(prov.phone)}</div>` : ''}
-            ${prov?.finditId ? `<div style="font-size:11px; font-weight:800; color:#0052FF; margin-top:2px;">ID: ${escapeHtml(prov.finditId)}</div>` : ''}
+            <div style="font-size:13px; color:#64748B; font-weight:600; margin-top:2px;">
+              ${escapeHtml(prov?.brandName || 'Mobile Specialist')} • ${escapeHtml(prov?.suburbName || 'Harare')}
+            </div>
           </div>
+          <button type="button" class="dg-map-circle-btn" style="width:38px; height:38px; box-shadow:none; background:#F8FAFC;" onclick="openSettingsModal()" title="Preferences">
+            ${uiIcon('settings', 16)}
+          </button>
         </div>
 
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; padding-top:10px; border-top:1px solid #F1F5F9;">
-          <div style="background:#F8FAFC; border-radius:12px; padding:8px 10px; text-align:center;">
-            <div style="font-size:11px; color:#64748B; font-weight:600;">Rating</div>
-            <div style="font-size:15px; font-weight:800; color:#0F172A; display:inline-flex; align-items:center; gap:4px;">${uiIcon('star', 14)} <span>${rating}</span></div>
+        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-top:14px; padding-top:14px; border-top:1px solid #F1F5F9;">
+          <div style="background:#F8FAFC; border-radius:14px; padding:10px; text-align:center;">
+            <div style="font-size:16px; font-weight:900; color:#0F172A;">&#9733; ${rating}</div>
+            <div style="font-size:11px; color:#64748B; font-weight:700; margin-top:2px;">Rating</div>
           </div>
-          <div style="background:#F8FAFC; border-radius:12px; padding:8px 10px; text-align:center;">
-            <div style="font-size:11px; color:#64748B; font-weight:600;">Completed Jobs</div>
-            <div style="font-size:15px; font-weight:800; color:#0F172A;">${completed}</div>
+          <div style="background:#F8FAFC; border-radius:14px; padding:10px; text-align:center;">
+            <div style="font-size:16px; font-weight:900; color:#0F172A;">${completed}</div>
+            <div style="font-size:11px; color:#64748B; font-weight:700; margin-top:2px;">Jobs Done</div>
+          </div>
+          <div style="background:#F8FAFC; border-radius:14px; padding:10px; text-align:center; cursor:pointer;" onclick="switchProviderTab('EARNINGS')">
+            <div style="font-size:16px; font-weight:900; color:#10B981;">$${walletBal}</div>
+            <div style="font-size:11px; color:#64748B; font-weight:700; margin-top:2px;">Wallet</div>
           </div>
         </div>
       </div>
 
+      ${paidBadgeFeatureEnabled && !hasPaidBadge ? `
+        <div style="background:#EFF6FF; border:1.5px solid #BFDBFE; border-radius:18px; padding:14px 16px; margin-bottom:12px; display:flex; align-items:center; justify-content:space-between; gap:12px;">
+          <div>
+            <div style="font-size:14px; font-weight:800; color:#0F172A;">Get Verified Pro Badge</div>
+            <div style="font-size:12px; color:#475569;">Stand out in client offers for $${paidBadgePriceUsd.toFixed(2)} USD</div>
+          </div>
+          <button type="button" class="btn-primary-blue" style="width:auto; height:36px; padding:0 14px; font-size:12px;" onclick="purchaseProviderVerificationBadge()">Buy ($${paidBadgePriceUsd})</button>
+        </div>
+      ` : ''}
+
       <!-- Mode Switch Card -->
-      <div class="fh-role-switch-banner" onclick="toggleClientAndProviderMode()">
+      <div class="fh-role-switch-banner" onclick="toggleClientAndProviderMode()" style="border-radius:18px; margin-bottom:12px;">
         <div>
-          <div style="font-size:14px; font-weight:800;">Switch to Client Mode</div>
-          <div style="font-size:11.5px; opacity:0.85;">Hire specialists &amp; request home services</div>
+          <div style="font-size:14.5px; font-weight:800;">Switch to Client Mode</div>
+          <div style="font-size:12px; opacity:0.85;">Request home services in Harare</div>
         </div>
         <span style="display:inline-flex;">${uiIcon('arrowRight', 18)}</span>
       </div>
 
-      <!-- Direct Android APK Download Card -->
-      <a href="/FinditHarare.apk" download="FinditHarare.apk" style="display:flex; align-items:center; justify-content:space-between; gap:12px; background:linear-gradient(135deg, #059669 0%, #047857 100%); border-radius:16px; padding:13px 16px; color:#FFFFFF; text-decoration:none; margin-bottom:12px; box-shadow:0 4px 14px rgba(5,150,105,0.25);">
-        <div style="display:flex; align-items:center; gap:10px; min-width:0;">
-          <div style="width:38px; height:38px; border-radius:10px; background:rgba(255,255,255,0.2); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
-              <line x1="12" y1="18" x2="12.01" y2="18"/>
-            </svg>
-          </div>
-          <div>
-            <div style="font-size:13.5px; font-weight:800;">Download Android App (.APK)</div>
-            <div style="font-size:11px; opacity:0.9;">Direct install for Android phones • 9.5 MB</div>
-          </div>
-        </div>
-        <span style="background:rgba(255,255,255,0.25); font-size:11.5px; font-weight:800; padding:4px 10px; border-radius:99px; white-space:nowrap;">
-          Download
-        </span>
-      </a>
-
-      <!-- Menu Items List -->
-      <div class="fh-profile-menu-list">
+      <!-- Clean Preferences & Menu List (Screenshot 4 Right Inspired) -->
+      <div class="fh-profile-menu-list" style="border-radius:20px; overflow:hidden;">
         <div class="fh-profile-menu-row" onclick="openSettingsModal()">
           <div style="display:flex; align-items:center; gap:10px;">
-            <span style="color:#0052FF;">${uiIcon('settings', 18)}</span>
-            <span>Account &amp; Job Categories Settings</span>
+            <span style="color:#0052FF;">${uiIcon('sliders', 18)}</span>
+            <span>Preferences &amp; Service Categories</span>
           </div>
           ${uiIcon('chevronRight', 16)}
         </div>
-        <div class="fh-profile-menu-row" onclick="openWalletTopupModal()">
+        <div class="fh-profile-menu-row" onclick="switchProviderTab('EARNINGS')">
           <div style="display:flex; align-items:center; gap:10px;">
             <span style="color:#0052FF;">${uiIcon('wallet', 18)}</span>
-            <span>Provider Wallet (Commission Balance)</span>
+            <span>Earnings &amp; Commission Wallet</span>
           </div>
           <span style="color:#0052FF; font-weight:800;">$${walletBal}</span>
         </div>
         <div class="fh-profile-menu-row" onclick="state.providerTab='CATALOGUE'; renderUiOverlay();">
           <div style="display:flex; align-items:center; gap:10px;">
             <span style="color:#0052FF;">${uiIcon('list', 18)}</span>
-            <span>Service Catalogue &amp; Rates</span>
+            <span>Work Catalogue &amp; Rates</span>
           </div>
           ${uiIcon('chevronRight', 16)}
         </div>
         <div class="fh-profile-menu-row" onclick="openSafetyCenterModal()">
           <div style="display:flex; align-items:center; gap:10px;">
             <span style="color:#0052FF;">${uiIcon('shield', 18)}</span>
-            <span>Safety Center &amp; Emergency SOS</span>
+            <span>Safety &amp; PIN Protection</span>
           </div>
           ${uiIcon('chevronRight', 16)}
         </div>
         <div class="fh-profile-menu-row" onclick="openWhatsAppDirectSupport()">
           <div style="display:flex; align-items:center; gap:10px;">
             <span style="color:#10B981;">${uiIcon('whatsapp', 18)}</span>
-            <span>WhatsApp Provider Support</span>
+            <span>Provider Support</span>
           </div>
           ${uiIcon('chevronRight', 16)}
         </div>
@@ -5963,119 +5997,149 @@ function renderProviderProfileTab() {
 }
 
 // ----------------------------------------------------------------------------
-// PROVIDER HOME TAB (DRIVEGO SCREEN 06 RADAR & EARNINGS TODAY TWIN)
+// PROVIDER HOME TAB (SCREENSHOT 4 LEFT: OVER LIVE MAP + 7-DAY MINI CHART + SLIDE TO CONNECT)
 // ----------------------------------------------------------------------------
+function handleSlideConnectBarInteraction(event) {
+  event.stopPropagation();
+  toggleProviderOnlineStatus();
+}
+
 function renderProviderHomeTab(prov, openRequests, activeJob) {
-  const dayStart = new Date();
-  dayStart.setHours(0, 0, 0, 0);
-  const completedTodayList = (state.db?.requests || []).filter((request) =>
-    request.status === 'COMPLETED' &&
-    request.acceptedProviderId === prov?.id &&
-    new Date(request.completedAt || request.updatedAt || 0).getTime() >= dayStart.getTime()
-  );
-  const completedToday = completedTodayList.length;
+  const allReqs = state.db?.requests || [];
+  const myCompleted = allReqs.filter((r) => r.status === 'COMPLETED' && r.acceptedProviderId === prov?.id);
+  const now = new Date();
+  const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const completedTodayList = myCompleted.filter((r) => new Date(r.completedAt || r.updatedAt || 0).getTime() >= dayStart);
   const earningsTodayUsd = completedTodayList.reduce((sum, r) => sum + Number(r.agreedTotalUsd || r.budgetUsd || 0), 0);
-  const walletBal = Number(prov?.walletBalanceUsd || 0).toFixed(2);
+
+  // Compute 7-day M T W T F S S bars (Screenshot 4 Left)
+  const dayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+  const currentDayIdx = (now.getDay() + 6) % 7; // Mon=0 .. Sun=6
+  const weekTotals = [0, 0, 0, 0, 0, 0, 0];
+  myCompleted.forEach((r) => {
+    const d = new Date(r.completedAt || r.updatedAt || Date.now());
+    const diffDays = Math.floor((now.getTime() - d.getTime()) / (86400 * 1000));
+    if (diffDays >= 0 && diffDays < 7) {
+      const idx = (d.getDay() + 6) % 7;
+      weekTotals[idx] += Number(r.agreedTotalUsd || r.budgetUsd || 0);
+    }
+  });
+  if (earningsTodayUsd > 0 && weekTotals[currentDayIdx] === 0) {
+    weekTotals[currentDayIdx] = earningsTodayUsd;
+  }
+  const weekTotalUsd = weekTotals.reduce((a, b) => a + b, 0) || earningsTodayUsd;
+  const maxBar = Math.max(20, ...weekTotals);
+
   const isOnline = prov?.isOnline !== false && prov?.status !== 'OFFLINE';
+  const ratingVal = (prov?.completedBookings > 0 && prov?.rating) ? Number(prov.rating).toFixed(1) : '5.0';
 
   return `
-    <div class="fh-main-screen-container fh-provider-dashboard">
-      <!-- DriveGo Screen 06 Dark "EARNINGS TODAY" & Online Radar Card -->
-      <div style="background:linear-gradient(135deg, #0F172A 0%, #1E293B 100%); border-radius:20px; padding:18px; color:#FFFFFF; margin-bottom:14px; box-shadow:0 12px 28px rgba(15,23,42,0.22);">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-          <div>
-            <div style="font-size:10.5px; font-weight:800; color:#94A3B8; text-transform:uppercase; letter-spacing:0.08em;">EARNINGS TODAY</div>
-            <div style="font-size:28px; font-weight:900; color:#FFFFFF; letter-spacing:-0.02em; margin-top:2px;">$${earningsTodayUsd.toFixed(2)}</div>
+    <div class="dg-screen-over-map">
+      <!-- Top Floating Pills over Map (Screenshot 4 Left: Bell, Active Surge Pill, Rating Pill) -->
+      <div class="dg-top-area">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+          <div style="display:flex; flex-direction:column; gap:8px;">
+            <button type="button" class="dg-map-circle-btn" onclick="openNotificationCenterModal()" title="Notifications">
+              ${uiIcon('bell', 18)}
+            </button>
+            <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:999px; padding:6px 12px; box-shadow:0 6px 16px rgba(15,23,42,0.12); display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:800; color:#0F172A;">
+              <span style="width:8px; height:8px; border-radius:50%; background:#0052FF;"></span>
+              <span>${openRequests.length} active in Harare</span>
+            </div>
           </div>
-          <button
-            type="button"
-            onclick="toggleProviderOnlineStatus()"
-            style="display:inline-flex; align-items:center; gap:7px; padding:8px 14px; border-radius:99px; border:1.5px solid ${isOnline ? '#10B981' : '#64748B'}; background:${isOnline ? 'rgba(16,185,129,0.18)' : 'rgba(100,116,139,0.2)'}; color:${isOnline ? '#34D399' : '#CBD5E1'}; font-size:12px; font-weight:800; cursor:pointer;"
-          >
-            <span style="width:8px; height:8px; border-radius:50%; background:${isOnline ? '#10B981' : '#94A3B8'}; ${isOnline ? 'box-shadow:0 0 0 3px rgba(16,185,129,0.3);' : ''}"></span>
-            <span>${isOnline ? 'Online' : 'Offline'}</span>
+
+          <div style="display:flex; align-items:center; gap:8px;">
+            <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:999px; padding:7px 13px; box-shadow:0 6px 16px rgba(15,23,42,0.12); display:inline-flex; align-items:center; gap:5px; font-size:13px; font-weight:800; color:#0F172A;">
+              <span style="color:#0052FF;">&#9733;</span>
+              <span>${ratingVal}</span>
+            </div>
+            <button type="button" class="dg-map-circle-btn" onclick="useBrowserGeolocation(false)" title="Center Map">
+              ${uiIcon('crosshair', 18)}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bottom Half-Sheet over Live Harare Map (Screenshot 4 Left) -->
+      <div class="dg-half-sheet">
+        <div class="dg-sheet-handle"></div>
+
+        ${activeJob ? `
+          <div onclick="switchProviderTab('ACTIVE_JOB')" style="background:#0F172A; color:#FFFFFF; border-radius:16px; padding:12px 14px; display:flex; align-items:center; justify-content:space-between; cursor:pointer;">
+            <div>
+              <div style="font-size:10.5px; font-weight:800; color:#10B981; text-transform:uppercase;">Active Job In Progress</div>
+              <div style="font-size:14px; font-weight:800; margin-top:2px;">${escapeHtml(activeJob.customerName)} • $${Number(activeJob.agreedTotalUsd || activeJob.budgetUsd).toFixed(2)}</div>
+            </div>
+            <span style="background:#0052FF; padding:6px 12px; border-radius:99px; font-size:12px; font-weight:800;">Open &rsaquo;</span>
+          </div>
+        ` : ''}
+
+        <!-- EARNINGS TODAY Card with 7-Day Mini Vertical Bar Chart (Screenshot 4 Left) -->
+        <div class="dg-provider-earnings-card" onclick="switchProviderTab('EARNINGS')" style="cursor:pointer;">
+          <div>
+            <div style="font-size:10.5px; font-weight:800; color:#64748B; text-transform:uppercase; letter-spacing:0.06em;">EARNINGS TODAY</div>
+            <div style="font-size:28px; font-weight:900; color:#0F172A; letter-spacing:-0.02em; margin-top:2px;">$${earningsTodayUsd.toFixed(2)}</div>
+            <div style="font-size:12px; color:#64748B; font-weight:600; margin-top:2px;">
+              ${completedTodayList.length} job${completedTodayList.length === 1 ? '' : 's'} • $${weekTotalUsd.toFixed(0)} this week
+            </div>
+          </div>
+
+          <div class="dg-mini-week-chart">
+            ${dayLabels.map((lbl, idx) => {
+              const val = weekTotals[idx] || 0;
+              const pct = val > 0 ? Math.max(22, Math.round((val / maxBar) * 100)) : (idx === currentDayIdx ? 18 : 8);
+              const isToday = idx === currentDayIdx;
+              return `
+                <div class="dg-mini-day-col">
+                  <div class="dg-mini-bar-track">
+                    <div class="dg-mini-bar-fill" style="height:${pct}%; background:${isToday ? '#10B981' : '#94A3B8'};"></div>
+                  </div>
+                  <span class="dg-mini-day-lbl" style="color:${isToday ? '#0F172A' : '#94A3B8'};">${lbl}</span>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+
+        <!-- Status Strip: Looking for jobs near you + Suburb Pill (Screenshot 4 Left) -->
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+          <div style="flex:1; background:${isOnline ? '#EFF6FF' : '#F8FAFC'}; border:1px solid ${isOnline ? '#BFDBFE' : '#E2E8F0'}; border-radius:999px; padding:9px 14px; display:flex; align-items:center; gap:8px;">
+            <span style="width:8px; height:8px; border-radius:50%; background:${isOnline ? '#0052FF' : '#94A3B8'};"></span>
+            <span style="font-size:12.5px; font-weight:700; color:#0F172A;">
+              ${isOnline ? 'Looking for jobs near you' : 'Offline — Slide below to connect'}
+            </span>
+          </div>
+          <button type="button" onclick="switchProviderTab('FEED')" style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:999px; padding:9px 13px; font-size:12px; font-weight:800; color:#0F172A; display:inline-flex; align-items:center; gap:4px; cursor:pointer; flex-shrink:0;">
+            ${uiIcon('pin', 12)}
+            <span>${escapeHtml(prov?.suburbName || 'Harare')}</span>
           </button>
         </div>
 
-        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; padding-top:12px; border-top:1px solid rgba(255,255,255,0.1);">
-          <div>
-            <div style="font-size:10px; color:#94A3B8; font-weight:700; text-transform:uppercase;">Jobs Today</div>
-            <div style="font-size:15px; font-weight:800; color:#FFFFFF; margin-top:2px;">${completedToday}</div>
-          </div>
-          <div>
-            <div style="font-size:10px; color:#94A3B8; font-weight:700; text-transform:uppercase;">Total Jobs</div>
-            <div style="font-size:15px; font-weight:800; color:#FFFFFF; margin-top:2px;">${prov?.completedBookings ?? 0}</div>
-          </div>
-          <div onclick="openWalletTopupModal()" style="cursor:pointer;">
-            <div style="font-size:10px; color:#94A3B8; font-weight:700; text-transform:uppercase;">Wallet</div>
-            <div style="font-size:15px; font-weight:800; color:#10B981; margin-top:2px;">$${walletBal}</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- DriveGo Live Radar Status Strip -->
-      <div style="background:${isOnline ? '#EBF3FF' : '#F8FAFC'}; border:1.5px solid ${isOnline ? '#BFDBFE' : '#E2E8F0'}; border-radius:16px; padding:12px 14px; margin-bottom:14px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
+        <!-- Interactive Slide to Connect / Slide to Disconnect Bar + Preferences Button (Screenshot 4 Left & Center) -->
         <div style="display:flex; align-items:center; gap:10px;">
-          <span style="width:10px; height:10px; border-radius:50%; background:${isOnline ? '#0052FF' : '#94A3B8'}; ${isOnline ? 'box-shadow:0 0 0 4px rgba(0,82,255,0.2);' : ''} flex-shrink:0;"></span>
-          <div>
-            <div style="font-size:13px; font-weight:800; color:#0F172A;">
-              ${isOnline ? 'Looking for jobs near you in Harare' : 'Radar paused — You are Offline'}
+          <div
+            class="dg-slide-connect-wrap ${isOnline ? '' : 'is-offline'}"
+            style="flex:1;"
+            onclick="handleSlideConnectBarInteraction(event)"
+          >
+            <div class="dg-slide-connect-thumb" style="${isOnline ? 'right:5px;' : 'left:5px;'}">
+              ${isOnline ? uiIcon('arrowLeft', 18) : uiIcon('arrowRight', 18)}
             </div>
-            <div style="font-size:11.5px; color:#64748B;">
-              ${isOnline ? `${openRequests.length} matching request${openRequests.length === 1 ? '' : 's'} available now` : 'Tap Online above to receive live client requests'}
-            </div>
+            <span class="dg-slide-connect-label">
+              ${isOnline ? '&lsaquo; &lsaquo; Slide to disconnect' : 'Slide to connect &rsaquo; &rsaquo;'}
+            </span>
           </div>
+
+          <button
+            type="button"
+            onclick="openSettingsModal()"
+            style="width:52px; height:52px; border-radius:16px; background:#F1F5F9; border:1px solid #E2E8F0; color:#0F172A; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0;"
+            title="Preferences"
+          >
+            ${uiIcon('sliders', 20)}
+          </button>
         </div>
-        <button type="button" onclick="setProviderFeedView('MAP'); switchProviderTab('FEED');" style="background:#0052FF; color:#FFFFFF; border:none; border-radius:10px; padding:7px 12px; font-size:11.5px; font-weight:800; cursor:pointer; display:inline-flex; align-items:center; gap:5px; flex-shrink:0;">
-          ${uiIcon('map', 13)}
-          <span>Radar</span>
-        </button>
       </div>
-
-      ${activeJob ? `
-        <button type="button" class="fh-provider-active-card" onclick="switchProviderTab('ACTIVE_JOB')">
-          <span class="fh-provider-card-kicker"><span class="fh-provider-live-dot"></span> ACTIVE VISIT</span>
-          <span class="fh-provider-active-price">${formatUsdPrice(activeJob.agreedTotalUsd || activeJob.budgetUsd)}</span>
-          <span class="fh-provider-active-client">${escapeHtml(activeJob.customerName || 'Your client')}</span>
-          <span class="fh-provider-active-location">${uiIcon('pin', 14)} ${escapeHtml(activeJob.suburbName || 'Harare')}</span>
-          <span class="fh-provider-active-action">Continue visit ${uiIcon('arrowRight', 15)}</span>
-        </button>
-      ` : ''}
-
-      <div class="fh-provider-metrics">
-        <div class="fh-provider-metric-card">
-          <span class="fh-provider-metric-icon">${uiIcon('briefcase', 17)}</span>
-          <span class="fh-provider-metric-label">Completed today</span>
-          <strong>${completedToday}</strong>
-          <span class="fh-provider-metric-note">${completedToday === 1 ? 'job completed' : 'jobs completed'}</span>
-        </div>
-        <button type="button" class="fh-provider-metric-card fh-provider-wallet-card" onclick="openWalletTopupModal()">
-          <span class="fh-provider-metric-icon">${uiIcon('wallet', 17)}</span>
-          <span class="fh-provider-metric-label">Provider wallet</span>
-          <strong>${formatUsdPrice(walletBal)}</strong>
-          <span class="fh-provider-metric-note">Manage balance ${uiIcon('arrowRight', 13)}</span>
-        </button>
-      </div>
-
-      <button type="button" class="fh-provider-opportunities-card" onclick="switchProviderTab('FEED')">
-        <span class="fh-provider-opportunities-topline">
-          <span class="fh-provider-opportunities-icon">${uiIcon('briefcase', 19)}</span>
-          <span class="fh-provider-opportunities-count">${openRequests.length} open</span>
-        </span>
-        <span class="fh-provider-opportunities-title">Opportunities for you</span>
-        <span class="fh-provider-opportunities-copy">New requests from clients in your service categories.</span>
-        <span class="fh-provider-opportunities-action">Browse opportunities ${uiIcon('arrowRight', 16)}</span>
-      </button>
-
-      <!-- DriveGo Screen 06 Disconnect / Go Offline Bar -->
-      <button
-        type="button"
-        onclick="toggleProviderOnlineStatus()"
-        style="width:100%; height:46px; border-radius:14px; border:1.5px solid ${isOnline ? '#E2E8F0' : '#0052FF'}; background:${isOnline ? '#FFFFFF' : '#0052FF'}; color:${isOnline ? '#0F172A' : '#FFFFFF'}; font-size:13px; font-weight:800; display:flex; align-items:center; justify-content:center; gap:8px; cursor:pointer; margin-top:4px;"
-      >
-        ${uiIcon('logout', 16)}
-        <span>${isOnline ? 'Disconnect from live radar (Go Offline)' : 'Connect to live radar (Go Online)'}</span>
-      </button>
     </div>
   `;
 }
@@ -6266,8 +6330,37 @@ function renderEmbeddedChatComponent(req, peerName) {
 }
 
 // ----------------------------------------------------------------------------
-// CLIENT ACTIVE HOME-VISIT BOOKING OVERLAY (WITH LIVE ROUTE & EMBEDDED CHAT)
+// CLIENT ACTIVE HOME-VISIT BOOKING OVERLAY (SCREENSHOT 3 CENTER TWIN OVER MAP)
 // ----------------------------------------------------------------------------
+function openExternalMapsNavigation(lat, lng, label, app = 'google') {
+  const safeLat = Number(lat) || -17.8252;
+  const safeLng = Number(lng) || 31.0335;
+  const q = encodeURIComponent(label || `${safeLat},${safeLng}`);
+  const url = app === 'waze'
+    ? `https://waze.com/ul?ll=${safeLat},${safeLng}&navigate=yes`
+    : `https://www.google.com/maps/dir/?api=1&destination=${safeLat},${safeLng}&destination_place_id=${q}`;
+  try {
+    window.open(url, '_blank', 'noopener,noreferrer');
+  } catch (e) {
+    window.location.href = url;
+  }
+}
+
+function shareBookingLocation(reqId) {
+  const req = (state.db?.requests || []).find((r) => r.id === reqId);
+  if (!req) return;
+  const acceptedOffer = (req.offers || []).find((o) => o.id === req.acceptedOfferId) || req.offers?.[0];
+  const prov = resolveProviderByIdOrOffer(req.acceptedProviderId || acceptedOffer?.providerId, req, acceptedOffer);
+  const msg = `Findit Harare Live Visit: ${prov?.name || 'Specialist'} is ${req.status === 'IN_PROGRESS' ? 'completing' : 'en route for'} "${req.title}" at ${req.exactAddress || req.suburbName || 'Harare'}.`;
+  if (navigator.share) {
+    navigator.share({ title: 'Findit Harare Visit', text: msg }).catch(() => {});
+  } else if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(msg).then(() => showToast('Visit details copied to share')).catch(() => showToast(msg));
+  } else {
+    showToast('Visit details ready to share');
+  }
+}
+
 function renderBookedTrackingOverlay(req) {
   const acceptedOffer = (req.offers || []).find((o) => o.id === req.acceptedOfferId) || req.offers?.[0];
   const provId = req.acceptedProviderId || acceptedOffer?.providerId;
@@ -6277,354 +6370,168 @@ function renderBookedTrackingOverlay(req) {
   const isArrived = req.status === 'ARRIVED';
   const isInProgress = req.status === 'IN_PROGRESS' || Boolean(req.pinVerifiedByProvider);
   const isCompleted = req.status === 'COMPLETED';
+  const etaMins = acceptedOffer?.etaMinutes || 4;
+  const distKm = acceptedOffer?.distanceKm || (calculateDistanceMeters(prov?.lat, prov?.lng, req.lat, req.lng) / 1000).toFixed(1);
+  const isDoneRequested = Boolean(req.completionRequested);
 
-  // SCREEN 6: SERVICE IN PROGRESS & COMPLETION PIN SHARING
-  if (isInProgress) {
-    const completionPin = req.completionPinCode || '7291';
-    const isDoneRequested = Boolean(req.completionRequested);
+  const initials = (prov?.name || 'SP').split(' ').filter(Boolean).map((p) => p[0]).join('').slice(0, 2).toUpperCase();
+  let statusBadgeText = `On the way • ${etaMins} min`;
+  let statusDotColor = '#10B981';
+  if (isArrived) {
+    statusBadgeText = 'At your gate';
+    statusDotColor = '#0052FF';
+  } else if (isInProgress) {
+    statusBadgeText = isDoneRequested ? 'Work completed • Share PIN' : `In progress • ~${req.estimatedDurationMinutes || 30} min`;
+    statusDotColor = isDoneRequested ? '#10B981' : '#0052FF';
+  } else if (isCompleted) {
+    statusBadgeText = 'Visit completed';
+    statusDotColor = '#10B981';
+  }
 
+  const activePinCode = isInProgress ? (req.completionPinCode || '7291') : (req.startPinCode || '4829');
+  const activePinLabel = isInProgress ? 'COMPLETION PIN' : 'START PIN';
+  const addressText = req.exactAddress || req.clientLiveAddress || req.suburbName || 'Harare';
+
+  if (state.isSheetMinimized) {
     return `
-      <div class="fh-main-screen-container" style="padding-top:14px; max-width:480px; margin:0 auto;">
-        <!-- Clean Compact Service In-Progress Card -->
-        <div class="fh-request-form-card" style="padding:16px 14px; margin-bottom:12px;">
-          <!-- Status Header Badge -->
-          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
-            <div style="display:flex; align-items:center; gap:6px;">
-              <span style="width:8px; height:8px; border-radius:50%; background:${isDoneRequested ? '#10B981' : '#3B82F6'}; animation:pulse 1s infinite; display:inline-block;"></span>
-              <span style="font-size:13px; font-weight:800; color:#0F172A;">
-                ${isDoneRequested ? 'Specialist Completed Work' : 'Service in Progress'}
-              </span>
+      <div class="dg-screen-over-map">
+        <div class="dg-top-area">
+          <div class="dg-search-top-row" style="justify-content:space-between;">
+            <button type="button" class="dg-map-circle-btn" onclick="openSideDrawerModal()" title="Menu">
+              ${uiIcon('menu', 18)}
+            </button>
+            <div style="background:#FFFFFF; border-radius:999px; padding:8px 14px; box-shadow:0 6px 18px rgba(15,23,42,0.14); display:inline-flex; align-items:center; gap:7px; font-size:12.5px; font-weight:800; color:#0F172A;">
+              <span style="width:8px; height:8px; border-radius:50%; background:${statusDotColor};"></span>
+              <span>${statusBadgeText}</span>
             </div>
-            <span style="font-size:11px; font-weight:800; padding:3px 9px; border-radius:99px; ${isDoneRequested ? 'background:#DCFCE7; color:#15803D; border:1px solid #86EFAC;' : 'background:#EFF6FF; color:#1D4ED8; border:1px solid #BFDBFE;'}">
-              ${isDoneRequested ? 'Awaiting Your PIN' : `~${req.estimatedDurationMinutes || 30}m Est.`}
-            </span>
-          </div>
-
-          <!-- Specialist Row with Direct Call & Chat -->
-          <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; background:#F8FAFC; border:1px solid #E2E8F0; border-radius:14px; padding:10px 12px; margin-bottom:14px;">
-            <div style="display:flex; align-items:center; gap:10px; min-width:0;">
-              <img
-                src="${resolveMediaUrl(avatarUrl)}"
-                onerror="this.onerror=null; this.src='${DEFAULT_AVATAR_FALLBACK}';"
-                style="width:40px; height:40px; border-radius:50%; object-fit:cover; border:2px solid #FFFFFF; box-shadow:0 2px 6px rgba(0,0,0,0.08); flex-shrink:0;"
-                alt="${escapeHtml(prov?.name || 'Specialist')}"
-              />
-              <div style="min-width:0;">
-                <div style="font-size:13.5px; font-weight:800; color:#0F172A; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-                  ${escapeHtml(prov?.name || 'Specialist')}
-                </div>
-                <div style="font-size:11px; color:#64748B; display:flex; align-items:center; gap:4px;">
-                  <span style="display:inline-flex; align-items:center; gap:3px; color:#0052FF; font-weight:700;">${uiIcon('star', 11)} ${prov?.rating || '5.0'}</span>
-                  <span>•</span>
-                  <span>${escapeHtml(prov?.brandName || 'Mobile Specialist')}</span>
-                </div>
-              </div>
-            </div>
-            <div style="display:flex; gap:6px; flex-shrink:0;">
-              <button
-                type="button"
-                class="btn-dark-sec"
-                style="height:34px; padding:0 10px; font-size:12px; border-radius:8px;"
-                onclick="startInAppCall('${(prov?.name || 'Pro').replace(/'/g, "\\'")}', '${escapeHtml(req.title)}', 'call_${req.id}', '${prov?.id || ''}')"
-              >
-                ${uiIcon('phone', 13)}
-                <span>Call</span>
-              </button>
-              <button
-                type="button"
-                class="btn-dark-sec"
-                style="height:34px; padding:0 10px; font-size:12px; border-radius:8px;"
-                onclick="openChatDrawer('${req.id}', '${prov?.id}')"
-              >
-                ${uiIcon('chat', 13)}
-                <span>Chat</span>
-              </button>
-            </div>
-          </div>
-
-          <!-- DriveGo Safety Twin Completion PIN Box (Brand Emerald, No Send in Chat button) -->
-          <div style="background:${isDoneRequested ? '#ECFDF5' : '#F8FAFC'}; border:2px ${isDoneRequested ? 'solid #10B981' : 'dashed #94A3B8'}; border-radius:16px; padding:16px 14px; text-align:center; margin-bottom:14px; box-shadow:${isDoneRequested ? '0 8px 20px rgba(16,185,129,0.16)' : 'none'};">
-            <div style="font-size:11px; font-weight:900; text-transform:uppercase; letter-spacing:0.08em; color:${isDoneRequested ? '#047857' : '#475569'}; margin-bottom:4px; display:inline-flex; align-items:center; gap:5px;">
-              ${uiIcon('shield', 13)}
-              <span>${isDoneRequested ? 'Share Completion PIN With Specialist' : 'Your 4-Digit Completion PIN'}</span>
-            </div>
-            <div style="font-size:34px; font-weight:900; letter-spacing:8px; color:${isDoneRequested ? '#047857' : '#0F172A'}; margin:6px 0 8px;" id="clientCompletionPinText">
-              #${completionPin}
-            </div>
-            <div style="font-size:11.5px; color:${isDoneRequested ? '#065F46' : '#64748B'}; line-height:1.45; margin-bottom:12px; padding:0 6px; font-weight:600;">
-              ${isDoneRequested
-                ? 'Specialist has marked the job as done. Inspect the completed work and read this code aloud to finalize.'
-                : `Keep this code safe — read it aloud to ${escapeHtml(prov?.name || 'your specialist')} in person only after the work is finished to your satisfaction.`
-              }
-            </div>
-            <div style="display:flex; justify-content:center;">
-              <button type="button" class="fh-pin-action-btn" style="max-width:160px; width:100%; height:36px; font-size:12px; font-weight:800;" onclick="copyCompletionPin('${completionPin}')">
-                ${uiIcon('copy', 13)}
-                <span id="copyCompletionPinBtnText">Copy PIN</span>
-              </button>
-            </div>
-          </div>
-
-          <!-- Service Details Strip -->
-          <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px; padding:10px 12px; text-align:left; margin-bottom:12px;">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-              <div style="min-width:0;">
-                <div style="font-size:13px; font-weight:800; color:#0F172A; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-                  ${escapeHtml(req.title)}
-                </div>
-                <div style="font-size:11px; color:#64748B; margin-top:2px; display:flex; align-items:center; gap:4px;">
-                  <span style="color:#0052FF; display:inline-flex;">${uiIcon('pin', 11)}</span>
-                  <span>${escapeHtml(req.suburbName || 'Harare')}</span>
-                </div>
-              </div>
-              <div style="text-align:right; flex-shrink:0;">
-                <div style="font-size:13.5px; font-weight:900; color:#0052FF;">
-                  ${formatUsdPrice(agreedPrice)}
-                </div>
-                <div style="font-size:10px; font-weight:700; color:#64748B;">
-                  ${escapeHtml(req.paymentMethod || 'Cash USD')}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Discreet Dispute / Help Link -->
-          <div style="text-align:center; padding-top:2px;">
-            <button
-              type="button"
-              onclick="openDisputeModal('${req.id}')"
-              style="background:none; border:none; color:#DC2626; font-size:12px; font-weight:700; cursor:pointer; padding:6px 12px; display:inline-flex; align-items:center; gap:5px;"
-            >
-              ${uiIcon('shield', 13)}
-              <span>Report Issue / Need Help</span>
+            <button type="button" class="dg-map-circle-btn" onclick="useBrowserGeolocation(false)" title="Center Map">
+              ${uiIcon('crosshair', 18)}
             </button>
           </div>
+        </div>
+        <div style="padding:12px 16px calc(env(safe-area-inset-bottom, 12px) + 84px); pointer-events:auto;">
+          <button type="button" class="dg-primary-dark-btn" onclick="toggleSheetMinimize(false)">
+            ${uiIcon('chevronUp', 16)}
+            <span>Show Specialist &amp; PIN (#${activePinCode})</span>
+          </button>
         </div>
       </div>
     `;
   }
 
-  let statusIcon = uiIcon('routeCar', 18);
-  let statusHeadline = `${prov?.shortName || prov?.name || 'Pro'} is arriving in ~${acceptedOffer?.etaMinutes || 4} min`;
-  if (req.status === 'ARRIVED') {
-    statusIcon = uiIcon('pin', 18);
-    statusHeadline = `${prov?.shortName || prov?.name} is waiting outside!`;
-  }
-
   return `
-    <div class="indrive-top-left-row">
-      <button class="indrive-circle-btn" onclick="openSideDrawerModal()">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
-      </button>
+    <div class="dg-screen-over-map">
+      <!-- Top Floating Bar over Live Map + Route -->
+      <div class="dg-top-area">
+        <div class="dg-search-top-row" style="justify-content:space-between;">
+          <button type="button" class="dg-map-circle-btn" onclick="toggleSheetMinimize(true)" title="View Full Map">
+            ${uiIcon('arrowLeft', 18)}
+          </button>
 
-      ${(!isArrived && !isInProgress) ? `
-        <div style="display:flex; align-items:center; gap:8px;">
-          <button class="cancel-request-red-pill pointer-auto" onclick="openCancelTaskModal('${req.id}')">
-            ${uiIcon('close', 14)}
-            <span>Cancel</span>
+          <div style="background:#FFFFFF; border-radius:999px; padding:8px 14px; box-shadow:0 6px 18px rgba(15,23,42,0.14); display:inline-flex; align-items:center; gap:7px; font-size:12.5px; font-weight:800; color:#0F172A;">
+            <span style="width:8px; height:8px; border-radius:50%; background:${statusDotColor};"></span>
+            <span>${statusBadgeText}</span>
+          </div>
+
+          <button type="button" class="dg-map-circle-btn" onclick="shareBookingLocation('${req.id}')" title="Share Visit">
+            ${uiIcon('share', 17)}
           </button>
         </div>
-      ` : ''}
-    </div>
-
-    <div class="sheet-floating-controls" style="justify-content:flex-end;">
-      <button class="map-floating-gps-btn" onclick="useBrowserGeolocation(false)" title="Center on My Live Location">
-        ${uiIcon('crosshair', 19)}
-      </button>
-    </div>
-
-    ${state.isSheetMinimized ? `
-      <div class="minimized-map-restore-bar" onclick="toggleSheetMinimize(false)">
-        <div>
-          <div style="font-size:13.5px; font-weight:800; color:var(--text-main); display:flex; align-items:center; gap:6px;">
-            <span style="color:var(--blue-primary); display:inline-flex;">${statusIcon}</span>
-            <span>${statusHeadline}</span>
-          </div>
-          <div style="font-size:11.5px; color:var(--text-secondary); font-weight:600;">Start PIN: #${req.startPinCode || '4829'} • Tap to open chat &amp; details</div>
-        </div>
-        <button type="button" class="minimized-restore-btn" onclick="toggleSheetMinimize(false); event.stopPropagation();">
-          ${uiIcon('chevronUp', 14)}
-          <span>Open Chat</span>
-        </button>
       </div>
-    ` : `
-      <div class="indrive-dark-sheet">
-        <div class="sheet-top-handle-bar">
-          <span style="font-size:11px; font-weight:800; color:#059669; text-transform:uppercase; letter-spacing:0.04em; display:inline-flex; align-items:center; gap:5px;">
-            <span style="width:7px; height:7px; border-radius:50%; background:#10B981;"></span>
-            <span>Active Visit Confirmed</span>
-          </span>
-          <div class="sheet-grabber" onclick="toggleSheetMinimize(true)"></div>
-          <button class="sheet-collapse-pill" onclick="toggleSheetMinimize(true)">
-            ${uiIcon('map', 13)}
-            <span>Full Map</span>
-            ${uiIcon('chevronDown', 13)}
-          </button>
+
+      <!-- Bottom Half-Screen Sheet (Screenshot 3 Center) -->
+      <div class="dg-half-sheet">
+        <div class="dg-sheet-handle" onclick="toggleSheetMinimize(true)"></div>
+
+        <!-- Specialist Row + ETA/Distance Pill -->
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+          <div style="display:flex; align-items:center; gap:11px; min-width:0; flex:1;">
+            <div style="width:46px; height:46px; border-radius:50%; background:#EFF6FF; color:#0052FF; border:2px solid #BFDBFE; display:flex; align-items:center; justify-content:center; font-size:15px; font-weight:900; flex-shrink:0; overflow:hidden; position:relative;">
+              ${prov?.avatarUrl ? `<img src="${resolveMediaUrl(avatarUrl)}" onerror="this.style.display='none'; this.parentElement.textContent='${initials}';" style="width:100%; height:100%; object-fit:cover;" alt="${escapeHtml(prov?.name || 'Pro')}" />` : initials}
+            </div>
+            <div style="min-width:0;">
+              <div style="font-size:15.5px; font-weight:900; color:#0F172A; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                ${escapeHtml(prov?.name || 'Specialist')}
+              </div>
+              <div style="font-size:12px; color:#64748B; font-weight:600; display:flex; align-items:center; gap:5px; margin-top:1px;">
+                <span style="display:inline-flex; align-items:center; gap:3px; color:#0052FF; font-weight:800;">${uiIcon('star', 12)} ${prov?.rating || '5.0'}</span>
+                <span>•</span>
+                <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(prov?.brandName || 'Verified Specialist')}</span>
+              </div>
+              <div style="margin-top:4px; display:inline-flex; align-items:center; gap:6px; background:${isDoneRequested ? '#ECFDF5' : '#EFF6FF'}; border:1px solid ${isDoneRequested ? '#86EFAC' : '#BFDBFE'}; padding:2px 9px; border-radius:8px; cursor:pointer;" onclick="copyCompletionPin('${activePinCode}')" title="Tap to copy PIN">
+                <span style="font-size:9.5px; font-weight:900; color:${isDoneRequested ? '#047857' : '#0052FF'}; letter-spacing:0.05em;">${activePinLabel}</span>
+                <span style="font-size:13px; font-weight:900; color:#0F172A; letter-spacing:1.5px;">#${activePinCode}</span>
+              </div>
+            </div>
+          </div>
+
+          <div style="background:#EFF6FF; border:1px solid #BFDBFE; border-radius:12px; padding:6px 10px; text-align:center; flex-shrink:0;">
+            <div style="font-size:13px; font-weight:900; color:#0052FF;">${etaMins} min</div>
+            <div style="font-size:10.5px; font-weight:700; color:#64748B;">${distKm} km</div>
+          </div>
         </div>
 
-        ${isArrived ? `
-          <!-- DRIVEGO SAFETY TWIN ARRIVAL CARD (BRAND ELECTRIC BLUE, NO YELLOW) -->
-          <div style="background:#EBF3FF; border:2px solid #0052FF; border-radius:16px; padding:14px; margin-bottom:10px; box-shadow:0 8px 20px rgba(0,82,255,0.12);">
-            <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px;">
-              <div style="display:flex; align-items:center; gap:8px;">
-                <span style="width:9px; height:9px; border-radius:50%; background:#0052FF; animation:pulse 1s infinite; display:inline-block;"></span>
-                <div>
-                  <div style="font-size:12px; font-weight:900; color:#0052FF; text-transform:uppercase; letter-spacing:0.04em;">Specialist Outside Gate</div>
-                  <div style="font-size:11.5px; color:#1E3A8A; font-weight:600;">Share this 4-digit Start PIN with your pro:</div>
-                </div>
-              </div>
-              <div style="background:#0052FF; color:#FFFFFF; border-radius:12px; padding:6px 14px; text-align:center; box-shadow:0 4px 12px rgba(0,82,255,0.28); cursor:pointer;" onclick="copyCompletionPin('${req.startPinCode || '4829'}')" title="Tap to copy Start PIN">
-                <span style="font-size:8.5px; font-weight:900; color:#DBEAFE; letter-spacing:0.08em; display:block;">START PIN</span>
-                <span style="font-size:21px; font-weight:900; color:#FFFFFF; letter-spacing:2.5px; line-height:1.2;">#${req.startPinCode || '4829'}</span>
-              </div>
-            </div>
-
-            <!-- Specialist Row -->
-            <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; background:#FFFFFF; border:1px solid #BFDBFE; border-radius:12px; padding:9px 11px; margin-bottom:9px;">
-              <div style="display:flex; align-items:center; gap:9px; min-width:0;">
-                <img src="${resolveMediaUrl(avatarUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_AVATAR_FALLBACK}';" style="width:38px; height:38px; border-radius:50%; object-fit:cover; flex-shrink:0;" alt="${prov?.name}" />
-                <div style="min-width:0;">
-                  <div style="font-size:13px; font-weight:800; color:#0F172A; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${prov?.name || 'Specialist'}</div>
-                  <div style="font-size:11px; color:#64748B; display:flex; align-items:center; gap:4px;">
-                    <span style="display:inline-flex; align-items:center; gap:2px; color:#0052FF; font-weight:700;">${uiIcon('star', 11)} ${prov?.rating || '5.0'}</span>
-                    <span>•</span>
-                    <span>${prov?.brandName || 'Mobile Specialist'}</span>
-                  </div>
-                </div>
-              </div>
-              <div style="text-align:right; flex-shrink:0;">
-                <div style="font-size:14px; font-weight:900; color:#0052FF;">${formatUsdPrice(agreedPrice)}</div>
-                <div style="font-size:10px; color:#64748B; font-weight:700;">${req.paymentMethod}</div>
-              </div>
-            </div>
-
-            <!-- Compact Action Row: Call, Chat, Photo -->
-            <div style="display:flex; gap:6px;">
-              <button type="button" class="btn-dark-sec" style="flex:1; height:36px; font-size:12px; border-radius:10px; background:#FFFFFF;" onclick="startInAppCall('${(prov?.name || 'Pro').replace(/'/g, "\\'")}', '${escapeHtml(req.title)}', 'call_${req.id}', '${prov?.id || ''}')">
-                ${uiIcon('phone', 13)}
-                <span>Call</span>
-              </button>
-              <button type="button" class="btn-dark-sec" style="flex:1; height:36px; font-size:12px; border-radius:10px; background:#FFFFFF;" onclick="openChatDrawer('${req.id}', '${prov?.id || ''}')">
-                ${uiIcon('chat', 13)}
-                <span>Chat ${(req.messages && req.messages.length > 0) ? `(${req.messages.length})` : ''}</span>
-              </button>
-              ${req.photoUrl ? `
-                <button type="button" class="btn-dark-sec" style="height:36px; font-size:11.5px; border-radius:10px; padding:0 10px; background:#FFFFFF;" onclick="openImagePreviewModal('${req.photoUrl}', 'Desired Style Photo')">
-                  <span>Photo</span>
-                </button>
-              ` : ''}
-            </div>
+        <!-- Agreed Fare Row -->
+        <div style="display:flex; align-items:center; justify-content:space-between; background:#F8FAFC; border:1px solid #E2E8F0; border-radius:14px; padding:10px 13px;">
+          <div style="display:flex; align-items:center; gap:8px; font-size:13px; font-weight:700; color:#334155;">
+            <span style="color:#0052FF; display:inline-flex;">${uiIcon('wallet', 16)}</span>
+            <span>Agreed fare (${escapeHtml(req.paymentMethod || 'Cash USD')})</span>
           </div>
-        ` : `
-          <!-- EN ROUTE VIEW -->
-          ${(() => {
-            const distMeters = calculateDistanceMeters(prov?.lat, prov?.lng, req.lat, req.lng);
-            if (distMeters <= 50 && req.status !== 'IN_PROGRESS') {
-              return `
-                <div style="background:#EFF6FF; border:1px solid #BFDBFE; border-radius:12px; padding:8px 11px; margin-bottom:8px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
-                  <div style="font-size:12px; font-weight:700; color:#1E40AF; display:flex; align-items:center; gap:6px;">
-                    <span style="color:#2563EB;">${uiIcon('pin', 14)}</span>
-                    <span>Specialist approaching (~${distMeters}m away)</span>
-                  </div>
-                  <div style="font-size:12px; font-weight:800; color:#2563EB;">PIN #${req.startPinCode || '4829'}</div>
-                </div>
-              `;
-            }
-            return '';
-          })()}
-
-          <!-- Service Info Row + Bold Brand Blue Start PIN Banner -->
-          <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px; background:#EBF3FF; border:1.5px solid #BFDBFE; border-radius:14px; padding:10px 12px;">
-            <div style="min-width:0;">
-              <div style="font-size:14.5px; font-weight:800; color:#0F172A; display:flex; align-items:center; gap:6px;">
-                <span style="color:#0052FF; display:inline-flex;">${statusIcon}</span>
-                <span>${statusHeadline}</span>
-              </div>
-              <div style="font-size:12px; color:#475569; margin-top:2px; font-weight:600;">
-                ${req.title} • <strong style="color:#0052FF;">${formatUsdPrice(agreedPrice)}</strong> (${req.paymentMethod})
-              </div>
-            </div>
-            <div style="background:#0052FF; color:#FFFFFF; padding:6px 12px; border-radius:10px; text-align:center; flex-shrink:0; box-shadow:0 4px 10px rgba(0,82,255,0.22); cursor:pointer;" onclick="copyCompletionPin('${req.startPinCode || '4829'}')" title="Tap to copy Start PIN">
-              <div style="font-size:8.5px; color:#DBEAFE; font-weight:900; letter-spacing:0.06em;">START PIN</div>
-              <div style="font-size:17px; font-weight:900; color:#FFFFFF; letter-spacing:2px;">#${req.startPinCode || '4829'}</div>
-            </div>
+          <div style="font-size:16px; font-weight:900; color:#0F172A;">
+            ${formatUsdPrice(agreedPrice)}
           </div>
+        </div>
 
-          ${req.photoUrl ? `
-            <div style="display:inline-flex; align-items:center; gap:7px; background:#F0FDF4; border:1px solid #BBF7D0; border-radius:8px; padding:3px 9px; margin-bottom:8px; cursor:pointer;" onclick="openImagePreviewModal('${req.photoUrl}', 'Desired Style Photo')">
-              <img src="${resolveMediaUrl(req.photoUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_TASK_PHOTO_FALLBACK}';" style="width:20px; height:20px; border-radius:4px; object-fit:cover;" alt="Reference" />
-              <span style="font-size:11px; font-weight:700; color:#15803D;">View Reference Photo</span>
-              ${uiIcon('chevronRight', 10)}
-            </div>
-          ` : ''}
+        <!-- Green Location Pill -->
+        <div style="display:flex; align-items:center; gap:8px; background:#ECFDF5; border:1px solid #A7F3D0; border-radius:12px; padding:9px 12px; color:#047857; font-size:12.5px; font-weight:700;">
+          <span style="flex-shrink:0; display:inline-flex;">${uiIcon('pin', 15)}</span>
+          <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Visiting you at ${escapeHtml(addressText)}</span>
+        </div>
 
-          <!-- Accepted Service Provider Card -->
-          <div class="indrive-selected-tier-box" style="margin-bottom:8px; padding:8px 10px;">
-            <div class="offer-pro-row" style="margin-bottom:0;">
-              <div class="offer-avatar-wrap platinum">
-                <img src="${resolveMediaUrl(avatarUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_AVATAR_FALLBACK}';" alt="${prov?.name}" />
-                <div class="platinum-diamond-badge">${uiIcon('diamond', 9)}</div>
-              </div>
-              <div class="offer-pro-details">
-                <div class="offer-pro-name-line">
-                  <span>${prov?.name || 'Tariro Moyo'}</span>
-                  ${formatProRatingAndJobs(prov?.rating, prov?.completedBookings)}
-                </div>
-                <div class="offer-pro-kit-line">${prov?.brandName || 'Mobile Service'} • ${acceptedOffer?.distanceKm ? `${acceptedOffer.distanceKm} km away` : 'En route'}</div>
-                <div class="offer-pro-platinum-line">${prov?.skillTier || 'Platinum pro'}</div>
-              </div>
-              <button class="offer-catalogue-pill" onclick="openProviderCatalogueModal('${prov?.id}')">
-                <span>Catalogue</span>
-                ${uiIcon('chevronRight', 13)}
-              </button>
-            </div>
+        ${req.delayNotice ? `
+          <div style="background:#EFF6FF; border:1px solid #93C5FD; border-radius:12px; padding:8px 11px; display:flex; align-items:center; gap:8px; font-size:12px; font-weight:700; color:#1E40AF;">
+            ${uiIcon('clock', 15)}
+            <span>Running ~${req.delayNotice.minutes}m late (${escapeHtml(req.delayNotice.reason)})</span>
           </div>
+        ` : ''}
 
-          ${req.delayNotice ? `
-            <div style="background:#EFF6FF; border:1px solid #93C5FD; border-radius:10px; padding:8px 10px; margin-bottom:8px; display:flex; align-items:center; gap:8px;">
-              <span style="color:#0052FF; display:inline-flex;">${uiIcon('clock', 16)}</span>
-              <div>
-                <div style="font-size:12px; font-weight:800; color:#1E40AF;">Specialist Running ~${req.delayNotice.minutes}m Late</div>
-                <div style="font-size:11px; color:#1D4ED8;">${escapeHtml(req.delayNotice.reason)}</div>
-              </div>
-            </div>
-          ` : ''}
+        <!-- View Route in Google Maps -->
+        <button type="button" onclick="openExternalMapsNavigation(${req.lat || -17.8252}, ${req.lng || 31.0335}, '${escapeHtml(addressText).replace(/'/g, "\\'")}', 'google')" style="width:100%; height:42px; border-radius:12px; background:#FFFFFF; border:1.5px solid #E2E8F0; color:#0F172A; font-size:13px; font-weight:800; display:flex; align-items:center; justify-content:center; gap:7px; cursor:pointer;">
+          <span style="color:#0052FF; display:inline-flex;">${uiIcon('navigation', 15)}</span>
+          <span>View route in Google Maps</span>
+        </button>
 
-          <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px;">
-            <button class="btn-dark-sec" onclick="startInAppCall('${(prov?.name || 'Pro').replace(/'/g, "\\'")}', '${escapeHtml(req.title)}', 'call_${req.id}', '${prov?.id || ''}')">
-              ${uiIcon('phone', 14)}
-              <span>Call</span>
-            </button>
-            <button class="btn-dark-sec" onclick="openChatDrawer('${req.id}', '${prov?.id || ''}')">
-              ${uiIcon('chat', 14)}
-              <span>Chat ${(req.messages && req.messages.length > 0) ? `(${req.messages.length})` : ''}</span>
-            </button>
-          </div>
-        `}
+        <!-- 2x2 Action Grid: Call | Chat | Share | SOS -->
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+          <button type="button" onclick="startInAppCall('${(prov?.name || 'Pro').replace(/'/g, "\\'")}', '${escapeHtml(req.title).replace(/'/g, "\\'")}', 'call_${req.id}', '${prov?.id || ''}')" style="height:44px; border-radius:12px; background:#FFFFFF; border:1.5px solid #E2E8F0; color:#0F172A; font-size:13.5px; font-weight:800; display:flex; align-items:center; justify-content:center; gap:7px; cursor:pointer;">
+            ${uiIcon('phone', 16)}
+            <span>Call</span>
+          </button>
+          <button type="button" onclick="openChatDrawer('${req.id}', '${prov?.id || ''}')" style="height:44px; border-radius:12px; background:#FFFFFF; border:1.5px solid #E2E8F0; color:#0F172A; font-size:13.5px; font-weight:800; display:flex; align-items:center; justify-content:center; gap:7px; cursor:pointer;">
+            ${uiIcon('chat', 16)}
+            <span>Chat ${(req.messages && req.messages.length > 0) ? `(${req.messages.length})` : ''}</span>
+          </button>
+          <button type="button" onclick="shareBookingLocation('${req.id}')" style="height:44px; border-radius:12px; background:#FFFFFF; border:1.5px solid #E2E8F0; color:#0F172A; font-size:13.5px; font-weight:800; display:flex; align-items:center; justify-content:center; gap:7px; cursor:pointer;">
+            ${uiIcon('share', 16)}
+            <span>Share</span>
+          </button>
+          <button type="button" onclick="openDisputeModal('${req.id}')" style="height:44px; border-radius:12px; background:#EF4444; border:none; color:#FFFFFF; font-size:13.5px; font-weight:800; display:flex; align-items:center; justify-content:center; gap:7px; cursor:pointer;">
+            ${uiIcon('shield', 16)}
+            <span>SOS</span>
+          </button>
+        </div>
 
         ${isCompleted ? `
-          <button class="btn-primary-blue" style="width:100%; height:44px; font-size:14px; font-weight:800; background:#10B981; box-shadow:0 4px 14px rgba(16,185,129,0.35); margin-bottom:8px;" onclick="openRateBookingModal('${req.id}')">
+          <button type="button" class="dg-primary-blue-btn" style="background:#10B981;" onclick="openRateBookingModal('${req.id}')">
             <span>Rate Specialist &amp; Finish</span>
           </button>
-        ` : (isInProgress || isArrived) ? `
-          <div style="text-align:center; margin-top:6px;">
-            <button type="button" style="background:none; border:none; color:#DC2626; font-size:11.5px; font-weight:700; cursor:pointer; padding:4px 8px; display:inline-flex; align-items:center; gap:4px;" onclick="openDisputeModal('${req.id}')">
-              ${uiIcon('shield', 12)}
-              <span>Report Dispute / Need Help</span>
-            </button>
-          </div>
-        ` : `
-          <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
-            <button class="btn-dark-sec" style="font-size:11.5px; color:#DC2626; border-color:rgba(220,38,38,0.3); justify-content:center; font-weight:700;" onclick="openDisputeModal('${req.id}')">
-              <span>Report Dispute</span>
-            </button>
-            <button class="cancel-request-red-pill" style="justify-content:center; font-weight:700;" onclick="openCancelTaskModal('${req.id}')">
-              <span>Cancel Job</span>
-            </button>
-          </div>
-        `}
+        ` : (!isInProgress && !isArrived) ? `
+          <button type="button" onclick="openCancelTaskModal('${req.id}')" style="background:none; border:none; color:#DC2626; font-size:12px; font-weight:800; padding:4px; cursor:pointer; text-align:center;">
+            Cancel request
+          </button>
+        ` : ''}
       </div>
-    `}
+    </div>
   `;
 }
 
@@ -6659,7 +6566,7 @@ function renderSignUpWizardInnerHtml(isFullScreen = false) {
         <div>
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
             <div style="display:flex; align-items:center; gap:10px;">
-              <img src="/assets/logo-icon.svg" width="36" height="36" style="border-radius:10px; display:block;" alt="Findit Logo" />
+              <img src="assets/logo-icon.svg" width="36" height="36" style="border-radius:10px; display:block;" alt="Findit Logo" />
               <div>
                 <div style="font-size:18px; font-weight:800; color:var(--text-main);">Findit Harare</div>
                 <div style="font-size:11.5px; color:var(--text-secondary); font-weight:600;">Client Account (Step 1 of 2)</div>
@@ -6833,7 +6740,7 @@ function renderSignUpWizardInnerHtml(isFullScreen = false) {
       <div>
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
           <div style="display:flex; align-items:center; gap:10px;">
-            <img src="/assets/logo-icon.svg" width="36" height="36" style="border-radius:10px; display:block;" alt="Findit Logo" />
+            <img src="assets/logo-icon.svg" width="36" height="36" style="border-radius:10px; display:block;" alt="Findit Logo" />
             <div>
               <div style="font-size:18px; font-weight:800; color:var(--text-main);">Findit Harare</div>
               <div style="font-size:11.5px; color:var(--text-secondary); font-weight:600;">Provider Sign Up (Step 1 of 4)</div>
@@ -7994,7 +7901,7 @@ function renderModalLayer() {
         <div class="indrive-modal-sheet" onclick="event.stopPropagation()">
           <div class="cancel-sheet-header">
             <div style="display:flex; align-items:center; gap:8px;">
-              <img src="/assets/logo-icon.svg" width="28" height="28" style="border-radius:8px;" alt="Logo" />
+              <img src="assets/logo-icon.svg" width="28" height="28" style="border-radius:8px;" alt="Logo" />
               <div class="cancel-sheet-title">Findit Harare</div>
             </div>
             <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
@@ -9309,7 +9216,7 @@ function renderModalLayer() {
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#54656F" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
               </button>
               <div style="position:relative; width:40px; height:40px; border-radius:50%; overflow:hidden; background:#FFFFFF; flex-shrink:0; display:flex; align-items:center; justify-content:center; border:1px solid #D1D7DB;">
-                <img src="/assets/logo-icon.svg" alt="Findit Harare" style="width:100%; height:100%; object-fit:cover;" onerror="this.src='/favicon.png'" />
+                <img src="assets/logo-icon.svg" alt="Findit Harare" style="width:100%; height:100%; object-fit:cover;" onerror="this.src='favicon.png'" />
               </div>
               <div style="min-width:0; flex:1;">
                 <div style="display:flex; align-items:center; gap:5px;">
@@ -9339,7 +9246,7 @@ function renderModalLayer() {
             <!-- Authentic WhatsApp Business Profile Card (With Real Followers & Clickable Social Icons) -->
             <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:18px; padding:18px 16px; margin:0 auto 10px auto; width:92%; text-align:center; box-shadow:0 1px 4px rgba(0,0,0,0.06);">
               <div style="width:72px; height:72px; border-radius:50%; background:#FFFFFF; margin:0 auto 10px auto; display:flex; align-items:center; justify-content:center; overflow:hidden; border:2px solid #00A884; box-shadow:0 2px 8px rgba(0,0,0,0.08);">
-                <img src="/assets/logo-icon.svg" alt="Findit Harare" style="width:100%; height:100%; object-fit:cover;" />
+                <img src="assets/logo-icon.svg" alt="Findit Harare" style="width:100%; height:100%; object-fit:cover;" />
               </div>
               <div style="font-size:16px; font-weight:800; color:#111B21; display:flex; align-items:center; justify-content:center; gap:5px;">
                 <span>Findit Harare Official</span>
@@ -11300,31 +11207,29 @@ function renderProviderModeOverlay() {
   }
   const myPendingApprovals = (state.db.approvalQueue || []).filter((a) => a.providerId === prov.id && a.status === 'PENDING');
 
-  const currentTab = state.providerTab || (activeJob ? 'ACTIVE_JOB' : 'FEED');
+  const currentTab = state.providerTab || (activeJob ? 'ACTIVE_JOB' : 'HOME');
 
-  let bodyHtml = '';
   if (currentTab === 'HOME') {
-    bodyHtml = renderProviderHomeTab(prov, openRequests, activeJob);
-  } else if (currentTab === 'ACTIVE_JOB') {
-    bodyHtml = `<div class="fh-main-screen-container" style="padding-top:14px;">${renderProviderActiveVisitTab(prov, activeJob)}</div>`;
-  } else if (currentTab === 'PROFILE') {
-    bodyHtml = renderProviderProfileTab();
-  } else if (currentTab === 'CATALOGUE') {
-    bodyHtml = `<div class="fh-main-screen-container" style="padding-top:14px;">${renderProviderCatalogueTab(prov, myPendingApprovals)}</div>`;
-  } else {
-    // FEED (Opportunities)
-    if (state.providerFeedView === 'MAP' && !activeJob) {
-      bodyHtml = renderProviderOpportunitiesMapOverlay(prov, openRequests);
-    } else {
-      bodyHtml = `<div class="fh-main-screen-container" style="padding-top:14px;">${renderProviderRequestsFeedTab(prov, openRequests, activeJob)}</div>`;
-    }
+    return renderProviderHomeTab(prov, openRequests, activeJob);
+  }
+  if (currentTab === 'ACTIVE_JOB') {
+    return renderProviderActiveVisitTab(prov, activeJob);
+  }
+  if (currentTab === 'EARNINGS') {
+    return renderProviderEarningsTab(prov);
+  }
+  if (currentTab === 'PROFILE') {
+    return renderProviderProfileTab();
+  }
+  if (currentTab === 'CATALOGUE') {
+    return `
+      ${renderCurvedBrandHeader('PROVIDER')}
+      <div class="fh-main-screen-container" style="padding-top:14px;">${renderProviderCatalogueTab(prov, myPendingApprovals)}</div>
+    `;
   }
 
-  const isMapFeed = (state.providerFeedView === 'MAP' && !activeJob && currentTab === 'FEED');
-  return `
-    ${isMapFeed ? '' : renderCurvedBrandHeader('PROVIDER')}
-    ${bodyHtml}
-  `;
+  // FEED (Opportunities): Always keep live Harare map + route open with folded-down list drawer
+  return renderProviderOpportunitiesMapOverlay(prov, openRequests, activeJob);
 }
 
 function _legacy_renderProviderModeOverlay_unused() {
@@ -11419,316 +11324,301 @@ function _legacy_renderProviderModeOverlay_unused() {
 }
 
 // ----------------------------------------------------------------------------
-// PROVIDER TAB 1: ACTIVE CLIENT VISIT & REAL-TIME CHAT (WHEN OFFER IS ACCEPTED)
+// PROVIDER TAB: ACTIVE CLIENT VISIT & JOBS DONE TODAY (SCREENSHOT 3 RIGHT & 5)
 // ----------------------------------------------------------------------------
 function renderProviderActiveVisitTab(prov, activeJob) {
+  const isPromo = Boolean(state.db?.settings?.launchPromoActive);
+  const commRate = isPromo ? 0 : (state.db.settings?.commissionPercent ?? 10);
+
   if (!activeJob) {
+    // Show clean "My Jobs" view with Jobs Done Today (uncrowded, Screenshot 5 Right style summary if completed today)
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayMs = todayStart.getTime();
+    const completedToday = (state.db?.requests || []).filter((r) => {
+      if (r.status !== 'COMPLETED') return false;
+      const isMine = r.acceptedProviderId === prov.id || (r.offers || []).some((o) => o.providerId === prov.id && o.id === r.acceptedOfferId);
+      if (!isMine) return false;
+      const ts = Number(r.completedAt || r.updatedAt || r.createdAt || 0);
+      return ts >= todayMs || !ts;
+    });
+    const latestDone = completedToday[0];
+
     return `
-      <div style="text-align:center; padding:24px 14px; background:var(--bg-card); border-radius:18px; border:1px solid var(--border-light);">
-        <div style="font-size:15px; font-weight:800; color:var(--text-main); margin-bottom:4px;">No Active Home Visit Right Now</div>
-        <div style="font-size:12.5px; color:var(--text-secondary); margin-bottom:14px; line-height:1.45;">
-          Open the <strong>Requests</strong> tab to accept a client's fare or send a counter-offer. As soon as a client accepts your offer, your live route and client chat appear here.
+      <div class="fh-white-screen-container" style="padding:18px 16px 96px; min-height:100vh; background:#F8FAFC;">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
+          <div>
+            <div style="font-size:22px; font-weight:900; color:#0F172A; letter-spacing:-0.02em;">My Jobs</div>
+            <div style="font-size:12.5px; font-weight:600; color:#64748B;">Active visit &amp; today's completed jobs</div>
+          </div>
+          <button type="button" onclick="state.providerTab='FEED'; renderUiOverlay(true);" style="border:none; background:#0052FF; color:#FFFFFF; font-size:12px; font-weight:800; padding:8px 14px; border-radius:999px; cursor:pointer;">
+            Opportunities
+          </button>
         </div>
-        <button class="btn-primary-blue" style="height:42px; font-size:13px;" onclick="state.providerTab='FEED'; renderUiOverlay();">
-          ${uiIcon('list', 15)}
-          <span>View Open Client Requests</span>
-        </button>
+
+        ${latestDone ? (() => {
+          const fare = Number(latestDone.agreedTotalUsd || latestDone.budgetUsd || 0);
+          const comm = Math.round(fare * (commRate / 100) * 100) / 100;
+          const net = fare - comm;
+          return `
+            <div style="background:#FFFFFF; border-radius:22px; padding:18px 16px; border:1px solid #E2E8F0; box-shadow:0 6px 20px rgba(15,23,42,0.06); margin-bottom:16px;">
+              <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+                <div style="width:36px; height:36px; border-radius:50%; background:#ECFDF5; color:#10B981; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                  ${uiIcon('check', 18)}
+                </div>
+                <div>
+                  <div style="font-size:15px; font-weight:900; color:#0F172A;">Latest job completed!</div>
+                  <div style="font-size:11.5px; font-weight:600; color:#64748B;">${escapeHtml(latestDone.title)} • ${escapeHtml(latestDone.customerName || 'Client')}</div>
+                </div>
+              </div>
+
+              <div style="background:linear-gradient(135deg, #10B981 0%, #059669 100%); border-radius:16px; padding:14px 16px; color:#FFFFFF; margin-bottom:12px;">
+                <div style="font-size:10px; font-weight:800; letter-spacing:0.08em; opacity:0.9;">COLLECT IN CASH</div>
+                <div style="font-size:28px; font-weight:900; margin:2px 0 8px;">${formatUsdPrice(fare)}</div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                  <div style="background:rgba(255,255,255,0.16); border-radius:10px; padding:7px 10px;">
+                    <div style="font-size:10px; opacity:0.85;">Your earnings</div>
+                    <div style="font-size:14px; font-weight:900;">$${net.toFixed(2)}</div>
+                  </div>
+                  <div style="background:rgba(255,255,255,0.16); border-radius:10px; padding:7px 10px;">
+                    <div style="font-size:10px; opacity:0.85;">Commission (${commRate}%)</div>
+                    <div style="font-size:14px; font-weight:900;">$${comm.toFixed(2)}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          `;
+        })() : `
+          <div style="background:#FFFFFF; border-radius:20px; padding:24px 16px; border:1px solid #E2E8F0; text-align:center; margin-bottom:16px;">
+            <div style="font-size:15px; font-weight:900; color:#0F172A; margin-bottom:4px;">No Active Visit Right Now</div>
+            <div style="font-size:12.5px; color:#64748B; margin-bottom:14px; line-height:1.45;">
+              Accept a client request on the Opportunities map to start your next visit.
+            </div>
+            <button type="button" class="dg-primary-blue-btn" style="height:44px; font-size:13.5px;" onclick="state.providerTab='FEED'; renderUiOverlay(true);">
+              ${uiIcon('map', 15)}
+              <span>Browse Opportunities</span>
+            </button>
+          </div>
+        `}
+
+        <!-- Jobs Done Today List -->
+        <div style="font-size:13px; font-weight:800; color:#0F172A; margin-bottom:8px;">
+          Jobs Done Today (${completedToday.length})
+        </div>
+        ${completedToday.length === 0 ? `
+          <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:16px; padding:16px; text-align:center; font-size:12.5px; color:#64748B; font-weight:600;">
+            Completed jobs for today will appear here.
+          </div>
+        ` : `
+          <div style="display:flex; flex-direction:column; gap:8px;">
+            ${completedToday.slice(0, 8).map((j) => {
+              const fare = Number(j.agreedTotalUsd || j.budgetUsd || 0);
+              return `
+                <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:14px; padding:12px 14px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
+                  <div style="min-width:0;">
+                    <div style="font-size:13.5px; font-weight:800; color:#0F172A; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(j.title || 'Home Visit')}</div>
+                    <div style="font-size:11.5px; color:#64748B; font-weight:600;">${escapeHtml(j.customerName || 'Client')} • ${escapeHtml(j.suburbName || 'Harare')}</div>
+                  </div>
+                  <div style="text-align:right; flex-shrink:0;">
+                    <div style="font-size:14.5px; font-weight:900; color:#10B981;">${formatUsdPrice(fare)}</div>
+                    <div style="font-size:10px; font-weight:700; color:#64748B;">Completed</div>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        `}
       </div>
     `;
   }
 
   const accOffer = (activeJob.offers || []).find((o) => o.id === activeJob.acceptedOfferId);
   const agreedUsd = activeJob.agreedTotalUsd || accOffer?.priceUsd || activeJob.budgetUsd;
-  const isPromo = Boolean(state.db?.settings?.launchPromoActive);
-  const commRate = isPromo ? 0 : (state.db.settings?.commissionPercent ?? 10);
   const netUsd = Math.round(agreedUsd * (1 - commRate / 100) * 100) / 100;
 
   const isEnRoute = activeJob.status === 'CONFIRMED' || activeJob.status === 'BOOKED';
   const isArrived = activeJob.status === 'ARRIVED';
   const isInProgress = activeJob.status === 'IN_PROGRESS' || activeJob.pinVerifiedByProvider;
 
+  const distMeters = calculateDistanceMeters(prov?.lat, prov?.lng, activeJob.lat, activeJob.lng);
+  const distKm = (distMeters / 1000).toFixed(1);
+  const etaMins = Math.max(1, Math.round(distMeters / 400));
+  const addressText = activeJob.exactAddress || activeJob.suburbName || 'Harare';
+  const clientInitials = (activeJob.customerName || 'CL').split(' ').filter(Boolean).map((p) => p[0]).join('').slice(0, 2).toUpperCase();
+
+  let topPillText = `Heading to client • ${etaMins} min`;
+  let topPillBg = '#0052FF';
+  let bannerText = `Navigate to ${escapeHtml(addressText)}`;
+  let bannerBg = '#EFF6FF';
+  let bannerColor = '#1E40AF';
+  if (isArrived) {
+    topPillText = 'At the client gate';
+    topPillBg = '#0052FF';
+    bannerText = "You've arrived at the gate. Ask client for their 4-digit Start PIN.";
+    bannerBg = '#EFF6FF';
+    bannerColor = '#1E40AF';
+  } else if (isInProgress) {
+    const estMinutes = activeJob.estimatedDurationMinutes || 30;
+    const endMs = activeJob.estimatedCompletionAt || (Date.now() + estMinutes * 60 * 1000);
+    const remainingMins = Math.max(1, Math.ceil(Math.max(0, endMs - Date.now()) / 60000));
+    topPillText = `In progress • ~${remainingMins} min`;
+    topPillBg = '#10B981';
+    bannerText = activeJob.completionRequested
+      ? 'Marked done! Enter client Completion PIN below.'
+      : `Work in progress at ${escapeHtml(addressText)}`;
+    bannerBg = '#ECFDF5';
+    bannerColor = '#047857';
+  }
+
   return `
-    <div>
-      <!-- Luxury 3-Step Provider Progression Bar -->
-      <div class="luxury-step-track">
-        <div class="luxury-step-segment ${isEnRoute ? 'active' : 'done'}">
-          ${!isEnRoute ? uiIcon('check', 11) : ''}
-          <span>1. En Route</span>
-        </div>
-        <div class="luxury-step-segment ${isArrived ? 'active' : isInProgress ? 'done' : ''}">
-          ${isInProgress ? uiIcon('check', 11) : ''}
-          <span>2. Outside Gate</span>
-        </div>
-        <div class="luxury-step-segment ${isInProgress ? 'active' : ''}">
-          <span>3. In Service</span>
+    <div class="dg-screen-over-map">
+      <!-- Top Floating Bar over Live Harare Map + Route (Screenshot 3 Right & 5) -->
+      <div class="dg-top-area">
+        <div class="dg-search-top-row" style="justify-content:space-between;">
+          <button type="button" class="dg-map-circle-btn" onclick="state.providerTab='FEED'; renderUiOverlay(true);" title="Opportunities">
+            ${uiIcon('close', 18)}
+          </button>
+
+          <div style="background:${topPillBg}; color:#FFFFFF; border-radius:999px; padding:8px 16px; box-shadow:0 6px 18px rgba(15,23,42,0.18); font-size:12.5px; font-weight:800;">
+            ${topPillText}
+          </div>
+
+          <button type="button" onclick="openDisputeModal('${activeJob.id}')" style="width:42px; height:42px; border-radius:50%; background:#EF4444; color:#FFFFFF; border:none; font-size:11px; font-weight:900; box-shadow:0 6px 18px rgba(239,68,68,0.35); cursor:pointer;">
+            SOS
+          </button>
         </div>
       </div>
 
-      <!-- Luxury Accepted Client Visit Summary Card -->
-      <div class="luxury-provider-card">
-        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px;">
+      <!-- Bottom Half-Screen Sheet over Live Route -->
+      <div class="dg-half-sheet">
+        <div class="dg-sheet-handle"></div>
+
+        <!-- Agreed Fare & Net Payout Row -->
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
           <div>
-            <div style="font-size:10.5px; font-weight:800; color:#059669; text-transform:uppercase; letter-spacing:0.04em; margin-bottom:2px;">
-              Client Accepted Offer
-            </div>
-            <div style="font-size:17px; font-weight:900; color:var(--text-main); display:flex; align-items:center; gap:6px;">
-              <span>${escapeHtml(activeJob.customerName)}</span>
-              <span style="font-size:12px; color:#0052FF; font-weight:700; display:inline-flex; align-items:center; gap:3px;">
-                ${(Number(activeJob.customerRating) || 0) > 0 ? `${uiIcon('star', 11)} ${activeJob.customerRating}` : '• New Client'}
-              </span>
-            </div>
-            <div style="font-size:12.5px; color:var(--blue-primary); font-weight:700; margin-top:3px; display:flex; align-items:center; gap:4px;">
-              ${uiIcon('pin', 13)}
-              <span>${escapeHtml(activeJob.exactAddress || activeJob.suburbName || 'Harare')}</span>
-            </div>
+            <div style="font-size:10px; font-weight:800; color:#64748B; text-transform:uppercase; letter-spacing:0.06em;">Agreed fare (${escapeHtml(activeJob.paymentMethod || 'Cash USD')})</div>
+            <div style="font-size:26px; font-weight:900; color:#0F172A; line-height:1.1;">${formatUsdPrice(agreedUsd)}</div>
+          </div>
+          <div style="background:#ECFDF5; border:1px solid #A7F3D0; color:#047857; border-radius:999px; padding:6px 12px; font-size:12px; font-weight:800; display:inline-flex; align-items:center; gap:5px;">
+            <span>You earn $${netUsd.toFixed(2)}</span>
           </div>
         </div>
 
-        <!-- DriveGo Trip Flow Twin: Collect in Cash / EcoCash Banner (07-app-trip-flow.png) -->
-        <div class="luxury-earnings-banner" style="background:linear-gradient(135deg, #0F172A 0%, #1E293B 100%);">
-          <div>
-            <div style="font-size:10.5px; font-weight:800; color:#94A3B8; text-transform:uppercase; letter-spacing:0.06em;">Collect from Client (${escapeHtml(activeJob.paymentMethod || 'Cash USD')})</div>
-            <div class="luxury-fare-large">${formatUsdPrice(agreedUsd)}</div>
-          </div>
-          <div style="text-align:right;">
-            <div class="luxury-net-pill">Net Payout: $${netUsd.toFixed(2)}</div>
-            <div style="font-size:11px; color:#94A3B8; font-weight:700; margin-top:3px;">${isPromo ? '0% Launch Promo (No Fee)' : `${commRate}% platform fee`}</div>
-          </div>
+        <!-- Status Banner -->
+        <div style="background:${bannerBg}; color:${bannerColor}; border-radius:12px; padding:9px 12px; font-size:12px; font-weight:700; display:flex; align-items:center; gap:7px;">
+          ${uiIcon('pin', 14)}
+          <span>${bannerText}</span>
         </div>
 
-        <div style="font-size:13px; font-weight:800; color:var(--text-main); background:var(--blue-soft); padding:8px 12px; border-radius:12px; margin-bottom:10px; display:flex; align-items:center; gap:7px;">
-          <span style="color:var(--blue-primary); display:inline-flex;">${uiIcon('briefcase', 14)}</span>
-          <span>${escapeHtml(activeJob.title)} • <span style="font-weight:600; color:var(--text-secondary);">${escapeHtml(activeJob.description)}</span></span>
-        </div>
-
-        ${activeJob.bookingFor === 'SOMEONE_ELSE' ? `
-          <div style="font-size:11.5px; font-weight:700; color:#1E40AF; background:#DBEAFE; padding:7px 11px; border-radius:10px; margin-bottom:8px;">
-            Ordered for: <strong>${escapeHtml(activeJob.recipientName || 'Recipient')}</strong> ${activeJob.recipientPhone ? `(${escapeHtml(activeJob.recipientPhone)})` : ''}
-          </div>
-        ` : ''}
-
-        ${activeJob.timingType === 'SCHEDULED' ? `
-          <div style="font-size:11.5px; font-weight:700; color:#1E40AF; background:#EFF6FF; padding:7px 11px; border-radius:10px; margin-bottom:8px;">
-            Scheduled Visit: <strong>${escapeHtml(activeJob.scheduledDate)} at ${escapeHtml(activeJob.scheduledTime)}</strong>
-          </div>
-        ` : ''}
-
-        ${activeJob.delayNotice ? `
-          <div style="font-size:11.5px; font-weight:700; color:#1E40AF; background:#EFF6FF; border:1px solid #93C5FD; padding:7px 11px; border-radius:10px; margin-bottom:8px;">
-            Delay Alert: Running ~${activeJob.delayNotice.minutes}m late (${escapeHtml(activeJob.delayNotice.reason)})
-          </div>
-        ` : ''}
-
-        ${activeJob.photoUrl ? `
-          <div style="display:flex; align-items:center; gap:9px; background:var(--blue-soft); border:1px solid var(--blue-border); border-radius:12px; padding:7px 11px; margin-bottom:10px;">
-            <img src="${resolveMediaUrl(activeJob.photoUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_TASK_PHOTO_FALLBACK}';" style="width:42px; height:42px; border-radius:8px; object-fit:cover; cursor:pointer;" onclick="openImagePreviewModal('${activeJob.photoUrl}', 'Client Reference Photo')" alt="Desired Style Reference" />
-            <div style="flex:1; min-width:0;">
-              <div style="font-size:12px; font-weight:800; color:var(--blue-primary);">Client Desired Style Photo</div>
-              <div style="font-size:11px; color:var(--text-secondary); cursor:pointer;" onclick="openImagePreviewModal('${activeJob.photoUrl}', 'Client Reference Photo')">Tap to view full reference photo</div>
+        <!-- Client Row + Circular Chat & Call Buttons -->
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+          <div style="display:flex; align-items:center; gap:10px; min-width:0; flex:1;">
+            <div style="width:42px; height:42px; border-radius:50%; background:#F1F5F9; color:#0F172A; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:900; flex-shrink:0;">
+              ${clientInitials}
             </div>
-          </div>
-        ` : ''}
-
-        ${activeJob.voiceNoteUrl ? `
-          <div style="margin-bottom:10px;">
-            ${renderWhatsAppAudioPlayerCard('visit_' + activeJob.id, activeJob.voiceNoteUrl, activeJob.voiceNoteDuration || 15, 'Client Spoken Voice Note')}
-          </div>
-        ` : ''}
-
-        <!-- STAGE 1: EN ROUTE (Provider sees "I'm Outside Gate" — PIN input is hidden!) -->
-        ${isEnRoute ? `
-          <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:14px; padding:12px; margin-bottom:10px;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; padding:8px 10px; background:#FFFFFF; border:1px solid #E2E8F0; border-radius:10px;">
-              <div style="display:flex; align-items:center; gap:6px;">
-                <span style="font-size:12px; font-weight:800; color:#0F172A;">Voice Directions:</span>
-                <span style="font-size:11px; font-weight:800; padding:2px 8px; border-radius:99px; background:${liveNavState.voiceEnabled ? '#DCFCE7' : '#F1F5F9'}; color:${liveNavState.voiceEnabled ? '#15803D' : '#64748B'};">
-                  ${liveNavState.voiceEnabled ? 'ON' : 'OFF (Default)'}
-                </span>
+            <div style="min-width:0;">
+              <div style="font-size:14.5px; font-weight:900; color:#0F172A; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                ${escapeHtml(activeJob.customerName || 'Client')}
               </div>
-              <button type="button" class="small-pill-btn" onclick="toggleNavVoice(); renderUiOverlay(true);" style="height:30px; padding:0 10px; font-size:11.5px; font-weight:800; background:${liveNavState.voiceEnabled ? '#10B981' : '#F1F5F9'}; color:${liveNavState.voiceEnabled ? '#FFFFFF' : '#0F172A'}; border:1px solid ${liveNavState.voiceEnabled ? '#10B981' : '#CBD5E1'}; display:inline-flex; align-items:center; gap:4px;">
-                ${liveNavState.voiceEnabled ? `${uiIcon('volumeOff', 12)} <span>Mute</span>` : `${uiIcon('volumeOn', 12)} <span>Turn On</span>`}
-              </button>
+              <div style="font-size:11.5px; font-weight:600; color:#64748B; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                ${escapeHtml(activeJob.title)} • ${distKm} km
+              </div>
             </div>
-            <div style="font-size:12px; color:var(--text-secondary); font-weight:600; margin-bottom:10px; line-height:1.4; text-align:center;">
-              You are navigating to client residence. Tap below when you arrive outside:
-            </div>
-            <button type="button" class="luxury-action-btn-primary luxury-action-btn-arrived" onclick="providerMarkArrived('${activeJob.id}')">
-              <span>I'm Outside Gate</span>
+          </div>
+
+          <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
+            <button type="button" class="dg-map-circle-btn" style="position:relative; box-shadow:none; background:#F1F5F9; border:none;" onclick="openChatDrawer('${activeJob.id}')" title="Chat">
+              ${uiIcon('chat', 17)}
+              ${(activeJob.messages && activeJob.messages.length > 0) ? `<span style="position:absolute; top:-2px; right:-2px; width:16px; height:16px; border-radius:50%; background:#EF4444; color:#FFFFFF; font-size:9.5px; font-weight:900; display:flex; align-items:center; justify-content:center;">${activeJob.messages.length}</span>` : ''}
+            </button>
+            <button type="button" class="dg-map-circle-btn" style="box-shadow:none; background:#F1F5F9; border:none;" onclick="startInAppCall('${(activeJob.customerName || 'Client').replace(/'/g, "\\'")}', '${escapeHtml(activeJob.title).replace(/'/g, "\\'")}', 'call_${activeJob.id}', '${activeJob.customerId || activeJob.customerPhone || ''}')" title="Call">
+              ${uiIcon('phone', 17)}
             </button>
           </div>
+        </div>
+
+        ${(activeJob.photoUrl || activeJob.voiceNoteUrl) ? `
+          <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+            ${activeJob.photoUrl ? `
+              <button type="button" class="dg-media-mini-chip has-value" onclick="openImagePreviewModal('${activeJob.photoUrl}', 'Client Reference Photo')">
+                ${uiIcon('camera', 13)}
+                <span>View client photo</span>
+              </button>
+            ` : ''}
+            ${activeJob.voiceNoteUrl ? `
+              <div style="flex:1; min-width:180px;">
+                ${renderWhatsAppAudioPlayerCard('visit_' + activeJob.id, activeJob.voiceNoteUrl, activeJob.voiceNoteDuration || 15, 'Client Voice Note')}
+              </div>
+            ` : ''}
+          </div>
         ` : ''}
 
-        <!-- STAGE 2: WAITING OUTSIDE GATE (DriveGo Safety PIN Entry + Keypad Modal Button) -->
-        ${isArrived ? `
-          <div style="background:#EBF3FF; border:2px solid #0052FF; border-radius:16px; padding:16px 14px; margin-bottom:12px; text-align:center;">
-            <div style="display:inline-flex; align-items:center; gap:6px; background:#0052FF; color:#FFFFFF; font-size:11px; font-weight:900; text-transform:uppercase; letter-spacing:0.06em; padding:4px 12px; border-radius:99px; margin-bottom:8px;">
-              <span style="width:7px; height:7px; border-radius:50%; background:#10B981; animation:pulse 1s infinite;"></span>
-              <span>Waiting Outside Gate</span>
-            </div>
-            <div style="font-size:14.5px; font-weight:900; color:#0F172A; margin-bottom:3px;">
-              Enter Client's 4-Digit Start PIN
-            </div>
-            <div style="font-size:11.5px; color:#1E3A8A; margin-bottom:12px; font-weight:600;">
-              Ask customer for their code — work starts immediately upon verification:
-            </div>
-            <div style="display:flex; justify-content:center; align-items:center; gap:8px; margin-bottom:10px;">
+        <!-- Navigate: Google Maps | Waze -->
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+          <button type="button" onclick="openExternalMapsNavigation(${activeJob.lat || -17.8252}, ${activeJob.lng || 31.0335}, '${escapeHtml(addressText).replace(/'/g, "\\'")}', 'google')" style="height:40px; border-radius:12px; background:#EFF6FF; border:1px solid #BFDBFE; color:#0052FF; font-size:12.5px; font-weight:800; display:flex; align-items:center; justify-content:center; gap:6px; cursor:pointer;">
+            ${uiIcon('map', 14)}
+            <span>Google Maps</span>
+          </button>
+          <button type="button" onclick="openExternalMapsNavigation(${activeJob.lat || -17.8252}, ${activeJob.lng || 31.0335}, '${escapeHtml(addressText).replace(/'/g, "\\'")}', 'waze')" style="height:40px; border-radius:12px; background:#F8FAFC; border:1px solid #E2E8F0; color:#0F172A; font-size:12.5px; font-weight:800; display:flex; align-items:center; justify-content:center; gap:6px; cursor:pointer;">
+            ${uiIcon('navigation', 14)}
+            <span>Waze</span>
+          </button>
+        </div>
+
+        <!-- Stage Primary Action -->
+        ${isEnRoute ? `
+          <button type="button" class="dg-primary-dark-btn" onclick="providerMarkArrived('${activeJob.id}')">
+            <span>I've arrived at the gate</span>
+          </button>
+        ` : isArrived ? `
+          <div style="background:#EFF6FF; border:1.5px solid #0052FF; border-radius:16px; padding:12px; text-align:center;">
+            <div style="font-size:12.5px; font-weight:800; color:#0F172A; margin-bottom:8px;">Enter Client's 4-Digit Start PIN</div>
+            <div style="display:flex; justify-content:center; align-items:center; gap:8px;">
               <input
                 id="providerPinInput_${activeJob.id}"
                 class="dark-input"
                 type="tel"
                 inputmode="numeric"
                 pattern="[0-9]*"
-                style="height:52px; width:170px; font-size:26px; font-weight:900; letter-spacing:8px; text-align:center; padding:0 12px; border:2.5px solid #0052FF; border-radius:14px; background:#FFFFFF; color:#0F172A; box-shadow:0 4px 14px rgba(0,82,255,0.16);"
+                style="height:46px; width:150px; font-size:22px; font-weight:900; letter-spacing:6px; text-align:center; border:2px solid #0052FF; border-radius:12px; background:#FFFFFF; color:#0F172A;"
                 placeholder="••••"
                 maxlength="4"
-                autofocus
                 oninput="if(this.value.length === 4) handleProviderAutoPinVerification(this.value, '${activeJob.id}')"
               />
-              <button
-                type="button"
-                class="btn-primary-blue"
-                style="height:52px; width:auto; padding:0 14px; border-radius:14px; font-size:12px; font-weight:800; background:#0052FF; display:inline-flex; align-items:center; gap:5px;"
-                onclick="openProviderPinKeypadModal('${activeJob.id}', 'START')"
-              >
+              <button type="button" class="dg-primary-blue-btn" style="width:auto; height:46px; padding:0 16px; border-radius:12px; font-size:12.5px;" onclick="openProviderPinKeypadModal('${activeJob.id}', 'START')">
                 ${uiIcon('keypad', 15)}
                 <span>Keypad</span>
               </button>
             </div>
-            <div style="display:inline-flex; align-items:center; gap:6px; font-size:11.5px; color:#475569; background:#FFFFFF; border:1px solid #BFDBFE; padding:4px 10px; border-radius:10px;">
-              <span style="font-weight:700;">Est. Time:</span>
-              <select id="providerEstSelect_${activeJob.id}" style="border:none; background:transparent; font-size:11.5px; font-weight:800; color:#0F172A; cursor:pointer; outline:none;">
-                <option value="15">15 mins</option>
-                <option value="30" selected>30 mins</option>
-                <option value="45">45 mins</option>
-                <option value="60">1 hour</option>
-                <option value="90">1.5 hrs</option>
-                <option value="120">2 hrs</option>
-              </select>
-            </div>
             <div id="providerPinStatus_${activeJob.id}" style="margin-top:6px;"></div>
           </div>
-        ` : ''}
-
-        <!-- STAGE 3: IN PROGRESS & WORK ESTIMATION -->
-        ${isInProgress ? (() => {
-          const estMinutes = activeJob.estimatedDurationMinutes || 30;
-          const endMs = activeJob.estimatedCompletionAt || (Date.now() + estMinutes * 60 * 1000);
-          const remainingSec = Math.max(0, Math.floor((endMs - Date.now()) / 1000));
-          const remainingMins = Math.ceil(remainingSec / 60);
-
-          return `
-            <div style="background:#ECFDF5; border:1.5px solid #10B981; border-radius:16px; padding:14px; margin-bottom:12px;">
-              <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
-                <div style="font-size:12px; font-weight:900; color:#047857; display:flex; align-items:center; gap:6px;">
-                  <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#10B981; animation:pulse 1s infinite;"></span>
-                  <span>TASK IN PROGRESS</span>
-                </div>
-                <div style="font-size:12px; font-weight:800; color:#065F46;">
-                  ~${remainingMins} mins remaining
-                </div>
-              </div>
-              <div style="font-size:11.5px; color:#065F46; margin-bottom:10px;">
-                Estimated duration: <strong>${estMinutes} mins</strong>. Adjust ETA if work takes more or less time:
-              </div>
-              <div style="display:flex; gap:6px; margin-bottom:12px;">
-                <button type="button" class="small-pill-btn" style="flex:1; justify-content:center; background:#FFFFFF; color:#047857; border:1px solid #6EE7B7; font-weight:800;" onclick="providerAdjustEstimatedTime('${activeJob.id}', -15)">
-                  -15m
-                </button>
-                <button type="button" class="small-pill-btn" style="flex:1; justify-content:center; background:#FFFFFF; color:#047857; border:1px solid #6EE7B7; font-weight:800;" onclick="providerAdjustEstimatedTime('${activeJob.id}', 15)">
-                  +15m
-                </button>
-                <button type="button" class="small-pill-btn" style="flex:1; justify-content:center; background:#FFFFFF; color:#047857; border:1px solid #6EE7B7; font-weight:800;" onclick="providerAdjustEstimatedTime('${activeJob.id}', 30)">
-                  +30m
-                </button>
-              </div>
-
-              <!-- Completion Step -->
-              ${!activeJob.completionRequested ? `
-                <button class="btn-primary-blue" style="width:100%; height:46px; font-size:14px; font-weight:800; background:#10B981; box-shadow:0 4px 14px rgba(16,185,129,0.35);" onclick="providerRequestCompletion('${activeJob.id}')">
-                  <span>I'm Done — Request Completion PIN</span>
-                </button>
-              ` : `
-                <div style="background:#FFFFFF; border:2px solid #0052FF; border-radius:14px; padding:12px; margin-top:6px;">
-                  <div style="font-size:13px; font-weight:900; color:#0052FF; margin-bottom:4px;">
-                    Marked Done! Enter Customer's Completion PIN:
-                  </div>
-                  <div style="font-size:11.5px; color:var(--text-secondary); margin-bottom:10px; font-weight:600;">
-                    Ask client for the 4-digit Completion PIN displayed on their screen:
-                  </div>
-                  <div style="display:flex; align-items:center; gap:6px;">
-                    <input
-                      id="providerCompletionPinInput_${activeJob.id}"
-                      class="dark-input"
-                      type="tel"
-                      inputmode="numeric"
-                      pattern="[0-9]*"
-                      style="height:44px; font-size:20px; font-weight:900; letter-spacing:4px; text-align:center; padding:0 8px; width:105px; flex-shrink:0; border:2px solid #0052FF;"
-                      placeholder="••••"
-                      maxlength="4"
-                      oninput="if(this.value.length === 4) handleProviderCompletionPinVerification(this.value, '${activeJob.id}')"
-                    />
-                    <button
-                      type="button"
-                      class="btn-dark-sec"
-                      style="height:44px; padding:0 10px; font-size:11.5px; font-weight:800; flex-shrink:0;"
-                      onclick="openProviderPinKeypadModal('${activeJob.id}', 'COMPLETION')"
-                      title="Open Keypad"
-                    >
-                      ${uiIcon('keypad', 14)}
-                    </button>
-                    <button type="button" class="btn-primary-blue" style="flex:1; height:44px; font-size:12.5px; font-weight:800; background:#10B981;" onclick="handleProviderCompletionPinVerification(document.getElementById('providerCompletionPinInput_${activeJob.id}')?.value, '${activeJob.id}')">
-                      Verify &amp; Finish
-                    </button>
-                  </div>
-                  <div id="providerCompletionPinStatus_${activeJob.id}"></div>
-                </div>
-              `}
+        ` : isInProgress ? (!activeJob.completionRequested ? `
+          <button type="button" class="dg-primary-blue-btn" style="background:#10B981; box-shadow:0 8px 20px rgba(16,185,129,0.28);" onclick="providerRequestCompletion('${activeJob.id}')">
+            <span>I'm Done — Request Completion PIN</span>
+          </button>
+        ` : `
+          <div style="background:#ECFDF5; border:1.5px solid #10B981; border-radius:16px; padding:12px; text-align:center;">
+            <div style="font-size:12.5px; font-weight:800; color:#047857; margin-bottom:8px;">Enter Client's 4-Digit Completion PIN</div>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <input
+                id="providerCompletionPinInput_${activeJob.id}"
+                class="dark-input"
+                type="tel"
+                inputmode="numeric"
+                pattern="[0-9]*"
+                style="height:44px; width:115px; font-size:20px; font-weight:900; letter-spacing:4px; text-align:center; border:2px solid #10B981; border-radius:12px; background:#FFFFFF;"
+                placeholder="••••"
+                maxlength="4"
+                oninput="if(this.value.length === 4) handleProviderCompletionPinVerification(this.value, '${activeJob.id}')"
+              />
+              <button type="button" class="dg-primary-blue-btn" style="flex:1; height:44px; border-radius:12px; background:#10B981; font-size:13px;" onclick="handleProviderCompletionPinVerification(document.getElementById('providerCompletionPinInput_${activeJob.id}')?.value, '${activeJob.id}')">
+                Verify &amp; Finish
+              </button>
             </div>
-          `;
-        })() : ''}
-      </div>
-
-      <!-- Latest Message Snippet Pill (if messages exist) -->
-      ${(activeJob.messages && activeJob.messages.length > 0) ? `
-        <div class="chat-preview-pill" onclick="openChatDrawer('${activeJob.id}')">
-          <div class="chat-preview-dot"></div>
-          <div class="chat-preview-text">
-            <span class="chat-preview-sender">${escapeHtml(activeJob.messages[activeJob.messages.length - 1].senderName)}:</span>
-            ${escapeHtml(activeJob.messages[activeJob.messages.length - 1].text)}
+            <div id="providerCompletionPinStatus_${activeJob.id}"></div>
           </div>
-          <span class="chat-preview-action">Reply ${uiIcon('chevronRight', 12)}</span>
-        </div>
-      ` : ''}
-
-      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; margin-bottom:8px; margin-top:8px;">
-        <button class="btn-dark-sec" style="font-size:11.5px; padding:0 8px; justify-content:center; font-weight:700;" onclick="promptProviderDelayNotice('${activeJob.id}')" title="Send Transit Delay Notice to Client">
-          <span>Delay (+15m)</span>
-        </button>
-        <button class="btn-dark-sec" style="font-size:11.5px; padding:0 8px; justify-content:center; font-weight:700;" onclick="startInAppCall('${(activeJob.customerName || 'Client').replace(/'/g, "\\'")}', '${escapeHtml(activeJob.title)}', 'call_${activeJob.id}', '${activeJob.customerId || activeJob.customerPhone || ''}')">
-          <span>Call</span>
-        </button>
-        <button class="btn-dark-sec" style="font-size:11.5px; padding:0 8px; justify-content:center; font-weight:700;" onclick="openChatDrawer('${activeJob.id}')">
-          <span>Chat ${(activeJob.messages && activeJob.messages.length > 0) ? `(${activeJob.messages.length})` : ''}</span>
-        </button>
+        `) : ''}
       </div>
-
-      <!-- Dispute / Cancellation Row: If in-progress or arrived outside, cancellation is LOCKED -->
-      ${(isInProgress || isArrived) ? `
-        <div style="margin-top:4px;">
-          <button class="btn-dark-sec" style="width:100%; font-size:12.5px; color:#DC2626; border-color:rgba(220,38,38,0.3); justify-content:center; padding:10px; font-weight:700;" onclick="openDisputeModal('${activeJob.id}')">
-            <span>Report a Dispute</span>
-          </button>
-        </div>
-      ` : `
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
-          <button class="btn-dark-sec" style="font-size:11.5px; color:#DC2626; border-color:rgba(220,38,38,0.3); justify-content:center; font-weight:700;" onclick="openDisputeModal('${activeJob.id}')">
-            <span>Report Dispute</span>
-          </button>
-          <button class="cancel-request-red-pill" style="justify-content:center; font-weight:700;" onclick="openCancelTaskModal('${activeJob.id}')">
-            <span>Cancel Job</span>
-          </button>
-        </div>
-      `}
     </div>
   `;
 }
@@ -11843,155 +11733,206 @@ function cycleOpportunityOnMap(direction) {
   }
 }
 
-function renderProviderOpportunitiesMapOverlay(prov, openRequests) {
+function toggleOppDrawerExpanded() {
+  state.isOppDrawerExpanded = !state.isOppDrawerExpanded;
+  lastUiOverlaySignature = '';
+  renderUiOverlay(true);
+}
+
+function renderProviderOpportunitiesMapOverlay(prov, openRequests, activeJob) {
   const visibleRequests = openRequests.filter((r) => !(state.dismissedJobIds || []).includes(r.id));
+  if (!state.selectedOpportunityId && visibleRequests.length > 0) {
+    state.selectedOpportunityId = visibleRequests[0].id;
+  }
   const currentIdx = Math.max(0, visibleRequests.findIndex((r) => r.id === state.selectedOpportunityId));
   const activeReq = visibleRequests[currentIdx] || visibleRequests[0];
   const totalCount = visibleRequests.length;
+  const isExpanded = Boolean(state.isOppDrawerExpanded);
+  const isPromoActive = Boolean(state.db?.settings?.launchPromoActive);
 
   return `
-    <div style="position:relative; width:100%; height:100%; pointer-events:none;">
-      <!-- Floating Top Bar with Segmented View Switcher -->
-      <div style="position:absolute; top:12px; left:12px; right:12px; display:flex; align-items:center; justify-content:space-between; gap:10px; z-index:900; pointer-events:auto;">
-        <div style="background:rgba(255,255,255,0.95); backdrop-filter:blur(8px); border:1px solid rgba(226,232,240,0.8); border-radius:12px; padding:6px 10px; display:inline-flex; align-items:center; gap:6px; box-shadow:0 4px 14px rgba(0,0,0,0.08);">
-          <span style="width:8px; height:8px; border-radius:50%; background:#10B981; animation:pulse 1.2s infinite; flex-shrink:0;"></span>
-          <span style="font-size:12px; font-weight:800; color:#0F172A;">${totalCount} Client Request${totalCount === 1 ? '' : 's'} on Map</span>
-        </div>
+    <div class="dg-screen-over-map">
+      <!-- Top Floating Bar over Live Harare Map + Route (Screenshot 2 Left & 4 Center) -->
+      <div class="dg-top-area">
+        <div class="dg-search-top-row" style="justify-content:space-between;">
+          <div style="background:rgba(255,255,255,0.96); backdrop-filter:blur(8px); border:1px solid #E2E8F0; border-radius:999px; padding:8px 14px; display:inline-flex; align-items:center; gap:7px; box-shadow:0 6px 18px rgba(15,23,42,0.12);">
+            <span style="width:8px; height:8px; border-radius:50%; background:${prov.isOnline === false ? '#F59E0B' : '#10B981'}; flex-shrink:0;"></span>
+            <span style="font-size:12.5px; font-weight:800; color:#0F172A;">
+              ${totalCount} ${totalCount === 1 ? 'request' : 'requests'} near you
+            </span>
+          </div>
 
-        <div style="background:rgba(255,255,255,0.95); backdrop-filter:blur(8px); border:1px solid rgba(226,232,240,0.8); border-radius:12px; padding:3px; display:inline-flex; gap:3px; box-shadow:0 4px 14px rgba(0,0,0,0.08);">
-          <button type="button" onclick="setProviderFeedView('LIST')" style="border:none; background:transparent; color:#64748B; font-size:11.5px; font-weight:800; padding:5px 12px; border-radius:8px; cursor:pointer; display:inline-flex; align-items:center; gap:5px;">
-            ${uiIcon('list', 12)}
-            <span>List</span>
-          </button>
-          <button type="button" style="border:none; background:#0052FF; color:#FFFFFF; font-size:11.5px; font-weight:800; padding:5px 12px; border-radius:8px; cursor:pointer; display:inline-flex; align-items:center; gap:5px; box-shadow:0 2px 6px rgba(0,82,255,0.3);">
-            ${uiIcon('map', 12)}
-            <span>Map</span>
-          </button>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <button type="button" class="dg-map-circle-btn" onclick="openAccountSettingsModal()" title="Categories">
+              ${uiIcon('sliders', 17)}
+            </button>
+            <button type="button" class="dg-map-circle-btn" onclick="useBrowserGeolocation(false)" title="My GPS Location">
+              ${uiIcon('crosshair', 17)}
+            </button>
+          </div>
         </div>
       </div>
 
-      <!-- Floating Location GPS Button -->
-      <div style="position:absolute; right:14px; top:68px; z-index:900; pointer-events:auto;">
-        <button type="button" class="map-floating-gps-btn" style="background:#FFFFFF; border:1px solid #CBD5E1; box-shadow:0 4px 14px rgba(0,0,0,0.12);" onclick="useBrowserGeolocation(false)" title="My GPS Location">
-          ${uiIcon('crosshair', 18)}
-        </button>
-      </div>
+      <!-- Bottom Stack: Floating Request Card + Folded-Down List Drawer -->
+      <div style="display:flex; flex-direction:column; gap:10px; pointer-events:none;">
+        ${!isExpanded ? `
+          <div style="padding:0 14px; pointer-events:auto;">
+            ${activeReq ? (() => {
+              const r = activeReq;
+              const myExistingOffer = (r.offers || []).find((o) => o.providerId === prov.id || (prov.finditId && o.providerFinditId === prov.finditId));
+              const isOfferPending = Boolean(myExistingOffer && (myExistingOffer.status === 'PROPOSED' || myExistingOffer.status === 'COUNTERED'));
+              const reqCat = normalizeCategoryId(r.categoryId);
+              const commPercent = isPromoActive ? 0 : Number(state.db?.settings?.categoryCommissions?.[reqCat] ?? (state.db?.settings?.commissionPercent || 10));
+              const minReserve = isPromoActive ? 0 : Number(state.db?.settings?.minWalletBalanceUsd || 2.0);
+              const jobBudgetUsd = Number(r.budgetUsd || 0);
+              const requiredCommUsd = Math.round(jobBudgetUsd * (commPercent / 100) * 100) / 100;
+              const walletBalUsd = Number(prov.walletBalanceUsd || 0);
+              const surpassesWallet = !isPromoActive && (walletBalUsd < minReserve || walletBalUsd < requiredCommUsd || (walletBalUsd - requiredCommUsd) < minReserve);
 
-      <!-- Bottom Floating Selected Opportunity Card -->
-      ${activeReq ? (() => {
-        const r = activeReq;
-        const myExistingOffer = (r.offers || []).find((o) => o.providerId === prov.id || (prov.finditId && o.providerFinditId === prov.finditId));
-        const isOfferDeclined = Boolean(myExistingOffer && myExistingOffer.status === 'DECLINED');
-        const isOfferPending = Boolean(myExistingOffer && (myExistingOffer.status === 'PROPOSED' || myExistingOffer.status === 'COUNTERED'));
-        const reqCat = normalizeCategoryId(r.categoryId);
-        const commPercent = Number(state.db?.settings?.categoryCommissions?.[reqCat] ?? (state.db?.settings?.commissionPercent || 10));
-        const minReserve = Number(state.db?.settings?.minWalletBalanceUsd || 2.0);
-        const jobBudgetUsd = Number(r.budgetUsd || 0);
-        const requiredCommUsd = Math.round(jobBudgetUsd * (commPercent / 100) * 100) / 100;
-        const walletBalUsd = Number(prov.walletBalanceUsd || 0);
-        const surpassesWallet = (walletBalUsd < minReserve || walletBalUsd < requiredCommUsd || (walletBalUsd - requiredCommUsd) < minReserve);
-        const bid1Usd = Number((jobBudgetUsd + 2).toFixed(2));
-        const bid2Usd = Number((jobBudgetUsd + 3.5).toFixed(2));
-        const bid1CommUsd = Math.round(bid1Usd * (commPercent / 100) * 100) / 100;
-        const bid2CommUsd = Math.round(bid2Usd * (commPercent / 100) * 100) / 100;
-        const bid1Surpasses = (walletBalUsd < minReserve || walletBalUsd < bid1CommUsd || (walletBalUsd - bid1CommUsd) < minReserve);
-        const bid2Surpasses = (walletBalUsd < minReserve || walletBalUsd < bid2CommUsd || (walletBalUsd - bid2CommUsd) < minReserve);
+              let displayLocation = r.exactAddress || r.clientLiveAddress || r.suburbName || 'Harare';
+              displayLocation = displayLocation
+                .replace(/^My Current Live Location \((.*)\)$/i, '$1')
+                .replace(/^My Current Live Location$/i, r.suburbName ? `${r.suburbName}, Harare` : 'Harare');
 
-        let displayLocation = r.exactAddress || r.clientLiveAddress || r.suburbName || 'Harare';
-        let badgeSuburb = r.suburbName || (displayLocation.split(',')[0] || 'Harare').trim();
+              const distMeters = calculateDistanceMeters(prov?.lat, prov?.lng, r.lat, r.lng);
+              const distKm = (distMeters / 1000).toFixed(1);
+              const etaMins = Math.max(2, Math.round(distMeters / 400));
+              const clientInitials = (r.customerName || 'CL').split(' ').filter(Boolean).map((p) => p[0]).join('').slice(0, 2).toUpperCase();
 
-        return `
-          <div style="position:absolute; bottom:64px; left:12px; right:12px; max-width:480px; margin:0 auto; z-index:900; pointer-events:auto;">
-            <div class="provider-order-card" style="box-shadow:0 8px 30px rgba(15,23,42,0.18); border:2px solid #0052FF; background:#FFFFFF;">
-              <!-- Navigation Header between opportunities -->
-              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; border-bottom:1px solid #F1F5F9; padding-bottom:6px;">
-                <div style="font-size:11.5px; font-weight:800; color:#64748B;">
-                  Opportunity ${currentIdx + 1} of ${totalCount}
-                </div>
-                ${totalCount > 1 ? `
-                  <div style="display:flex; gap:6px;">
-                    <button type="button" onclick="cycleOpportunityOnMap(-1)" class="btn-dark-sec" style="height:26px; padding:0 8px; font-size:11px; font-weight:800; border-radius:6px;">
-                      <span>Prev</span>
-                    </button>
-                    <button type="button" onclick="cycleOpportunityOnMap(1)" class="btn-dark-sec" style="height:26px; padding:0 8px; font-size:11px; font-weight:800; border-radius:6px;">
-                      <span>Next</span>
-                    </button>
+              return `
+                <div class="dg-floating-request-card">
+                  <!-- Card Header: Price + ETA + Prev/Next -->
+                  <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+                    <div style="display:flex; align-items:baseline; gap:8px;">
+                      <span style="font-size:24px; font-weight:900; color:#0F172A;">${formatUsdPrice(r.budgetUsd)}</span>
+                      <span style="font-size:12.5px; font-weight:700; color:#64748B;">${etaMins} min • ${distKm} km</span>
+                    </div>
+                    ${totalCount > 1 ? `
+                      <div style="display:flex; align-items:center; gap:5px;">
+                        <button type="button" onclick="cycleOpportunityOnMap(-1)" style="height:28px; padding:0 10px; border-radius:999px; border:1px solid #E2E8F0; background:#F8FAFC; color:#0F172A; font-size:11px; font-weight:800; cursor:pointer;">Prev</button>
+                        <span style="font-size:11px; font-weight:800; color:#64748B;">${currentIdx + 1}/${totalCount}</span>
+                        <button type="button" onclick="cycleOpportunityOnMap(1)" style="height:28px; padding:0 10px; border-radius:999px; border:1px solid #E2E8F0; background:#F8FAFC; color:#0F172A; font-size:11px; font-weight:800; cursor:pointer;">Next</button>
+                      </div>
+                    ` : ''}
                   </div>
-                ` : ''}
+
+                  <!-- Client & Service Row -->
+                  <div style="display:flex; align-items:center; gap:10px;">
+                    <div style="width:36px; height:36px; border-radius:50%; background:#EFF6FF; color:#0052FF; display:flex; align-items:center; justify-content:center; font-size:12.5px; font-weight:900; flex-shrink:0;">
+                      ${clientInitials}
+                    </div>
+                    <div style="min-width:0; flex:1;">
+                      <div style="display:flex; align-items:center; gap:6px; font-size:13.5px; font-weight:800; color:#0F172A;">
+                        <span>${escapeHtml(r.customerName || 'Client')}</span>
+                        ${(Number(r.customerRating) || 0) > 0 ? `<span style="display:inline-flex; align-items:center; gap:2px; color:#0052FF; font-size:12px;">${uiIcon('star', 11)} ${r.customerRating}</span>` : ''}
+                      </div>
+                      <div style="font-size:12.5px; font-weight:700; color:#334155; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                        ${escapeHtml(r.title)}
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Route / Location Rows -->
+                  <div style="display:flex; flex-direction:column; gap:5px; font-size:12px; font-weight:600; color:#475569; background:#F8FAFC; border-radius:12px; padding:8px 11px;">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                      <span style="width:7px; height:7px; border-radius:50%; background:#10B981; flex-shrink:0;"></span>
+                      <span>Your current location</span>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:8px;">
+                      <span style="width:7px; height:7px; border-radius:50%; background:#0052FF; flex-shrink:0;"></span>
+                      <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:#0F172A; font-weight:700;">${escapeHtml(displayLocation)}</span>
+                    </div>
+                  </div>
+
+                  ${(r.photoUrl || r.voiceNoteUrl) ? `
+                    <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                      ${r.photoUrl ? `
+                        <button type="button" class="dg-media-mini-chip has-value" onclick="openImagePreviewModal('${r.photoUrl}', 'Desired Style Photo')">
+                          ${uiIcon('camera', 12)} <span>Style photo</span>
+                        </button>
+                      ` : ''}
+                      ${r.voiceNoteUrl ? `
+                        <span class="dg-media-mini-chip has-value">${uiIcon('mic', 12)} Voice note attached</span>
+                      ` : ''}
+                    </div>
+                  ` : ''}
+
+                  <!-- Actions -->
+                  ${activeJob ? `
+                    <div style="background:#EFF6FF; border:1px solid #BFDBFE; border-radius:12px; padding:9px 12px; display:flex; align-items:center; justify-content:space-between; gap:8px;">
+                      <span style="font-size:12px; font-weight:700; color:#1E40AF;">Finish active visit to bid</span>
+                      <button type="button" onclick="state.providerTab='ACTIVE_JOB'; renderUiOverlay(true);" style="border:none; background:#0052FF; color:#FFFFFF; font-size:11.5px; font-weight:800; padding:6px 12px; border-radius:999px; cursor:pointer;">Open Job</button>
+                    </div>
+                  ` : isOfferPending ? `
+                    <div style="background:#EFF6FF; border:1px solid #BFDBFE; border-radius:12px; padding:9px 12px; display:flex; justify-content:space-between; align-items:center;">
+                      <span style="font-size:12px; font-weight:800; color:#1D4ED8;">Offered ${formatUsdPrice(myExistingOffer.priceUsd)} • Waiting for client</span>
+                      <button type="button" style="border:1px solid #BFDBFE; background:#FFFFFF; color:#0052FF; height:30px; padding:0 12px; border-radius:999px; font-size:11.5px; font-weight:800; cursor:pointer;" onclick="promptProviderCustomBid('${r.id}', ${r.budgetUsd})">Change</button>
+                    </div>
+                  ` : `
+                    <button type="button" ${(!isPromoActive && walletBalUsd < minReserve) ? 'disabled' : `onclick="promptProviderCustomBid('${r.id}', ${r.budgetUsd})"`} style="width:100%; height:40px; border-radius:12px; border:1.5px solid #BFDBFE; background:#EFF6FF; color:#0052FF; font-size:13px; font-weight:800; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; ${(!isPromoActive && walletBalUsd < minReserve) ? 'opacity:0.45;' : ''}">
+                      <span>Counter-offer</span>
+                    </button>
+                    <div style="display:grid; grid-template-columns:1fr 1.35fr; gap:8px;">
+                      <button type="button" onclick="providerDismissJob('${r.id}')" style="height:44px; border-radius:12px; border:none; background:#F1F5F9; color:#0F172A; font-size:13.5px; font-weight:800; cursor:pointer;">
+                        Decline
+                      </button>
+                      <button type="button" ${surpassesWallet ? 'disabled' : `onclick="providerSubmitBid('${r.id}', ${r.budgetUsd})"`} style="height:44px; border-radius:12px; border:none; background:#10B981; color:#FFFFFF; font-size:13.5px; font-weight:900; cursor:pointer; box-shadow:0 6px 16px rgba(16,185,129,0.28); ${surpassesWallet ? 'opacity:0.45;' : ''}">
+                        ${surpassesWallet ? (walletBalUsd < minReserve ? 'Need $2 Bal' : `Need $${(requiredCommUsd + minReserve).toFixed(2)}`) : `Accept ${formatUsdPrice(r.budgetUsd)}`}
+                      </button>
+                    </div>
+                  `}
+                </div>
+              `;
+            })() : `
+              <div class="dg-floating-request-card" style="text-align:center; padding:18px;">
+                <div style="font-size:14.5px; font-weight:800; color:#0F172A;">No open requests right now</div>
+                <div style="font-size:12px; color:#64748B;">Stay online — matching client requests will pop up here over the map.</div>
               </div>
+            `}
+          </div>
+        ` : ''}
 
-              <!-- Price & Location -->
-              <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px;">
-                <div>
-                  <span style="font-size:22px; font-weight:900; color:#0052FF;">${formatUsdPrice(r.budgetUsd)}</span>
-                  <span style="font-size:11.5px; font-weight:700; color:#64748B; margin-left:4px;">${r.paymentMethod}</span>
-                </div>
-                <span style="font-size:11px; color:#0052FF; font-weight:800; background:#EFF6FF; padding:3px 9px; border-radius:99px; display:inline-flex; align-items:center; gap:4px;">
-                  ${uiIcon('pin', 11)}
-                  <span>${escapeHtml(badgeSuburb)}</span>
-                </span>
+        <!-- Folded-Down Bottom List Drawer (Raises When Clicked) -->
+        <div class="dg-folded-bottom-drawer" style="${isExpanded ? 'max-height:58vh;' : 'max-height:140px;'}">
+          <div onclick="toggleOppDrawerExpanded()" style="cursor:pointer; padding-bottom:${isExpanded ? '10px' : '2px'};">
+            <div class="dg-sheet-handle" style="margin-bottom:8px;"></div>
+            <div style="display:flex; align-items:center; justify-content:space-between;">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span style="font-size:14px; font-weight:900; color:#0F172A;">All opportunities</span>
+                <span style="background:#EFF6FF; color:#0052FF; font-size:11.5px; font-weight:800; padding:2px 9px; border-radius:999px;">${totalCount}</span>
               </div>
-
-              <div style="font-size:14px; font-weight:800; color:#0F172A; margin-bottom:4px;">${escapeHtml(r.title)}</div>
-
-              <div style="font-size:11.5px; color:#475569; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
-                <span style="font-weight:700; color:#0F172A; display:inline-flex; align-items:center; gap:4px;"><span style="color:#0052FF; display:inline-flex;">${uiIcon('pin', 11)}</span> ${escapeHtml(displayLocation)}</span>
-                <span>•</span>
-                <span>${escapeHtml(r.customerName)}</span>
-              </div>
-
-              ${r.description ? `
-                <div style="font-size:11.5px; color:#64748B; font-style:italic; margin-bottom:8px;">
-                  "${escapeHtml(r.description)}"
-                </div>
-              ` : ''}
-
-              <!-- Action Bid Grid -->
-              ${isOfferPending ? `
-                <div style="background:#EFF6FF; border:1px solid #BFDBFE; border-radius:10px; padding:8px 10px; display:flex; justify-content:space-between; align-items:center;">
-                  <span style="font-size:12px; font-weight:800; color:#1D4ED8;">Offered ${formatUsdPrice(myExistingOffer.priceUsd)} • Waiting for client</span>
-                  <button type="button" class="btn-dark-sec" style="height:28px; padding:0 8px; font-size:11px; font-weight:800;" onclick="promptProviderCustomBid('${r.id}', ${r.budgetUsd})">Change</button>
-                </div>
-              ` : `
-                <div class="provider-bid-grid" style="gap:5px;">
-                  <button
-                    class="btn-primary-blue"
-                    ${surpassesWallet ? 'disabled style="height:36px; font-size:11.5px; opacity:0.42;"' : `style="height:36px; font-size:11.5px; font-weight:800;" onclick="providerSubmitBid('${r.id}', ${r.budgetUsd})"`}
-                  >
-                    ${surpassesWallet ? (walletBalUsd < minReserve ? 'Need $2 Bal' : `Need $${(requiredCommUsd + minReserve).toFixed(2)}`) : `Accept ${formatUsdPrice(r.budgetUsd)}`}
-                  </button>
-                  <button
-                    class="btn-dark-sec"
-                    ${bid1Surpasses ? 'disabled style="height:36px; font-size:11.5px; opacity:0.42;"' : `style="height:36px; font-size:11.5px; font-weight:800;" onclick="providerSubmitBid('${r.id}', ${bid1Usd})"`}
-                  >
-                    ${bid1Surpasses ? (walletBalUsd < minReserve ? 'Need $2' : `Need $${(bid1CommUsd + minReserve).toFixed(2)}`) : formatUsdPrice(bid1Usd)}
-                  </button>
-                  <button
-                    class="btn-dark-sec"
-                    ${bid2Surpasses ? 'disabled style="height:36px; font-size:11.5px; opacity:0.42;"' : `style="height:36px; font-size:11.5px; font-weight:800;" onclick="providerSubmitBid('${r.id}', ${bid2Usd})"`}
-                  >
-                    ${bid2Surpasses ? (walletBalUsd < minReserve ? 'Need $2' : `Need $${(bid2CommUsd + minReserve).toFixed(2)}`) : formatUsdPrice(bid2Usd)}
-                  </button>
-                  <button
-                    class="btn-dark-sec"
-                    ${walletBalUsd < minReserve ? 'disabled style="height:36px; font-size:11.5px; opacity:0.42;"' : `style="height:36px; font-size:11.5px; font-weight:800;" onclick="promptProviderCustomBid('${r.id}', ${r.budgetUsd})"`}
-                  >
-                    Custom $
-                  </button>
-                </div>
-              `}
+              <span style="font-size:12px; font-weight:800; color:#0052FF; display:inline-flex; align-items:center; gap:4px;">
+                <span>${isExpanded ? 'Fold down' : 'Raise list'}</span>
+                ${uiIcon(isExpanded ? 'chevronDown' : 'chevronUp', 14)}
+              </span>
             </div>
           </div>
-        `;
-      })() : `
-        <div style="position:absolute; bottom:80px; left:20px; right:20px; text-align:center; background:#FFFFFF; border-radius:14px; padding:18px; box-shadow:0 4px 20px rgba(0,0,0,0.12); pointer-events:auto;">
-          <div style="font-size:14px; font-weight:800; color:#0F172A; margin-bottom:6px;">No Open Requests on Map</div>
-          <div style="font-size:12px; color:#64748B; margin-bottom:12px;">New customer requests in your categories will appear as pins on this map.</div>
-          <button type="button" class="btn-primary-blue" onclick="setProviderFeedView('LIST')" style="height:36px; font-size:12px; padding:0 16px;">
-            <span>Back to List View</span>
-          </button>
+
+          ${isExpanded ? `
+            <div style="display:flex; flex-direction:column; gap:8px; margin-top:4px;">
+              ${totalCount === 0 ? `
+                <div style="text-align:center; padding:20px; font-size:12.5px; color:#64748B;">No open requests in your categories right now.</div>
+              ` : visibleRequests.map((r) => {
+                const isSelected = activeReq && activeReq.id === r.id;
+                const distMeters = calculateDistanceMeters(prov?.lat, prov?.lng, r.lat, r.lng);
+                const distKm = (distMeters / 1000).toFixed(1);
+                return `
+                  <div onclick="state.isOppDrawerExpanded=false; showOpportunityOnMap('${r.id}');" style="padding:12px 13px; border-radius:14px; border:1.5px solid ${isSelected ? '#0052FF' : '#E2E8F0'}; background:${isSelected ? '#EFF6FF' : '#F8FAFC'}; display:flex; align-items:center; justify-content:space-between; gap:10px; cursor:pointer;">
+                    <div style="min-width:0; flex:1;">
+                      <div style="font-size:13.5px; font-weight:800; color:#0F172A; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(r.title)}</div>
+                      <div style="font-size:11.5px; color:#64748B; font-weight:600;">${escapeHtml(r.customerName || 'Client')} • ${escapeHtml(r.suburbName || 'Harare')} • ${distKm} km</div>
+                    </div>
+                    <div style="text-align:right; flex-shrink:0;">
+                      <div style="font-size:15px; font-weight:900; color:#0052FF;">${formatUsdPrice(r.budgetUsd)}</div>
+                      <div style="font-size:10.5px; font-weight:700; color:#64748B;">Tap to view</div>
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          ` : ''}
         </div>
-      `}
+      </div>
     </div>
   `;
 }
@@ -12298,6 +12239,211 @@ function renderProviderRequestsFeedTab(prov, openRequests, activeJob) {
           ${uiIcon('edit', 10)}
           <span>Edit</span>
         </button>
+      </div>
+    </div>
+  `;
+}
+
+// ----------------------------------------------------------------------------
+// PROVIDER TAB: EARNINGS & WALLET (SCREENSHOT 6 LEFT & CENTER TWIN)
+// ----------------------------------------------------------------------------
+function setProviderEarningsPeriod(period) {
+  state.providerEarningsPeriod = period;
+  lastUiOverlaySignature = '';
+  renderUiOverlay(true);
+}
+
+function setProviderEarningsSubView(view) {
+  state.providerEarningsSubView = view;
+  lastUiOverlaySignature = '';
+  renderUiOverlay(true);
+}
+
+function renderProviderEarningsTab(prov) {
+  const isPromo = Boolean(state.db?.settings?.launchPromoActive);
+  const commRate = isPromo ? 0 : (state.db.settings?.commissionPercent ?? 10);
+  const period = state.providerEarningsPeriod || 'WEEK';
+  const subView = state.providerEarningsSubView || 'SUMMARY';
+
+  const allReqs = state.db?.requests || [];
+  const completedJobs = allReqs.filter((r) => {
+    if (r.status !== 'COMPLETED') return false;
+    if (r.acceptedProviderId === prov.id) return true;
+    return (r.offers || []).some((o) => o.providerId === prov.id && (o.id === r.acceptedOfferId || r.pinVerifiedByProvider));
+  });
+
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const startOfWeek = startOfToday - (6 * 86400000);
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+
+  const filteredJobs = completedJobs.filter((r) => {
+    const ts = Number(r.completedAt || r.updatedAt || r.createdAt || 0);
+    if (!ts) return period !== 'TODAY';
+    if (period === 'TODAY') return ts >= startOfToday;
+    if (period === 'WEEK') return ts >= startOfWeek;
+    return ts >= startOfMonth;
+  });
+
+  const grossEarned = filteredJobs.reduce((sum, r) => sum + Number(r.agreedTotalUsd || r.budgetUsd || 0), 0);
+  const netEarned = grossEarned * (1 - commRate / 100);
+  const jobsCount = filteredJobs.length;
+  const avgEarned = jobsCount > 0 ? (netEarned / jobsCount) : 0;
+
+  // 7-day trend bars M..S
+  const dayLetters = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+  const dayTotals = [0, 0, 0, 0, 0, 0, 0];
+  completedJobs.forEach((r) => {
+    const ts = Number(r.completedAt || r.updatedAt || r.createdAt || 0);
+    if (!ts || ts < startOfWeek) return;
+    const d = new Date(ts).getDay(); // 0=Sun..6=Sat
+    const idx = d === 0 ? 6 : d - 1;
+    dayTotals[idx] += Number(r.agreedTotalUsd || r.budgetUsd || 0) * (1 - commRate / 100);
+  });
+  const maxDay = Math.max(10, ...dayTotals);
+
+  const walletBal = Number(prov.walletBalanceUsd || 0);
+  const txs = (prov.walletTransactions || []).slice(0, 12);
+
+  if (subView === 'WALLET') {
+    return `
+      <div class="fh-white-screen-container" style="padding:18px 16px 96px; min-height:100vh; background:#F8FAFC;">
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:16px;">
+          <button type="button" class="dg-map-circle-btn" style="box-shadow:none; border:1px solid #E2E8F0;" onclick="setProviderEarningsSubView('SUMMARY')">
+            ${uiIcon('arrowLeft', 18)}
+          </button>
+          <div style="font-size:20px; font-weight:900; color:#0F172A;">Wallet</div>
+        </div>
+
+        <div style="background:#0F172A; border-radius:22px; padding:18px; color:#FFFFFF; margin-bottom:14px; box-shadow:0 10px 26px rgba(15,23,42,0.2);">
+          <div style="font-size:11px; font-weight:800; color:#93C5FD; text-transform:uppercase; letter-spacing:0.06em;">
+            ${isPromo ? 'LAUNCH PROMO • 0% COMMISSION' : 'PREPAID COMMISSION WALLET'}
+          </div>
+          <div style="font-size:32px; font-weight:900; margin:6px 0;">$${walletBal.toFixed(2)}</div>
+          <div style="font-size:12px; color:#CBD5E1; line-height:1.45; margin-bottom:12px;">
+            You collect 100% from clients on site. Keep at least $${(state.db.settings?.minWalletBalanceUsd ?? 2.0).toFixed(2)} in your wallet to bid on jobs.
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; border-top:1px solid rgba(255,255,255,0.12); padding-top:10px;">
+            <div>
+              <div style="font-size:10.5px; color:#94A3B8;">Total Net Earned</div>
+              <div style="font-size:15px; font-weight:800;">$${netEarned.toFixed(2)}</div>
+            </div>
+            <div>
+              <div style="font-size:10.5px; color:#94A3B8;">Commission Rate</div>
+              <div style="font-size:15px; font-weight:800;">${commRate}%</div>
+            </div>
+          </div>
+        </div>
+
+        <button type="button" class="dg-primary-dark-btn" style="margin-bottom:16px;" onclick="openProviderWalletModal()">
+          ${uiIcon('wallet', 16)}
+          <span>Top up Wallet via EcoCash</span>
+        </button>
+
+        <div style="font-size:11.5px; font-weight:800; color:#64748B; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:8px;">
+          Movements
+        </div>
+        ${txs.length === 0 ? `
+          <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:16px; padding:18px; text-align:center; font-size:12.5px; color:#64748B;">
+            No wallet movements yet.
+          </div>
+        ` : `
+          <div style="display:flex; flex-direction:column; gap:8px;">
+            ${txs.map((t) => {
+              const isCredit = Number(t.amountUsd || 0) >= 0;
+              return `
+                <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:14px; padding:12px 14px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
+                  <div style="display:flex; align-items:center; gap:10px; min-width:0;">
+                    <div style="width:34px; height:34px; border-radius:10px; background:${isCredit ? '#ECFDF5' : '#FEF2F2'}; color:${isCredit ? '#10B981' : '#EF4444'}; display:flex; align-items:center; justify-content:center; font-weight:900; flex-shrink:0;">
+                      ${isCredit ? '+' : '%'}
+                    </div>
+                    <div style="min-width:0;">
+                      <div style="font-size:13px; font-weight:800; color:#0F172A; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(t.note || t.type || 'Wallet movement')}</div>
+                      <div style="font-size:11px; color:#64748B;">${t.createdAt ? new Date(t.createdAt).toLocaleDateString() : 'Recent'}</div>
+                    </div>
+                  </div>
+                  <div style="font-size:14px; font-weight:900; color:${isCredit ? '#10B981' : '#EF4444'}; flex-shrink:0;">
+                    ${isCredit ? '+' : ''}$${Math.abs(Number(t.amountUsd || 0)).toFixed(2)}
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        `}
+      </div>
+    `;
+  }
+
+  return `
+    <div class="fh-white-screen-container" style="padding:18px 16px 96px; min-height:100vh; background:#F8FAFC;">
+      <div style="margin-bottom:14px;">
+        <div style="font-size:26px; font-weight:900; color:#0F172A; letter-spacing:-0.02em;">Earnings</div>
+        <div style="font-size:12.5px; font-weight:600; color:#64748B;">Your earnings summary</div>
+      </div>
+
+      <!-- Today | Week | Month Switcher (Screenshot 6 Left) -->
+      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; background:#FFFFFF; border:1px solid #E2E8F0; border-radius:999px; padding:4px; margin-bottom:14px;">
+        ${['TODAY', 'WEEK', 'MONTH'].map((p) => {
+          const active = period === p;
+          const label = p === 'TODAY' ? 'Today' : p === 'WEEK' ? 'Week' : 'Month';
+          return `
+            <button type="button" onclick="setProviderEarningsPeriod('${p}')" style="height:36px; border-radius:999px; border:none; background:${active ? '#0F172A' : 'transparent'}; color:${active ? '#FFFFFF' : '#475569'}; font-size:13px; font-weight:800; cursor:pointer;">
+              ${label}
+            </button>
+          `;
+        }).join('')}
+      </div>
+
+      <!-- Dark Navy Net Earnings Card (Screenshot 6 Left) -->
+      <div style="background:linear-gradient(135deg, #0F172A 0%, #1E293B 100%); border-radius:22px; padding:18px; color:#FFFFFF; margin-bottom:14px; box-shadow:0 10px 26px rgba(15,23,42,0.18);">
+        <div style="font-size:12px; font-weight:700; color:#94A3B8;">Net earnings</div>
+        <div style="font-size:34px; font-weight:900; margin:4px 0 14px;">$${netEarned.toFixed(2)}</div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+          <div style="background:rgba(255,255,255,0.08); border-radius:14px; padding:10px 12px;">
+            <div style="font-size:11px; color:#94A3B8; font-weight:700;">Jobs</div>
+            <div style="font-size:18px; font-weight:900; margin-top:2px;">${jobsCount}</div>
+          </div>
+          <div style="background:rgba(255,255,255,0.08); border-radius:14px; padding:10px 12px;">
+            <div style="font-size:11px; color:#94A3B8; font-weight:700;">Avg / job</div>
+            <div style="font-size:18px; font-weight:900; margin-top:2px;">$${avgEarned.toFixed(2)}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Trend Bar Chart Card (Screenshot 6 Left) -->
+      <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:20px; padding:16px; margin-bottom:14px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
+          <div style="font-size:14.5px; font-weight:900; color:#0F172A;">Trend</div>
+          <div style="font-size:11.5px; font-weight:700; color:#0052FF;">Last 7 days</div>
+        </div>
+        <div style="display:grid; grid-template-columns:repeat(7, 1fr); gap:8px; align-items:end; height:104px;">
+          ${dayLetters.map((lbl, idx) => {
+            const val = dayTotals[idx];
+            const pct = val > 0 ? Math.max(14, Math.round((val / maxDay) * 100)) : 8;
+            return `
+              <div style="display:flex; flex-direction:column; align-items:center; gap:6px; height:100%; justify-content:flex-end;">
+                <div style="width:100%; max-width:20px; height:76px; border-radius:99px; background:#F1F5F9; display:flex; align-items:flex-end; overflow:hidden;">
+                  <div style="width:100%; height:${pct}%; border-radius:99px; background:${val > 0 ? '#0052FF' : '#CBD5E1'};"></div>
+                </div>
+                <span style="font-size:11px; font-weight:800; color:#64748B;">${lbl}</span>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+
+      <!-- Wallet Row Card (Tap to open Screenshot 6 Center Wallet View) -->
+      <div onclick="setProviderEarningsSubView('WALLET')" style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:18px; padding:14px 16px; display:flex; align-items:center; justify-content:space-between; gap:12px; cursor:pointer;">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <div style="width:42px; height:42px; border-radius:12px; background:#EFF6FF; color:#0052FF; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+            ${uiIcon('wallet', 20)}
+          </div>
+          <div>
+            <div style="font-size:14.5px; font-weight:900; color:#0F172A;">Wallet</div>
+            <div style="font-size:12px; font-weight:600; color:#64748B;">Balance $${walletBal.toFixed(2)} • Commission &amp; EcoCash</div>
+          </div>
+        </div>
+        <span style="color:#64748B;">${uiIcon('chevronRight', 18)}</span>
       </div>
     </div>
   `;
@@ -13977,57 +14123,59 @@ function renderChatDrawer() {
   }
 
   root.innerHTML = `
-    <div class="fullscreen-chat-backdrop" onclick="closeChatDrawer()">
-      <div class="fullscreen-chat-modal" onclick="event.stopPropagation()">
-        <!-- WhatsApp iOS Navigation Header -->
-        <div class="fullscreen-chat-header">
-          <button class="fullscreen-chat-back-ios" onclick="closeChatDrawer()" title="Back">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-          </button>
-
-          <div class="fullscreen-chat-peer" onclick="closeChatDrawer()">
-            <img src="${peerAvatar}" onerror="this.onerror=null; this.src='${DEFAULT_AVATAR_FALLBACK}';" alt="${escapeHtml(peerName)}" class="fullscreen-chat-avatar" />
-            <div class="fullscreen-chat-peer-info">
-              <div class="fullscreen-chat-peer-name">${escapeHtml(peerName)}</div>
-              <div class="fullscreen-chat-peer-status online">online</div>
+    <div onclick="closeChatDrawer()" style="position:fixed; inset:0; background:rgba(15,23,42,0.28); z-index:2400; display:flex; flex-direction:column; justify-content:flex-end;">
+      <div onclick="event.stopPropagation()" style="background:#FFFFFF; border-radius:26px 26px 0 0; height:80vh; max-height:80vh; display:flex; flex-direction:column; box-shadow:0 -12px 36px rgba(15,23,42,0.22); overflow:hidden;">
+        <!-- Top Grabber + Screenshot 3 Left Header ("Chat with [Name]") -->
+        <div style="padding:10px 16px 12px; border-bottom:1px solid #F1F5F9; flex-shrink:0;">
+          <div style="width:38px; height:4px; border-radius:999px; background:#CBD5E1; margin:0 auto 10px;"></div>
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+            <div style="display:flex; align-items:center; gap:10px; min-width:0;">
+              <span style="color:#0F172A; display:inline-flex;">${uiIcon('chat', 18)}</span>
+              <div style="font-size:16px; font-weight:900; color:#0F172A; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                Chat with ${escapeHtml(peerName)}
+              </div>
             </div>
-          </div>
-
-          <div class="fullscreen-chat-header-actions">
-            <button class="fullscreen-chat-call-btn" onclick="startInAppCall('${peerName.replace(/'/g, "\\'")}', '${(req?.title || 'Home Visit').replace(/'/g, "\\'")}', 'call_${req?.id || ''}', '${peerId || ''}')" title="Call ${escapeHtml(peerName)}">
-              ${uiIcon('phone', 20)}
-            </button>
+            <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
+              <button type="button" onclick="startInAppCall('${peerName.replace(/'/g, "\\'")}', '${(req?.title || 'Home Visit').replace(/'/g, "\\'")}', 'call_${req?.id || ''}', '${peerId || ''}')" style="width:36px; height:36px; border-radius:50%; background:#EFF6FF; color:#0052FF; border:none; display:flex; align-items:center; justify-content:center; cursor:pointer;" title="Call ${escapeHtml(peerName)}">
+                ${uiIcon('phone', 17)}
+              </button>
+              <button type="button" onclick="closeChatDrawer()" style="width:36px; height:36px; border-radius:50%; background:#F1F5F9; color:#0F172A; border:none; display:flex; align-items:center; justify-content:center; cursor:pointer;" title="Close">
+                ${uiIcon('close', 16)}
+              </button>
+            </div>
           </div>
         </div>
 
-        <!-- Scrollable WhatsApp Feed with iOS Wallpaper Tint -->
-        <div class="fullscreen-chat-feed" id="fullScreenChatFeed" data-req-id="${req?.id || ''}">
+        <!-- Clean White Message Feed -->
+        <div class="fullscreen-chat-feed" id="fullScreenChatFeed" data-req-id="${req?.id || ''}" style="background:#FFFFFF; flex:1; overflow-y:auto; padding:14px 16px;">
           ${renderChatMessagesHtml(messages)}
         </div>
 
-        <!-- WhatsApp iOS Footer: Preset quick replies & Input -->
-        <div class="fullscreen-chat-footer">
-          <div class="chat-quick-strip">
+        <!-- Quick Replies + Clean Input Row -->
+        <div style="background:#FFFFFF; border-top:1px solid #F1F5F9; padding:10px 14px calc(env(safe-area-inset-bottom, 12px) + 12px); flex-shrink:0;">
+          <div class="chat-quick-strip" style="margin-bottom:8px;">
             ${quickList.map((q) => `
-              <button type="button" class="chat-preset-chip" onclick="sendChatMessage('${q.replace(/'/g, "\\'")}', '${req?.id || ''}')">
+              <button type="button" class="chat-preset-chip" style="background:#F8FAFC; border:1px solid #E2E8F0; color:#334155;" onclick="sendChatMessage('${q.replace(/'/g, "\\'")}', '${req?.id || ''}')">
                 ${q}
               </button>
             `).join('')}
           </div>
 
-          <div class="chat-inline-input-row">
-            <button type="button" class="whatsapp-ios-plus-btn" onclick="document.getElementById('chatPhotoInput').click()" title="Attach Photo">+</button>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <button type="button" onclick="document.getElementById('chatPhotoInput').click()" style="width:40px; height:40px; border-radius:50%; background:#F1F5F9; border:none; color:#0F172A; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0;" title="Attach Photo">
+              ${uiIcon('camera', 18)}
+            </button>
             <input type="file" id="chatPhotoInput" accept="image/*" style="display:none;" onchange="handleChatPhotoUpload(this, '${req?.id || ''}')" />
             <input
               id="chatTextInput"
-              class="whatsapp-ios-input"
-              placeholder="Message..."
+              placeholder="Type a message..."
+              style="flex:1; height:42px; border-radius:999px; border:1.5px solid #E2E8F0; background:#F8FAFC; padding:0 16px; font-size:14px; color:#0F172A; outline:none;"
               onkeydown="if(event.key==='Enter'){ event.preventDefault(); sendCustomChat('${req?.id || ''}'); }"
             />
             <button
               type="button"
-              class="whatsapp-ios-send-btn"
               onclick="sendCustomChat('${req?.id || ''}')"
+              style="width:42px; height:42px; border-radius:50%; background:#0052FF; color:#FFFFFF; border:none; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; box-shadow:0 4px 12px rgba(0,82,255,0.25);"
               title="Send Message"
             >
               ${uiIcon('send', 16)}
