@@ -17,7 +17,7 @@ function resolveMediaUrl(url, type = 'avatar') {
     return type === 'task' ? DEFAULT_TASK_PHOTO_FALLBACK : DEFAULT_AVATAR_FALLBACK;
   }
   if (url.includes('tinashe_selfie.png')) {
-    return (API_BASE || '') + '/api/media/img_689d999fee5679b5b5c5';
+    return type === 'task' ? DEFAULT_TASK_PHOTO_FALLBACK : DEFAULT_AVATAR_FALLBACK;
   }
   if (url.startsWith('data:image/')) {
     return url;
@@ -190,6 +190,19 @@ function uiIcon(name, size = 16) {
     home: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>`,
     bell: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>`,
     gear: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
+    settings: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
+    copy: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`,
+    logout: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`,
+    whatsapp: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>`,
+    sliders: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>`,
+    suburb: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M3 21h18"/><path d="M5 21V7l8-4v18"/><path d="M19 21V11l-6-4"/><line x1="9" y1="9" x2="9" y2="9.01"/><line x1="9" y1="13" x2="9" y2="13.01"/><line x1="9" y1="17" x2="9" y2="17.01"/></svg>`,
+    keypad: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><rect x="4" y="2" width="16" height="20" rx="2"/><circle cx="8" cy="7" r="1"/><circle cx="12" cy="7" r="1"/><circle cx="16" cy="7" r="1"/><circle cx="8" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="16" cy="12" r="1"/><circle cx="8" cy="17" r="1"/><circle cx="12" cy="17" r="1"/><circle cx="16" cy="17" r="1"/></svg>`,
+    volumeOn: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>`,
+    volumeOff: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>`,
+    coffee: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>`,
+    alertTriangle: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
+    scale: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M16 16l3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1z"/><path d="M2 16l3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1z"/><path d="M7 21h10"/><path d="M12 3v18"/><path d="M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2"/></svg>`,
+    share: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>`,
     info: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>`,
     support: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>`,
     facebook: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0;"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>`,
@@ -241,7 +254,7 @@ function formatProRatingAndJobs(rating, completedBookings) {
   const jobs = Number(completedBookings || 0);
   const stars = Number(rating || 0);
   if (jobs === 0 || stars === 0) {
-    return `<span class="new-pro-badge" style="display:inline-flex; align-items:center; gap:4px; font-size:11.5px; font-weight:700; color:#D97706; background:#FEF3C7; border:1px solid #FCD34D; padding:2px 7px; border-radius:7px;">
+    return `<span class="new-pro-badge" style="display:inline-flex; align-items:center; gap:4px; font-size:11.5px; font-weight:700; color:#0052FF; background:#EBF3FF; border:1px solid #BFDBFE; padding:2px 7px; border-radius:7px;">
       <span style="display:inline-flex;">${uiIcon('star', 12)}</span>
       <span>New (0 jobs)</span>
     </span>`;
@@ -3357,7 +3370,7 @@ function useBrowserGeolocation(silent = false) {
     }
     if (!silent) {
       const accuracyLabel = state.gpsAccuracyMeters === null ? '' : ` (±${Math.round(state.gpsAccuracyMeters)} m accuracy)`;
-      showToast(`📍 Live Location${accuracyLabel}: ${state.customAddress}, ${state.customSuburbLabel.split(',')[0]}`, 'success');
+      showToast(`Live Location${accuracyLabel}: ${state.customAddress}, ${state.customSuburbLabel.split(',')[0]}`, 'success');
     }
     renderUiOverlay();
   };
@@ -5132,7 +5145,7 @@ function renderHomeDiscoveryOverlay() {
       <div class="minimized-map-restore-bar" onclick="toggleSheetMinimize(false)">
         <div class="minimized-map-suburb-chip">
           <span class="live-pulse-dot" style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#0052FF;"></span>
-          <span>📍 Harare Map View (${escapeHtml(state.customSuburbLabel ? state.customSuburbLabel.split(',')[0] : 'Avondale')})</span>
+          <span style="display:inline-flex; align-items:center; gap:4px;">${uiIcon('pin', 13)} <span>Harare Map View (${escapeHtml(state.customSuburbLabel ? state.customSuburbLabel.split(',')[0] : 'Avondale')})</span></span>
         </div>
         <button type="button" class="minimized-restore-btn" onclick="toggleSheetMinimize(false); event.stopPropagation();">
           <span>Show Services</span>
@@ -5143,27 +5156,77 @@ function renderHomeDiscoveryOverlay() {
   }
 
   const categories = state.db?.categories || [];
+  const activeCategories = categories.filter((category) => category.status === 'ACTIVE');
+  const currentCat = activeCategories.find((c) => c.id === state.selectedCategoryId) || activeCategories[0] || categories[0];
+  const currentSub = (currentCat?.subServices || [])[state.selectedSubServiceIdx] || (currentCat?.subServices || [])[0] || {
+    name: currentCat?.fullName || currentCat?.name || 'Home Service',
+    defaultUsd: currentCat?.suggestedMinUsd || 25,
+    duration: '1.5 hrs'
+  };
+  const onlineProsCount = Math.max(1, (state.db?.providers || []).filter((p) => p.isOnline !== false && !p.isBanned).length);
+  const currentSuburbLabel = state.customAddress && state.customAddress !== 'Current Live Location'
+    ? `${state.customAddress}, ${state.customSuburbLabel ? state.customSuburbLabel.split(',')[0] : 'Avondale'}`
+    : (state.customSuburbLabel || 'Avondale, Harare');
 
   return `
     ${renderCurvedBrandHeader('CUSTOMER', false)}
 
     <div class="fh-main-screen-container fh-marketplace-discovery">
-      <div class="fh-marketplace-welcome">
-        <div class="fh-marketplace-kicker">LOCAL SERVICES, MADE SIMPLE</div>
-        <div class="fh-marketplace-heading">What do you need<br />a hand with?</div>
-        <div class="fh-marketplace-description">Choose a service and compare offers from verified Harare providers.</div>
+      <!-- DriveGo Screen 01 Top Search Pill & Live Radar Strip -->
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:10px;">
+        <div style="display:inline-flex; align-items:center; gap:6px; background:#EBF3FF; border:1px solid #BFDBFE; color:#0052FF; padding:5px 11px; border-radius:99px; font-size:11.5px; font-weight:800;">
+          <span style="width:7px; height:7px; border-radius:50%; background:#10B981; box-shadow:0 0 0 3px rgba(16,185,129,0.22); display:inline-block;"></span>
+          <span>${onlineProsCount} verified pro${onlineProsCount === 1 ? '' : 's'} online in Harare</span>
+        </div>
+        <button type="button" class="sheet-collapse-pill" style="background:#FFFFFF; border:1px solid #E2E8F0; color:#0F172A; height:30px; padding:0 10px; border-radius:99px; font-size:11.5px; font-weight:800; display:inline-flex; align-items:center; gap:4px; cursor:pointer;" onclick="toggleSheetMinimize(true)">
+          ${uiIcon('map', 12)}
+          <span>Map Radar</span>
+        </button>
       </div>
 
-      <button type="button" class="fh-marketplace-search" onclick="focusSearchOrConfigure()">
-        <span>${uiIcon('search', 19)}</span>
-        <span>Search home services</span>
-        <span class="fh-marketplace-search-shortcut">${uiIcon('arrowRight', 16)}</span>
+      <button type="button" class="fh-marketplace-search" onclick="focusSearchOrConfigure()" style="margin-bottom:12px; border:1.5px solid #CBD5E1; box-shadow:0 6px 18px rgba(15,23,42,0.06);">
+        <span style="color:#0052FF; display:inline-flex;">${uiIcon('search', 19)}</span>
+        <span style="font-weight:800; color:#0F172A;">What service do you need?</span>
+        <span class="fh-marketplace-search-shortcut" style="background:#0052FF; color:#FFFFFF;">${uiIcon('arrowRight', 16)}</span>
       </button>
+
+      <!-- DriveGo Screen 01 2-Row Route-Style Quick Request Card -->
+      <div style="background:#FFFFFF; border:1.5px solid #E2E8F0; border-radius:18px; padding:12px 14px; margin-bottom:14px; box-shadow:0 8px 24px rgba(15,23,42,0.05);">
+        <div style="position:relative; display:flex; flex-direction:column; gap:10px;">
+          <div style="position:absolute; left:9px; top:20px; bottom:20px; width:2px; background:linear-gradient(180deg, #0052FF 0%, #0F172A 100%); opacity:0.25;"></div>
+
+          <!-- Row 1: Services in Selected Category -->
+          <div onclick="openConfigureStep(state.selectedSubServiceIdx || 0)" style="display:flex; align-items:center; justify-content:space-between; gap:10px; background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px; padding:9px 11px; cursor:pointer;">
+            <div style="display:flex; align-items:center; gap:10px; min-width:0;">
+              <span style="width:10px; height:10px; border-radius:50%; background:#0052FF; box-shadow:0 0 0 3px rgba(0,82,255,0.18); flex-shrink:0;"></span>
+              <div style="min-width:0;">
+                <div style="font-size:10px; font-weight:800; color:#0052FF; text-transform:uppercase; letter-spacing:0.04em;">1. Selected Category &amp; Task</div>
+                <div style="font-size:13.5px; font-weight:800; color:#0F172A; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(currentSub.name)}</div>
+                <div style="font-size:11px; color:#64748B;">${escapeHtml(currentCat?.name || 'Service')} • Est. ${formatUsdPrice(state.draftFareUsd || currentSub.defaultUsd || 25)}</div>
+              </div>
+            </div>
+            <span style="color:#0052FF; display:inline-flex;">${uiIcon('chevronRight', 15)}</span>
+          </div>
+
+          <!-- Row 2: Service Location & Task Details -->
+          <div onclick="openConfigureStep(state.selectedSubServiceIdx || 0)" style="display:flex; align-items:center; justify-content:space-between; gap:10px; background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px; padding:9px 11px; cursor:pointer;">
+            <div style="display:flex; align-items:center; gap:10px; min-width:0;">
+              <span style="width:10px; height:10px; border-radius:2px; background:#0F172A; box-shadow:0 0 0 3px rgba(15,23,42,0.14); flex-shrink:0;"></span>
+              <div style="min-width:0;">
+                <div style="font-size:10px; font-weight:800; color:#64748B; text-transform:uppercase; letter-spacing:0.04em;">2. Service Location &amp; Task Details</div>
+                <div style="font-size:13px; font-weight:800; color:#0F172A; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(currentSuburbLabel)}</div>
+                <div style="font-size:11px; color:#64748B;">Add task note, photo or WhatsApp voice note</div>
+              </div>
+            </div>
+            <span style="color:#64748B; display:inline-flex;">${uiIcon('sliders', 15)}</span>
+          </div>
+        </div>
+      </div>
 
       <div class="fh-marketplace-section-head">
         <div>
-          <div class="fh-marketplace-section-title">Explore categories</div>
-          <div class="fh-marketplace-section-subtitle">${categories.filter((category) => category.status === 'ACTIVE').length} services available in Harare</div>
+          <div class="fh-marketplace-section-title">Select a service category</div>
+          <div class="fh-marketplace-section-subtitle">${activeCategories.length} verified specialist categories in Harare</div>
         </div>
       </div>
 
@@ -5194,7 +5257,7 @@ function renderHomeDiscoveryOverlay() {
       <div class="fh-floating-orange-cta-wrap">
         <button type="button" class="fh-orange-pill-cta" onclick="openConfigureStep(0)">
           ${uiIcon('briefcase', 18)}
-          <span>Post a service request</span>
+          <span>Find offers</span>
           ${uiIcon('arrowRight', 17)}
         </button>
       </div>
@@ -5213,7 +5276,7 @@ function selectTopServiceShortcut(catId, subIdx) {
 }
 
 // ----------------------------------------------------------------------------
-// REQUEST A SERVICE SCREEN (PHONE 2 & SCREEN 2: CLEAN FORM CARD)
+// REQUEST A SERVICE SCREEN (DRIVEGO SCREEN 01 TWIN + FINDIT HARARE FEATURES)
 // ----------------------------------------------------------------------------
 function renderConfigureFareOverlay() {
   if (state.isSheetMinimized) {
@@ -5221,7 +5284,7 @@ function renderConfigureFareOverlay() {
       <div class="minimized-map-restore-bar" onclick="toggleSheetMinimize(false)">
         <div class="minimized-map-suburb-chip">
           <span class="live-pulse-dot" style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#10B981;"></span>
-          <span>📍 Pin Location on Harare Map (${escapeHtml(state.customSuburbLabel ? state.customSuburbLabel.split(',')[0] : 'Avondale')})</span>
+          <span style="display:inline-flex; align-items:center; gap:4px;">${uiIcon('pin', 13)} <span>Pin Location on Harare Map (${escapeHtml(state.customSuburbLabel ? state.customSuburbLabel.split(',')[0] : 'Avondale')})</span></span>
         </div>
         <button type="button" class="minimized-restore-btn" onclick="toggleSheetMinimize(false); event.stopPropagation();" style="background:#0052FF; color:#FFFFFF;">
           <span>Set Location</span>
@@ -5232,8 +5295,8 @@ function renderConfigureFareOverlay() {
   }
 
   const categories = state.db.categories || [];
-  const activeCat = categories.find((c) => c.id === state.selectedCategoryId && c.status === 'ACTIVE')
-    || categories.find((c) => c.status === 'ACTIVE');
+  const activeCategories = categories.filter((c) => c.status === 'ACTIVE');
+  const activeCat = activeCategories.find((c) => c.id === state.selectedCategoryId) || activeCategories[0];
   if (!activeCat) {
     return `
       <div class="fh-main-screen-container" style="padding-top:14px;">
@@ -5252,121 +5315,149 @@ function renderConfigureFareOverlay() {
   };
 
   return `
-    <div class="fh-main-screen-container" style="padding-top:14px;">
-      <div class="fh-request-form-card">
-        <!-- Form Header with Back Arrow -->
-        <div class="fh-form-header-row">
-          <button type="button" class="fh-form-back-btn" onclick="backToHomeStep()" title="Back">
-            ${uiIcon('arrowLeft', 18)}
+    <div class="fh-main-screen-container" style="padding-top:10px;">
+      <div class="fh-request-form-card" style="padding:14px;">
+        <!-- DriveGo Screen 01 Top Search Bar Header -->
+        <div class="fh-form-header-row" style="justify-content:space-between; margin-bottom:10px;">
+          <div style="display:flex; align-items:center; gap:8px; flex:1; min-width:0;">
+            <button type="button" class="fh-form-back-btn" onclick="backToHomeStep()" title="Back">
+              ${uiIcon('arrowLeft', 18)}
+            </button>
+            <button type="button" onclick="openServicePickerModal()" style="flex:1; display:flex; align-items:center; justify-content:space-between; gap:8px; background:#F8FAFC; border:1.5px solid #E2E8F0; border-radius:99px; padding:7px 12px; cursor:pointer; text-align:left; min-width:0;">
+              <span style="display:flex; align-items:center; gap:7px; min-width:0;">
+                <span style="color:#0052FF; display:inline-flex;">${uiIcon('search', 15)}</span>
+                <span style="font-size:12.5px; font-weight:800; color:#0F172A; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">What service do you need?</span>
+              </span>
+              <span style="font-size:10.5px; font-weight:800; color:#0052FF; background:#EBF3FF; padding:2px 8px; border-radius:99px; flex-shrink:0;">Tasks</span>
+            </button>
+          </div>
+          <button type="button" class="sheet-collapse-pill" style="height:34px; padding:0 10px; border-radius:99px; background:#F8FAFC; border:1px solid #E2E8F0; color:#0F172A; font-size:11px; font-weight:800; flex-shrink:0;" onclick="toggleSheetMinimize(true)">
+            ${uiIcon('map', 12)}
+            <span>Map</span>
           </button>
-          <div class="fh-form-header-title">Request a Service</div>
         </div>
 
-        <!-- Service Category Selector -->
-        <div class="fh-form-group">
-          <div class="fh-form-select-card" onclick="openServicePickerModal()">
-            <div style="display:flex; align-items:center; gap:10px;">
-              <div style="color:#0052FF;">${getCategoryVectorSvg(activeCat.id, false)}</div>
-              <div>
-                <div style="font-size:14px; font-weight:800; color:#0F172A;">${escapeHtml(currentSub.name)}</div>
-                <div style="font-size:11.5px; color:#64748B;">${escapeHtml(activeCat.name)}${currentSub.duration ? ` • ~${escapeHtml(currentSub.duration)}` : ''}</div>
+        <!-- Horizontal Service Category Strip (DriveGo Vehicle/Service Selector Twin) -->
+        <div style="display:flex; gap:6px; overflow-x:auto; padding-bottom:8px; margin-bottom:10px; scrollbar-width:none;">
+          ${activeCategories.map((cat) => {
+            const isSel = cat.id === activeCat.id;
+            return `
+              <button
+                type="button"
+                onclick="selectHomeCategory('${cat.id}')"
+                style="display:inline-flex; align-items:center; gap:6px; padding:6px 11px; border-radius:12px; border:1.5px solid ${isSel ? '#0052FF' : '#E2E8F0'}; background:${isSel ? '#0052FF' : '#F8FAFC'}; color:${isSel ? '#FFFFFF' : '#0F172A'}; font-size:11.5px; font-weight:800; white-space:nowrap; cursor:pointer; flex-shrink:0; transition:all 0.15s ease;"
+              >
+                <span style="display:inline-flex; transform:scale(0.78);">${getCategoryVectorSvg(cat.id, isSel)}</span>
+                <span>${escapeHtml(cat.shortName || cat.name)}</span>
+              </button>
+            `;
+          }).join('')}
+        </div>
+
+        <!-- DriveGo 2-Row Route Box: (1) Services in Selected Category & (2) Service & Task Details -->
+        <div style="position:relative; background:#F8FAFC; border:1.5px solid #E2E8F0; border-radius:16px; padding:10px 12px; margin-bottom:12px;">
+          <div style="position:absolute; left:21px; top:32px; bottom:56px; width:2px; background:linear-gradient(180deg, #0052FF 0%, #0F172A 100%); opacity:0.25; pointer-events:none;"></div>
+
+          <!-- ROW 1: Services in Selected Category -->
+          <div class="fh-form-select-card" onclick="openServicePickerModal()" style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:12px; padding:10px 12px; margin-bottom:8px; cursor:pointer;">
+            <div style="display:flex; align-items:center; gap:10px; min-width:0;">
+              <span style="width:10px; height:10px; border-radius:50%; background:#0052FF; box-shadow:0 0 0 3px rgba(0,82,255,0.2); flex-shrink:0;"></span>
+              <div style="color:#0052FF; display:inline-flex; flex-shrink:0;">${getCategoryVectorSvg(activeCat.id, false)}</div>
+              <div style="min-width:0;">
+                <div style="font-size:10px; font-weight:800; color:#0052FF; text-transform:uppercase; letter-spacing:0.04em;">Services in ${escapeHtml(activeCat.name)}</div>
+                <div style="font-size:14px; font-weight:800; color:#0F172A; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(currentSub.name)}</div>
+                <div style="font-size:11px; color:#64748B;">${currentSub.duration ? `~${escapeHtml(currentSub.duration)} • ` : ''}Recommended ${formatUsdPrice(currentSub.defaultUsd || state.recommendedFareUsd)}</div>
               </div>
             </div>
-            <span style="color:#64748B;">${uiIcon('chevronDown', 16)}</span>
-          </div>
-        </div>
-
-        <!-- Describe Your Request -->
-        <div class="fh-form-group">
-          <div class="fh-form-label-row">
-            <span class="fh-form-label">Describe your request</span>
-            <span class="fh-form-counter" id="descCharCounter">${(state.draftNotes || '').length}/500</span>
-          </div>
-          <textarea
-            class="fh-form-textarea"
-            placeholder="Fix leaking kitchen tap and check water pressure."
-            maxlength="500"
-            oninput="handleDraftNotesInput(this)"
-          >${escapeHtml(state.draftNotes || '')}</textarea>
-        </div>
-
-        <!-- Budget (USD) -->
-        <div class="fh-form-group">
-          <div class="fh-form-label-row">
-            <span class="fh-form-label">Budget (USD)</span>
-            <span style="font-size:11px; color:#0052FF; font-weight:700;">inDrive Negotiation</span>
-          </div>
-          <div class="fh-budget-input-wrap">
-            <button type="button" class="fh-budget-adjust-btn" onclick="adjustDraftFare(-1)">−</button>
-            <div class="fh-budget-amount-box">
-              <div class="fh-budget-amount-val">${formatUsdPrice(state.draftFareUsd)}</div>
-              <div class="fh-budget-rec-text">Recommended: ${formatUsdPrice(state.recommendedFareUsd)}</div>
-            </div>
-            <button type="button" class="fh-budget-adjust-btn" onclick="adjustDraftFare(1)">+</button>
-          </div>
-        </div>
-
-        <!-- Location Section with Live GPS & Map Pin (Crossed dropdown replaced) -->
-        <div class="fh-form-group">
-          <div class="fh-form-label-row">
-            <span class="fh-form-label">Service Location</span>
-            <span style="font-size:11px; color:${state.isLiveGpsActive ? '#059669' : '#64748B'}; font-weight:700;">
-              ${state.isCustomAddressSelected
-                ? 'Selected location'
-                : state.isLiveGpsActive
-                  ? (state.gpsAccuracyMeters === null ? 'Live GPS fix' : `GPS accuracy ±${Math.round(state.gpsAccuracyMeters)} m`)
-                  : 'Location not confirmed'}
+            <span style="color:#0052FF; font-size:11px; font-weight:800; display:inline-flex; align-items:center; gap:3px; flex-shrink:0;">
+              <span>Change</span>
+              ${uiIcon('chevronDown', 14)}
             </span>
           </div>
-          <div class="fh-location-card">
-            <div class="fh-loc-input-line">
+
+          <!-- ROW 2: Service Location & Task Details -->
+          <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:12px; padding:10px 12px;">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span style="width:10px; height:10px; border-radius:2px; background:#0F172A; box-shadow:0 0 0 3px rgba(15,23,42,0.14); flex-shrink:0;"></span>
+                <span style="font-size:10px; font-weight:800; color:#0F172A; text-transform:uppercase; letter-spacing:0.04em;">Service Location &amp; Task Details</span>
+              </div>
+              <span style="font-size:10.5px; color:${state.isLiveGpsActive ? '#059669' : '#0052FF'}; font-weight:800;">
+                ${state.isCustomAddressSelected
+                  ? 'Selected location'
+                  : state.isLiveGpsActive
+                    ? (state.gpsAccuracyMeters === null ? 'Live GPS fix' : `GPS ±${Math.round(state.gpsAccuracyMeters)}m`)
+                    : 'Set location'}
+              </span>
+            </div>
+
+            <div class="fh-loc-input-line" style="margin-bottom:8px;">
               <span style="color:#0052FF; display:flex; align-items:center;">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0052FF" stroke-width="2.5" stroke-linecap="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                ${uiIcon('pin', 17)}
               </span>
               <input
                 type="text"
                 id="requestServiceLocationInput"
                 class="fh-loc-text-field"
-                placeholder="Enter address details; confirm with GPS, map, or suburb"
+                placeholder="Enter Harare address or suburb"
                 value="${escapeHtml(state.customAddress && state.customAddress !== 'Current Live Location' ? `${state.customAddress}, ${state.customSuburbLabel ? state.customSuburbLabel.split(',')[0] : 'Avondale'}` : (state.customSuburbLabel || 'Avondale, Harare'))}"
                 oninput="handleManualAddressInput(this.value)"
               />
             </div>
-            <div class="fh-loc-actions-bar">
+
+            <div class="fh-loc-actions-bar" style="margin-bottom:8px;">
               <button type="button" class="fh-loc-pill-btn ${state.isLiveGpsActive ? 'active-gps' : ''}" onclick="useBrowserGeolocation(false)" title="Use Live GPS">
                 <span class="live-pulse-dot" style="width:7px; height:7px; background:#10B981; border-radius:50%; display:inline-block;"></span>
-                <span>📍 Live GPS</span>
+                <span>Live GPS</span>
               </button>
               <button type="button" class="fh-loc-pill-btn" onclick="toggleSheetMinimize(true)" title="Pick on Map">
                 ${uiIcon('map', 13)}
-                <span>🗺️ Pick on Map</span>
+                <span>Pick on Map</span>
               </button>
               <button type="button" class="fh-loc-pill-btn" onclick="openSuburbPickerModal()" title="Choose Suburb">
-                <span>🏘️ Suburbs</span>
+                ${uiIcon('suburb', 13)}
+                <span>Suburbs</span>
               </button>
+            </div>
+
+            <!-- Inline Task Description & Quick Preset Modal Trigger -->
+            <div style="border-top:1px dashed #E2E8F0; padding-top:8px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                <span style="font-size:11px; font-weight:800; color:#475569;">Task Instructions &amp; Notes</span>
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <button type="button" onclick="openNotesModal()" style="background:none; border:none; color:#0052FF; font-size:11px; font-weight:800; cursor:pointer; padding:0;">+ Preset chips</button>
+                  <span class="fh-form-counter" id="descCharCounter" style="font-size:10.5px;">${(state.draftNotes || '').length}/500</span>
+                </div>
+              </div>
+              <textarea
+                class="fh-form-textarea"
+                rows="2"
+                style="min-height:54px; padding:8px 10px; font-size:12.5px;"
+                placeholder="Describe your task (e.g. Fix leaking kitchen tap, bring tools)..."
+                maxlength="500"
+                oninput="handleDraftNotesInput(this)"
+              >${escapeHtml(state.draftNotes || '')}</textarea>
             </div>
           </div>
         </div>
 
-        <!-- Media Attachments Row: Photo + WhatsApp Voice Note -->
-        <div class="fh-media-row">
-          <!-- Photos -->
+        <!-- Media Attachments Row: Photo + WhatsApp Voice Note Chips -->
+        <div class="fh-media-row" style="margin-bottom:10px;">
           <input type="file" id="stylePhotoInput" accept="image/*" style="display:none;" onchange="handleDraftStylePhotoUpload(this)" />
           ${state.draftPhotoUrl ? `
             <div class="fh-media-card" style="border-style:solid; border-color:#0052FF; background:#EFF6FF;" onclick="openImagePreviewModal('${state.draftPhotoUrl}', 'Attached Photo')">
-              <img src="${resolveMediaUrl(state.draftPhotoUrl, 'task')}" onerror="this.onerror=null; this.src='${DEFAULT_TASK_PHOTO_FALLBACK}';" style="width:36px; height:36px; border-radius:8px; object-fit:cover;" alt="Photo" />
+              <img src="${resolveMediaUrl(state.draftPhotoUrl, 'task')}" onerror="this.onerror=null; this.src='${DEFAULT_TASK_PHOTO_FALLBACK}';" style="width:34px; height:34px; border-radius:8px; object-fit:cover;" alt="Photo" />
               <div style="font-size:11px; font-weight:800; color:#0052FF;">Photo Attached</div>
               <span style="font-size:10px; color:#DC2626;" onclick="event.stopPropagation(); removeDraftStylePhoto();">Remove</span>
             </div>
           ` : `
             <div class="fh-media-card" onclick="document.getElementById('stylePhotoInput').click()">
-              <span style="color:#0052FF;">${uiIcon('camera', 22)}</span>
-              <div style="font-size:11.5px; font-weight:700; color:#0F172A;">Add Photos</div>
-              <div style="font-size:10px; color:#94A3B8;">(Optional)</div>
+              <span style="color:#0052FF;">${uiIcon('camera', 20)}</span>
+              <div style="font-size:11.5px; font-weight:700; color:#0F172A;">Add Photo</div>
+              <div style="font-size:10px; color:#94A3B8;">Task / Style Ref</div>
             </div>
           `}
 
-          <!-- WhatsApp Voice Note UX -->
           ${state.draftVoiceNoteUrl ? `
             <div class="fh-wa-voice-player-bar">
               <button type="button" class="fh-wa-voice-btn" style="background:#10B981; color:#FFF; width:32px; height:32px;" onclick="playAudioFromUrl('${state.draftVoiceNoteUrl}')" title="Play Voice Note">
@@ -5409,17 +5500,38 @@ function renderConfigureFareOverlay() {
           ` : `
             <div class="fh-media-card" onclick="startRecordingVoiceNote()">
               <div class="fh-media-voice-btn-circle">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+                ${uiIcon('mic', 17)}
               </div>
-              <div style="font-size:11.5px; font-weight:700; color:#0F172A;">Record Voice Note</div>
-              <div style="font-size:10px; color:#94A3B8;">(WhatsApp style)</div>
+              <div style="font-size:11.5px; font-weight:700; color:#0F172A;">Voice Note</div>
+              <div style="font-size:10px; color:#94A3B8;">WhatsApp Style</div>
             </div>
           `}
         </div>
 
-        <!-- Submit Request Button -->
-        <button type="button" class="fh-orange-pill-cta" style="margin-top:8px;" onclick="submitServiceRequest()">
-          <span>Submit Request</span>
+        <!-- DriveGo Screen 01 Fare Stepper (- $25.00 +) & Payment Pill -->
+        <div class="fh-form-group" style="margin-bottom:10px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <span class="fh-form-label">Offer your fare (USD)</span>
+            <button type="button" onclick="openPaymentModal()" style="display:inline-flex; align-items:center; gap:5px; background:#EBF3FF; border:1px solid #BFDBFE; color:#0052FF; padding:3px 10px; border-radius:99px; font-size:11px; font-weight:800; cursor:pointer;">
+              ${uiIcon('wallet', 12)}
+              <span>${escapeHtml(state.draftPaymentMethod || 'Cash USD')}</span>
+              ${uiIcon('chevronDown', 11)}
+            </button>
+          </div>
+          <div class="fh-budget-input-wrap">
+            <button type="button" class="fh-budget-adjust-btn" onclick="adjustDraftFare(-1)">−</button>
+            <div class="fh-budget-amount-box">
+              <div class="fh-budget-amount-val">${formatUsdPrice(state.draftFareUsd)}</div>
+              <div class="fh-budget-rec-text">Recommended: ${formatUsdPrice(state.recommendedFareUsd)}</div>
+            </div>
+            <button type="button" class="fh-budget-adjust-btn" onclick="adjustDraftFare(1)">+</button>
+          </div>
+        </div>
+
+        <!-- Submit / Find Offers CTA -->
+        <button type="button" class="fh-orange-pill-cta" style="margin-top:4px;" onclick="submitServiceRequest()">
+          <span>Find offers</span>
+          ${uiIcon('arrowRight', 17)}
         </button>
       </div>
     </div>
@@ -5427,17 +5539,18 @@ function renderConfigureFareOverlay() {
 }
 
 // ----------------------------------------------------------------------------
-// OFFERS RECEIVED SCREEN (PHONE 4 & SCREEN 4: COMPARE OFFERS)
+// OFFERS RECEIVED SCREEN (DRIVEGO SCREEN 02 TWIN: COMPARE OFFERS WITH DECLINE & ACCEPT)
 // ----------------------------------------------------------------------------
 function renderCompareOffersOverlay(req) {
   if (!req) req = getCustomerActiveRequest();
 
-  // If the booking is already confirmed/accepted, display confirmed state & avoid re-rendering stale bids
   if (req && (isBookedStatus(req.status) || req.acceptedOfferId)) {
     return `
       <div class="fh-main-screen-container" style="padding-top:14px;">
         <div class="fh-request-form-card" style="text-align:center; padding:28px 18px;">
-          <div style="width:58px; height:58px; border-radius:50%; background:#ECFDF5; color:#10B981; display:flex; align-items:center; justify-content:center; margin:0 auto 14px; font-size:26px;">✓</div>
+          <div style="width:58px; height:58px; border-radius:50%; background:#ECFDF5; color:#10B981; display:flex; align-items:center; justify-content:center; margin:0 auto 14px;">
+            ${uiIcon('check', 28)}
+          </div>
           <div style="font-size:17px; font-weight:800; color:#0F172A; margin-bottom:6px;">Offer Accepted!</div>
           <div style="font-size:13px; color:#64748B; margin-bottom:20px; line-height:1.4;">
             ${escapeHtml(req.acceptedProviderName || 'Specialist')} is confirmed. Track their route and find your Arrival Start PIN on the Home screen.
@@ -5480,7 +5593,7 @@ function renderCompareOffersOverlay(req) {
           <div style="flex:1; min-width:0;">
             <div style="font-size:14px; font-weight:800; color:#0F172A;">${escapeHtml(req.title)}</div>
             <div style="font-size:12px; color:#64748B; display:flex; align-items:center; gap:4px; margin-top:2px;">
-              <span>📍 ${escapeHtml(req.suburbName || 'Harare')}</span>
+              <span style="display:inline-flex; align-items:center; gap:3px;">${uiIcon('pin', 12)} <span>${escapeHtml(req.suburbName || 'Harare')}</span></span>
               <span>•</span>
               <span style="font-weight:700; color:#0052FF;">$${req.budgetUsd}</span>
             </div>
@@ -5499,6 +5612,7 @@ function renderCompareOffersOverlay(req) {
           ${activeOffers.map((offer) => {
             const prov = resolveProviderByIdOrOffer(offer.providerId, req, offer);
             const distKm = (offer.distanceKm || calculateDistanceKm(prov?.lat, prov?.lng, req.lat, req.lng) || 2.4).toFixed(1);
+            const isYourFare = Number(offer.priceUsd) <= Number(req.budgetUsd);
             return `
               <div class="fh-provider-offer-card">
                 <div class="fh-offer-card-top">
@@ -5515,23 +5629,26 @@ function renderCompareOffersOverlay(req) {
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="#0052FF"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
                       </div>
                       <div class="fh-offer-meta-row">
-                        <span style="color:#F59E0B; display:inline-flex;">${uiIcon('star', 12)}</span>
-                        <span>${prov?.rating || '4.8'} (${prov?.completedBookings || 120} jobs)</span>
+                        ${formatProRatingAndJobs(offer.providerRating ?? prov?.rating, offer.providerCompletedJobs ?? prov?.completedBookings)}
                       </div>
-                      <div style="font-size:11px; color:#10B981; font-weight:700; margin-top:2px;">
-                        ● Available Today • ${distKm} km
+                      <div style="font-size:11px; color:#10B981; font-weight:700; margin-top:2px; display:flex; align-items:center; gap:5px;">
+                        <span>● Available Today • ${distKm} km • ~${offer.etaMinutes || 5} min</span>
+                        ${isYourFare ? `<span style="background:#ECFDF5; color:#059669; border:1px solid #A7F3D0; padding:1px 6px; border-radius:99px; font-size:10px; font-weight:800;">Your fare</span>` : ''}
                       </div>
                     </div>
                   </div>
                   <div class="fh-offer-price-tag">$${offer.priceUsd}</div>
                 </div>
 
-                <div class="fh-offer-actions-row">
+                <div class="fh-offer-actions-row" style="display:grid; grid-template-columns:0.9fr 1fr 1.2fr; gap:8px;">
+                  <button type="button" class="fh-btn-ghost" style="color:#DC2626; border-color:#FECACA; background:#FFF1F2;" onclick="declineOffer('${req.id}', '${offer.id}')">
+                    Decline
+                  </button>
                   <button type="button" class="fh-btn-ghost" onclick="openProviderPortfolioModal('${prov?.id || offer.providerId}')">
-                    View Profile
+                    Portfolio
                   </button>
                   <button type="button" class="fh-btn-orange" onclick="acceptOffer('${req.id}', '${offer.id}')">
-                    Accept Offer
+                    Accept
                   </button>
                 </div>
               </div>
@@ -5561,7 +5678,7 @@ function renderCustomerRequestsTab() {
             <span style="font-size:15px; font-weight:800; color:#0052FF;">$${req.budgetUsd}</span>
           </div>
           <div style="font-size:15px; font-weight:800; color:#0F172A; margin-bottom:2px;">${escapeHtml(req.title)}</div>
-          <div style="font-size:12px; color:#64748B; margin-bottom:12px;">📍 ${escapeHtml(req.suburbName || 'Harare')}</div>
+          <div style="font-size:12px; color:#64748B; margin-bottom:12px; display:flex; align-items:center; gap:4px;">${uiIcon('pin', 12)} <span>${escapeHtml(req.suburbName || 'Harare')}</span></div>
           <button type="button" class="fh-orange-pill-cta" style="height:40px; font-size:13px;" onclick="switchCustomerTab('HOME')">
             View Live Status
           </button>
@@ -5580,7 +5697,7 @@ function renderCustomerRequestsTab() {
             <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:14px; padding:12px 14px; display:flex; justify-content:space-between; align-items:center;">
               <div>
                 <div style="font-size:13.5px; font-weight:800; color:#0F172A;">${escapeHtml(r.title)}</div>
-                <div style="font-size:11.5px; color:#64748B;">📍 ${escapeHtml(r.suburbName || 'Harare')} • Completed</div>
+                <div style="font-size:11.5px; color:#64748B; display:flex; align-items:center; gap:4px;">${uiIcon('pin', 11)} <span>${escapeHtml(r.suburbName || 'Harare')} • Completed</span></div>
               </div>
               <div style="font-size:14px; font-weight:800; color:#0052FF;">$${r.agreedTotalUsd || r.budgetUsd}</div>
             </div>
@@ -5635,7 +5752,7 @@ function renderCustomerProfileTab() {
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; padding-top:10px; border-top:1px solid #F1F5F9;">
           <div style="background:#F8FAFC; border-radius:12px; padding:8px 10px; text-align:center;">
             <div style="font-size:11px; color:#64748B; font-weight:600;">Rating</div>
-            <div style="font-size:15px; font-weight:800; color:#0F172A;">★ ${rating}</div>
+            <div style="font-size:15px; font-weight:800; color:#0F172A; display:inline-flex; align-items:center; gap:4px;">${uiIcon('star', 14)} <span>${rating}</span></div>
           </div>
           <div style="background:#F8FAFC; border-radius:12px; padding:8px 10px; text-align:center;">
             <div style="font-size:11px; color:#64748B; font-weight:600;">Completed</div>
@@ -5650,7 +5767,7 @@ function renderCustomerProfileTab() {
           <div style="font-size:14px; font-weight:800;">Switch to Service Provider</div>
           <div style="font-size:11.5px; opacity:0.85;">Offer services in Harare &amp; earn your price</div>
         </div>
-        <span style="font-size:18px;">➔</span>
+        <span style="display:inline-flex;">${uiIcon('arrowRight', 18)}</span>
       </div>
 
       <!-- Direct Android APK Download Card -->
@@ -5711,14 +5828,14 @@ function renderCustomerProfileTab() {
         </div>
         <div class="fh-profile-menu-row" onclick="openWhatsAppDirectSupport()">
           <div style="display:flex; align-items:center; gap:10px;">
-            <span style="color:#10B981;">💬</span>
+            <span style="color:#10B981;">${uiIcon('whatsapp', 18)}</span>
             <span>WhatsApp Support</span>
           </div>
           ${uiIcon('chevronRight', 16)}
         </div>
         <div class="fh-profile-menu-row" onclick="logoutCurrentAccount()" style="color:#DC2626;">
           <div style="display:flex; align-items:center; gap:10px;">
-            <span>🚪</span>
+            <span>${uiIcon('logout', 18)}</span>
             <span>Log Out</span>
           </div>
         </div>
@@ -5733,8 +5850,8 @@ function renderCustomerProfileTab() {
 function renderProviderProfileTab() {
   const prov = state.currentUser || state.db?.providers?.[0];
   const walletBal = Number(prov?.walletBalanceUsd || 0).toFixed(2);
-  const rating = prov?.rating ? Number(prov.rating).toFixed(1) : '4.9';
-  const completed = prov?.completedBookings || 0;
+  const completed = prov?.completedBookings ?? 0;
+  const rating = (completed > 0 && prov?.rating) ? Number(prov.rating).toFixed(1) : 'New';
 
   return `
     <div class="fh-main-screen-container" style="padding-top:14px;">
@@ -5760,7 +5877,7 @@ function renderProviderProfileTab() {
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; padding-top:10px; border-top:1px solid #F1F5F9;">
           <div style="background:#F8FAFC; border-radius:12px; padding:8px 10px; text-align:center;">
             <div style="font-size:11px; color:#64748B; font-weight:600;">Rating</div>
-            <div style="font-size:15px; font-weight:800; color:#0F172A;">★ ${rating}</div>
+            <div style="font-size:15px; font-weight:800; color:#0F172A; display:inline-flex; align-items:center; gap:4px;">${uiIcon('star', 14)} <span>${rating}</span></div>
           </div>
           <div style="background:#F8FAFC; border-radius:12px; padding:8px 10px; text-align:center;">
             <div style="font-size:11px; color:#64748B; font-weight:600;">Completed Jobs</div>
@@ -5775,7 +5892,7 @@ function renderProviderProfileTab() {
           <div style="font-size:14px; font-weight:800;">Switch to Client Mode</div>
           <div style="font-size:11.5px; opacity:0.85;">Hire specialists &amp; request home services</div>
         </div>
-        <span style="font-size:18px;">➔</span>
+        <span style="display:inline-flex;">${uiIcon('arrowRight', 18)}</span>
       </div>
 
       <!-- Direct Android APK Download Card -->
@@ -5829,14 +5946,14 @@ function renderProviderProfileTab() {
         </div>
         <div class="fh-profile-menu-row" onclick="openWhatsAppDirectSupport()">
           <div style="display:flex; align-items:center; gap:10px;">
-            <span style="color:#10B981;">💬</span>
+            <span style="color:#10B981;">${uiIcon('whatsapp', 18)}</span>
             <span>WhatsApp Provider Support</span>
           </div>
           ${uiIcon('chevronRight', 16)}
         </div>
         <div class="fh-profile-menu-row" onclick="logoutCurrentAccount()" style="color:#DC2626;">
           <div style="display:flex; align-items:center; gap:10px;">
-            <span>🚪</span>
+            <span>${uiIcon('logout', 18)}</span>
             <span>Log Out</span>
           </div>
         </div>
@@ -5846,24 +5963,73 @@ function renderProviderProfileTab() {
 }
 
 // ----------------------------------------------------------------------------
-// PROVIDER HOME TAB
+// PROVIDER HOME TAB (DRIVEGO SCREEN 06 RADAR & EARNINGS TODAY TWIN)
 // ----------------------------------------------------------------------------
 function renderProviderHomeTab(prov, openRequests, activeJob) {
   const dayStart = new Date();
   dayStart.setHours(0, 0, 0, 0);
-  const completedToday = (state.db?.requests || []).filter((request) =>
+  const completedTodayList = (state.db?.requests || []).filter((request) =>
     request.status === 'COMPLETED' &&
     request.acceptedProviderId === prov?.id &&
-    new Date(request.completedAt || 0).getTime() >= dayStart.getTime()
-  ).length;
+    new Date(request.completedAt || request.updatedAt || 0).getTime() >= dayStart.getTime()
+  );
+  const completedToday = completedTodayList.length;
+  const earningsTodayUsd = completedTodayList.reduce((sum, r) => sum + Number(r.agreedTotalUsd || r.budgetUsd || 0), 0);
   const walletBal = Number(prov?.walletBalanceUsd || 0).toFixed(2);
+  const isOnline = prov?.isOnline !== false && prov?.status !== 'OFFLINE';
 
   return `
     <div class="fh-main-screen-container fh-provider-dashboard">
-      <div class="fh-provider-welcome">
-        <div class="fh-provider-welcome-kicker">PROVIDER OVERVIEW</div>
-        <div class="fh-provider-welcome-title">Your work, at a glance</div>
-        <div class="fh-provider-welcome-subtitle">Manage the current job, new opportunities and your wallet.</div>
+      <!-- DriveGo Screen 06 Dark "EARNINGS TODAY" & Online Radar Card -->
+      <div style="background:linear-gradient(135deg, #0F172A 0%, #1E293B 100%); border-radius:20px; padding:18px; color:#FFFFFF; margin-bottom:14px; box-shadow:0 12px 28px rgba(15,23,42,0.22);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+          <div>
+            <div style="font-size:10.5px; font-weight:800; color:#94A3B8; text-transform:uppercase; letter-spacing:0.08em;">EARNINGS TODAY</div>
+            <div style="font-size:28px; font-weight:900; color:#FFFFFF; letter-spacing:-0.02em; margin-top:2px;">$${earningsTodayUsd.toFixed(2)}</div>
+          </div>
+          <button
+            type="button"
+            onclick="toggleProviderOnlineStatus()"
+            style="display:inline-flex; align-items:center; gap:7px; padding:8px 14px; border-radius:99px; border:1.5px solid ${isOnline ? '#10B981' : '#64748B'}; background:${isOnline ? 'rgba(16,185,129,0.18)' : 'rgba(100,116,139,0.2)'}; color:${isOnline ? '#34D399' : '#CBD5E1'}; font-size:12px; font-weight:800; cursor:pointer;"
+          >
+            <span style="width:8px; height:8px; border-radius:50%; background:${isOnline ? '#10B981' : '#94A3B8'}; ${isOnline ? 'box-shadow:0 0 0 3px rgba(16,185,129,0.3);' : ''}"></span>
+            <span>${isOnline ? 'Online' : 'Offline'}</span>
+          </button>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; padding-top:12px; border-top:1px solid rgba(255,255,255,0.1);">
+          <div>
+            <div style="font-size:10px; color:#94A3B8; font-weight:700; text-transform:uppercase;">Jobs Today</div>
+            <div style="font-size:15px; font-weight:800; color:#FFFFFF; margin-top:2px;">${completedToday}</div>
+          </div>
+          <div>
+            <div style="font-size:10px; color:#94A3B8; font-weight:700; text-transform:uppercase;">Total Jobs</div>
+            <div style="font-size:15px; font-weight:800; color:#FFFFFF; margin-top:2px;">${prov?.completedBookings ?? 0}</div>
+          </div>
+          <div onclick="openWalletTopupModal()" style="cursor:pointer;">
+            <div style="font-size:10px; color:#94A3B8; font-weight:700; text-transform:uppercase;">Wallet</div>
+            <div style="font-size:15px; font-weight:800; color:#10B981; margin-top:2px;">$${walletBal}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- DriveGo Live Radar Status Strip -->
+      <div style="background:${isOnline ? '#EBF3FF' : '#F8FAFC'}; border:1.5px solid ${isOnline ? '#BFDBFE' : '#E2E8F0'}; border-radius:16px; padding:12px 14px; margin-bottom:14px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="width:10px; height:10px; border-radius:50%; background:${isOnline ? '#0052FF' : '#94A3B8'}; ${isOnline ? 'box-shadow:0 0 0 4px rgba(0,82,255,0.2);' : ''} flex-shrink:0;"></span>
+          <div>
+            <div style="font-size:13px; font-weight:800; color:#0F172A;">
+              ${isOnline ? 'Looking for jobs near you in Harare' : 'Radar paused — You are Offline'}
+            </div>
+            <div style="font-size:11.5px; color:#64748B;">
+              ${isOnline ? `${openRequests.length} matching request${openRequests.length === 1 ? '' : 's'} available now` : 'Tap Online above to receive live client requests'}
+            </div>
+          </div>
+        </div>
+        <button type="button" onclick="setProviderFeedView('MAP'); switchProviderTab('FEED');" style="background:#0052FF; color:#FFFFFF; border:none; border-radius:10px; padding:7px 12px; font-size:11.5px; font-weight:800; cursor:pointer; display:inline-flex; align-items:center; gap:5px; flex-shrink:0;">
+          ${uiIcon('map', 13)}
+          <span>Radar</span>
+        </button>
       </div>
 
       ${activeJob ? `
@@ -5901,11 +6067,15 @@ function renderProviderHomeTab(prov, openRequests, activeJob) {
         <span class="fh-provider-opportunities-action">Browse opportunities ${uiIcon('arrowRight', 16)}</span>
       </button>
 
-      <div class="fh-provider-dashboard-note">
-        <span>${uiIcon('shield', 17)}</span>
-        <span>Keep your profile and availability up to date to help clients find you.</span>
-        <button type="button" onclick="switchProviderTab('PROFILE')" aria-label="Open provider profile">${uiIcon('chevronRight', 15)}</button>
-      </div>
+      <!-- DriveGo Screen 06 Disconnect / Go Offline Bar -->
+      <button
+        type="button"
+        onclick="toggleProviderOnlineStatus()"
+        style="width:100%; height:46px; border-radius:14px; border:1.5px solid ${isOnline ? '#E2E8F0' : '#0052FF'}; background:${isOnline ? '#FFFFFF' : '#0052FF'}; color:${isOnline ? '#0F172A' : '#FFFFFF'}; font-size:13px; font-weight:800; display:flex; align-items:center; justify-content:center; gap:8px; cursor:pointer; margin-top:4px;"
+      >
+        ${uiIcon('logout', 16)}
+        <span>${isOnline ? 'Disconnect from live radar (Go Offline)' : 'Connect to live radar (Go Online)'}</span>
+      </button>
     </div>
   `;
 }
@@ -6144,7 +6314,7 @@ function renderBookedTrackingOverlay(req) {
                   ${escapeHtml(prov?.name || 'Specialist')}
                 </div>
                 <div style="font-size:11px; color:#64748B; display:flex; align-items:center; gap:4px;">
-                  <span>★ ${prov?.rating || '5.0'}</span>
+                  <span style="display:inline-flex; align-items:center; gap:3px; color:#0052FF; font-weight:700;">${uiIcon('star', 11)} ${prov?.rating || '5.0'}</span>
                   <span>•</span>
                   <span>${escapeHtml(prov?.brandName || 'Mobile Specialist')}</span>
                 </div>
@@ -6172,28 +6342,25 @@ function renderBookedTrackingOverlay(req) {
             </div>
           </div>
 
-          <!-- Sweet Sleek Completion PIN Box -->
-          <div style="background:${isDoneRequested ? '#F0FDF4' : '#F8FAFC'}; border:1.5px ${isDoneRequested ? 'solid #10B981' : 'dashed #CBD5E1'}; border-radius:14px; padding:14px 12px; text-align:center; margin-bottom:14px; box-shadow:${isDoneRequested ? '0 4px 14px rgba(16,185,129,0.15)' : 'none'};">
-            <div style="font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:0.06em; color:${isDoneRequested ? '#15803D' : '#64748B'}; margin-bottom:3px;">
-              ${isDoneRequested ? '🎉 Share Completion PIN With Specialist:' : 'Your 4-Digit Completion PIN:'}
+          <!-- DriveGo Safety Twin Completion PIN Box (Brand Emerald, No Send in Chat button) -->
+          <div style="background:${isDoneRequested ? '#ECFDF5' : '#F8FAFC'}; border:2px ${isDoneRequested ? 'solid #10B981' : 'dashed #94A3B8'}; border-radius:16px; padding:16px 14px; text-align:center; margin-bottom:14px; box-shadow:${isDoneRequested ? '0 8px 20px rgba(16,185,129,0.16)' : 'none'};">
+            <div style="font-size:11px; font-weight:900; text-transform:uppercase; letter-spacing:0.08em; color:${isDoneRequested ? '#047857' : '#475569'}; margin-bottom:4px; display:inline-flex; align-items:center; gap:5px;">
+              ${uiIcon('shield', 13)}
+              <span>${isDoneRequested ? 'Share Completion PIN With Specialist' : 'Your 4-Digit Completion PIN'}</span>
             </div>
-            <div style="font-size:32px; font-weight:900; letter-spacing:6px; color:${isDoneRequested ? '#15803D' : '#0F172A'}; margin:4px 0 6px;" id="clientCompletionPinText">
+            <div style="font-size:34px; font-weight:900; letter-spacing:8px; color:${isDoneRequested ? '#047857' : '#0F172A'}; margin:6px 0 8px;" id="clientCompletionPinText">
               #${completionPin}
             </div>
-            <div style="font-size:11.5px; color:${isDoneRequested ? '#166534' : '#64748B'}; line-height:1.4; margin-bottom:10px; padding:0 6px;">
+            <div style="font-size:11.5px; color:${isDoneRequested ? '#065F46' : '#64748B'}; line-height:1.45; margin-bottom:12px; padding:0 6px; font-weight:600;">
               ${isDoneRequested
-                ? 'Specialist has marked the job as done. Inspect the work and share this code to finalize.'
-                : `Keep safe — give this to ${escapeHtml(prov?.name || 'specialist')} only after work is finished to your satisfaction.`
+                ? 'Specialist has marked the job as done. Inspect the completed work and read this code aloud to finalize.'
+                : `Keep this code safe — read it aloud to ${escapeHtml(prov?.name || 'your specialist')} in person only after the work is finished to your satisfaction.`
               }
             </div>
-            <div style="display:flex; justify-content:center; gap:8px;">
-              <button type="button" class="fh-pin-action-btn" style="flex:1; max-width:140px; height:34px; font-size:12px;" onclick="copyCompletionPin('${completionPin}')">
-                ${uiIcon('check', 13)}
+            <div style="display:flex; justify-content:center;">
+              <button type="button" class="fh-pin-action-btn" style="max-width:160px; width:100%; height:36px; font-size:12px; font-weight:800;" onclick="copyCompletionPin('${completionPin}')">
+                ${uiIcon('copy', 13)}
                 <span id="copyCompletionPinBtnText">Copy PIN</span>
-              </button>
-              <button type="button" class="fh-pin-action-btn" style="flex:1; max-width:140px; height:34px; font-size:12px;" onclick="openChatDrawer('${req.id}', '${prov?.id}')">
-                ${uiIcon('chat', 13)}
-                <span>Send in Chat</span>
               </button>
             </div>
           </div>
@@ -6205,8 +6372,9 @@ function renderBookedTrackingOverlay(req) {
                 <div style="font-size:13px; font-weight:800; color:#0F172A; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
                   ${escapeHtml(req.title)}
                 </div>
-                <div style="font-size:11px; color:#64748B; margin-top:1px;">
-                  📍 ${escapeHtml(req.suburbName || 'Harare')}
+                <div style="font-size:11px; color:#64748B; margin-top:2px; display:flex; align-items:center; gap:4px;">
+                  <span style="color:#0052FF; display:inline-flex;">${uiIcon('pin', 11)}</span>
+                  <span>${escapeHtml(req.suburbName || 'Harare')}</span>
                 </div>
               </div>
               <div style="text-align:right; flex-shrink:0;">
@@ -6295,49 +6463,53 @@ function renderBookedTrackingOverlay(req) {
         </div>
 
         ${isArrived ? `
-          <!-- UNIFIED SLEEK LUXURY ARRIVAL CARD (CLIENT) -->
-          <div style="background:#F0FDF4; border:1.5px solid #86EFAC; border-radius:14px; padding:12px 14px; margin-bottom:8px;">
+          <!-- DRIVEGO SAFETY TWIN ARRIVAL CARD (BRAND ELECTRIC BLUE, NO YELLOW) -->
+          <div style="background:#EBF3FF; border:2px solid #0052FF; border-radius:16px; padding:14px; margin-bottom:10px; box-shadow:0 8px 20px rgba(0,82,255,0.12);">
             <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px;">
-              <div style="display:flex; align-items:center; gap:6px;">
-                <span style="width:8px; height:8px; border-radius:50%; background:#16A34A; animation:pulse 1s infinite; display:inline-block;"></span>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span style="width:9px; height:9px; border-radius:50%; background:#0052FF; animation:pulse 1s infinite; display:inline-block;"></span>
                 <div>
-                  <div style="font-size:12px; font-weight:800; color:#15803D; text-transform:uppercase;">Specialist Outside Gate</div>
-                  <div style="font-size:11px; color:#166534;">Share Start PIN with pro to begin:</div>
+                  <div style="font-size:12px; font-weight:900; color:#0052FF; text-transform:uppercase; letter-spacing:0.04em;">Specialist Outside Gate</div>
+                  <div style="font-size:11.5px; color:#1E3A8A; font-weight:600;">Share this 4-digit Start PIN with your pro:</div>
                 </div>
               </div>
-              <div style="background:#FFFFFF; border:2px solid #10B981; border-radius:10px; padding:4px 12px; text-align:center; box-shadow:0 2px 8px rgba(16,185,129,0.18);">
-                <span style="font-size:8.5px; font-weight:800; color:#059669; letter-spacing:0.05em; display:block;">START PIN</span>
-                <span style="font-size:20px; font-weight:900; color:#059669; letter-spacing:2px; line-height:1.2;">#${req.startPinCode || '4829'}</span>
+              <div style="background:#0052FF; color:#FFFFFF; border-radius:12px; padding:6px 14px; text-align:center; box-shadow:0 4px 12px rgba(0,82,255,0.28); cursor:pointer;" onclick="copyCompletionPin('${req.startPinCode || '4829'}')" title="Tap to copy Start PIN">
+                <span style="font-size:8.5px; font-weight:900; color:#DBEAFE; letter-spacing:0.08em; display:block;">START PIN</span>
+                <span style="font-size:21px; font-weight:900; color:#FFFFFF; letter-spacing:2.5px; line-height:1.2;">#${req.startPinCode || '4829'}</span>
               </div>
             </div>
 
             <!-- Specialist Row -->
-            <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; background:#FFFFFF; border:1px solid #DCFCE7; border-radius:10px; padding:8px 10px; margin-bottom:8px;">
-              <div style="display:flex; align-items:center; gap:8px; min-width:0;">
-                <img src="${resolveMediaUrl(avatarUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_AVATAR_FALLBACK}';" style="width:36px; height:36px; border-radius:50%; object-fit:cover; flex-shrink:0;" alt="${prov?.name}" />
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; background:#FFFFFF; border:1px solid #BFDBFE; border-radius:12px; padding:9px 11px; margin-bottom:9px;">
+              <div style="display:flex; align-items:center; gap:9px; min-width:0;">
+                <img src="${resolveMediaUrl(avatarUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_AVATAR_FALLBACK}';" style="width:38px; height:38px; border-radius:50%; object-fit:cover; flex-shrink:0;" alt="${prov?.name}" />
                 <div style="min-width:0;">
                   <div style="font-size:13px; font-weight:800; color:#0F172A; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${prov?.name || 'Specialist'}</div>
-                  <div style="font-size:11px; color:#64748B;">★ ${prov?.rating || '5.0'} • ${prov?.brandName || 'Mobile Specialist'}</div>
+                  <div style="font-size:11px; color:#64748B; display:flex; align-items:center; gap:4px;">
+                    <span style="display:inline-flex; align-items:center; gap:2px; color:#0052FF; font-weight:700;">${uiIcon('star', 11)} ${prov?.rating || '5.0'}</span>
+                    <span>•</span>
+                    <span>${prov?.brandName || 'Mobile Specialist'}</span>
+                  </div>
                 </div>
               </div>
               <div style="text-align:right; flex-shrink:0;">
-                <div style="font-size:13.5px; font-weight:900; color:#0052FF;">${formatUsdPrice(agreedPrice)}</div>
-                <div style="font-size:10px; color:#64748B;">${req.paymentMethod}</div>
+                <div style="font-size:14px; font-weight:900; color:#0052FF;">${formatUsdPrice(agreedPrice)}</div>
+                <div style="font-size:10px; color:#64748B; font-weight:700;">${req.paymentMethod}</div>
               </div>
             </div>
 
             <!-- Compact Action Row: Call, Chat, Photo -->
             <div style="display:flex; gap:6px;">
-              <button type="button" class="btn-dark-sec" style="flex:1; height:34px; font-size:12px; border-radius:8px;" onclick="startInAppCall('${(prov?.name || 'Pro').replace(/'/g, "\\'")}', '${escapeHtml(req.title)}', 'call_${req.id}', '${prov?.id || ''}')">
+              <button type="button" class="btn-dark-sec" style="flex:1; height:36px; font-size:12px; border-radius:10px; background:#FFFFFF;" onclick="startInAppCall('${(prov?.name || 'Pro').replace(/'/g, "\\'")}', '${escapeHtml(req.title)}', 'call_${req.id}', '${prov?.id || ''}')">
                 ${uiIcon('phone', 13)}
                 <span>Call</span>
               </button>
-              <button type="button" class="btn-dark-sec" style="flex:1; height:34px; font-size:12px; border-radius:8px;" onclick="openChatDrawer('${req.id}', '${prov?.id || ''}')">
+              <button type="button" class="btn-dark-sec" style="flex:1; height:36px; font-size:12px; border-radius:10px; background:#FFFFFF;" onclick="openChatDrawer('${req.id}', '${prov?.id || ''}')">
                 ${uiIcon('chat', 13)}
                 <span>Chat ${(req.messages && req.messages.length > 0) ? `(${req.messages.length})` : ''}</span>
               </button>
               ${req.photoUrl ? `
-                <button type="button" class="btn-dark-sec" style="height:34px; font-size:11.5px; border-radius:8px; padding:0 8px;" onclick="openImagePreviewModal('${req.photoUrl}', 'Desired Style Photo')">
+                <button type="button" class="btn-dark-sec" style="height:36px; font-size:11.5px; border-radius:10px; padding:0 10px; background:#FFFFFF;" onclick="openImagePreviewModal('${req.photoUrl}', 'Desired Style Photo')">
                   <span>Photo</span>
                 </button>
               ` : ''}
@@ -6361,20 +6533,20 @@ function renderBookedTrackingOverlay(req) {
             return '';
           })()}
 
-          <!-- Service Info Row -->
-          <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:8px;">
-            <div>
-              <div style="font-size:15px; font-weight:800; color:var(--text-main); display:flex; align-items:center; gap:6px;">
-                <span style="color:var(--blue-primary); display:inline-flex;">${statusIcon}</span>
+          <!-- Service Info Row + Bold Brand Blue Start PIN Banner -->
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px; background:#EBF3FF; border:1.5px solid #BFDBFE; border-radius:14px; padding:10px 12px;">
+            <div style="min-width:0;">
+              <div style="font-size:14.5px; font-weight:800; color:#0F172A; display:flex; align-items:center; gap:6px;">
+                <span style="color:#0052FF; display:inline-flex;">${statusIcon}</span>
                 <span>${statusHeadline}</span>
               </div>
-              <div style="font-size:12px; color:var(--text-secondary); margin-top:2px;">
-                ${req.title} • <strong style="color:var(--blue-primary);">${formatUsdPrice(agreedPrice)}</strong> (${req.paymentMethod})
+              <div style="font-size:12px; color:#475569; margin-top:2px; font-weight:600;">
+                ${req.title} • <strong style="color:#0052FF;">${formatUsdPrice(agreedPrice)}</strong> (${req.paymentMethod})
               </div>
             </div>
-            <div style="background:var(--blue-soft); border:1.5px solid var(--blue-border); padding:5px 10px; border-radius:10px; text-align:center; flex-shrink:0;">
-              <div style="font-size:9px; color:var(--blue-primary); font-weight:800;">START PIN</div>
-              <div style="font-size:15px; font-weight:800; color:var(--blue-primary); letter-spacing:1.5px;">${req.startPinCode || '4829'}</div>
+            <div style="background:#0052FF; color:#FFFFFF; padding:6px 12px; border-radius:10px; text-align:center; flex-shrink:0; box-shadow:0 4px 10px rgba(0,82,255,0.22); cursor:pointer;" onclick="copyCompletionPin('${req.startPinCode || '4829'}')" title="Tap to copy Start PIN">
+              <div style="font-size:8.5px; color:#DBEAFE; font-weight:900; letter-spacing:0.06em;">START PIN</div>
+              <div style="font-size:17px; font-weight:900; color:#FFFFFF; letter-spacing:2px;">#${req.startPinCode || '4829'}</div>
             </div>
           </div>
 
@@ -6409,11 +6581,11 @@ function renderBookedTrackingOverlay(req) {
           </div>
 
           ${req.delayNotice ? `
-            <div style="background:#FEF3C7; border:1px solid #F59E0B; border-radius:10px; padding:8px 10px; margin-bottom:8px; display:flex; align-items:center; gap:8px;">
-              <span style="font-size:16px;">⏱️</span>
+            <div style="background:#EFF6FF; border:1px solid #93C5FD; border-radius:10px; padding:8px 10px; margin-bottom:8px; display:flex; align-items:center; gap:8px;">
+              <span style="color:#0052FF; display:inline-flex;">${uiIcon('clock', 16)}</span>
               <div>
-                <div style="font-size:12px; font-weight:800; color:#B45309;">Specialist Running ~${req.delayNotice.minutes}m Late</div>
-                <div style="font-size:11px; color:#92400E;">${escapeHtml(req.delayNotice.reason)}</div>
+                <div style="font-size:12px; font-weight:800; color:#1E40AF;">Specialist Running ~${req.delayNotice.minutes}m Late</div>
+                <div style="font-size:11px; color:#1D4ED8;">${escapeHtml(req.delayNotice.reason)}</div>
               </div>
             </div>
           ` : ''}
@@ -7555,6 +7727,166 @@ function renderModalLayer() {
   }
   lastRenderedModalKey = modalKey;
 
+  // DRIVEGO COUNTER-OFFER STEPPER MODAL (03-app-counter-offer.png)
+  if (state.activeModal === 'COUNTER_OFFER_MODAL') {
+    const md = state.modalData || {};
+    const requestId = md.requestId || '';
+    const baseUsd = Number(md.baseUsd || 20);
+    const currentUsd = Math.max(1, Number(md.currentUsd || (baseUsd + 2)));
+    const req = (state.db?.requests || []).find((r) => r.id === requestId);
+    const reqCat = normalizeCategoryId(req?.categoryId);
+    const isPromo = Boolean(state.db?.settings?.launchPromoActive);
+    const commPercent = isPromo ? 0 : Number(state.db?.settings?.categoryCommissions?.[reqCat] ?? (state.db?.settings?.commissionPercent || 10));
+    const commUsd = Math.round(currentUsd * (commPercent / 100) * 100) / 100;
+    const netUsd = Math.round((currentUsd - commUsd) * 100) / 100;
+
+    root.innerHTML = `
+      <div class="modal-backdrop" onclick="closeModal()">
+        <div class="indrive-modal-sheet" onclick="event.stopPropagation()" style="border-radius:26px 26px 0 0; padding:20px 18px 26px; max-width:480px; margin:0 auto;">
+          <div style="width:40px; height:4px; border-radius:99px; background:#CBD5E1; margin:0 auto 14px;"></div>
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:14px;">
+            <div>
+              <div style="font-size:18px; font-weight:900; color:#0F172A;">Offer your fare</div>
+              <div style="font-size:12px; color:#64748B; font-weight:600; margin-top:2px;">
+                ${escapeHtml(req?.title || 'Client Service Request')} • Client budget: <strong style="color:#0052FF;">$${baseUsd.toFixed(2)}</strong>
+              </div>
+            </div>
+            <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
+          </div>
+
+          <!-- DriveGo Large Stepper Row (- $25.00 +) -->
+          <div style="background:#F8FAFC; border:1.5px solid #E2E8F0; border-radius:20px; padding:18px 16px; margin-bottom:14px; text-align:center;">
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:14px;">
+              <button
+                type="button"
+                onclick="stepCounterOfferModal(-1)"
+                style="width:52px; height:52px; border-radius:50%; border:1.5px solid #CBD5E1; background:#FFFFFF; color:#0F172A; font-size:24px; font-weight:900; cursor:pointer; display:flex; align-items:center; justify-content:center; box-shadow:0 2px 6px rgba(15,23,42,0.06);"
+              >&minus;</button>
+              <div style="flex:1;">
+                <div style="font-size:36px; font-weight:900; color:#0F172A; letter-spacing:-0.03em; line-height:1;">
+                  $${currentUsd.toFixed(2)}
+                </div>
+                <div style="font-size:11.5px; font-weight:800; color:#059669; margin-top:6px;">
+                  You receive: $${netUsd.toFixed(2)} ${isPromo ? '(0% Launch Promo)' : `(${commPercent}% fee)`}
+                </div>
+              </div>
+              <button
+                type="button"
+                onclick="stepCounterOfferModal(1)"
+                style="width:52px; height:52px; border-radius:50%; border:none; background:#0052FF; color:#FFFFFF; font-size:24px; font-weight:900; cursor:pointer; display:flex; align-items:center; justify-content:center; box-shadow:0 6px 14px rgba(0,82,255,0.28);"
+              >+</button>
+            </div>
+
+            <!-- Quick Increment Chips -->
+            <div style="display:flex; justify-content:center; gap:8px; margin-top:14px; flex-wrap:wrap;">
+              ${[baseUsd, baseUsd + 2, baseUsd + 5, baseUsd + 10].map((val) => `
+                <button
+                  type="button"
+                  onclick="setCounterOfferModalAmount(${val})"
+                  style="height:32px; padding:0 12px; border-radius:99px; border:1.5px solid ${Math.abs(currentUsd - val) < 0.01 ? '#0052FF' : '#CBD5E1'}; background:${Math.abs(currentUsd - val) < 0.01 ? '#EBF3FF' : '#FFFFFF'}; color:${Math.abs(currentUsd - val) < 0.01 ? '#0052FF' : '#334155'}; font-size:12px; font-weight:800; cursor:pointer;"
+                >$${val.toFixed(0)}${val === baseUsd ? ' (Client)' : ''}</button>
+              `).join('')}
+            </div>
+          </div>
+
+          <button
+            type="button"
+            class="btn-primary-blue"
+            style="width:100%; height:50px; border-radius:14px; font-size:15px; font-weight:900; background:#0052FF; box-shadow:0 8px 20px rgba(0,82,255,0.28);"
+            onclick="confirmCounterOfferModal()"
+          >
+            <span>Send offer ($${currentUsd.toFixed(2)})</span>
+          </button>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // DRIVEGO 4-DIGIT PIN KEYPAD MODAL FOR PROVIDERS (05-app-safety.png)
+  if (state.activeModal === 'PROVIDER_PIN_KEYPAD_MODAL') {
+    const md = state.modalData || {};
+    const requestId = md.requestId || '';
+    const mode = md.mode === 'COMPLETION' ? 'COMPLETION' : 'START';
+    const digits = String(md.digits || '').slice(0, 4);
+    const isCompletion = mode === 'COMPLETION';
+    const accentColor = isCompletion ? '#10B981' : '#0052FF';
+    const softBg = isCompletion ? '#ECFDF5' : '#EBF3FF';
+
+    root.innerHTML = `
+      <div class="modal-backdrop" onclick="closeModal()">
+        <div class="indrive-modal-sheet" onclick="event.stopPropagation()" style="border-radius:26px 26px 0 0; padding:20px 18px 26px; max-width:440px; margin:0 auto;">
+          <div style="width:40px; height:4px; border-radius:99px; background:#CBD5E1; margin:0 auto 12px;"></div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <div style="width:36px; height:36px; border-radius:10px; background:${softBg}; color:${accentColor}; display:flex; align-items:center; justify-content:center;">
+                ${uiIcon('shield', 18)}
+              </div>
+              <div>
+                <div style="font-size:16px; font-weight:900; color:#0F172A;">
+                  ${isCompletion ? 'Enter Completion PIN' : 'Enter Start PIN'}
+                </div>
+                <div style="font-size:11.5px; color:#64748B; font-weight:600;">
+                  Ask client for the 4-digit ${isCompletion ? 'completion' : 'arrival'} code
+                </div>
+              </div>
+            </div>
+            <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
+          </div>
+
+          <!-- 4-Digit Display Boxes -->
+          <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:10px; max-width:280px; margin:12px auto 16px;">
+            ${[0, 1, 2, 3].map((idx) => {
+              const ch = digits[idx] || '';
+              const isCurrent = idx === digits.length;
+              return `
+                <div style="height:56px; border-radius:14px; border:2px solid ${ch ? accentColor : isCurrent ? accentColor : '#CBD5E1'}; background:${ch ? softBg : '#F8FAFC'}; display:flex; align-items:center; justify-content:center; font-size:26px; font-weight:900; color:#0F172A; box-shadow:${isCurrent ? `0 0 0 3px ${softBg}` : 'none'};">
+                  ${ch || '•'}
+                </div>
+              `;
+            }).join('')}
+          </div>
+
+          <!-- Numeric Keypad Grid -->
+          <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; max-width:320px; margin:0 auto 14px;">
+            ${['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((d) => `
+              <button
+                type="button"
+                onclick="pressProviderPinKeypad('${d}')"
+                style="height:50px; border-radius:12px; border:1px solid #E2E8F0; background:#FFFFFF; color:#0F172A; font-size:20px; font-weight:900; cursor:pointer; box-shadow:0 2px 4px rgba(15,23,42,0.04);"
+              >${d}</button>
+            `).join('')}
+            <button
+              type="button"
+              onclick="pressProviderPinKeypad('CLEAR')"
+              style="height:50px; border-radius:12px; border:1px solid #E2E8F0; background:#F8FAFC; color:#64748B; font-size:12px; font-weight:800; cursor:pointer;"
+            >Clear</button>
+            <button
+              type="button"
+              onclick="pressProviderPinKeypad('0')"
+              style="height:50px; border-radius:12px; border:1px solid #E2E8F0; background:#FFFFFF; color:#0F172A; font-size:20px; font-weight:900; cursor:pointer; box-shadow:0 2px 4px rgba(15,23,42,0.04);"
+            >0</button>
+            <button
+              type="button"
+              onclick="pressProviderPinKeypad('BACK')"
+              style="height:50px; border-radius:12px; border:1px solid #E2E8F0; background:#F8FAFC; color:#0F172A; font-size:16px; font-weight:800; cursor:pointer;"
+            >&larr;</button>
+          </div>
+
+          <button
+            type="button"
+            class="btn-primary-blue"
+            style="width:100%; height:48px; border-radius:14px; font-size:14.5px; font-weight:900; background:${accentColor}; opacity:${digits.length === 4 ? '1' : '0.5'};"
+            ${digits.length === 4 ? `onclick="submitProviderPinKeypad('${requestId}', '${mode}', '${digits}')"` : 'disabled'}
+          >
+            <span>${isCompletion ? 'Verify & Complete Job' : 'Verify PIN & Start Service'}</span>
+          </button>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
   // 1. SIGN-IN MODAL: "Log In" (existing account) | "Create Account" (new), each as Client or Provider
   if (state.activeModal === 'SIGNIN_ROLE_CHOICE') {
     const md = state.modalData || {};
@@ -7615,8 +7947,9 @@ function renderModalLayer() {
             </button>
           ` : ''}
           ${notice.actions === 'SUBMIT_APPEAL' ? `
-            <button type="button" class="btn-primary-blue" style="height:38px; font-size:12.5px; background:#D97706;" onclick="promptSubmitSuspensionAppeal('${escapeHtml(notice.phone || '')}')">
-              ⚖️ Submit Suspension Appeal to Admin
+            <button type="button" class="btn-primary-blue" style="height:38px; font-size:12.5px; background:#D97706; display:inline-flex; align-items:center; justify-content:center; gap:6px;" onclick="promptSubmitSuspensionAppeal('${escapeHtml(notice.phone || '')}')">
+              ${uiIcon('scale', 14)}
+              <span>Submit Suspension Appeal to Admin</span>
             </button>
           ` : ''}
         </div>
@@ -8388,9 +8721,9 @@ function renderModalLayer() {
                     ${isProvider ? `Client: ${r.customerName} • ` : ''}${r.exactAddress || r.suburbName || 'Harare'} • <span style="font-weight:700; color:${isCompleted ? '#10B981' : 'var(--blue-primary)'};">${r.status}</span>
                   </div>
                   ${myRatingScore ? `
-                    <div style="font-size:11.5px; font-weight:800; color:#F59E0B; margin-top:3px; display:flex; align-items:center; gap:3px;">
+                    <div style="font-size:11.5px; font-weight:800; color:#0052FF; margin-top:3px; display:flex; align-items:center; gap:3px;">
                       ${uiIcon('star', 12)}
-                      <span>Rated ${myRatingScore}.0 ★</span>
+                      <span>Rated ${myRatingScore}.0</span>
                     </div>
                   ` : ''}
                 </div>
@@ -8757,9 +9090,9 @@ function renderModalLayer() {
                   type="button"
                   class="small-pill-btn"
                   onclick="toggleNavVoice(); renderModalLayer();"
-                  style="height:32px; padding:0 12px; font-size:11.5px; font-weight:800; background:${liveNavState.voiceEnabled ? '#10B981' : '#F1F5F9'}; color:${liveNavState.voiceEnabled ? '#FFFFFF' : '#0F172A'}; border:1px solid ${liveNavState.voiceEnabled ? '#10B981' : '#CBD5E1'}; cursor:pointer;"
+                  style="height:32px; padding:0 12px; font-size:11.5px; font-weight:800; background:${liveNavState.voiceEnabled ? '#10B981' : '#F1F5F9'}; color:${liveNavState.voiceEnabled ? '#FFFFFF' : '#0F172A'}; border:1px solid ${liveNavState.voiceEnabled ? '#10B981' : '#CBD5E1'}; cursor:pointer; display:inline-flex; align-items:center; gap:5px;"
                 >
-                  ${liveNavState.voiceEnabled ? '🔊 Active (ON)' : '🔈 Muted (Default OFF)'}
+                  ${liveNavState.voiceEnabled ? `${uiIcon('volumeOn', 13)} <span>Active (ON)</span>` : `${uiIcon('volumeOff', 13)} <span>Muted (Default OFF)</span>`}
                 </button>
               </div>
             </div>
@@ -10910,9 +11243,20 @@ function normalizeCategoryId(catId) {
     makeup: 'beauty_care',
     wigs: 'beauty_care',
     lashes: 'beauty_care',
+    hair: 'beauty_care',
     cleaning: 'cleaning_domestic',
     handyman: 'repairs_construction',
-    plumbing: 'repairs_construction'
+    plumbing: 'repairs_construction',
+    plumbing_electrical: 'repairs_construction',
+    tech_appliances: 'solar_electrical',
+    solar: 'solar_electrical',
+    electrical: 'solar_electrical',
+    borehole: 'water_borehole',
+    gardening: 'outdoor_auto',
+    gardening_landscaping: 'outdoor_auto',
+    mechanic: 'outdoor_auto',
+    delivery: 'errands_delivery',
+    errands: 'errands_delivery'
   };
   return map[catId] || catId || 'repairs_construction';
 }
@@ -11095,7 +11439,8 @@ function renderProviderActiveVisitTab(prov, activeJob) {
 
   const accOffer = (activeJob.offers || []).find((o) => o.id === activeJob.acceptedOfferId);
   const agreedUsd = activeJob.agreedTotalUsd || accOffer?.priceUsd || activeJob.budgetUsd;
-  const commRate = state.db.settings?.commissionPercent ?? 10;
+  const isPromo = Boolean(state.db?.settings?.launchPromoActive);
+  const commRate = isPromo ? 0 : (state.db.settings?.commissionPercent ?? 10);
   const netUsd = Math.round(agreedUsd * (1 - commRate / 100) * 100) / 100;
 
   const isEnRoute = activeJob.status === 'CONFIRMED' || activeJob.status === 'BOOKED';
@@ -11128,8 +11473,8 @@ function renderProviderActiveVisitTab(prov, activeJob) {
             </div>
             <div style="font-size:17px; font-weight:900; color:var(--text-main); display:flex; align-items:center; gap:6px;">
               <span>${escapeHtml(activeJob.customerName)}</span>
-              <span style="font-size:12px; color:var(--text-secondary); font-weight:700;">
-                ${(Number(activeJob.customerRating) || 0) > 0 ? `★ ${activeJob.customerRating}` : '• New Client'}
+              <span style="font-size:12px; color:#0052FF; font-weight:700; display:inline-flex; align-items:center; gap:3px;">
+                ${(Number(activeJob.customerRating) || 0) > 0 ? `${uiIcon('star', 11)} ${activeJob.customerRating}` : '• New Client'}
               </span>
             </div>
             <div style="font-size:12.5px; color:var(--blue-primary); font-weight:700; margin-top:3px; display:flex; align-items:center; gap:4px;">
@@ -11139,15 +11484,15 @@ function renderProviderActiveVisitTab(prov, activeJob) {
           </div>
         </div>
 
-        <!-- Luxury Fare & Net Earnings Card -->
-        <div class="luxury-earnings-banner">
+        <!-- DriveGo Trip Flow Twin: Collect in Cash / EcoCash Banner (07-app-trip-flow.png) -->
+        <div class="luxury-earnings-banner" style="background:linear-gradient(135deg, #0F172A 0%, #1E293B 100%);">
           <div>
-            <div style="font-size:11px; font-weight:700; color:#94A3B8; text-transform:uppercase; letter-spacing:0.04em;">Agreed Fare</div>
+            <div style="font-size:10.5px; font-weight:800; color:#94A3B8; text-transform:uppercase; letter-spacing:0.06em;">Collect from Client (${escapeHtml(activeJob.paymentMethod || 'Cash USD')})</div>
             <div class="luxury-fare-large">${formatUsdPrice(agreedUsd)}</div>
           </div>
           <div style="text-align:right;">
             <div class="luxury-net-pill">Net Payout: $${netUsd.toFixed(2)}</div>
-            <div style="font-size:11px; color:#94A3B8; font-weight:600; margin-top:3px;">${activeJob.paymentMethod} • 10% fee</div>
+            <div style="font-size:11px; color:#94A3B8; font-weight:700; margin-top:3px;">${isPromo ? '0% Launch Promo (No Fee)' : `${commRate}% platform fee`}</div>
           </div>
         </div>
 
@@ -11163,13 +11508,13 @@ function renderProviderActiveVisitTab(prov, activeJob) {
         ` : ''}
 
         ${activeJob.timingType === 'SCHEDULED' ? `
-          <div style="font-size:11.5px; font-weight:700; color:#854D0E; background:#FEF9C3; padding:7px 11px; border-radius:10px; margin-bottom:8px;">
+          <div style="font-size:11.5px; font-weight:700; color:#1E40AF; background:#EFF6FF; padding:7px 11px; border-radius:10px; margin-bottom:8px;">
             Scheduled Visit: <strong>${escapeHtml(activeJob.scheduledDate)} at ${escapeHtml(activeJob.scheduledTime)}</strong>
           </div>
         ` : ''}
 
         ${activeJob.delayNotice ? `
-          <div style="font-size:11.5px; font-weight:700; color:#B45309; background:#FEF3C7; border:1px solid #FCD34D; padding:7px 11px; border-radius:10px; margin-bottom:8px;">
+          <div style="font-size:11.5px; font-weight:700; color:#1E40AF; background:#EFF6FF; border:1px solid #93C5FD; padding:7px 11px; border-radius:10px; margin-bottom:8px;">
             Delay Alert: Running ~${activeJob.delayNotice.minutes}m late (${escapeHtml(activeJob.delayNotice.reason)})
           </div>
         ` : ''}
@@ -11200,8 +11545,8 @@ function renderProviderActiveVisitTab(prov, activeJob) {
                   ${liveNavState.voiceEnabled ? 'ON' : 'OFF (Default)'}
                 </span>
               </div>
-              <button type="button" class="small-pill-btn" onclick="toggleNavVoice(); renderUiOverlay(true);" style="height:30px; padding:0 10px; font-size:11.5px; font-weight:800; background:${liveNavState.voiceEnabled ? '#10B981' : '#F1F5F9'}; color:${liveNavState.voiceEnabled ? '#FFFFFF' : '#0F172A'}; border:1px solid ${liveNavState.voiceEnabled ? '#10B981' : '#CBD5E1'};">
-                ${liveNavState.voiceEnabled ? '🔊 Mute' : '🔈 Turn On'}
+              <button type="button" class="small-pill-btn" onclick="toggleNavVoice(); renderUiOverlay(true);" style="height:30px; padding:0 10px; font-size:11.5px; font-weight:800; background:${liveNavState.voiceEnabled ? '#10B981' : '#F1F5F9'}; color:${liveNavState.voiceEnabled ? '#FFFFFF' : '#0F172A'}; border:1px solid ${liveNavState.voiceEnabled ? '#10B981' : '#CBD5E1'}; display:inline-flex; align-items:center; gap:4px;">
+                ${liveNavState.voiceEnabled ? `${uiIcon('volumeOff', 12)} <span>Mute</span>` : `${uiIcon('volumeOn', 12)} <span>Turn On</span>`}
               </button>
             </div>
             <div style="font-size:12px; color:var(--text-secondary); font-weight:600; margin-bottom:10px; line-height:1.4; text-align:center;">
@@ -11213,34 +11558,43 @@ function renderProviderActiveVisitTab(prov, activeJob) {
           </div>
         ` : ''}
 
-        <!-- STAGE 2: WAITING OUTSIDE GATE (Luxury Auto-Verifying PIN Entry) -->
+        <!-- STAGE 2: WAITING OUTSIDE GATE (DriveGo Safety PIN Entry + Keypad Modal Button) -->
         ${isArrived ? `
-          <div style="background:#F0FDF4; border:1.5px solid #86EFAC; border-radius:16px; padding:16px 14px; margin-bottom:12px; text-align:center;">
-            <div style="display:inline-flex; align-items:center; gap:6px; background:#DCFCE7; border:1px solid #86EFAC; color:#15803D; font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:0.04em; padding:4px 10px; border-radius:99px; margin-bottom:8px;">
-              <span style="width:7px; height:7px; border-radius:50%; background:#16A34A; animation:pulse 1s infinite;"></span>
+          <div style="background:#EBF3FF; border:2px solid #0052FF; border-radius:16px; padding:16px 14px; margin-bottom:12px; text-align:center;">
+            <div style="display:inline-flex; align-items:center; gap:6px; background:#0052FF; color:#FFFFFF; font-size:11px; font-weight:900; text-transform:uppercase; letter-spacing:0.06em; padding:4px 12px; border-radius:99px; margin-bottom:8px;">
+              <span style="width:7px; height:7px; border-radius:50%; background:#10B981; animation:pulse 1s infinite;"></span>
               <span>Waiting Outside Gate</span>
             </div>
-            <div style="font-size:14px; font-weight:800; color:#0F172A; margin-bottom:3px;">
+            <div style="font-size:14.5px; font-weight:900; color:#0F172A; margin-bottom:3px;">
               Enter Client's 4-Digit Start PIN
             </div>
-            <div style="font-size:11.5px; color:#166534; margin-bottom:12px;">
-              Ask customer for their code — work starts instantly upon entry:
+            <div style="font-size:11.5px; color:#1E3A8A; margin-bottom:12px; font-weight:600;">
+              Ask customer for their code — work starts immediately upon verification:
             </div>
-            <div style="display:flex; justify-content:center; align-items:center; margin-bottom:10px;">
+            <div style="display:flex; justify-content:center; align-items:center; gap:8px; margin-bottom:10px;">
               <input
                 id="providerPinInput_${activeJob.id}"
                 class="dark-input"
                 type="tel"
                 inputmode="numeric"
                 pattern="[0-9]*"
-                style="height:52px; width:180px; font-size:26px; font-weight:900; letter-spacing:8px; text-align:center; padding:0 12px; border:2.5px solid #10B981; border-radius:14px; background:#FFFFFF; color:#0F172A; box-shadow:0 4px 14px rgba(16,185,129,0.18);"
+                style="height:52px; width:170px; font-size:26px; font-weight:900; letter-spacing:8px; text-align:center; padding:0 12px; border:2.5px solid #0052FF; border-radius:14px; background:#FFFFFF; color:#0F172A; box-shadow:0 4px 14px rgba(0,82,255,0.16);"
                 placeholder="••••"
                 maxlength="4"
                 autofocus
                 oninput="if(this.value.length === 4) handleProviderAutoPinVerification(this.value, '${activeJob.id}')"
               />
+              <button
+                type="button"
+                class="btn-primary-blue"
+                style="height:52px; width:auto; padding:0 14px; border-radius:14px; font-size:12px; font-weight:800; background:#0052FF; display:inline-flex; align-items:center; gap:5px;"
+                onclick="openProviderPinKeypadModal('${activeJob.id}', 'START')"
+              >
+                ${uiIcon('keypad', 15)}
+                <span>Keypad</span>
+              </button>
             </div>
-            <div style="display:inline-flex; align-items:center; gap:6px; font-size:11.5px; color:#475569; background:#FFFFFF; border:1px solid #E2E8F0; padding:4px 10px; border-radius:10px;">
+            <div style="display:inline-flex; align-items:center; gap:6px; font-size:11.5px; color:#475569; background:#FFFFFF; border:1px solid #BFDBFE; padding:4px 10px; border-radius:10px;">
               <span style="font-weight:700;">Est. Time:</span>
               <select id="providerEstSelect_${activeJob.id}" style="border:none; background:transparent; font-size:11.5px; font-weight:800; color:#0F172A; cursor:pointer; outline:none;">
                 <option value="15">15 mins</option>
@@ -11263,27 +11617,27 @@ function renderProviderActiveVisitTab(prov, activeJob) {
           const remainingMins = Math.ceil(remainingSec / 60);
 
           return `
-            <div style="background:#F0FDF4; border:1.5px solid #86EFAC; border-radius:14px; padding:12px; margin-bottom:12px;">
+            <div style="background:#ECFDF5; border:1.5px solid #10B981; border-radius:16px; padding:14px; margin-bottom:12px;">
               <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
-                <div style="font-size:12px; font-weight:800; color:#15803D; display:flex; align-items:center; gap:5px;">
-                  <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#16A34A; animation:pulse 1s infinite;"></span>
+                <div style="font-size:12px; font-weight:900; color:#047857; display:flex; align-items:center; gap:6px;">
+                  <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#10B981; animation:pulse 1s infinite;"></span>
                   <span>TASK IN PROGRESS</span>
                 </div>
-                <div style="font-size:12px; font-weight:800; color:#166534;">
+                <div style="font-size:12px; font-weight:800; color:#065F46;">
                   ~${remainingMins} mins remaining
                 </div>
               </div>
-              <div style="font-size:11.5px; color:#166534; margin-bottom:10px;">
-                Estimated duration: <strong>${estMinutes} mins</strong>. You can adjust ETA if work takes more or less time:
+              <div style="font-size:11.5px; color:#065F46; margin-bottom:10px;">
+                Estimated duration: <strong>${estMinutes} mins</strong>. Adjust ETA if work takes more or less time:
               </div>
               <div style="display:flex; gap:6px; margin-bottom:12px;">
-                <button type="button" class="small-pill-btn" style="flex:1; justify-content:center; background:#FFFFFF; color:#15803D; border:1px solid #86EFAC; font-weight:800;" onclick="providerAdjustEstimatedTime('${activeJob.id}', -15)">
+                <button type="button" class="small-pill-btn" style="flex:1; justify-content:center; background:#FFFFFF; color:#047857; border:1px solid #6EE7B7; font-weight:800;" onclick="providerAdjustEstimatedTime('${activeJob.id}', -15)">
                   -15m
                 </button>
-                <button type="button" class="small-pill-btn" style="flex:1; justify-content:center; background:#FFFFFF; color:#15803D; border:1px solid #86EFAC; font-weight:800;" onclick="providerAdjustEstimatedTime('${activeJob.id}', 15)">
+                <button type="button" class="small-pill-btn" style="flex:1; justify-content:center; background:#FFFFFF; color:#047857; border:1px solid #6EE7B7; font-weight:800;" onclick="providerAdjustEstimatedTime('${activeJob.id}', 15)">
                   +15m
                 </button>
-                <button type="button" class="small-pill-btn" style="flex:1; justify-content:center; background:#FFFFFF; color:#15803D; border:1px solid #86EFAC; font-weight:800;" onclick="providerAdjustEstimatedTime('${activeJob.id}', 30)">
+                <button type="button" class="small-pill-btn" style="flex:1; justify-content:center; background:#FFFFFF; color:#047857; border:1px solid #6EE7B7; font-weight:800;" onclick="providerAdjustEstimatedTime('${activeJob.id}', 30)">
                   +30m
                 </button>
               </div>
@@ -11294,27 +11648,36 @@ function renderProviderActiveVisitTab(prov, activeJob) {
                   <span>I'm Done — Request Completion PIN</span>
                 </button>
               ` : `
-                <div style="background:#FFFFFF; border:1.5px solid #0066FF; border-radius:12px; padding:10px; margin-top:6px;">
-                  <div style="font-size:12.5px; font-weight:800; color:#0066FF; margin-bottom:4px;">
+                <div style="background:#FFFFFF; border:2px solid #0052FF; border-radius:14px; padding:12px; margin-top:6px;">
+                  <div style="font-size:13px; font-weight:900; color:#0052FF; margin-bottom:4px;">
                     Marked Done! Enter Customer's Completion PIN:
                   </div>
-                  <div style="font-size:11.5px; color:var(--text-secondary); margin-bottom:8px;">
+                  <div style="font-size:11.5px; color:var(--text-secondary); margin-bottom:10px; font-weight:600;">
                     Ask client for the 4-digit Completion PIN displayed on their screen:
                   </div>
-                  <div style="display:flex; align-items:center; gap:8px;">
+                  <div style="display:flex; align-items:center; gap:6px;">
                     <input
                       id="providerCompletionPinInput_${activeJob.id}"
                       class="dark-input"
                       type="tel"
                       inputmode="numeric"
                       pattern="[0-9]*"
-                      style="height:44px; font-size:20px; font-weight:900; letter-spacing:4px; text-align:center; padding:0 8px; width:110px; flex-shrink:0; border:2px solid #0066FF;"
+                      style="height:44px; font-size:20px; font-weight:900; letter-spacing:4px; text-align:center; padding:0 8px; width:105px; flex-shrink:0; border:2px solid #0052FF;"
                       placeholder="••••"
                       maxlength="4"
                       oninput="if(this.value.length === 4) handleProviderCompletionPinVerification(this.value, '${activeJob.id}')"
                     />
-                    <button type="button" class="btn-primary-blue" style="flex:1; height:44px; font-size:13px; font-weight:800; background:#10B981;" onclick="handleProviderCompletionPinVerification(document.getElementById('providerCompletionPinInput_${activeJob.id}')?.value, '${activeJob.id}')">
-                      Verify &amp; Finish Job
+                    <button
+                      type="button"
+                      class="btn-dark-sec"
+                      style="height:44px; padding:0 10px; font-size:11.5px; font-weight:800; flex-shrink:0;"
+                      onclick="openProviderPinKeypadModal('${activeJob.id}', 'COMPLETION')"
+                      title="Open Keypad"
+                    >
+                      ${uiIcon('keypad', 14)}
+                    </button>
+                    <button type="button" class="btn-primary-blue" style="flex:1; height:44px; font-size:12.5px; font-weight:800; background:#10B981;" onclick="handleProviderCompletionPinVerification(document.getElementById('providerCompletionPinInput_${activeJob.id}')?.value, '${activeJob.id}')">
+                      Verify &amp; Finish
                     </button>
                   </div>
                   <div id="providerCompletionPinStatus_${activeJob.id}"></div>
@@ -11548,10 +11911,10 @@ function renderProviderOpportunitiesMapOverlay(prov, openRequests) {
                 ${totalCount > 1 ? `
                   <div style="display:flex; gap:6px;">
                     <button type="button" onclick="cycleOpportunityOnMap(-1)" class="btn-dark-sec" style="height:26px; padding:0 8px; font-size:11px; font-weight:800; border-radius:6px;">
-                      ◀ Prev
+                      <span>Prev</span>
                     </button>
                     <button type="button" onclick="cycleOpportunityOnMap(1)" class="btn-dark-sec" style="height:26px; padding:0 8px; font-size:11px; font-weight:800; border-radius:6px;">
-                      Next ▶
+                      <span>Next</span>
                     </button>
                   </div>
                 ` : ''}
@@ -11572,7 +11935,7 @@ function renderProviderOpportunitiesMapOverlay(prov, openRequests) {
               <div style="font-size:14px; font-weight:800; color:#0F172A; margin-bottom:4px;">${escapeHtml(r.title)}</div>
 
               <div style="font-size:11.5px; color:#475569; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
-                <span style="font-weight:700; color:#0F172A;">📍 ${escapeHtml(displayLocation)}</span>
+                <span style="font-weight:700; color:#0F172A; display:inline-flex; align-items:center; gap:4px;"><span style="color:#0052FF; display:inline-flex;">${uiIcon('pin', 11)}</span> ${escapeHtml(displayLocation)}</span>
                 <span>•</span>
                 <span>${escapeHtml(r.customerName)}</span>
               </div>
@@ -11667,7 +12030,7 @@ function renderProviderRequestsFeedTab(prov, openRequests, activeJob) {
       ${(prov.status === 'ON_BREAK' || prov.status === 'LUNCH') ? `
         <div style="background:#EFF6FF; border:1.5px solid #3B82F6; border-radius:14px; padding:12px 14px; margin-bottom:12px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
           <div style="display:flex; align-items:center; gap:9px; flex:1; min-width:0;">
-            <span style="font-size:20px;">☕</span>
+            <span style="color:#0052FF; display:inline-flex;">${uiIcon('coffee', 18)}</span>
             <div>
               <div style="font-size:13px; font-weight:800; color:#1E40AF;">You are on ${prov.status === 'LUNCH' ? 'Lunch Break' : 'Break'}</div>
               <div style="font-size:11.5px; color:#3B82F6; font-weight:600;">Job opportunities are paused while you rest. Tap Resume when ready.</div>
@@ -11712,24 +12075,24 @@ function renderProviderRequestsFeedTab(prov, openRequests, activeJob) {
           `;
         }
 
+        const isPromoActive = Boolean(state.db?.settings?.launchPromoActive);
         const cardsHtml = visibleRequests.map((r) => {
           const myExistingOffer = (r.offers || []).find((o) => o.providerId === prov.id || (prov.finditId && o.providerFinditId === prov.finditId));
           const isOfferDeclined = Boolean(myExistingOffer && myExistingOffer.status === 'DECLINED');
           const isOfferPending = Boolean(myExistingOffer && (myExistingOffer.status === 'PROPOSED' || myExistingOffer.status === 'COUNTERED'));
           const reqCat = normalizeCategoryId(r.categoryId);
-          const commPercent = Number(state.db?.settings?.categoryCommissions?.[reqCat] ?? (state.db?.settings?.commissionPercent || 10));
-          const minReserve = Number(state.db?.settings?.minWalletBalanceUsd || 2.0);
+          const commPercent = isPromoActive ? 0 : Number(state.db?.settings?.categoryCommissions?.[reqCat] ?? (state.db?.settings?.commissionPercent || 10));
+          const minReserve = isPromoActive ? 0 : Number(state.db?.settings?.minWalletBalanceUsd || 2.0);
           const jobBudgetUsd = Number(r.budgetUsd || 0);
           const requiredCommUsd = Math.round(jobBudgetUsd * (commPercent / 100) * 100) / 100;
           const walletBalUsd = Number(prov.walletBalanceUsd || 0);
-          const surpassesWallet = (walletBalUsd < minReserve || walletBalUsd < requiredCommUsd || (walletBalUsd - requiredCommUsd) < minReserve);
-          const suggestedTopUpUsd = Math.max(5, Math.ceil(requiredCommUsd + minReserve - walletBalUsd));
+          const surpassesWallet = !isPromoActive && (walletBalUsd < minReserve || walletBalUsd < requiredCommUsd || (walletBalUsd - requiredCommUsd) < minReserve);
           const bid1Usd = Number((jobBudgetUsd + 2).toFixed(2));
           const bid2Usd = Number((jobBudgetUsd + 3.5).toFixed(2));
           const bid1CommUsd = Math.round(bid1Usd * (commPercent / 100) * 100) / 100;
           const bid2CommUsd = Math.round(bid2Usd * (commPercent / 100) * 100) / 100;
-          const bid1Surpasses = (walletBalUsd < minReserve || walletBalUsd < bid1CommUsd || (walletBalUsd - bid1CommUsd) < minReserve);
-          const bid2Surpasses = (walletBalUsd < minReserve || walletBalUsd < bid2CommUsd || (walletBalUsd - bid2CommUsd) < minReserve);
+          const bid1Surpasses = !isPromoActive && (walletBalUsd < minReserve || walletBalUsd < bid1CommUsd || (walletBalUsd - bid1CommUsd) < minReserve);
+          const bid2Surpasses = !isPromoActive && (walletBalUsd < minReserve || walletBalUsd < bid2CommUsd || (walletBalUsd - bid2CommUsd) < minReserve);
 
           let displayLocation = r.exactAddress || r.clientLiveAddress || r.suburbName || 'Harare';
           displayLocation = displayLocation
@@ -11749,11 +12112,11 @@ function renderProviderRequestsFeedTab(prov, openRequests, activeJob) {
           }
 
           return `
-            <div class="provider-order-card" id="prov_card_${r.id}" style="padding:12px 14px; margin-bottom:10px; border-radius:14px;">
+            <div class="provider-order-card" id="prov_card_${r.id}" style="padding:14px; margin-bottom:10px; border-radius:16px; border:1.5px solid #E2E8F0; background:#FFFFFF;">
               <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px;">
                 <div>
-                  <span style="font-size:21px; font-weight:900; color:var(--blue-primary);">${formatUsdPrice(r.budgetUsd)}</span>
-                  <span style="font-size:11.5px; font-weight:700; color:var(--text-secondary); margin-left:4px;">${r.paymentMethod}</span>
+                  <span style="font-size:22px; font-weight:900; color:#0052FF;">${formatUsdPrice(r.budgetUsd)}</span>
+                  <span style="font-size:11.5px; font-weight:800; color:#64748B; margin-left:4px;">${r.paymentMethod}</span>
                 </div>
                 <div style="display:flex; align-items:center; gap:6px;">
                   <button type="button" onclick="showOpportunityOnMap('${r.id}'); event.stopPropagation();" style="border:1px solid #BFDBFE; background:#EFF6FF; color:#1D4ED8; font-size:10.5px; font-weight:800; padding:2px 8px; border-radius:8px; cursor:pointer; display:inline-flex; align-items:center; gap:4px; height:24px;">
@@ -11767,12 +12130,18 @@ function renderProviderRequestsFeedTab(prov, openRequests, activeJob) {
                 </div>
               </div>
 
-              <div style="font-size:14px; font-weight:800; color:var(--text-main); margin-bottom:4px;">${escapeHtml(r.title)}</div>
+              <div style="font-size:14.5px; font-weight:800; color:var(--text-main); margin-bottom:4px;">${escapeHtml(r.title)}</div>
 
-              <div style="font-size:11.5px; color:#475569; margin-bottom:6px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
-                <span style="font-weight:700; color:#0F172A;">📍 ${escapeHtml(displayLocation)}</span>
+              <div style="font-size:11.5px; color:#475569; margin-bottom:8px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                <span style="font-weight:700; color:#0F172A; display:inline-flex; align-items:center; gap:4px;">
+                  <span style="color:#0052FF; display:inline-flex;">${uiIcon('pin', 11)}</span>
+                  <span>${escapeHtml(displayLocation)}</span>
+                </span>
                 <span>•</span>
-                <span>${escapeHtml(r.customerName)} ${(Number(r.customerRating) || 0) > 0 ? `★ ${r.customerRating}` : ''}</span>
+                <span style="display:inline-flex; align-items:center; gap:4px;">
+                  <span>${escapeHtml(r.customerName)}</span>
+                  ${(Number(r.customerRating) || 0) > 0 ? `<span style="display:inline-flex; align-items:center; gap:2px; color:#0052FF; font-weight:800;">${uiIcon('star', 10)} ${r.customerRating}</span>` : ''}
+                </span>
               </div>
 
               ${r.description ? `
@@ -11805,12 +12174,12 @@ function renderProviderRequestsFeedTab(prov, openRequests, activeJob) {
                       ${surpassesWallet ? (walletBalUsd < minReserve ? 'Need $2 Bal' : `Need $${(requiredCommUsd + minReserve).toFixed(2)}`) : `Accept ${formatUsdPrice(r.budgetUsd)}`}
                     </button>
                     ${counterMidUsd ? `
-                      <button class="btn-dark-sec" ${(walletBalUsd < minReserve || walletBalUsd < Math.round(counterMidUsd * (commPercent / 100) * 100) / 100 || (walletBalUsd - Math.round(counterMidUsd * (commPercent / 100) * 100) / 100) < minReserve) ? 'disabled style="height:32px; padding:0 8px; font-size:11.5px; opacity:0.42; cursor:not-allowed;"' : `style="height:32px; padding:0 8px; font-size:11.5px; font-weight:800;" onclick="providerSubmitBid('${r.id}', ${counterMidUsd})"`}>
+                      <button class="btn-dark-sec" ${(!isPromoActive && (walletBalUsd < minReserve || walletBalUsd < Math.round(counterMidUsd * (commPercent / 100) * 100) / 100 || (walletBalUsd - Math.round(counterMidUsd * (commPercent / 100) * 100) / 100) < minReserve)) ? 'disabled style="height:32px; padding:0 8px; font-size:11.5px; opacity:0.42; cursor:not-allowed;"' : `style="height:32px; padding:0 8px; font-size:11.5px; font-weight:800;" onclick="providerSubmitBid('${r.id}', ${counterMidUsd})"`}>
                         Counter ${formatUsdPrice(counterMidUsd)}
                       </button>
                     ` : ''}
-                    <button class="btn-dark-sec" ${walletBalUsd < minReserve ? 'disabled style="height:32px; padding:0 8px; font-size:11.5px; opacity:0.42; cursor:not-allowed;"' : `style="height:32px; padding:0 8px; font-size:11.5px; font-weight:800;" onclick="promptProviderCustomBid('${r.id}', ${r.budgetUsd})"`}>
-                      Custom $
+                    <button class="btn-dark-sec" ${(!isPromoActive && walletBalUsd < minReserve) ? 'disabled style="height:32px; padding:0 8px; font-size:11.5px; opacity:0.42; cursor:not-allowed;"' : `style="height:32px; padding:0 8px; font-size:11.5px; font-weight:800;" onclick="promptProviderCustomBid('${r.id}', ${r.budgetUsd})"`}>
+                      Counter-offer
                     </button>
                   </div>
                 </div>
@@ -11847,30 +12216,42 @@ function renderProviderRequestsFeedTab(prov, openRequests, activeJob) {
                   <button type="button" onclick="state.providerTab='ACTIVE_JOB'; renderUiOverlay();" style="border:none; background:#0F172A; color:#FFFFFF; font-size:10.5px; font-weight:800; padding:4px 10px; border-radius:99px; cursor:pointer;">View</button>
                 </div>
               ` : isOfferDeclined || isOfferPending ? '' : `
-                <div class="provider-bid-grid" style="gap:5px;">
+                <!-- DriveGo Twin Action Row: Decline | Counter-offer (+quick chips) | Accept -->
+                <div style="display:grid; grid-template-columns:0.8fr 1.15fr 1.35fr; gap:6px; margin-bottom:6px;">
+                  <button
+                    type="button"
+                    class="btn-dark-sec"
+                    style="height:38px; font-size:11.5px; font-weight:800; color:#DC2626; border-color:#FECACA; background:#FFF1F2;"
+                    onclick="providerDismissJob('${r.id}')"
+                  >
+                    Decline
+                  </button>
+                  <button
+                    type="button"
+                    class="btn-dark-sec"
+                    ${(!isPromoActive && walletBalUsd < minReserve) ? 'disabled style="height:38px; font-size:11.5px; opacity:0.42; cursor:not-allowed;"' : `style="height:38px; font-size:11.5px; font-weight:800; color:#0052FF; border-color:#BFDBFE; background:#EBF3FF;" onclick="promptProviderCustomBid('${r.id}', ${r.budgetUsd})"`}
+                  >
+                    Counter-offer
+                  </button>
                   <button
                     class="btn-primary-blue"
-                    ${surpassesWallet ? 'disabled style="height:35px; font-size:11.5px; opacity:0.42; cursor:not-allowed;"' : `style="height:35px; font-size:12px; font-weight:800;" onclick="providerSubmitBid('${r.id}', ${r.budgetUsd})"`}
+                    ${surpassesWallet ? 'disabled style="height:38px; font-size:11.5px; opacity:0.42; cursor:not-allowed;"' : `style="height:38px; font-size:12px; font-weight:900;" onclick="providerSubmitBid('${r.id}', ${r.budgetUsd})"`}
                   >
                     ${surpassesWallet ? (walletBalUsd < minReserve ? 'Need $2 Bal' : `Need $${(requiredCommUsd + minReserve).toFixed(2)}`) : `Accept ${formatUsdPrice(r.budgetUsd)}`}
                   </button>
+                </div>
+                <div style="display:flex; gap:5px;">
                   <button
                     class="btn-dark-sec"
-                    ${bid1Surpasses ? 'disabled style="height:35px; font-size:11.5px; opacity:0.42; cursor:not-allowed;"' : `style="height:35px; font-size:11.5px; font-weight:800;" onclick="providerSubmitBid('${r.id}', ${bid1Usd})"`}
+                    ${bid1Surpasses ? 'disabled style="flex:1; height:30px; font-size:11px; opacity:0.42; cursor:not-allowed;"' : `style="flex:1; height:30px; font-size:11px; font-weight:800;" onclick="providerSubmitBid('${r.id}', ${bid1Usd})"`}
                   >
-                    ${bid1Surpasses ? (walletBalUsd < minReserve ? 'Need $2' : `Need $${(bid1CommUsd + minReserve).toFixed(2)}`) : formatUsdPrice(bid1Usd)}
+                    Quick +$2 (${formatUsdPrice(bid1Usd)})
                   </button>
                   <button
                     class="btn-dark-sec"
-                    ${bid2Surpasses ? 'disabled style="height:35px; font-size:11.5px; opacity:0.42; cursor:not-allowed;"' : `style="height:35px; font-size:11.5px; font-weight:800;" onclick="providerSubmitBid('${r.id}', ${bid2Usd})"`}
+                    ${bid2Surpasses ? 'disabled style="flex:1; height:30px; font-size:11px; opacity:0.42; cursor:not-allowed;"' : `style="flex:1; height:30px; font-size:11px; font-weight:800;" onclick="providerSubmitBid('${r.id}', ${bid2Usd})"`}
                   >
-                    ${bid2Surpasses ? (walletBalUsd < minReserve ? 'Need $2' : `Need $${(bid2CommUsd + minReserve).toFixed(2)}`) : formatUsdPrice(bid2Usd)}
-                  </button>
-                  <button
-                    class="btn-dark-sec"
-                    ${walletBalUsd < minReserve ? 'disabled style="height:35px; font-size:11.5px; opacity:0.42; cursor:not-allowed;"' : `style="height:35px; font-size:11.5px; font-weight:800;" onclick="promptProviderCustomBid('${r.id}', ${r.budgetUsd})"`}
-                  >
-                    Custom $
+                    Quick +$3.5 (${formatUsdPrice(bid2Usd)})
                   </button>
                 </div>
               `}
@@ -13068,10 +13449,10 @@ async function setProviderStatus(newStatus, breakMins = 15) {
       breakMinutes: breakMins
     });
     showToast(
-      newStatus === 'AVAILABLE' ? '🟢 You are now Online & Available for jobs!' :
-      newStatus === 'ON_BREAK' ? `☕ Break active for ${breakMins} mins. Job alerts paused.` :
-      newStatus === 'LUNCH' ? `🍱 Lunch active for ${breakMins} mins. Job alerts paused.` :
-      newStatus === 'BUSY' ? '🟡 Status set to Busy.' : '⚪ You are now Offline.',
+      newStatus === 'AVAILABLE' ? 'You are now Online and Available for jobs!' :
+      newStatus === 'ON_BREAK' ? `Break active for ${breakMins} mins. Job alerts paused.` :
+      newStatus === 'LUNCH' ? `Lunch active for ${breakMins} mins. Job alerts paused.` :
+      newStatus === 'BUSY' ? 'Status set to Busy.' : 'You are now Offline.',
       'info'
     );
     await fetchState(false);
@@ -13115,9 +13496,10 @@ async function submitDisputeFromModal(jobId) {
 
 function promptProviderCustomBid(requestId, baseUsd) {
   const prov = state.currentUser || state.db?.providers?.[0];
+  const isPromo = Boolean(state.db?.settings?.launchPromoActive);
   const walletBalUsd = Number(prov?.walletBalanceUsd || 0);
-  const minReserve = Number(state.db?.settings?.minWalletBalanceUsd || 2.0);
-  if (walletBalUsd < minReserve) {
+  const minReserve = isPromo ? 0 : Number(state.db?.settings?.minWalletBalanceUsd || 2.0);
+  if (!isPromo && walletBalUsd < minReserve) {
     openLowBalanceExplanatoryModal({
       currentBalanceUsd: walletBalUsd,
       minReserveUsd: minReserve,
@@ -13129,9 +13511,81 @@ function promptProviderCustomBid(requestId, baseUsd) {
     });
     return;
   }
-  const val = prompt('Enter your offer price in USD ($):', String(Number(baseUsd) + 2));
-  if (val && !isNaN(Number(val))) {
-    providerSubmitBid(requestId, Number(val));
+  state.activeModal = 'COUNTER_OFFER_MODAL';
+  state.modalData = {
+    requestId,
+    baseUsd: Number(baseUsd) || 20,
+    currentUsd: Number((Number(baseUsd || 20) + 2).toFixed(2))
+  };
+  lastRenderedModalKey = '';
+  renderModalLayer();
+}
+
+function stepCounterOfferModal(delta) {
+  if (state.activeModal !== 'COUNTER_OFFER_MODAL' || !state.modalData) return;
+  const nextVal = Math.max(1, Number((Number(state.modalData.currentUsd || 20) + delta).toFixed(2)));
+  state.modalData = { ...state.modalData, currentUsd: nextVal };
+  lastRenderedModalKey = '';
+  renderModalLayer();
+}
+
+function setCounterOfferModalAmount(val) {
+  if (state.activeModal !== 'COUNTER_OFFER_MODAL' || !state.modalData) return;
+  state.modalData = { ...state.modalData, currentUsd: Math.max(1, Number(val) || 20) };
+  lastRenderedModalKey = '';
+  renderModalLayer();
+}
+
+function confirmCounterOfferModal() {
+  if (!state.modalData?.requestId) return;
+  const { requestId, currentUsd } = state.modalData;
+  closeModal();
+  providerSubmitBid(requestId, Number(currentUsd));
+}
+
+function openProviderPinKeypadModal(requestId, mode = 'START') {
+  state.activeModal = 'PROVIDER_PIN_KEYPAD_MODAL';
+  state.modalData = {
+    requestId,
+    mode: mode === 'COMPLETION' ? 'COMPLETION' : 'START',
+    digits: ''
+  };
+  lastRenderedModalKey = '';
+  renderModalLayer();
+}
+
+function pressProviderPinKeypad(key) {
+  if (state.activeModal !== 'PROVIDER_PIN_KEYPAD_MODAL' || !state.modalData) return;
+  let digits = String(state.modalData.digits || '');
+  if (key === 'CLEAR') {
+    digits = '';
+  } else if (key === 'BACK') {
+    digits = digits.slice(0, -1);
+  } else if (digits.length < 4 && /^[0-9]$/.test(key)) {
+    digits += key;
+  }
+  state.modalData = { ...state.modalData, digits };
+  lastRenderedModalKey = '';
+  renderModalLayer();
+  if (digits.length === 4) {
+    const { requestId, mode } = state.modalData;
+    setTimeout(() => {
+      submitProviderPinKeypad(requestId, mode, digits);
+    }, 120);
+  }
+}
+
+function submitProviderPinKeypad(requestId, mode, digits) {
+  if (!digits || digits.length < 4) return;
+  closeModal();
+  if (mode === 'COMPLETION') {
+    const input = document.getElementById(`providerCompletionPinInput_${requestId}`);
+    if (input) input.value = digits;
+    handleProviderCompletionPinVerification(digits, requestId);
+  } else {
+    const input = document.getElementById(`providerPinInput_${requestId}`);
+    if (input) input.value = digits;
+    handleProviderAutoPinVerification(digits, requestId);
   }
 }
 

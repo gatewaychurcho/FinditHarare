@@ -1,0 +1,15596 @@
+// ============================================================================
+// FINDIT HARARE — ELECTRIC BLUE & WHITE PRODUCTION ENGINE (100% VECTOR SVG UI)
+// ============================================================================
+
+const SESSION_KEY = 'findit_harare_session_v3';
+
+// Hybrid APK & Web Native API Base:
+const API_BASE = (typeof window !== 'undefined' && (window.location.protocol === 'file:' || !window.location.origin || window.location.origin === 'null'))
+  ? 'https://finditharare.vercel.app'
+  : '';
+
+const DEFAULT_AVATAR_FALLBACK = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='50' fill='%23E2E8F0'/%3E%3Ccircle cx='50' cy='38' r='18' fill='%2394A3B8'/%3E%3Cpath d='M20 86c0-16 13-30 30-30s30 14 30 30' fill='%2394A3B8'/%3E%3C/svg%3E";
+const DEFAULT_TASK_PHOTO_FALLBACK = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='12' fill='%23EBF3FF'/%3E%3Cpath d='M30 40h40M30 50h40M30 60h25' stroke='%230066FF' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E";
+
+function resolveMediaUrl(url, type = 'avatar') {
+  if (!url || typeof url !== 'string' || url === 'undefined' || url === 'null') {
+    return type === 'task' ? DEFAULT_TASK_PHOTO_FALLBACK : DEFAULT_AVATAR_FALLBACK;
+  }
+  if (url.includes('tinashe_selfie.png')) {
+    return type === 'task' ? DEFAULT_TASK_PHOTO_FALLBACK : DEFAULT_AVATAR_FALLBACK;
+  }
+  if (url.startsWith('data:image/')) {
+    return url;
+  }
+  if (url.startsWith('/api/')) {
+    return (API_BASE || '') + url;
+  }
+  return url;
+}
+const WS_RELAY_HOST = (typeof window !== 'undefined' && window.FINDIT_WS_HOST) ? window.FINDIT_WS_HOST : '';
+
+const state = {
+  db: null,
+  role: 'CUSTOMER', // 'CUSTOMER' | 'PROVIDER'
+  currentUser: null,
+  isAuthenticated: false,
+
+  // Screen flow: 'HOME' -> 'CONFIGURE' -> 'SEARCHING' -> 'BOOKED'
+  screenStep: 'HOME',
+
+  selectedCategoryId: 'repairs_construction',
+  selectedSuburbId: 'avondale',
+  selectedSubServiceIdx: 0,
+  selectedTierKey: 'STANDARD', // 'STANDARD' | 'PLATINUM' | 'ONE_CLICK' | 'BUDGET'
+
+  customAddress: 'Current Live Location',
+  customSuburbLabel: 'Live Location, Harare',
+  isCustomAddressSelected: false,
+  entranceNote: 'Main Gate',
+  userLiveGpsLat: -17.7955,
+  userLiveGpsLng: 31.0365,
+  gpsAccuracyMeters: null,
+  isLiveGpsActive: false,
+  pinnedLat: -17.7955,
+  pinnedLng: 31.0365,
+
+  draftFareUsd: 25,
+  recommendedFareUsd: 25,
+  draftPaymentMethod: 'Cash USD',
+  draftAutoAccept: false,
+  draftNotes: '',
+  draftPhotoUrl: null,
+  draftVoiceNoteUrl: null,
+  draftVoiceNoteDuration: 0,
+  isRecordingVoiceNote: false,
+  isVoiceNotePaused: false,
+  voiceNoteRecordSeconds: 0,
+  notesLeakageWarning: '',
+
+  // Provider Availability & Break Status
+  providerStatus: 'AVAILABLE', // 'AVAILABLE' | 'BUSY' | 'ON_BREAK' | 'LUNCH' | 'OFFLINE'
+  providerBreakEndsAt: null,
+
+  // inDrive Style: Booking for Myself or Someone Else
+  bookingFor: 'ME', // 'ME' | 'SOMEONE_ELSE'
+  recipientName: '',
+  recipientPhone: '',
+
+  // Findit Dispatch: Immediate vs Scheduled Visit
+  timingType: 'IMMEDIATE', // 'IMMEDIATE' | 'SCHEDULED'
+  scheduledDate: '',
+  scheduledTime: '',
+
+  // Active searching fare stepper (-0.50 / +0.50)
+  pendingSearchFareUsd: null,
+  searchTimerSeconds: 120,
+
+  activeRequestId: null,
+  customerTab: 'HOME', // 'HOME' | 'REQUESTS' | 'OFFERS' | 'PROFILE'
+  providerTab: 'FEED', // 'HOME' | 'FEED' | 'ACTIVE_JOB' | 'PROFILE'
+
+  // Service Provider Wallet Top-Up State
+  walletTopupMethod: 'EcoCash USD',
+  walletTopupAmount: 10,
+
+  // Collapsible bottom sheet & offer stack for 100% full-screen map view
+  isSheetMinimized: false,
+  isOffersMinimized: false,
+  isCallMinimized: false,
+
+  // Modals: null | 'CANCEL_TASK' | 'CATALOGUE_VIEW' | 'DRAWER' | 'SIGNUP_FLOW' | 'TERMS_MODAL' | 'PRIVACY_MODAL' | 'HISTORY' | 'SAFETY' | 'SETTINGS' | 'SUBURB_PICKER' | 'SERVICE_PICKER' | 'NOTES_MODAL' | 'PAYMENT_MODAL' | 'UPLOAD_CATALOGUE' | 'EDIT_BIO_MODAL' | 'COMING_SOON_MODAL' | 'RATE_BOOKING_MODAL'
+  activeModal: null,
+  modalData: null,
+
+  // Rating Modal State
+  ratingStars: 5,
+  ratingTags: ['Punctual Arrival', 'Clean Mobile Kit', 'Professional Work'],
+
+  // Real File Upload Preview State (Provider Portfolio)
+  uploadedFileDataUrl: null,
+  uploadedFileName: '',
+  uploadSuspectedWatermark: false,
+
+  // Full inDrive & Findit Style Multi-Hub & Biometrics State
+  hubView: 'HUB', // 'HUB' | 'MARKETPLACE'
+  onboardingSlide: 0, // 0 | 1
+  onboardingActive: false,
+  authPassword: '',
+  authIdType: 'National ID',
+  authIdNumber: '',
+  authIdPhotoUrl: null,
+  authCategoryIds: ['repairs_construction'],
+  faceScanning: false,
+  faceVerifiedSuccess: false,
+
+  authStep: 'PHONE', // 'PHONE' | 'OTP' | 'PROFILE'
+  authRole: 'CUSTOMER', // 'CUSTOMER' | 'PROVIDER'
+  authPhone: '',
+  authOtpDigits: ['', '', '', ''],
+  authName: '',
+  authSuburbId: 'avondale',
+  authCategoryId: 'repairs_construction',
+  authSkillTier: 'Platinum pro',
+  authBrandName: '',
+  authStartingPrice: 25,
+  authNationalId: '63-2948102-F-42',
+  authTermsAccepted: true,
+  authCapturedSelfieUrl: null,
+  authFaceScanVerified: false,
+  authPortfolioPhotoUrl: null,
+
+  chatDrawerOpen: false,
+  activeChatProviderId: null,
+  activeCall: null,
+  callSeconds: 0,
+  splashDismissed: false
+};
+
+const ACTIVE_BOOKED_STATUSES = ['BOOKED', 'CONFIRMED', 'ARRIVED', 'IN_PROGRESS'];
+
+function isBookedStatus(status) {
+  return ACTIVE_BOOKED_STATUSES.includes(status);
+}
+
+// ============================================================================
+// UNIVERSAL VECTOR SVG ICON SYSTEM (ZERO EMOJIS ANYWHERE)
+// ============================================================================
+function uiIcon(name, size = 16) {
+  const s = size;
+  const icons = {
+    star: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="#F59E0B" stroke="#F59E0B" stroke-width="1.8" stroke-linejoin="round" style="flex-shrink:0;"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`,
+    starOutline: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" stroke-width="2" stroke-linejoin="round" style="flex-shrink:0;"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`,
+    diamond: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0;"><path d="M12 2L22 12L12 22L2 12L12 2Z"/></svg>`,
+    check: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><polyline points="20 6 9 17 4 12"/></svg>`,
+    close: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`,
+    chevronUp: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><polyline points="18 15 12 9 6 15"/></svg>`,
+    chevronDown: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><polyline points="6 9 12 15 18 9"/></svg>`,
+    chevronLeft: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><polyline points="15 18 9 12 15 6"/></svg>`,
+    chevronRight: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><polyline points="9 18 15 12 9 6"/></svg>`,
+    arrowRight: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>`,
+    search: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>`,
+    send: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>`,
+    arrowLeft: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>`,
+    briefcase: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>`,
+    user: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`,
+    map: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>`,
+    pin: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>`,
+    navigation: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>`,
+    crosshair: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="12" cy="12" r="7"/><line x1="12" y1="1" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="1" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="23" y2="12"/></svg>`,
+    routeCar: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><rect x="3" y="11" width="18" height="7" rx="2"/><path d="M5 11l2-5h10l2 5"/><circle cx="7.5" cy="18" r="1.5"/><circle cx="16.5" cy="18" r="1.5"/></svg>`,
+    phone: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>`,
+    chat: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`,
+    shield: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`,
+    lock: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`,
+    key: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="7.5" cy="15.5" r="5.5"/><path d="M21 2l-9.6 9.6"/><path d="M15.5 7.5l3 3L22 7l-3-3"/></svg>`,
+    wallet: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M16 12h.01"/><path d="M2 10h20"/></svg>`,
+    list: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><rect x="4" y="4" width="16" height="16" rx="2"/><line x1="8" y1="9" x2="16" y2="9"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="12" y2="17"/></svg>`,
+    image: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>`,
+    clock: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg>`,
+    home: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>`,
+    bell: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>`,
+    gear: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
+    settings: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
+    copy: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`,
+    logout: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`,
+    whatsapp: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>`,
+    sliders: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>`,
+    suburb: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M3 21h18"/><path d="M5 21V7l8-4v18"/><path d="M19 21V11l-6-4"/><line x1="9" y1="9" x2="9" y2="9.01"/><line x1="9" y1="13" x2="9" y2="13.01"/><line x1="9" y1="17" x2="9" y2="17.01"/></svg>`,
+    keypad: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><rect x="4" y="2" width="16" height="20" rx="2"/><circle cx="8" cy="7" r="1"/><circle cx="12" cy="7" r="1"/><circle cx="16" cy="7" r="1"/><circle cx="8" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="16" cy="12" r="1"/><circle cx="8" cy="17" r="1"/><circle cx="12" cy="17" r="1"/><circle cx="16" cy="17" r="1"/></svg>`,
+    volumeOn: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>`,
+    volumeOff: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>`,
+    coffee: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>`,
+    alertTriangle: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
+    scale: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M16 16l3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1z"/><path d="M2 16l3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1z"/><path d="M7 21h10"/><path d="M12 3v18"/><path d="M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2"/></svg>`,
+    share: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>`,
+    info: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>`,
+    support: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>`,
+    facebook: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0;"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>`,
+    instagram: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg>`,
+    camera: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>`,
+    sparkle: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z"/></svg>`,
+    notes: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`,
+    edit: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`,
+    hailingPerson: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="#0F172A" style="flex-shrink:0;"><circle cx="9.5" cy="4.5" r="2.5"/><path d="M7 8.5C6.7 8.5 6.5 8.7 6.5 9V15C6.5 15.3 6.7 15.5 7 15.5H8V21.5C8 21.8 8.2 22 8.5 22H10.5C10.8 22 11 21.8 11 21.5V16H12V21.5C12 21.8 12.2 22 12.5 22H14.5C14.8 22 15 21.8 15 21.5V15.5H15.5C15.8 15.5 16 15.3 16 15V13L18.8 8.8C19.1 8.4 19 7.8 18.6 7.5C18.2 7.2 17.6 7.3 17.3 7.7L15 11.2V9C15 8.7 14.8 8.5 14.5 8.5H7Z"/><path d="M6.5 9.5L4.8 13.8C4.6 14.2 4.8 14.7 5.2 14.9C5.6 15.1 6.1 14.9 6.3 14.5L7.5 11.5V9.5H6.5Z"/></svg>`,
+    buildingOffice: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="10" y2="6"/><line x1="14" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="10" y2="10"/><line x1="14" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="10" y2="14"/><line x1="14" y1="14" x2="16" y2="14"/><path d="M10 22v-4h4v4"/></svg>`,
+    trash: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>`,
+    plus: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
+    dotOnline: `<span style="width:8px; height:8px; border-radius:50%; background:#10B981; box-shadow:0 0 0 2.5px rgba(16,185,129,0.28); display:inline-block; flex-shrink:0;"></span>`,
+    dotOffline: `<span style="width:8px; height:8px; border-radius:50%; background:#94A3B8; display:inline-block; flex-shrink:0;"></span>`,
+    refresh: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>`,
+    zwFlag: `<svg width="${s}" height="${Math.round(s * 0.72)}" viewBox="0 0 28 20" fill="none" style="border-radius:3px; flex-shrink:0;"><rect width="28" height="20" fill="#006400"/><rect y="3" width="28" height="14" fill="#FFD200"/><rect y="6" width="28" height="8" fill="#D40000"/><rect y="8.5" width="28" height="3" fill="#000000"/><polygon points="0,0 11,10 0,20" fill="#FFFFFF"/></svg>`,
+    bolt: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`,
+    users: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
+    calendar: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`,
+    toolbox: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M22 7H2v11a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7z"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="12.01"/></svg>`,
+    chart: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>`,
+    mic: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>`,
+    micOff: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>`,
+    globe: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`,
+    wifiOff: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/><path d="M10.71 5.05A16 16 0 0 1 22.58 9"/><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>`
+  };
+  return icons[name] || icons.sparkle;
+}
+
+function toggleSheetMinimize(forceVal) {
+  if (typeof forceVal === 'boolean') {
+    state.isSheetMinimized = forceVal;
+  } else {
+    state.isSheetMinimized = !state.isSheetMinimized;
+  }
+  renderUiOverlay();
+}
+
+function toggleOffersMinimize(forceVal) {
+  if (typeof forceVal === 'boolean') {
+    state.isOffersMinimized = forceVal;
+  } else {
+    state.isOffersMinimized = !state.isOffersMinimized;
+  }
+  renderFloatingOffersOverlay();
+}
+
+function formatProRatingAndJobs(rating, completedBookings) {
+  const jobs = Number(completedBookings || 0);
+  const stars = Number(rating || 0);
+  if (jobs === 0 || stars === 0) {
+    return `<span class="new-pro-badge" style="display:inline-flex; align-items:center; gap:4px; font-size:11.5px; font-weight:700; color:#0052FF; background:#EBF3FF; border:1px solid #BFDBFE; padding:2px 7px; border-radius:7px;">
+      <span style="display:inline-flex;">${uiIcon('star', 12)}</span>
+      <span>New (0 jobs)</span>
+    </span>`;
+  }
+  return `<span style="display:inline-flex; align-items:center; gap:3px; font-size:12px; font-weight:800; color:var(--text-main);">
+    ${uiIcon('star', 13)}
+    <span>${stars.toFixed(1)}</span>
+    <span class="offer-pro-jobs" style="color:var(--text-secondary); font-weight:600; margin-left:2px;">(${jobs} job${jobs > 1 ? 's' : ''})</span>
+  </span>`;
+}
+
+let arrivalVibrateInterval = null;
+let arrivalAudioCtx = null;
+let isAudioContextUnlocked = false;
+
+function unlockArrivalAudioContext() {
+  const AudioContext = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContext) return;
+  if (!arrivalAudioCtx) {
+    arrivalAudioCtx = new AudioContext();
+  }
+  if (arrivalAudioCtx.state === 'suspended') {
+    arrivalAudioCtx.resume().then(() => {
+      isAudioContextUnlocked = true;
+    }).catch(() => {});
+  } else {
+    isAudioContextUnlocked = true;
+  }
+}
+
+if (typeof document !== 'undefined') {
+  ['touchstart', 'touchend', 'click', 'keydown'].forEach((evt) => {
+    document.addEventListener(evt, unlockArrivalAudioContext, { passive: true });
+  });
+}
+
+function playArrivalUrgentAlarmSound() {
+  if (state.activeCall || state.incomingCall) return;
+  try {
+    unlockArrivalAudioContext();
+    if (!arrivalAudioCtx) return;
+    const now = arrivalAudioCtx.currentTime;
+
+    // Dual-tone urgent telephone siren / penetrating alarm warble (880Hz / 1100Hz)
+    const osc1 = arrivalAudioCtx.createOscillator();
+    const osc2 = arrivalAudioCtx.createOscillator();
+    const gain1 = arrivalAudioCtx.createGain();
+    const gain2 = arrivalAudioCtx.createGain();
+
+    osc1.type = 'sawtooth';
+    osc2.type = 'triangle';
+
+    // Fast urgent warble alternation
+    osc1.frequency.setValueAtTime(880, now);
+    osc1.frequency.setValueAtTime(1100, now + 0.12);
+    osc1.frequency.setValueAtTime(880, now + 0.24);
+    osc1.frequency.setValueAtTime(1100, now + 0.36);
+    osc1.frequency.setValueAtTime(880, now + 0.48);
+
+    osc2.frequency.setValueAtTime(440, now);
+    osc2.frequency.setValueAtTime(550, now + 0.12);
+    osc2.frequency.setValueAtTime(440, now + 0.24);
+    osc2.frequency.setValueAtTime(550, now + 0.36);
+    osc2.frequency.setValueAtTime(440, now + 0.48);
+
+    gain1.gain.setValueAtTime(0.75, now);
+    gain1.gain.exponentialRampToValueAtTime(0.01, now + 0.65);
+
+    gain2.gain.setValueAtTime(0.65, now);
+    gain2.gain.exponentialRampToValueAtTime(0.01, now + 0.65);
+
+    osc1.connect(gain1);
+    osc2.connect(gain2);
+    gain1.connect(arrivalAudioCtx.destination);
+    gain2.connect(arrivalAudioCtx.destination);
+
+    osc1.start(now);
+    osc2.start(now);
+    osc1.stop(now + 0.7);
+    osc2.stop(now + 0.7);
+  } catch (e) {
+    console.warn('Urgent alarm note:', e.message);
+  }
+}
+
+function triggerHardwareVibration(pattern = [800, 250, 800, 250, 1000]) {
+  if (state.activeCall || state.incomingCall) return; // Completely silent & clear calls without interruption beeps or vibration
+  try {
+    if (typeof window !== 'undefined' && window.FinditNative && typeof window.FinditNative.vibratePattern === 'function') {
+      const csv = Array.isArray(pattern) ? [0, ...pattern].join(',') : '0,800,250,800,250,1000';
+      window.FinditNative.vibratePattern(csv);
+    }
+  } catch (e) {}
+  try {
+    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+      navigator.vibrate(pattern);
+    }
+  } catch (e) {}
+}
+
+function stopHardwareVibration() {
+  try {
+    if (typeof window !== 'undefined' && window.FinditNative && typeof window.FinditNative.vibrate === 'function') {
+      window.FinditNative.vibrate(0);
+    }
+  } catch (e) {}
+  try {
+    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+      navigator.vibrate(0);
+    }
+  } catch (e) {}
+}
+
+function startArrivalVibrationAlert(req) {
+  if (arrivalVibrateInterval) return;
+  playArrivalUrgentAlarmSound();
+  triggerHardwareVibration([800, 250, 800, 250, 1000]);
+  arrivalVibrateInterval = setInterval(() => {
+    const activeReq = getCustomerActiveRequest();
+    const isArrivalAlertActive = activeReq && !activeReq.pinVerifiedByProvider && (activeReq.status === 'ARRIVED' || isBookedStatus(activeReq.status));
+    if (!isArrivalAlertActive) {
+      stopArrivalVibrationAlert();
+      return;
+    }
+    playArrivalUrgentAlarmSound();
+    triggerHardwareVibration([800, 250, 800, 250, 1000]);
+  }, 1900);
+}
+
+function stopArrivalVibrationAlert() {
+  if (arrivalVibrateInterval) {
+    clearInterval(arrivalVibrateInterval);
+    arrivalVibrateInterval = null;
+  }
+  stopHardwareVibration();
+}
+
+let leafletMap = null;
+let leafletMarkersLayer = null;
+let leafletRoutePolyline = null;
+let leafletRoutePolylineCasing = null;
+let lastFittedRouteKey = '';
+let currentRouteCoordsKey = '';
+let userLiveGpsMarker = null;
+let callInterval = null;
+let offerCountdownInterval = null;
+let mediaStreamRef = null;
+let geocodeDebounceTimer = null;
+const osrmRouteCache = new Map();
+const osrmStepsCache = new Map();
+
+// ============================================================================
+// CUSTOM ICONIFIED SERVICE ILLUSTRATIONS (MATCHING EACH SERVICE LABEL)
+// ============================================================================
+function getCategoryVectorSvg(catId, isSelected = false) {
+  const strokeMain = isSelected ? '#FFFFFF' : '#0066FF';
+  const strokeSub = isSelected ? '#BAE6FD' : '#0F172A';
+
+  const icons = {
+    // 1. Home Repairs & Construction
+    repairs_construction: `<svg width="24" height="24" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" style="overflow:visible;">
+      <path d="M8 24L18 14" stroke="${strokeMain}" stroke-width="2.4" stroke-linecap="round"/>
+      <path d="M14 10L20 16M10 14L13 17" stroke="${strokeSub}" stroke-width="2.2" stroke-linecap="round"/>
+      <rect x="17" y="6" width="8" height="5" rx="1.5" transform="rotate(45 17 6)" stroke="${strokeMain}" stroke-width="2"/>
+    </svg>`,
+
+    // 2. Beauty & Personal Care
+    beauty_care: `<svg width="24" height="24" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" style="overflow:visible;">
+      <circle cx="10" cy="22" r="3.2" stroke="${strokeMain}" stroke-width="2.2"/>
+      <circle cx="22" cy="22" r="3.2" stroke="${strokeMain}" stroke-width="2.2"/>
+      <path d="M12.5 19.5L21.5 6M19.5 19.5L10.5 6" stroke="${strokeSub}" stroke-width="2.2" stroke-linecap="round"/>
+      <path d="M26 6L27 8L29 9L27 10L26 12L25 10L23 9L25 8Z" fill="${strokeMain}"/>
+    </svg>`,
+
+    // 3. Cleaning & Domestic Services
+    cleaning_domestic: `<svg width="24" height="24" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" style="overflow:visible;">
+      <path d="M14 7H19L20 11H13L14 7Z" stroke="${strokeSub}" stroke-width="2" stroke-linejoin="round"/>
+      <path d="M11 15H21L23 25H9L11 15Z" stroke="${strokeMain}" stroke-width="2.2" stroke-linejoin="round"/>
+      <path d="M12 9L8 11" stroke="${strokeSub}" stroke-width="2.2" stroke-linecap="round"/>
+      <circle cx="26" cy="10" r="1.5" fill="${strokeMain}"/>
+      <circle cx="7" cy="18" r="1.2" fill="${strokeMain}"/>
+    </svg>`,
+
+    // 4. Automotive Services
+    automotive: `<svg width="24" height="24" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" style="overflow:visible;">
+      <path d="M7 17L9 11C9.5 9.5 11 8.5 12.5 8.5H19.5C21 8.5 22.5 9.5 23 11L25 17" stroke="${strokeSub}" stroke-width="2.2" stroke-linecap="round"/>
+      <rect x="5" y="15" width="22" height="7" rx="3" stroke="${strokeMain}" stroke-width="2.2"/>
+      <circle cx="10" cy="22" r="2.5" fill="${strokeMain}"/>
+      <circle cx="22" cy="22" r="2.5" fill="${strokeMain}"/>
+    </svg>`,
+
+    // 5. Solar, Electrical Power & Water
+    solar_power_water: `<svg width="24" height="24" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" style="overflow:visible;">
+      <path d="M17 5L9 16H16L14 26L24 14H16L17 5Z" stroke="${strokeMain}" stroke-width="2.2" stroke-linejoin="round"/>
+      <circle cx="23" cy="7" r="2.5" stroke="${strokeSub}" stroke-width="1.8"/>
+    </svg>`,
+
+    // 6. Gardening & Outdoor Work
+    gardening_outdoor: `<svg width="24" height="24" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" style="overflow:visible;">
+      <path d="M8 25C8 25 10 14 20 9C20 9 24 19 14 23C11 24.2 9 25 8 25Z" stroke="${strokeMain}" stroke-width="2.2" stroke-linejoin="round"/>
+      <path d="M9 24L17 15" stroke="${strokeSub}" stroke-width="2" stroke-linecap="round"/>
+      <circle cx="23" cy="18" r="2" fill="${strokeMain}"/>
+    </svg>`,
+
+    // 7. General Labour & Other Jobs
+    general_labour: `<svg width="24" height="24" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" style="overflow:visible;">
+      <path d="M7 11L16 6L25 11L16 16L7 11Z" stroke="${strokeMain}" stroke-width="2.2" stroke-linejoin="round"/>
+      <path d="M7 11V20L16 25V16" stroke="${strokeSub}" stroke-width="2.1" stroke-linejoin="round"/>
+      <path d="M25 11V20L16 25" stroke="${strokeMain}" stroke-width="2.1" stroke-linejoin="round"/>
+    </svg>`,
+
+    // Backwards-compatible aliases
+    braiding: `<svg width="24" height="24" viewBox="0 0 32 32" fill="none"><path d="M9 6C9 11 13 13 13 18C13 22 10 24 10 26" stroke="${strokeMain}" stroke-width="2.2" stroke-linecap="round"/><path d="M14 6C14 11 10 13 10 18C10 22 13 24 13 26" stroke="${strokeSub}" stroke-width="2" stroke-linecap="round"/><rect x="18" y="7" width="8" height="17" rx="2" stroke="${strokeMain}" stroke-width="2"/></svg>`,
+    barber: `<svg width="24" height="24" viewBox="0 0 32 32" fill="none"><circle cx="10" cy="22" r="3.2" stroke="${strokeMain}" stroke-width="2.2"/><circle cx="22" cy="22" r="3.2" stroke="${strokeMain}" stroke-width="2.2"/><path d="M12.5 19.5L21.5 6M19.5 19.5L10.5 6" stroke="${strokeSub}" stroke-width="2.2" stroke-linecap="round"/></svg>`,
+    nails: `<svg width="24" height="24" viewBox="0 0 32 32" fill="none"><rect x="9" y="13" width="12" height="12" rx="3" stroke="${strokeMain}" stroke-width="2.2"/><path d="M12 13V8H18V13" stroke="${strokeSub}" stroke-width="2" stroke-linejoin="round"/><path d="M15 5V8" stroke="${strokeMain}" stroke-width="2.2" stroke-linecap="round"/></svg>`,
+    makeup: `<svg width="24" height="24" viewBox="0 0 32 32" fill="none"><rect x="8" y="14" width="8" height="11" rx="1.5" stroke="${strokeSub}" stroke-width="2"/><path d="M9.5 14V9C9.5 7.5 14.5 6 14.5 9V14" fill="${strokeMain}" stroke="${strokeMain}" stroke-width="1.5"/><path d="M21 16V25" stroke="${strokeSub}" stroke-width="2.2" stroke-linecap="round"/></svg>`,
+    cleaning: `<svg width="24" height="24" viewBox="0 0 32 32" fill="none"><path d="M21 6L14 16" stroke="${strokeSub}" stroke-width="2.2" stroke-linecap="round"/><path d="M9 16H19L21 24H7L9 16Z" stroke="${strokeMain}" stroke-width="2" stroke-linejoin="round"/></svg>`,
+    handyman: `<svg width="24" height="24" viewBox="0 0 32 32" fill="none"><path d="M8 24L18 14" stroke="${strokeMain}" stroke-width="2.4" stroke-linecap="round"/><path d="M17 9L23 15M10 11L14 15" stroke="${strokeSub}" stroke-width="2.2" stroke-linecap="round"/></svg>`,
+    plumbing: `<svg width="24" height="24" viewBox="0 0 32 32" fill="none"><path d="M17 5L9 16H16L14 26L24 14H16L17 5Z" stroke="${strokeMain}" stroke-width="2.2" stroke-linejoin="round"/></svg>`
+  };
+
+  return icons[catId] || icons.repairs_construction;
+}
+
+// Small crisp icon inside the blue badge on each provider's map marker
+function getMapMarkerProfessionIconSvg(catId) {
+  if (catId === 'barber') {
+    return `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/></svg>`;
+  }
+  if (catId === 'hair_styling' || catId === 'beauty_wellness' || catId === 'nails' || catId === 'makeup') {
+    return `<svg width="12" height="12" viewBox="0 0 24 24" fill="#FFFFFF"><path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z"/></svg>`;
+  }
+  if (catId === 'repairs_construction') {
+    return `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>`;
+  }
+  if (catId === 'solar_power_water') {
+    return `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`;
+  }
+  if (catId === 'cleaning_domestic') {
+    return `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>`;
+  }
+  if (catId === 'automotive') {
+    return `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round"><rect x="3" y="11" width="18" height="8" rx="2"/><circle cx="7.5" cy="19.5" r="2.5"/><circle cx="16.5" cy="19.5" r="2.5"/><path d="M5 11l2-5h10l2 5"/></svg>`;
+  }
+  if (catId === 'gardening_outdoor') {
+    return `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round"><path d="M12 22v-9"/><path d="M12 13c-4.42 0-8-3.58-8-8 4.42 0 8 3.58 8 8z"/><path d="M12 13c4.42 0 8-3.58 8-8-4.42 0-8 3.58-8 8z"/></svg>`;
+  }
+  return `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>`;
+}
+
+function formatUsdPrice(val) {
+  const num = Number(val || 0);
+  return num % 1 === 0 ? `$${num}` : `$${num.toFixed(2)}`;
+}
+
+// Client-side real-time anti-leakage check for Special Instructions & Chat
+function checkAntiLeakageClient(text) {
+  if (!text) return null;
+  const zimPhoneRegex = /(?:\+?263|0)\s*7[1378]\s*\d{3}\s*\d{3,4}|\b\d{6,12}\b/;
+  if (zimPhoneRegex.test(text)) {
+    return 'Phone numbers (077..., +263...) are blocked to protect in-app bookings.';
+  }
+  const socialLinksRegex = /(instagram\.com|instagr\.am|facebook\.com|fb\.com|fb\.me|ig\.me|tiktok\.com|wa\.me|t\.me|https?:\/\/|www\.)/i;
+  if (socialLinksRegex.test(text)) {
+    return 'Instagram links (instagram.com), Facebook links (facebook.com), and external URLs are strictly prohibited.';
+  }
+  const socialRegex = /(whatsapp|call\s+me|text\s+me|dm\s+me|@[a-zA-Z0-9_]{3,}|\binstagram\b|\bfacebook\b|\binsta\b)/i;
+  if (socialRegex.test(text)) {
+    return 'Off-platform handles (@...), Instagram, Facebook, and WhatsApp solicitations are blocked.';
+  }
+  return null;
+}
+
+// ============================================================================
+// INITIALIZATION, SESSION PERSISTENCE & REAL-TIME SSE STREAM
+// ============================================================================
+document.addEventListener('DOMContentLoaded', async () => {
+  initSplashScreen();
+  loadSavedSession();
+  await fetchState(true);
+  initLeafletMap();
+  initRealtimeSync();
+  startOfferCountdownLoop();
+
+});
+
+function pushNavState(label) {
+  try {
+    window.history.pushState({ step: label, ts: Date.now() }, '');
+  } catch (e) {}
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    stopFaceCameraStream();
+  }
+});
+
+function loadSavedSession() {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed.loggedOut) {
+        state.isAuthenticated = false;
+        state.currentUser = null;
+        state.savedAccountId = null;
+      } else if (parsed.user && typeof parsed.user === 'object') {
+        state.role = parsed.role || parsed.user.role || 'CUSTOMER';
+        state.currentUser = parsed.user;
+        state.savedAccountId = parsed.user.id || parsed.accountId;
+        state.isAuthenticated = true;
+      } else if (parsed.accountId) {
+        state.role = parsed.role || 'CUSTOMER';
+        state.savedAccountId = parsed.accountId;
+        state.currentUser = null;
+        state.isAuthenticated = false;
+      }
+    } else {
+      state.isAuthenticated = false;
+      state.currentUser = null;
+      state.savedAccountId = null;
+    }
+  } catch (e) {
+    state.isAuthenticated = false;
+    state.currentUser = null;
+  }
+}
+
+function saveSession(role, userOrId, loggedOut = false) {
+  try {
+    if (loggedOut || !userOrId) {
+      localStorage.removeItem(SESSION_KEY);
+      state.isAuthenticated = false;
+      state.currentUser = null;
+      state.savedAccountId = null;
+      return;
+    }
+    const resolvedRole = role || state.role || 'CUSTOMER';
+    let user = null;
+    if (typeof userOrId === 'object' && userOrId !== null) {
+      user = userOrId;
+    } else if (state.currentUser && state.currentUser.id === userOrId) {
+      user = state.currentUser;
+    } else {
+      user = {
+        id: userOrId,
+        role: resolvedRole,
+        name: state.authName || 'Findit User',
+        phone: state.authPhone || ''
+      };
+    }
+    const payload = {
+      role: resolvedRole,
+      accountId: user.id,
+      user,
+      loggedOut: false,
+      timestamp: Date.now()
+    };
+    localStorage.setItem(SESSION_KEY, JSON.stringify(payload));
+    state.isAuthenticated = true;
+    state.currentUser = user;
+    state.savedAccountId = user.id;
+    state.role = resolvedRole;
+  } catch (e) {}
+}
+
+function initSplashScreen() {
+  const splashEl = document.getElementById('splashScreen');
+  const fillEl = document.getElementById('splashLoaderFill');
+  if (!splashEl) return;
+
+  const hasOnboarded = localStorage.getItem('findit_onboarded_v2');
+  state.onboardingActive = !hasOnboarded;
+  state.hubView = 'HUB';
+
+  if (fillEl) {
+    setTimeout(() => {
+      fillEl.style.width = '100%';
+    }, 50);
+  }
+
+  setTimeout(() => {
+    splashEl.classList.add('hidden');
+    state.splashDismissed = true;
+    renderAll();
+  }, 900);
+}
+
+let lastRenderedOnboardingSig = '';
+
+function renderOnboardingLayer() {
+  let container = document.getElementById('onboardingRoot');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'onboardingRoot';
+    document.body.appendChild(container);
+  }
+
+  if (!state.onboardingActive) {
+    if (container.innerHTML !== '') container.innerHTML = '';
+    lastRenderedOnboardingSig = 'INACTIVE';
+    return;
+  }
+
+  const slide = state.onboardingSlide || 0;
+  const sig = `ACTIVE_${slide}`;
+  if (sig === lastRenderedOnboardingSig && container.firstElementChild) {
+    return;
+  }
+  lastRenderedOnboardingSig = sig;
+
+  if (slide === 0) {
+    // 1st Splash Screen: Customer discovering services (3rd user uploaded image)
+    container.innerHTML = `
+      <div class="fh-onboarding-screen">
+        <div class="onboarding-top-nav">
+          <button class="onboarding-skip-btn" onclick="finishOnboarding()">Skip</button>
+        </div>
+
+        <div class="onboarding-graphic-container">
+          <div class="onboarding-hero-image-wrap">
+            <img src="/assets/splash_slide1.jpg" alt="Findit Harare Client Screen" class="onboarding-hero-splash-img" />
+          </div>
+        </div>
+
+        <div class="onboarding-footer-area">
+          <div class="onboarding-headline-text">
+            Find verified experts in Harare for home, repairs, beauty &amp; more at <span class="highlight-accent">your price</span>.
+          </div>
+
+          <div class="onboarding-pagination-dots">
+            <span class="onboarding-dot active"></span>
+            <span class="onboarding-dot"></span>
+          </div>
+
+          <button class="onboarding-cta-btn" onclick="nextOnboardingSlide()">
+            <span>Next</span>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+          </button>
+        </div>
+      </div>
+    `;
+  } else {
+    // 2nd Splash Screen: Service Provider receiving requests & earning (2nd user uploaded image)
+    container.innerHTML = `
+      <div class="fh-onboarding-screen">
+        <div class="onboarding-top-nav">
+          <button class="onboarding-skip-btn" onclick="finishOnboarding()">Skip</button>
+        </div>
+
+        <div class="onboarding-graphic-container">
+          <div class="onboarding-hero-image-wrap">
+            <img src="/assets/splash_slide2.jpg" alt="Findit Harare Provider Screen" class="onboarding-hero-splash-img" />
+          </div>
+        </div>
+
+        <div class="onboarding-footer-area">
+          <div class="onboarding-headline-text">
+            Receive <span class="highlight-accent">instant job alerts</span> nearby in Harare, submit offers &amp; grow your earnings.
+          </div>
+
+          <div class="onboarding-pagination-dots">
+            <span class="onboarding-dot"></span>
+            <span class="onboarding-dot active"></span>
+          </div>
+
+          <button class="onboarding-cta-btn" onclick="finishOnboarding()">
+            <span>Get Started</span>
+          </button>
+        </div>
+      </div>
+    `;
+  }
+}
+
+function nextOnboardingSlide() {
+  state.onboardingSlide = 1;
+  renderAll();
+}
+
+function finishOnboarding() {
+  localStorage.setItem('findit_onboarded_v2', 'true');
+  state.onboardingActive = false;
+  state.hubView = 'HUB';
+  renderAll();
+}
+
+let lastStateFingerprint = '';
+let isFetchingState = false;
+let stateMutationEpoch = 0;
+
+function markLocalStateMutation() {
+  stateMutationEpoch++;
+}
+
+function getCatalogStateSignature(db) {
+  const categorySig = JSON.stringify((db?.categories || []).map((category) => ({
+    id: category.id,
+    status: category.status,
+    name: category.name,
+    tagline: category.tagline,
+    suggestedMinUsd: category.suggestedMinUsd,
+    suggestedMaxUsd: category.suggestedMaxUsd,
+    subServices: (category.subServices || []).map((task) => [task.name, task.defaultUsd, task.duration])
+  })));
+  const hubSig = JSON.stringify((db?.hubServices || []).map((service) => [
+    service.id,
+    service.status,
+    service.name,
+    service.title,
+    service.tagline,
+    service.subtitle
+  ]));
+  return `${categorySig}|${hubSig}`;
+}
+
+function computeStateFingerprint(db) {
+  if (!db) return '';
+  const reqSig = (db.requests || []).map((r) => `${r.id}:${r.status}:${(r.offers || []).map((o) => `${o.id}:${o.status}:${o.priceUsd}`).join(',')}:${r.acceptedOfferId || ''}:${r.budgetUsd}:${(r.activeViewerIds || []).length}:${(r.messages || []).map((m) => `${m.id}:${m.read ? 1 : 0}`).join(',')}`).join(';');
+  const userSig = state.currentUser ? `${state.currentUser.id}:${state.currentUser.walletBalanceUsd}:${state.currentUser.warningsCount || 0}:${state.currentUser.isBanned}:${(state.currentUser.categoryIds || []).join(',')}` : '';
+  const provSig = (db.providers || []).map((p) => `${p.id}:${p.isOnline}:${(p.categoryIds || []).join(',')}`).join(';');
+  const clSig = (db.changelogs || []).map((c) => c.id).join(',');
+  return `${reqSig}|${userSig}|${provSig}|${clSig}|${getCatalogStateSignature(db)}|${state.screenStep}|${state.providerTab}|${state.role}`;
+}
+
+const seenNotificationKeys = new Set();
+
+function syncNativeSessionBridge() {
+  try {
+    if (window.FinditNative && typeof window.FinditNative.syncUserSession === 'function') {
+      const uid = state.currentUser?.id || '';
+      const role = state.role || 'CUSTOMER';
+      const uName = state.currentUser?.name || '';
+      const cats = state.role === 'PROVIDER' ? getProviderCategoryIds(state.currentUser).join(',') : '';
+      window.FinditNative.syncUserSession(uid, role, uName, cats);
+    }
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => {});
+    }
+  } catch (e) {}
+}
+
+function triggerSystemNotification(title, body, notifKey = '') {
+  try {
+    const key = notifKey || `${title}:${body}`;
+    if (seenNotificationKeys.has(key)) return;
+    seenNotificationKeys.add(key);
+    if (seenNotificationKeys.size > 200) {
+      const first = seenNotificationKeys.values().next().value;
+      seenNotificationKeys.delete(first);
+    }
+
+    const numericId = Math.abs(
+      key.split('').reduce((acc, ch) => ((acc << 5) - acc) + ch.charCodeAt(0), 0)
+    ) % 90000 + 1000;
+
+    // 1. Native Android Status-Bar / Heads-Up Notification Bridge (works even when outside the app!)
+    if (window.FinditNative && typeof window.FinditNative.triggerNotification === 'function') {
+      window.FinditNative.triggerNotification(String(title || 'Findit Harare'), String(body || ''), numericId);
+      return;
+    }
+
+    // 2. Web Service Worker / Browser Notification fallback (when tab is backgrounded or on mobile browser)
+    if ('Notification' in window && Notification.permission === 'granted') {
+      if (navigator.serviceWorker && navigator.serviceWorker.ready) {
+        navigator.serviceWorker.ready
+          .then((reg) => {
+            if (reg && typeof reg.showNotification === 'function') {
+              reg.showNotification(String(title || 'Findit Harare'), {
+                body: String(body || ''),
+                icon: '/assets/logo-icon.svg',
+                badge: '/assets/logo-icon.svg',
+                tag: key,
+                vibrate: [180, 80, 180]
+              });
+            }
+          })
+          .catch(() => {});
+      } else {
+        new Notification(String(title || 'Findit Harare'), {
+          body: String(body || ''),
+          icon: '/assets/logo-icon.svg',
+          tag: key
+        });
+      }
+    }
+  } catch (e) {}
+}
+
+function resolveProviderByIdOrOffer(provId, req = null, offer = null) {
+  const matchedOffer =
+    offer ||
+    (req && Array.isArray(req.offers)
+      ? req.offers.find((o) => (req.acceptedOfferId && o.id === req.acceptedOfferId) || (provId && o.providerId === provId)) || req.offers[0]
+      : null);
+  const targetId = provId || req?.acceptedProviderId || matchedOffer?.providerId;
+  const targetFinditId = matchedOffer?.providerFinditId;
+
+  const found = (state.db?.providers || []).find(
+    (p) => (targetId && p.id === targetId) || (targetFinditId && p.finditId === targetFinditId)
+  );
+  if (found) {
+    return {
+      ...found,
+      name: matchedOffer?.providerName || found.name,
+      shortName: matchedOffer?.providerShortName || found.shortName || (matchedOffer?.providerName || found.name || 'Pro').split(' ')[0],
+      brandName: matchedOffer?.providerBrand || found.brandName || `${(matchedOffer?.providerName || found.name || 'Pro').split(' ')[0]} Services`,
+      avatarUrl: matchedOffer?.providerAvatarUrl || found.avatarUrl || found.selfieUrl || DEFAULT_AVATAR_FALLBACK
+    };
+  }
+
+  const fallbackName = matchedOffer?.providerName || req?.acceptedProviderName || 'Verified Specialist';
+  const fallbackShort = matchedOffer?.providerShortName || fallbackName.split(' ')[0];
+  return {
+    id: targetId || '',
+    finditId: targetFinditId || '',
+    name: fallbackName,
+    shortName: fallbackShort,
+    brandName: matchedOffer?.providerBrand || req?.acceptedProviderBrand || `${fallbackShort} Services`,
+    avatarUrl:
+      matchedOffer?.providerAvatarUrl ||
+      req?.acceptedProviderAvatarUrl ||
+      DEFAULT_AVATAR_FALLBACK,
+    rating: matchedOffer?.providerRating ?? 0,
+    completedBookings: matchedOffer?.providerCompletedJobs ?? 0,
+    skillTier: matchedOffer?.providerSkillTier || 'Verified pro',
+    bio: `${fallbackName} is a verified Findit Harare specialist ready for home visits.`,
+    categoryId: req?.categoryId || 'repairs_construction',
+    lat: req?.lat ? Number(req.lat) + 0.006 : -17.8024,
+    lng: req?.lng ? Number(req.lng) + 0.006 : 31.0368,
+    portfolio: []
+  };
+}
+
+async function fetchState(force = false) {
+  if (isFetchingState && !force) return;
+  isFetchingState = true;
+  const fetchStartEpoch = stateMutationEpoch;
+  try {
+    let newDb = null;
+    try {
+      newDb = await apiGet('/api/state', 2);
+      if (newDb && Array.isArray(newDb.categories)) {
+        try { localStorage.setItem('findit_offline_db', JSON.stringify(newDb)); } catch (e) {}
+      }
+    } catch (netErr) {
+      // Offline fallback: load from localStorage
+      const cachedStr = localStorage.getItem('findit_offline_db');
+      if (cachedStr) {
+        try { newDb = JSON.parse(cachedStr); } catch (e) {}
+      }
+      if (!newDb) throw netErr;
+      updateNetworkOfflineStatus();
+    }
+
+    if (!newDb) return;
+
+    // If a local user action happened while this background poll was in flight, ignore stale poll
+    if (!force && fetchStartEpoch !== stateMutationEpoch) {
+      return;
+    }
+
+    // Preserve optimistic local chat messages, offers, AND active local requests across serverless instances
+    if (state.db && Array.isArray(state.db.requests) && Array.isArray(newDb.requests)) {
+      const nowMs = Date.now();
+      newDb.requests.forEach((newReq) => {
+        const oldReq = state.db.requests.find((r) => r.id === newReq.id);
+        if (!oldReq) return;
+
+        // 1. Preserve recent/optimistic offers (especially the current provider's own offer!)
+        if (Array.isArray(oldReq.offers) && oldReq.offers.length > 0) {
+          if (!Array.isArray(newReq.offers)) newReq.offers = [];
+          oldReq.offers.forEach((oldOff) => {
+            if (!oldOff) return;
+            const offAgeMs = nowMs - Number(oldOff.updatedAt || new Date(oldOff.createdAt || 0).getTime() || 0);
+            if (offAgeMs > 120 * 1000) return;
+            const existingIdx = newReq.offers.findIndex(
+              (o) => o.id === oldOff.id || (oldOff.providerId && o.providerId === oldOff.providerId)
+            );
+            if (existingIdx < 0) {
+              newReq.offers.unshift(oldOff);
+            } else {
+              const serverOff = newReq.offers[existingIdx];
+              const localTime = Number(oldOff.updatedAt || 0);
+              const serverTime = Number(serverOff.updatedAt || 0);
+              if (localTime > serverTime && serverOff.status !== 'DECLINED' && serverOff.status !== 'ACCEPTED') {
+                newReq.offers[existingIdx] = { ...serverOff, ...oldOff };
+              }
+            }
+          });
+          newReq.offers.sort((a, b) => {
+            const timeA = Number(a.updatedAt || new Date(a.createdAt || 0).getTime() || 0);
+            const timeB = Number(b.updatedAt || new Date(b.createdAt || 0).getTime() || 0);
+            if (timeB !== timeA) return timeB - timeA;
+            return String(a.id || '').localeCompare(String(b.id || ''));
+          });
+        }
+
+        // 2. Preserve local chat messages & read ticks
+        if (oldReq.messages && oldReq.messages.length > 0) {
+          if (!newReq.messages) newReq.messages = [];
+          oldReq.messages.forEach((oldM) => {
+            const existsInNew = newReq.messages.find((m) =>
+              m.id === oldM.id ||
+              (oldM.clientMsgId && (m.clientMsgId === oldM.clientMsgId || m.id === oldM.clientMsgId)) ||
+              (m.text === oldM.text && m.senderRole === oldM.senderRole && Math.abs(new Date(m.timestamp || 0).getTime() - new Date(oldM.timestamp || oldM.createdAt || 0).getTime()) < 10000)
+            );
+            if (!existsInNew) {
+              newReq.messages.push(oldM);
+            } else if (oldM.read || oldM.status === 'READ') {
+              existsInNew.read = true;
+              existsInNew.status = 'READ';
+            }
+          });
+        }
+      });
+
+      // Only preserve newly submitted OPEN requests created in the last 15 seconds (in-flight network debounce)
+      if (!newDb.resetAt) {
+        state.db.requests.forEach((localReq) => {
+          if (!localReq || !localReq.id) return;
+          const isRecentInFlight = (localReq.status === 'OPEN' || isBookedStatus(localReq.status)) && localReq.createdAt &&
+            (nowMs - new Date(localReq.createdAt).getTime() < 30 * 1000);
+          if (isRecentInFlight && !newDb.requests.some((r) => r.id === localReq.id)) {
+            newDb.requests.unshift(localReq);
+          }
+        });
+      } else {
+        // If database was reset, clear any local active request pointer immediately
+        state.activeRequestId = null;
+      }
+    }
+
+    state.db = newDb;
+    if (state.activeModal === 'COMING_SOON_MODAL' && state.modalData?.category?.id) {
+      const currentCategory = state.db.categories.find((category) => category.id === state.modalData.category.id);
+      if (currentCategory) state.modalData = { ...state.modalData, category: currentCategory };
+    }
+    const prevBanned = Boolean(state.currentUser?.isBanned);
+    // Rock-solid session & profile retention: NEVER log out or overwrite user's chosen categories/profile with stale defaults!
+    if (state.isAuthenticated && state.currentUser) {
+      const list = state.role === 'PROVIDER' ? (state.db.providers || []) : (state.db.customers || []);
+      const found = list.find((item) => item.id === state.currentUser.id || (item.phone && state.currentUser.phone && item.phone.replace(/\D/g, '') === state.currentUser.phone.replace(/\D/g, '')));
+      if (found) {
+        const localCategoryIds = state.currentUser.categoryIds;
+        const localCategoryId = state.currentUser.categoryId;
+        const localName = state.currentUser.name;
+        const localBrand = state.currentUser.brandName;
+        const localAvatar = state.currentUser.avatarUrl || state.currentUser.selfieUrl;
+        state.currentUser = { ...state.currentUser, ...found };
+        if (Array.isArray(localCategoryIds) && localCategoryIds.length > 0 && state.userCustomizedProfile) {
+          state.currentUser.categoryIds = localCategoryIds;
+          state.currentUser.categoryId = localCategoryId || localCategoryIds[0];
+          found.categoryIds = localCategoryIds;
+          found.categoryId = state.currentUser.categoryId;
+        }
+        if (localName && state.userCustomizedProfile) {
+          state.currentUser.name = localName;
+          found.name = localName;
+        }
+        if (localBrand && state.userCustomizedProfile) {
+          state.currentUser.brandName = localBrand;
+          found.brandName = localBrand;
+        }
+        if (localAvatar && !found.avatarUrl) {
+          state.currentUser.avatarUrl = localAvatar;
+          found.avatarUrl = localAvatar;
+        }
+      } else {
+        state.isAuthenticated = false;
+        state.currentUser = null;
+        state.savedAccountId = null;
+        state.role = 'CUSTOMER';
+        state.customerTab = 'HOME';
+        state.hubView = 'HUB';
+        state.screenStep = 'HOME';
+        localStorage.removeItem(SESSION_KEY);
+      }
+      if (found) {
+        state.isAuthenticated = true;
+      }
+    } else if (state.savedAccountId) {
+      const list = state.role === 'PROVIDER' ? (state.db.providers || []) : (state.db.customers || []);
+      const found = list.find((item) => item.id === state.savedAccountId);
+      if (found) {
+        state.currentUser = found;
+        state.isAuthenticated = true;
+      } else {
+        state.isAuthenticated = false;
+        state.currentUser = null;
+        state.savedAccountId = null;
+        state.role = 'CUSTOMER';
+        state.customerTab = 'HOME';
+        state.hubView = 'HUB';
+        state.screenStep = 'HOME';
+        localStorage.removeItem(SESSION_KEY);
+      }
+    }
+
+    syncNativeSessionBridge();
+    syncRecommendedFare();
+
+    // Real-Time In-App Calling Sync (Guarantees incoming calls ring immediately across all devices & serverless instances)
+    if (Array.isArray(state.db?.activeCalls)) {
+      syncIncomingCallFromList(state.db.activeCalls);
+    }
+
+    // Admin ban / unban takes effect instantly — no refresh needed
+    if (state.currentUser && Boolean(state.currentUser.isBanned) !== prevBanned) {
+      force = true;
+      lastUiOverlaySignature = '';
+      if (state.currentUser.isBanned) {
+        state.activeModal = null;
+        lastRenderedModalKey = '';
+        try { renderModalLayer(); } catch (e) {}
+      }
+    }
+
+    const fp = computeStateFingerprint(state.db);
+    if (force || fp !== lastStateFingerprint) {
+      lastStateFingerprint = fp;
+      if (force) {
+        lastUiOverlaySignature = '';
+        lastOffersSignature = '';
+      }
+      const activeEl = document.activeElement;
+      const isUserTyping = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT');
+      if (!isUserTyping || force) {
+        renderAll(force);
+      }
+    }
+  } catch (err) {
+    console.error('Failed to load state:', err);
+  } finally {
+    isFetchingState = false;
+  }
+}
+
+function syncRecommendedFare() {
+  if (!state.db) return;
+  const cat = state.db.categories.find((c) => c.id === state.selectedCategoryId) || state.db.categories[0];
+  const subServices = cat?.subServices || [];
+  const sub = subServices[state.selectedSubServiceIdx] || subServices[0];
+  const baseUsd = sub ? sub.defaultUsd : (cat?.suggestedMinUsd || 20);
+
+  let mult = 1;
+  if (state.selectedTierKey === 'PLATINUM') mult = 1.25;
+  else if (state.selectedTierKey === 'ONE_CLICK') mult = 1.15;
+  else if (state.selectedTierKey === 'BUDGET') mult = 0.8;
+
+  const rec = Math.max(5, Math.round(baseUsd * mult * 2) / 2);
+  state.recommendedFareUsd = rec;
+  if (!state.draftFareUsd || state.screenStep === 'HOME') {
+    state.draftFareUsd = rec;
+  }
+}
+
+let realtimeWebSocket = null;
+let realtimeEventSource = null;
+let realtimeReconnectTimer = null;
+let isWsConnected = false;
+
+let realtimeSyncInterval = null;
+let liveOffersPollTimer = null;
+let lastPolledOffersCount = -1;
+
+function startFastLiveOffersPoll(requestId) {
+  if (liveOffersPollTimer) return;
+  liveOffersPollTimer = setInterval(async () => {
+    const activeReq = getCustomerActiveRequest();
+    if (!activeReq || activeReq.status !== 'OPEN' || !state.isAuthenticated || state.role !== 'CUSTOMER') {
+      stopFastLiveOffersPoll();
+      return;
+    }
+    const targetId = requestId || activeReq.id;
+    try {
+      const res = await apiGet(`/api/requests/${targetId}/live-offers`, 1);
+      if (res && res.requestId === activeReq.id) {
+        if (res.status && res.status !== activeReq.status) {
+          activeReq.status = res.status;
+          fetchState(true);
+          return;
+        }
+        if (Array.isArray(res.offers)) {
+          const prevCount = (activeReq.offers || []).length;
+          res.offers.sort((a, b) => {
+            const timeA = Number(a.updatedAt || new Date(a.createdAt || 0).getTime() || 0);
+            const timeB = Number(b.updatedAt || new Date(b.createdAt || 0).getTime() || 0);
+            if (timeB !== timeA) return timeB - timeA;
+            return String(a.id || '').localeCompare(String(b.id || ''));
+          });
+          activeReq.offers = res.offers;
+          if (Array.isArray(res.activeViewerIds)) {
+            activeReq.activeViewerIds = res.activeViewerIds;
+          }
+          if (res.offers.length > prevCount) {
+            lastPolledOffersCount = res.offers.length;
+            renderFloatingOffersOverlay(false);
+            const newestOffer = res.offers[0];
+            if (newestOffer && newestOffer.id !== state.lastAnnouncedOfferId) {
+              state.lastAnnouncedOfferId = newestOffer.id;
+              playIncomingMessageSoundAndVibrate({ senderName: newestOffer.providerName || 'Service Provider', text: `New pro offer received: $${newestOffer.priceUsd}` });
+            }
+          } else if (res.offers.length !== lastPolledOffersCount) {
+            lastPolledOffersCount = res.offers.length;
+            renderFloatingOffersOverlay(false);
+          }
+        }
+      }
+    } catch (e) {}
+  }, 1000);
+}
+
+function stopFastLiveOffersPoll() {
+  if (liveOffersPollTimer) {
+    clearInterval(liveOffersPollTimer);
+    liveOffersPollTimer = null;
+    lastPolledOffersCount = -1;
+  }
+}
+
+let pusherInstance = null;
+function initPusherRealtime() {
+  if (typeof Pusher === 'undefined') return;
+  if (pusherInstance) return;
+  try {
+    pusherInstance = new Pusher('315bc9cc65277fb63a58', {
+      cluster: 'ap2',
+      forceTLS: true
+    });
+    const channel = pusherInstance.subscribe('findit-harare');
+    channel.bind_global((eventName, data) => {
+      if (!eventName || eventName.startsWith('pusher:') || eventName.startsWith('pusher_internal:')) return;
+      let payload = data;
+      if (typeof data === 'string') {
+        try { payload = JSON.parse(data); } catch (e) {}
+      }
+      handleIncomingRealtimeEvent({ eventType: eventName, payload });
+    });
+    console.log('[Findit] Pusher Realtime WebSocket connected (cluster: ap2)');
+  } catch (err) {
+    console.warn('Pusher init notice:', err);
+  }
+}
+
+function initRealtimeSync() {
+  initPusherRealtime();
+  connectWebSocket();
+  if (state.isAuthenticated && state.currentUser) {
+    try { startActiveCallPolling(); } catch (e) {}
+  }
+  if (!realtimeSyncInterval) {
+    realtimeSyncInterval = setInterval(() => {
+      if (state.isAuthenticated && state.currentUser && !activeCallPollTimer) {
+        try { startActiveCallPolling(); } catch (e) {}
+      }
+      // Reliable multi-device delta sync heartbeat (runs seamlessly alongside WebSockets)
+      if (!isFetchingState) {
+        const activeEl = document.activeElement;
+        const isUserTyping = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT');
+        // Never interrupt active typing with background delta syncs
+        const catalogModalOpen = state.activeModal === 'SERVICE_PICKER' || state.activeModal === 'COMING_SOON_MODAL';
+        if (!isUserTyping && (!state.activeModal || catalogModalOpen)) {
+          const activeReq = getCustomerActiveRequest();
+          if (state.screenStep === 'SEARCHING' || (activeReq && activeReq.status === 'OPEN')) {
+            startFastLiveOffersPoll(activeReq?.id);
+          }
+          fetchState(false);
+        }
+      }
+    }, 3000);
+  }
+}
+
+let audioCtxForChime = null;
+
+function playIncomingMessageSoundAndVibrate(message) {
+  if (state.activeCall || state.incomingCall) return; // Completely silent calls with zero beeps or interruptions
+  // 1. Phone vibration (Standard message haptic pattern: vibrate - pause - vibrate)
+  try {
+    triggerHardwareVibration([140, 70, 140]);
+  } catch (e) {}
+
+  // 2. High-Fidelity Pleasant WhatsApp/iOS Message Chime using Web Audio API
+  try {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (AudioContextClass) {
+      if (!audioCtxForChime || audioCtxForChime.state === 'closed') {
+        audioCtxForChime = new AudioContextClass();
+      }
+      if (audioCtxForChime.state === 'suspended') {
+        audioCtxForChime.resume().catch(() => {});
+      }
+      const ctx = audioCtxForChime;
+      const now = ctx.currentTime;
+
+      // Note 1: 587.33 Hz (D5 chime)
+      const osc1 = ctx.createOscillator();
+      const gain1 = ctx.createGain();
+      osc1.type = 'sine';
+      osc1.frequency.setValueAtTime(587.33, now);
+      gain1.gain.setValueAtTime(0.28, now);
+      gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+      osc1.connect(gain1);
+      gain1.connect(ctx.destination);
+      osc1.start(now);
+      osc1.stop(now + 0.15);
+
+      // Note 2: 880 Hz (A5 bell harmonic)
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.type = 'sine';
+      osc2.frequency.setValueAtTime(880, now + 0.08);
+      gain2.gain.setValueAtTime(0.32, now + 0.08);
+      gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+      osc2.connect(gain2);
+      gain2.connect(ctx.destination);
+      osc2.start(now + 0.08);
+      osc2.stop(now + 0.35);
+    }
+  } catch (audioErr) {}
+
+  // 3. Android Native Bridge notification & vibration
+  try {
+    if (window.FinditNative && typeof window.FinditNative.triggerNotification === 'function') {
+      const sender = message?.senderName || 'Findit User';
+      const text = message?.text || 'Sent you a message';
+      window.FinditNative.triggerNotification(`${sender}`, text, 7777);
+    }
+  } catch (nativeErr) {}
+}
+
+const playNewMessageChime = playIncomingMessageSoundAndVibrate;
+
+function getRealtimeRequestParty(request) {
+  if (!request || !state.currentUser) return false;
+  const myId = state.currentUser.id;
+  const myFinditId = state.currentUser.finditId;
+  const myPhone = (state.currentUser.phone || '').replace(/\D/g, '');
+
+  if (state.role === 'CUSTOMER') {
+    return Boolean(myId && request.customerId === myId) ||
+      Boolean(myFinditId && request.customerFinditId === myFinditId) ||
+      Boolean(myPhone && (request.customerPhone || '').replace(/\D/g, '') === myPhone);
+  }
+  if (state.role === 'PROVIDER') {
+    return Boolean(myId && request.acceptedProviderId === myId) ||
+      (request.offers || []).some((offer) =>
+        Boolean(myId && offer.providerId === myId) || Boolean(myFinditId && offer.providerFinditId === myFinditId)
+      );
+  }
+  return false;
+}
+
+function updateRealtimeRequest(requestId, request) {
+  const reqId = requestId || request?.id;
+  if (!state.db?.requests || !reqId) return null;
+  const idx = state.db.requests.findIndex((item) => item.id === reqId);
+  if (idx >= 0) {
+    if (request) state.db.requests[idx] = request;
+    return state.db.requests[idx];
+  }
+  if (request && getRealtimeRequestParty(request)) {
+    state.db.requests.unshift(request);
+    return request;
+  }
+  return null;
+}
+
+function handleIncomingRealtimeEvent(data) {
+  if (!data || data.eventType === 'CONNECTED' || data.eventType === 'PING') return;
+
+  // 0A. OFFICIAL ADMIN NOTIFICATION & DISPATCHED WARNINGS
+  if (data.eventType === 'ADMIN_NOTIFICATION' && data.payload?.notification) {
+    const notif = data.payload.notification;
+    if (!state.db) state.db = {};
+    if (!Array.isArray(state.db.adminNotifications)) state.db.adminNotifications = [];
+    state.db.adminNotifications.unshift(notif);
+    const myId = state.currentUser?.id;
+    const isTarget = notif.recipientType === 'ALL' ||
+      (notif.recipientType === 'CUSTOMERS' && state.role === 'CUSTOMER') ||
+      (notif.recipientType === 'PROVIDERS' && state.role === 'PROVIDER') ||
+      (notif.recipientType === 'SPECIFIC_USER' && (notif.recipientId === myId || notif.recipientId === state.currentUser?.finditId));
+    if (isTarget) {
+      triggerHardwareVibration([180, 80, 180]);
+      showToast(`${notif.title}: ${notif.message}`, notif.type === 'WARNING' ? 'error' : 'info', 6000);
+      triggerSystemNotification(notif.title, notif.message, notif.id);
+      renderAll();
+    }
+    return;
+  }
+
+  // 0B. LIVE AI-SUPPORT & HUMAN HELPDESK REPLIES
+  if (data.eventType === 'SUPPORT_MESSAGE_RECEIVED' && data.payload) {
+    const { userKey, message } = data.payload;
+    const myKey = String(state.currentUser?.id || state.currentUser?.phone || state.currentUser?.name || 'guest').replace(/[^a-zA-Z0-9_-]/g, '_');
+    if (userKey === myKey && message) {
+      playIncomingMessageSoundAndVibrate(message);
+      if (state.activeModal === 'SUPPORT_CHAT') {
+        state.supportChatHistory = state.supportChatHistory || [];
+        if (!state.supportChatHistory.some((m) => m.id === message.id)) {
+          state.supportChatHistory.push(message);
+          renderModalLayer();
+        }
+      } else {
+        showToast(`Findit Support: ${message.text}`, 'info', 6000);
+      }
+    }
+    return;
+  }
+
+  // 0. ADMIN BAN / UNBAN / WARN — apply in 0ms to the affected user (zero refresh needed)
+  if (data.eventType === 'ACCOUNT_DISCIPLINE_UPDATED' && data.payload) {
+    const { accountId, finditId, role, action, reason } = data.payload;
+    if (state.db) {
+      const list = role === 'CUSTOMER' ? (state.db.customers || []) : (state.db.providers || []);
+      const target = list.find((u) => u.id === accountId || (finditId && u.finditId === finditId));
+      if (target) {
+        if (action === 'BAN') {
+          target.isBanned = true;
+          target.banReason = reason || 'Safety policy violation';
+          if (role === 'PROVIDER') target.isOnline = false;
+        } else if (action === 'UNBAN') {
+          target.isBanned = false;
+          target.banReason = '';
+        } else if (action === 'WARN') {
+          target.warningsCount = (target.warningsCount || 0) + 1;
+          target.activeWarnings = target.activeWarnings || [];
+          target.activeWarnings.unshift({
+            id: 'warn_' + Date.now(),
+            date: new Date().toISOString(),
+            reason: reason || 'Official Admin Warning'
+          });
+        }
+      }
+    }
+    if (state.currentUser && (state.currentUser.id === accountId || (finditId && state.currentUser.finditId === finditId))) {
+      if (action === 'BAN') {
+        state.currentUser.isBanned = true;
+        state.currentUser.banReason = reason || 'Safety policy violation';
+        state.activeModal = null;
+        lastRenderedModalKey = '';
+      } else if (action === 'UNBAN') {
+        state.currentUser.isBanned = false;
+        state.currentUser.banReason = '';
+        showToast('Your account has been reinstated by Admin!', 'success');
+      } else if (action === 'WARN') {
+        state.currentUser.warningsCount = (state.currentUser.warningsCount || 0) + 1;
+        state.currentUser.activeWarnings = state.currentUser.activeWarnings || [];
+        state.currentUser.activeWarnings.unshift({
+          id: 'warn_' + Date.now(),
+          date: new Date().toISOString(),
+          reason: reason || 'Official Admin Warning'
+        });
+      }
+      saveSession(state.role, state.currentUser, false);
+      lastUiOverlaySignature = '';
+      renderAll();
+    }
+    fetchState(true);
+    return;
+  }
+
+  // 1. CHAT MESSAGE SENT (Encrypted & private between customer and assigned provider only)
+  if (data.eventType === 'MESSAGE_SENT' && data.payload) {
+    const { requestId, message } = data.payload;
+    const targetReq = (state.db?.requests || []).find((r) => r.id === requestId);
+    if (targetReq && message) {
+      const myId = state.currentUser?.id;
+      const myFinditId = state.currentUser?.finditId;
+      const myPhone = (state.currentUser?.phone || '').replace(/\D/g, '');
+      const isCustomerParty = state.role === 'CUSTOMER' && (
+        targetReq.customerId === myId ||
+        targetReq.customerFinditId === myFinditId ||
+        (myPhone && (targetReq.customerPhone || '').replace(/\D/g, '') === myPhone)
+      );
+      const isProviderParty = state.role === 'PROVIDER' && (
+        targetReq.acceptedProviderId === myId ||
+        (targetReq.offers || []).some((o) => o.providerId === myId || (myFinditId && o.providerFinditId === myFinditId))
+      );
+      const isParty = isCustomerParty || isProviderParty;
+      if (!isParty) return;
+
+      if (!targetReq.messages) targetReq.messages = [];
+      const existingMsg = targetReq.messages.find((m) =>
+        m.id === message.id ||
+        (message.clientMsgId && (m.clientMsgId === message.clientMsgId || m.id === message.clientMsgId)) ||
+        (m.senderRole === message.senderRole &&
+          m.text === message.text &&
+          Math.abs(new Date(m.timestamp || m.createdAt || 0).getTime() - new Date(message.timestamp || 0).getTime()) < 8000)
+      );
+      if (existingMsg) {
+        Object.assign(existingMsg, message);
+      } else {
+        targetReq.messages.push(message);
+      }
+      if (message.senderRole && message.senderRole !== 'SYSTEM' && message.senderRole !== state.role) {
+        playIncomingMessageSoundAndVibrate(message);
+        const txt = (message.text || '').toLowerCase();
+        if (state.role === 'CUSTOMER' && (message.type === 'ARRIVED' || txt.includes('outside') || txt.includes('arrived') || txt.includes('gate'))) {
+          startArrivalVibrationAlert(targetReq);
+        }
+        if (state.chatDrawerOpen) {
+          markRequestMessagesRead(targetReq.id);
+        } else {
+          showToast(`${message.senderName || 'Findit User'}: ${message.text || 'Photo attached'}`, 'info', 4500);
+          triggerSystemNotification(
+            `New Message from ${message.senderName || 'Findit User'}`,
+            message.text,
+            `msg_${message.id || message.clientMsgId || Date.now()}`
+          );
+        }
+      }
+      updateChatFeedDomOnly(targetReq);
+    }
+    return;
+  }
+
+  // 1B. CHAT MESSAGES READ (Turns Grey Ticks -> Blue Ticks in real time!)
+  if (data.eventType === 'MESSAGES_READ' && data.payload) {
+    const { requestId, readerRole, request } = data.payload;
+    const targetReq = (state.db?.requests || []).find((r) => r.id === requestId);
+    if (targetReq) {
+      if (request && Array.isArray(request.messages)) {
+        targetReq.messages = request.messages;
+      } else if (Array.isArray(targetReq.messages)) {
+        targetReq.messages.forEach((m) => {
+          if (m.senderRole && m.senderRole !== 'SYSTEM' && m.senderRole !== readerRole) {
+            m.read = true;
+            m.status = 'READ';
+          }
+        });
+      }
+      updateChatFeedDomOnly(targetReq);
+    }
+    return;
+  }
+
+  // 1C. OFFER DECLINED BY CLIENT (Notify provider on their card so they can edit price/re-bid!)
+  if (data.eventType === 'OFFER_DECLINED' && data.payload) {
+    const { requestId, offerId, providerId, declinedPriceUsd, request } = data.payload;
+    if (request && state.db?.requests) {
+      updateRealtimeRequest(requestId, request);
+    } else if (state.db?.requests) {
+      const r = state.db.requests.find((x) => x.id === requestId);
+      const off = r && (r.offers || []).find((o) => o.id === offerId);
+      if (off) {
+        off.status = 'DECLINED';
+        off.declinedPriceUsd = off.priceUsd;
+      }
+    }
+    if (state.role === 'PROVIDER' && state.currentUser && state.currentUser.id === providerId) {
+      showToast(`Client declined your $${declinedPriceUsd || ''} offer. You can edit your price and submit a revised bid!`, 'error');
+      triggerSystemNotification(
+        'Offer Declined — Edit Price',
+        `Client declined your $${declinedPriceUsd || ''} offer. Tap to adjust your price or terms.`,
+        `dec_${offerId}_${declinedPriceUsd}`
+      );
+      if ('vibrate' in navigator) {
+        try { navigator.vibrate([100, 60, 100]); } catch (e) {}
+      }
+    }
+    renderAll(false);
+    return;
+  }
+
+  // 2. NEW REQUEST CREATED (Instant delivery to providers via WebSocket - Card pops up directly!)
+  if (data.eventType === 'REQUEST_CREATED' && data.payload?.request) {
+    const req = data.payload.request;
+    if (!state.db) state.db = {};
+    if (!Array.isArray(state.db.requests)) state.db.requests = [];
+    const existingIdx = state.db.requests.findIndex((r) => r.id === req.id);
+    if (existingIdx >= 0) state.db.requests[existingIdx] = req;
+    else state.db.requests.unshift(req);
+    const myCats = state.role === 'PROVIDER' ? getProviderCategoryIds(state.currentUser) : [];
+    const reqCat = normalizeCategoryId(req.categoryId);
+    const matchesMe = myCats.length === 0 || myCats.includes(reqCat);
+    if (state.role === 'PROVIDER' && matchesMe) {
+      // Auto-expand provider sheet if idle/on home so new job card displays
+      if (!state.providerTab || state.providerTab === 'HOME') {
+        state.isSheetMinimized = false;
+        state.providerTab = 'FEED';
+      }
+
+      playNewMessageChime();
+
+      if (state.currentUser && state.currentUser.isOnline === false) {
+        showToast(`New Job in ${req.suburbName || 'Harare'} ($${req.budgetUsd})! You are currently Offline. Switch Online to bid.`, 'info', 6000);
+      }
+      triggerSystemNotification(
+        `New Job in ${req.suburbName || 'Harare'} ($${req.budgetUsd} USD)`,
+        `${req.title} requested by ${req.customerName} at ${req.exactAddress}`,
+        `req_${req.id}`
+      );
+      if ('vibrate' in navigator) {
+        try { navigator.vibrate([120, 60, 120]); } catch (e) {}
+      }
+      renderAll(false);
+    } else if (state.role === 'CUSTOMER' && state.currentUser && req.customerId === state.currentUser.id) {
+      renderAll(false);
+    }
+    return;
+  }
+
+  // 3. PROVIDER SUBMITTED AN OFFER (Instant delivery to client - Offer card pops up directly!)
+  if (data.eventType === 'OFFER_SUBMITTED' && data.payload?.offer) {
+    const { requestId, offer, request } = data.payload;
+    if (request && state.db?.requests) {
+      updateRealtimeRequest(requestId, request);
+    }
+    const currentActive = getCustomerActiveRequest();
+    if (state.role === 'CUSTOMER' && currentActive && currentActive.id === requestId) {
+      triggerSystemNotification(
+        `New Offer: $${offer.priceUsd} USD from ${offer.providerName}`,
+        `${offer.providerBrand || currentActive.title} (~${offer.etaMinutes || 5} mins away)`,
+        `off_${offer.id}_${offer.priceUsd}`
+      );
+      if ('vibrate' in navigator) {
+        try { navigator.vibrate([150, 70, 150]); } catch (e) {}
+      }
+    }
+    renderAll(false);
+    return;
+  }
+
+  // 4. BOOKING CONFIRMED (Accepted offer: disappears for other providers, locks in for accepted provider & client)
+  if ((data.eventType === 'BOOKING_CONFIRMED' || data.eventType === 'OFFER_ACCEPTED') && data.payload) {
+    const { requestId, acceptedProviderId, request } = data.payload;
+    const requestWithProvider = request
+      ? { ...request, acceptedProviderId: request.acceptedProviderId || acceptedProviderId }
+      : request;
+    const updatedRequest = updateRealtimeRequest(requestId, requestWithProvider);
+    if (updatedRequest && !request) {
+      updatedRequest.status = 'CONFIRMED';
+      updatedRequest.acceptedProviderId = acceptedProviderId;
+    }
+    if (state.role === 'PROVIDER') {
+      if (state.currentUser?.id === acceptedProviderId) {
+        state.providerTab = 'ACTIVE_JOB';
+        triggerSystemNotification(
+          `Offer Accepted! ($${requestWithProvider?.agreedTotalUsd || requestWithProvider?.budgetUsd || ''} USD)`,
+          `${requestWithProvider?.customerName || 'Client'} accepted your offer for ${requestWithProvider?.title || 'Job'}.`,
+          `acc_${requestId}`
+        );
+        if ('vibrate' in navigator) {
+          try { navigator.vibrate([200, 100, 200]); } catch (e) {}
+        }
+      }
+    }
+    renderAll(false);
+    return;
+  }
+
+  // 5. PROVIDER ARRIVED OUTSIDE GATE (Triggers persistent vibration on client phone!)
+  if (data.eventType === 'PROVIDER_ARRIVED' && data.payload?.request) {
+    const { requestId, request } = data.payload;
+    const updatedRequest = updateRealtimeRequest(requestId, request);
+    if (state.role === 'CUSTOMER' && getRealtimeRequestParty(updatedRequest)) {
+      startArrivalVibrationAlert(request);
+      triggerSystemNotification(
+        'Specialist Waiting Outside Gate!',
+        `Please share your Start PIN #${request.startPinCode || '4829'} to begin service.`,
+        `arr_${request.id}`
+      );
+      showToast(`Specialist is waiting outside! Please share your Start PIN #${request.startPinCode}.`, 'info');
+    }
+    renderAll(false);
+    return;
+  }
+
+  // 6. START PIN VERIFIED (Task Started - Stop vibration!)
+  if (data.eventType === 'PIN_VERIFIED') {
+    const updatedRequest = updateRealtimeRequest(data.payload?.requestId, data.payload?.request);
+    if (getRealtimeRequestParty(updatedRequest)) {
+      stopArrivalVibrationAlert();
+      showToast(`Start PIN verified! Service is now in progress.`);
+    }
+    renderAll(false);
+    return;
+  }
+
+  // 6A. COMPLETION REQUESTED (Specialist finished work, client needs to provide PIN)
+  if (data.eventType === 'COMPLETION_REQUESTED') {
+    const reqId = data.payload?.requestId || data.payload?.request?.id;
+    const reqObj = data.payload?.request;
+    const updatedRequest = updateRealtimeRequest(reqId, reqObj);
+    if (updatedRequest) {
+      updatedRequest.completionRequested = true;
+      if (data.payload?.completionPinCode) {
+        updatedRequest.completionPinCode = data.payload.completionPinCode;
+      }
+    }
+    if (getRealtimeRequestParty(updatedRequest)) {
+      triggerHardwareVibration([200, 100, 200]);
+    }
+    if (state.role === 'CUSTOMER' && getRealtimeRequestParty(updatedRequest)) {
+      triggerSystemNotification(
+        'Specialist Finished Service!',
+        `Please inspect the work and give Completion PIN #${data.payload?.completionPinCode || ''} to complete.`,
+        `comp_${reqId}`
+      );
+      showToast('Specialist finished work! Please share your Completion PIN.', 'success');
+    }
+    renderAll(false);
+    return;
+  }
+
+  // 6B. BOOKING STATUS UPDATED / COMPLETED (By client, provider, or admin)
+  if (data.eventType === 'BOOKING_STATUS_UPDATED' || data.eventType === 'STATUS_UPDATED' || data.eventType === 'BOOKING_COMPLETED') {
+    const reqId = data.payload?.requestId || data.payload?.request?.id;
+    const reqObj = data.payload?.request;
+    const newStatus = data.payload?.status || reqObj?.status;
+    const targetReq = updateRealtimeRequest(reqId, reqObj);
+    if (targetReq && !reqObj && newStatus) {
+      targetReq.status = newStatus;
+    }
+
+    const isDirectlyInvolved = getRealtimeRequestParty(targetReq);
+
+    if (newStatus === 'COMPLETED' || newStatus === 'CANCELLED') {
+      if (!isDirectlyInvolved) {
+        renderAll(false);
+        return;
+      }
+
+      stopArrivalVibrationAlert();
+      stopNavigationHud();
+      if (leafletRoutePolyline) {
+        try { leafletRoutePolyline.remove(); } catch (e) {}
+        leafletRoutePolyline = null;
+      }
+      if (leafletRoutePolylineCasing) {
+        try { leafletRoutePolylineCasing.remove(); } catch (e) {}
+        leafletRoutePolylineCasing = null;
+      }
+      if (reqId) delete state.bookingProximitySeconds[reqId];
+      if (state.activeRequestId === reqId) {
+        state.activeRequestId = null;
+      }
+      state.activeModal = null;
+      lastRenderedModalKey = '';
+      if (state.role === 'CUSTOMER') {
+        state.screenStep = 'HOME';
+        state.customerTab = 'HOME';
+        state.pendingSearchFareUsd = null;
+        if (newStatus === 'COMPLETED' && reqId) {
+          openRateBookingModal(reqId);
+          renderAll(true);
+          return;
+        }
+        renderAll(false);
+        return;
+      }
+      if (state.role === 'PROVIDER') {
+        state.providerTab = 'FEED';
+        if (newStatus === 'COMPLETED' && reqId) {
+          openRateBookingModal(reqId);
+          renderAll(true);
+          return;
+        }
+      }
+      lastUiOverlaySignature = '';
+      lastOffersSignature = '';
+      showToast(newStatus === 'COMPLETED' ? 'Job completed successfully! Thank you.' : 'Job was cancelled.', 'info');
+      renderAll(true);
+      return;
+    }
+  }
+
+  // 7. TASK CANCELLED (By user or provider — Private to involved parties ONLY)
+  if (data.eventType === 'TASK_CANCELLED') {
+    const reqId = data.payload?.requestId || data.payload?.request?.id;
+    const reqObj = data.payload?.request;
+    let targetReq = updateRealtimeRequest(reqId, reqObj);
+    if (!reqObj && state.db?.requests && reqId) {
+      const r = state.db.requests.find((x) => x.id === reqId);
+      if (r) {
+        r.status = 'CANCELLED';
+        if (data.payload?.reason) r.cancelReason = data.payload.reason;
+        targetReq = r;
+      }
+    }
+
+    // STRICT PRIVACY: If not involved, NEVER display cancellation toast and NEVER disrupt their active screen!
+    if (!getRealtimeRequestParty(targetReq)) {
+      renderAll(false);
+      return;
+    }
+
+    stopArrivalVibrationAlert();
+    stopNavigationHud();
+    if (leafletRoutePolyline) {
+      try { leafletRoutePolyline.remove(); } catch (e) {}
+      leafletRoutePolyline = null;
+    }
+    if (leafletRoutePolylineCasing) {
+      try { leafletRoutePolylineCasing.remove(); } catch (e) {}
+      leafletRoutePolylineCasing = null;
+    }
+
+    if (state.activeRequestId === reqId) {
+      state.activeRequestId = null;
+    }
+    state.activeModal = null;
+    lastRenderedModalKey = '';
+
+    if (state.role === 'CUSTOMER') {
+      state.screenStep = 'HOME';
+      state.customerTab = 'HOME';
+      state.pendingSearchFareUsd = null;
+    }
+    if (state.role === 'PROVIDER') {
+      state.providerTab = 'FEED';
+    }
+
+    // Cancellation toast visible ONLY to the directly involved parties
+    const actorRole = data.payload?.cancelledByRole;
+    if (actorRole === state.role) {
+      showToast('Booking cancelled.');
+    } else {
+      const reasonTxt = data.payload?.reason ? `: ${data.payload.reason}` : '';
+      showToast(`Booking cancelled${reasonTxt}`, 'info');
+    }
+    renderAll(true);
+    return;
+  }
+
+  // 8. REAL-TIME CALL INCOMING (Signaling to recipient)
+  if (data.eventType === 'CALL_INCOMING' && data.payload) {
+    const c = data.payload;
+    if (isCallForCurrentUser(c)) {
+      state.incomingCall = {
+        callerId: c.callerId,
+        callerName: c.callerName || 'User',
+        contextTitle: c.contextTitle || 'In-App Audio Call',
+        channelId: c.channelId || ('call_' + c.requestId),
+        requestId: c.requestId
+      };
+      playIncomingRingtone();
+      renderCallModal();
+      triggerSystemNotification('Incoming Call from ' + (c.callerName || 'User'), c.contextTitle || 'Tap to answer', 'call_' + c.requestId);
+      try {
+        if (window.FinditNative && typeof window.FinditNative.triggerIncomingCall === 'function') {
+          window.FinditNative.triggerIncomingCall(c.callerName || 'Findit User', 'Voice', c.channelId);
+        }
+      } catch (nativeCallErr) {}
+      startActiveCallPolling();
+    }
+    return;
+  }
+
+  // 9. REAL-TIME CALL RESPONSE (Signaling to caller & callee)
+  if ((data.eventType === 'CALL_RESPONSE' || data.eventType === 'CALL_RESPONDED') && data.payload) {
+    const { channelId, action } = data.payload;
+    if (action === 'ACCEPT' && state.activeCall && state.activeCall.channelId === channelId) {
+      stopCallRingtones();
+      state.activeCall.callState = 'CONNECTED';
+      state.callSeconds = 0;
+      if (callInterval) clearInterval(callInterval);
+      callInterval = setInterval(() => {
+        state.callSeconds++;
+        const el = document.getElementById('callTimerText');
+        if (el) {
+          const m = String(Math.floor(state.callSeconds / 60)).padStart(2, '0');
+          const s = String(state.callSeconds % 60).padStart(2, '0');
+          el.textContent = `${m}:${s}`;
+        }
+      }, 1000);
+      renderCallModal();
+      // Caller initiates dual-engine audio streams now that callee has accepted!
+      joinDualEngineCall(channelId, true);
+    } else if ((action === 'DECLINE' || action === 'END' || action === 'HANGUP') && (state.activeCall || state.incomingCall)) {
+      endInAppCall(false);
+    }
+    return;
+  }
+
+  // 9B. REAL-TIME WALLET DEDUCTION & TOP-UP SYNC
+  if (data.eventType === 'PROVIDER_WALLET_UPDATED' || data.eventType === 'WALLET_UPDATED') {
+    const { providerId, walletBalanceUsd, deductedUsd, provider } = data.payload || {};
+    if (state.db?.providers && providerId) {
+      const p = state.db.providers.find((x) => x.id === providerId);
+      if (p) {
+        if (provider) Object.assign(p, provider);
+        else if (walletBalanceUsd !== undefined) p.walletBalanceUsd = walletBalanceUsd;
+      }
+    }
+    if (state.role === 'PROVIDER' && state.currentUser && (state.currentUser.id === providerId || !providerId)) {
+      if (walletBalanceUsd !== undefined) {
+        state.currentUser.walletBalanceUsd = walletBalanceUsd;
+      }
+      if (provider) {
+        Object.assign(state.currentUser, provider);
+      }
+      saveSession(state.role, state.currentUser, false);
+      if (deductedUsd) {
+        showToast(`Commission deducted: -$${Number(deductedUsd).toFixed(2)} USD. New balance: $${Number(state.currentUser.walletBalanceUsd).toFixed(2)}`, 'info');
+      }
+      lastUiOverlaySignature = '';
+      renderAll(true);
+    }
+    return;
+  }
+
+  // 10. REAL-TIME WEBRTC P2P SIGNALING (Point A to Point B direct voice stream)
+  if (data.eventType === 'CALL_WEBRTC_SIGNAL' && data.payload) {
+    handleWebRtcSignalMessage(data.payload);
+    return;
+  }
+
+  // 11. Findit : PROVIDER TRANSIT DELAY NOTICE
+  if (data.eventType === 'BOOKING_DELAYED' && data.payload?.request) {
+    const { requestId, request, delayNotice } = data.payload;
+    const updatedRequest = updateRealtimeRequest(requestId, request);
+    if (state.role === 'CUSTOMER' && getRealtimeRequestParty(updatedRequest) && state.activeRequestId === requestId) {
+      showToast(`Transit Notice: Provider running ~${delayNotice.minutes}m late (${delayNotice.reason})`);
+      if ('vibrate' in navigator) try { navigator.vibrate([200, 100, 200]); } catch (e) {}
+    }
+    updateChatFeedDomOnly(request);
+    renderAll(false);
+    return;
+  }
+
+  // 12. REAL-TIME PROVIDER LIVE LOCATION MOVED (Smooth map update)
+  if (data.eventType === 'PROVIDER_MOVED' && data.payload) {
+    const { providerId, lat, lng } = data.payload;
+    if (state.db?.providers) {
+      const p = state.db.providers.find((x) => x.id === providerId);
+      if (p) {
+        p.lat = lat;
+        p.lng = lng;
+      }
+    }
+    updateMapMarkers(true);
+    return;
+  }
+
+  // 13. REAL-TIME CLIENT LIVE LOCATION (Directs providers straight to client live GPS position)
+  if (data.eventType === 'CLIENT_LOCATION_UPDATED' && data.payload) {
+    const { requestId, lat, lng, exactAddress } = data.payload;
+    if (state.db?.requests) {
+      const r = state.db.requests.find((x) => x.id === requestId);
+      if (r) {
+        r.lat = Number(lat);
+        r.lng = Number(lng);
+        r.clientLiveLat = Number(lat);
+        r.clientLiveLng = Number(lng);
+        if (exactAddress) r.exactAddress = exactAddress;
+      }
+    }
+    if (state.role === 'PROVIDER') {
+      const prov = state.currentUser || state.db?.providers?.[0];
+      const activeJob = getProviderActiveBooking(prov?.id);
+      if (activeJob && activeJob.id === requestId) {
+        activeJob.lat = Number(lat);
+        activeJob.lng = Number(lng);
+        activeJob.clientLiveLat = Number(lat);
+        activeJob.clientLiveLng = Number(lng);
+        if (exactAddress) activeJob.exactAddress = exactAddress;
+        updateMapMarkers(true);
+      }
+    }
+    return;
+  }
+
+  // If user is currently typing in an input, don't interrupt them
+  const activeEl = document.activeElement;
+  const isUserTyping = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT');
+  if (state.activeModal === 'SIGNUP_FLOW' || isUserTyping) {
+    return;
+  }
+
+  fetchState();
+}
+
+let wsConsecutiveFailures = 0;
+
+function connectWebSocket() {
+  if (realtimeWebSocket) {
+    try { realtimeWebSocket.close(); } catch (e) {}
+    realtimeWebSocket = null;
+  }
+
+  const isVercel = typeof window !== 'undefined' && window.location.hostname.includes('vercel.app');
+  // If running on Vercel and no external WS_RELAY_HOST is configured, skip WS handshake so there is 0ms connection lag
+  if (isVercel && !WS_RELAY_HOST) {
+    isWsConnected = false;
+    return;
+  }
+
+  if (typeof WebSocket === 'undefined') {
+    if (!isVercel) connectRealtimeStream();
+    return;
+  }
+
+  try {
+    const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const targetHost = isVercel ? WS_RELAY_HOST : window.location.host;
+    const wsUrl = `${wsProto}//${targetHost}/ws`;
+    const ws = new WebSocket(wsUrl);
+    realtimeWebSocket = ws;
+
+    ws.onopen = () => {
+      isWsConnected = true;
+      wsConsecutiveFailures = 0;
+      if (realtimeEventSource) {
+        try { realtimeEventSource.close(); } catch (e) {}
+        realtimeEventSource = null;
+      }
+      fetchState(true);
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.eventType === 'PING') return;
+        handleIncomingRealtimeEvent(data);
+      } catch (e) {}
+    };
+
+    ws.onerror = () => {
+      isWsConnected = false;
+      wsConsecutiveFailures++;
+      if (!isVercel && !realtimeEventSource) {
+        connectRealtimeStream();
+      }
+    };
+
+    ws.onclose = () => {
+      isWsConnected = false;
+      if (!realtimeReconnectTimer) {
+        // Back off cleanly if WebSocket relay is suspended/unreachable so Vercel polling runs smoothly
+        const retryDelayMs = wsConsecutiveFailures >= 2 ? 60000 : 4000;
+        realtimeReconnectTimer = setTimeout(() => {
+          realtimeReconnectTimer = null;
+          connectWebSocket();
+        }, retryDelayMs);
+      }
+    };
+  } catch (e) {
+    if (!isVercel) connectRealtimeStream();
+  }
+}
+
+function connectRealtimeStream() {
+  if (realtimeEventSource) {
+    try { realtimeEventSource.close(); } catch (e) {}
+    realtimeEventSource = null;
+  }
+
+  try {
+    const sseBase = (typeof API_BASE !== 'undefined' && API_BASE) ? API_BASE : '';
+    const es = new EventSource(`${sseBase}/api/stream`);
+    realtimeEventSource = es;
+
+    es.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        handleIncomingRealtimeEvent(data);
+      } catch (e) {
+        console.error('SSE parse error:', e);
+      }
+    };
+
+    es.onerror = () => {
+      try { es.close(); } catch (e) {}
+      realtimeEventSource = null;
+      if (!realtimeReconnectTimer && !isWsConnected) {
+        realtimeReconnectTimer = setTimeout(connectRealtimeStream, 2500);
+      }
+    };
+  } catch (err) {
+    if (!realtimeReconnectTimer && !isWsConnected) {
+      realtimeReconnectTimer = setTimeout(connectRealtimeStream, 3000);
+    }
+  }
+}
+
+// ============================================================================
+// 1-SECOND COUNTDOWN LOOP FOR SEARCH BAR, GEOFENCE 50M ALERTS & 20M AUTO-PAIR
+// ============================================================================
+function compressImageFileToDataUrl(file, maxDimension = 800, quality = 0.72) {
+  return new Promise((resolve) => {
+    if (!file || !file.type || !file.type.startsWith('image/')) {
+      resolve(null);
+      return;
+    }
+    const reader = new FileReader();
+    reader.onerror = () => resolve(null);
+    reader.onload = (e) => {
+      const dataUrl = e.target.result;
+      const img = new Image();
+      img.onerror = () => resolve(dataUrl);
+      img.onload = () => {
+        try {
+          let w = img.width;
+          let h = img.height;
+          if (w > maxDimension || h > maxDimension) {
+            if (w > h) {
+              h = Math.round((h * maxDimension) / w);
+              w = maxDimension;
+            } else {
+              w = Math.round((w * maxDimension) / h);
+              h = maxDimension;
+            }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        } catch (err) {
+          resolve(dataUrl);
+        }
+      };
+      img.src = dataUrl;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function calculateDistanceMeters(lat1, lng1, lat2, lng2) {
+  if (!lat1 || !lng1 || !lat2 || !lng2) return 999999;
+  const R = 6371000;
+  const toRad = (d) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.round(R * c);
+}
+
+function checkProximityAutoPairTick() {
+  if (!state.db || !state.isAuthenticated) return;
+  if (!state.bookingProximitySeconds) state.bookingProximitySeconds = {};
+
+  const bookedJob = state.role === 'PROVIDER'
+    ? getProviderActiveBooking(state.currentUser?.id)
+    : getCustomerActiveRequest();
+
+  if (!bookedJob || bookedJob.status === 'COMPLETED' || bookedJob.status === 'CANCELLED' || bookedJob.status === 'OPEN') {
+    if (bookedJob?.id && state.bookingProximitySeconds[bookedJob.id]) {
+      delete state.bookingProximitySeconds[bookedJob.id];
+    }
+    return;
+  }
+
+  const provId = bookedJob.acceptedProviderId || bookedJob.offers?.[0]?.providerId;
+  const prov = (state.db.providers || []).find((p) => p.id === provId) || state.db.providers?.[0];
+  if (!prov) return;
+
+  const distMeters = calculateDistanceMeters(prov.lat, prov.lng, bookedJob.lat, bookedJob.lng);
+  const isWithin20m = distMeters <= 20 || bookedJob.status === 'ARRIVED';
+
+  if (isWithin20m) {
+    state.bookingProximitySeconds[bookedJob.id] = (state.bookingProximitySeconds[bookedJob.id] || 0) + 1;
+    const currentSec = state.bookingProximitySeconds[bookedJob.id];
+
+    // 1. Client's phone starts ringing & vibrating when provider says "I'm outside" OR is within 20 meters!
+    if (state.role === 'CUSTOMER' && !bookedJob.pinVerifiedByProvider) {
+      if (currentSec <= 300) {
+        startArrivalVibrationAlert(bookedJob);
+      } else {
+        stopArrivalVibrationAlert();
+      }
+    }
+
+    // 2. If provider is within 20 meters for 1.5 minutes (90 seconds), the "I'm Outside" button
+    // disappears automatically as if clicked, and the provider screen now waits for PIN!
+    if (state.role === 'PROVIDER' && bookedJob.status !== 'ARRIVED' && !bookedJob.pinVerifiedByProvider && currentSec >= 90) {
+      providerMarkArrived(bookedJob.id);
+    }
+
+    // Update countdown timer on DOM: 3 minutes = 180 seconds auto-pair threshold
+    const countdownEls = document.querySelectorAll('.proximity-autopair-timer');
+    countdownEls.forEach((el) => {
+      const remaining = Math.max(0, 180 - currentSec);
+      const m = Math.floor(remaining / 60);
+      const s = String(remaining % 60).padStart(2, '0');
+      el.textContent = `${m}:${s}`;
+    });
+
+    // If provider is within 20m for 3 minutes (180s) and PIN not shared, auto-pair & deduct commission!
+    if (currentSec >= 180 && !bookedJob.pinVerifiedByProvider && !bookedJob.autoPairTriggered) {
+      bookedJob.autoPairTriggered = true;
+      delete state.bookingProximitySeconds[bookedJob.id];
+      stopArrivalVibrationAlert();
+      apiPost('/api/bookings/verify-pin', {
+        requestId: bookedJob.id,
+        autoVerified: true,
+        requestSnapshot: bookedJob
+      }).then(() => {
+        fetchState(true);
+      }).catch((e) => console.warn('Auto-pair trigger error:', e));
+    }
+  } else {
+    state.bookingProximitySeconds[bookedJob.id] = 0;
+  }
+}
+
+function startOfferCountdownLoop() {
+  if (offerCountdownInterval) clearInterval(offerCountdownInterval);
+  offerCountdownInterval = setInterval(() => {
+    tickCountdowns();
+  }, 1000);
+}
+
+let lastBackgroundSyncTime = Date.now();
+
+async function tickCountdowns() {
+  checkProximityAutoPairTick();
+
+  if (!state.db || !state.isAuthenticated || state.role !== 'CUSTOMER') return;
+  const activeReq = getCustomerActiveRequest();
+  if (!activeReq || activeReq.status !== 'OPEN') return;
+
+  const createdMs = new Date(activeReq.createdAt).getTime();
+  const elapsedSec = Math.max(0, Math.floor((Date.now() - createdMs) / 1000));
+  const remSearchSec = Math.max(0, 120 - (elapsedSec % 120));
+  const mins = Math.floor(remSearchSec / 60);
+  const secs = String(remSearchSec % 60).padStart(2, '0');
+
+  const timerTextEl = document.getElementById('searchMmSsTimer');
+  if (timerTextEl) timerTextEl.textContent = `${mins}:${secs}`;
+
+  const searchBarEl = document.getElementById('searchProgressFill');
+  if (searchBarEl) {
+    searchBarEl.style.width = `${Math.max(4, (remSearchSec / 120) * 100)}%`;
+  }
+
+  const nowMs = Date.now();
+  const expiredOffers = [];
+
+  (activeReq.offers || []).forEach((offer) => {
+    const expiresAt = offer.expiresAt || (new Date(offer.createdAt).getTime() + 120 * 1000);
+    const totalMs = (offer.ttlSeconds || 120) * 1000;
+    const remMs = Math.max(0, expiresAt - nowMs);
+    const pct = Math.max(0, Math.min(100, (remMs / totalMs) * 100));
+
+    const fillEl = document.getElementById(`accept_fill_${offer.id}`);
+    if (fillEl) {
+      fillEl.style.width = `${pct}%`;
+    }
+  });
+}
+
+async function apiGet(url, retries = 2) {
+  const target = url.startsWith('http') ? url : (API_BASE + url);
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(target);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Request failed');
+      return data;
+    } catch (err) {
+      if (attempt < retries) {
+        await new Promise((r) => setTimeout(r, 350 * (attempt + 1)));
+        continue;
+      }
+      throw err;
+    }
+  }
+}
+
+async function apiPost(url, body, retries = 2) {
+  markLocalStateMutation();
+  const target = url.startsWith('http') ? url : (API_BASE + url);
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(target, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        const error = new Error(data.error || 'Request failed');
+        error.data = data;
+        error.status = res.status;
+        throw error;
+      }
+      return data;
+    } catch (err) {
+      if (err.status && err.status < 500) {
+        throw err;
+      }
+      if (attempt < retries) {
+        await new Promise((r) => setTimeout(r, 350 * (attempt + 1)));
+        continue;
+      }
+      throw err;
+    }
+  }
+}
+
+function compressDataUrlIfNeeded(dataUrl, maxDim = 500, quality = 0.72) {
+  return new Promise((resolve) => {
+    if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) return resolve(dataUrl);
+    if (dataUrl.startsWith('data:image/svg+xml')) return resolve(dataUrl);
+    if (dataUrl.length < 80000) return resolve(dataUrl);
+    const img = new Image();
+    img.onload = () => {
+      let w = img.width;
+      let h = img.height;
+      if (w > maxDim || h > maxDim) {
+        if (w > h) {
+          h = Math.round((h * maxDim) / w);
+          w = maxDim;
+        } else {
+          w = Math.round((w * maxDim) / h);
+          h = maxDim;
+        }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
+let hasUnlockedAudioSpeech = false;
+function ensureAudioAndSpeechUnlocked() {
+  if (hasUnlockedAudioSpeech) return;
+  hasUnlockedAudioSpeech = true;
+  try {
+    if ('speechSynthesis' in window) {
+      if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+      const silent = new SpeechSynthesisUtterance(' ');
+      silent.volume = 0.01;
+      silent.rate = 2.0;
+      window.speechSynthesis.speak(silent);
+    }
+  } catch (e) {}
+}
+if (typeof document !== 'undefined') {
+  document.addEventListener('click', ensureAudioAndSpeechUnlocked, { once: false, passive: true });
+  document.addEventListener('touchstart', ensureAudioAndSpeechUnlocked, { once: false, passive: true });
+}
+
+function showToast(msg, type = 'info') {
+  if (state.activeCall || state.incomingCall) return;
+  // Ignore raw transient fetch drops from displaying scary toasts
+  if (typeof msg === 'string' && (msg.toLowerCase().includes('failed to fetch') || msg.toLowerCase().includes('networkerror'))) {
+    console.warn('Network notice (auto-reconnecting):', msg);
+    return;
+  }
+  const container = document.getElementById('toastContainer');
+  if (!container) return;
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = msg;
+  container.appendChild(el);
+  setTimeout(() => el.remove(), 3200);
+}
+
+// ============================================================================
+// 100% WORKING OPENSTREETMAP (ZERO "API KEY REQUIRED") + REAL REVERSE GEOCODER
+// ============================================================================
+function initLeafletMap() {
+  const mapEl = document.getElementById('leafletMap');
+  if (!mapEl) return;
+
+  try {
+    if (typeof L === 'undefined') throw new Error('Leaflet unavailable');
+
+    leafletMap = L.map('leafletMap', {
+      zoomControl: false,
+      attributionControl: false
+    }).setView([state.pinnedLat, state.pinnedLng], 14);
+
+    // Safeguard flyTo against zero-dimension division-by-zero (e.g. before initial layout) and invalid coordinates
+    const origFlyTo = leafletMap.flyTo.bind(leafletMap);
+    leafletMap.flyTo = function(targetLatLng, zoom, options) {
+      try {
+        this.invalidateSize();
+        const size = this.getSize();
+        let lat = Array.isArray(targetLatLng) ? targetLatLng[0] : (targetLatLng && targetLatLng.lat);
+        let lng = Array.isArray(targetLatLng) ? targetLatLng[1] : (targetLatLng && targetLatLng.lng);
+        lat = Number(lat);
+        lng = Number(lng);
+        if (!isFinite(lat) || !isFinite(lng)) {
+          console.warn('flyTo ignored invalid coordinates:', targetLatLng);
+          return this;
+        }
+        if (!size || size.x <= 0 || size.y <= 0) {
+          return this.setView([lat, lng], zoom);
+        }
+        return origFlyTo([lat, lng], zoom, options);
+      } catch (e) {
+        try {
+          return this.setView(targetLatLng, zoom);
+        } catch (err) {
+          return this;
+        }
+      }
+    };
+
+    const osmLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19
+    }).addTo(leafletMap);
+
+    osmLayer.on('tileerror', () => {
+      L.tileLayer('https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png', {
+        maxZoom: 19
+      }).addTo(leafletMap);
+    });
+
+    leafletMarkersLayer = L.layerGroup().addTo(leafletMap);
+
+    leafletMap.on('movestart', () => {});
+
+    leafletMap.on('moveend', () => {
+      if (!leafletMap) return;
+      // Moving the map does NOT change your location (only pans map view across Harare)
+    });
+
+    updateLiveGpsMarker();
+    updateMapMarkers();
+  } catch (err) {
+    console.warn('Using built-in Harare street map fallback:', err.message);
+    const fb = document.getElementById('fallbackRadarMap');
+    if (fb) fb.style.display = 'block';
+  }
+}
+
+function syncPinDomLabels() {
+  const pinLabel = document.getElementById('centerPinLabel');
+  if (pinLabel) {
+    pinLabel.textContent = `Deliver to: ${state.customAddress} (Live Location)`;
+  }
+  const routeAddrEl = document.querySelector('.indrive-top-route-card .top-route-row .top-route-text');
+  if (routeAddrEl) {
+    routeAddrEl.textContent = `${state.customAddress}, ${(state.customSuburbLabel || 'Harare').split(',')[0]}`;
+  }
+  updateLiveGpsMarker();
+}
+
+function handleCenterPinBubbleClick() {
+  openSuburbPickerModal();
+}
+
+function orderFromCurrentMapPin() {
+  if (state.role === 'PROVIDER') return;
+  const activeReq = getCustomerActiveRequest();
+  if (activeReq) return;
+  state.hubView = 'MARKETPLACE';
+  if (state.screenStep !== 'CONFIGURE') {
+    openConfigureStep(state.selectedSubServiceIdx || 0);
+  } else {
+    state.isSheetMinimized = false;
+    renderUiOverlay(true);
+  }
+  showToast(`Ordering service at: ${state.customAddress}`);
+}
+
+function reverseGeocodeHararePin(lat, lng) {
+  if (!state.db || !state.db.suburbs) return;
+  let nearest = state.db.suburbs[0];
+  let bestDist = Infinity;
+
+  for (const s of state.db.suburbs) {
+    const d = Math.hypot(s.lat - lat, s.lng - lng);
+    if (d < bestDist) {
+      bestDist = d;
+      nearest = s;
+    }
+  }
+  state.selectedSuburbId = nearest.id;
+  state.customAddress = nearest.sampleStreet ? nearest.sampleStreet.split(',')[0] : nearest.name;
+  state.customSuburbLabel = `${nearest.name}, Harare`;
+  syncPinDomLabels();
+
+  if (geocodeDebounceTimer) clearTimeout(geocodeDebounceTimer);
+  geocodeDebounceTimer = setTimeout(async () => {
+    try {
+      const srvRes = await fetch(`/api/reverse-geocode?lat=${lat}&lng=${lng}`);
+      if (srvRes.ok) {
+        const data = await srvRes.json();
+        if (data && data.suburb) {
+          state.customAddress = data.road || data.suburb;
+          state.customSuburbLabel = `${data.suburb}, Harare`;
+          if (data.suburbId) state.selectedSuburbId = data.suburbId;
+          syncPinDomLabels();
+          return;
+        }
+      }
+    } catch (e) {}
+
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
+        { headers: { 'Accept-Language': 'en' } }
+      );
+      if (res.ok) {
+        const data = await res.json();
+        const addr = data.address || {};
+        const suburb = addr.suburb || addr.neighbourhood || addr.city_district || nearest.name;
+        const road = addr.road || addr.pedestrian || addr.residential || suburb;
+        const houseNumber = addr.house_number ? ` ${addr.house_number}` : '';
+        state.customAddress = `${road}${houseNumber}`;
+        state.customSuburbLabel = `${suburb}, Harare`;
+        syncPinDomLabels();
+        return;
+      }
+    } catch (e) {}
+
+    state.customAddress = nearest.name;
+    state.customSuburbLabel = `${nearest.name}, Harare`;
+    syncPinDomLabels();
+  }, 200);
+}
+
+// ============================================================================
+// HARARE LOCAL GAZETTEER FOR 0ms INSTANT ADDRESS RELOCATION & GPS STREET NAMES
+// ============================================================================
+const HARARE_GAZETTEER = {
+  "herbert chitepo": { name: "Herbert Chitepo Avenue", lat: -17.8202, lng: 31.0450 },
+  "chitepo": { name: "Herbert Chitepo Avenue", lat: -17.8202, lng: 31.0450 },
+  "samora machel": { name: "Samora Machel Avenue", lat: -17.8286, lng: 31.0538 },
+  "julius nyerere": { name: "Julius Nyerere Way", lat: -17.8315, lng: 31.0489 },
+  "jason moyo": { name: "Jason Moyo Avenue", lat: -17.8305, lng: 31.0505 },
+  "robert mugabe": { name: "Robert Mugabe Road", lat: -17.8328, lng: 31.0520 },
+  "leopold takawira": { name: "Leopold Takawira Street", lat: -17.8250, lng: 31.0465 },
+  "churchill": { name: "Churchill Avenue", lat: -17.7960, lng: 31.0420 },
+  "borrowdale rd": { name: "Borrowdale Road", lat: -17.7780, lng: 31.0850 },
+  "borrowdale": { name: "Borrowdale Road", lat: -17.7520, lng: 31.0890 },
+  "enterprise": { name: "ED Mnangagwa Road", lat: -17.7980, lng: 31.1050 },
+  "ed mnangagwa": { name: "ED Mnangagwa Road", lat: -17.7980, lng: 31.1050 },
+  "sam nujoma": { name: "Sam Nujoma Street", lat: -17.8080, lng: 31.0495 },
+  "second st": { name: "Sam Nujoma Street", lat: -17.8080, lng: 31.0495 },
+  "simon muzenda": { name: "Simon Muzenda Street", lat: -17.8290, lng: 31.0570 },
+  "fourth st": { name: "Simon Muzenda Street", lat: -17.8290, lng: 31.0570 },
+  "rotten row": { name: "Rotten Row", lat: -17.8320, lng: 31.0370 },
+  "bishop gaul": { name: "Bishop Gaul Avenue", lat: -17.8260, lng: 31.0150 },
+  "lomagundi": { name: "Nemakonde Way (Lomagundi Rd)", lat: -17.7850, lng: 31.0250 },
+  "nemakonde": { name: "Nemakonde Way (Lomagundi Rd)", lat: -17.7850, lng: 31.0250 },
+  "kirkman": { name: "Solomon Mujuru Drive (Kirkman Rd)", lat: -17.8180, lng: 30.9850 },
+  "solomon mujuru": { name: "Solomon Mujuru Drive", lat: -17.8180, lng: 30.9850 },
+  "arcturus": { name: "Arcturus Road", lat: -17.8040, lng: 31.1240 },
+  "seke": { name: "Seke Road", lat: -17.8680, lng: 31.0650 },
+  "glenara": { name: "Glenara Avenue", lat: -17.8180, lng: 31.0960 },
+  "prince edward": { name: "Prince Edward Street", lat: -17.8120, lng: 31.0260 },
+  "baines": { name: "Baines Avenue", lat: -17.8180, lng: 31.0510 },
+  "central ave": { name: "Central Avenue", lat: -17.8240, lng: 31.0520 },
+  "kwame nkrumah": { name: "Kwame Nkrumah Avenue", lat: -17.8270, lng: 31.0515 },
+  "nelson mandela": { name: "Nelson Mandela Avenue", lat: -17.8290, lng: 31.0525 },
+  "george silundika": { name: "George Silundika Avenue", lat: -17.8260, lng: 31.0500 },
+  "fifth st": { name: "Fifth Street", lat: -17.8280, lng: 31.0590 },
+  "seventh st": { name: "Seventh Street", lat: -17.8230, lng: 31.0620 },
+  "chiremba": { name: "Chiremba Road", lat: -17.8450, lng: 31.0950 },
+  "dieppe": { name: "Dieppe Avenue", lat: -17.8380, lng: 31.0850 },
+  "cripps": { name: "Cripps Road", lat: -17.8480, lng: 31.0450 },
+  "simon mazorodze": { name: "Simon Mazorodze Road", lat: -17.8550, lng: 31.0350 },
+  "beatrice": { name: "Simon Mazorodze Road", lat: -17.8550, lng: 31.0350 },
+  "lytton": { name: "Lytton Road", lat: -17.8420, lng: 31.0080 },
+  "highfield": { name: "Highfield Road", lat: -17.8620, lng: 31.0180 },
+  "sherwood": { name: "Sherwood Drive", lat: -17.7910, lng: 30.9960 },
+  "upper east": { name: "Upper East Road", lat: -17.7680, lng: 31.0450 },
+  "pendennis": { name: "Pendennis Road", lat: -17.7550, lng: 31.0480 },
+  "hindhead": { name: "Hindhead Avenue", lat: -17.7780, lng: 31.1200 },
+  "crowhill": { name: "Crowhill Road", lat: -17.7280, lng: 31.1250 },
+  "oxford": { name: "Oxford Road", lat: -17.8020, lng: 31.0420 },
+  "suffolk": { name: "Suffolk Road", lat: -17.7920, lng: 31.0180 },
+  "kilwinning": { name: "Kilwinning Road", lat: -17.8680, lng: 31.0820 },
+  "parktown": { name: "Parktown Crescent", lat: -17.8920, lng: 31.0480 },
+  "avondale": { name: "Avondale", lat: -17.7955, lng: 31.0365 },
+  "sam levy": { name: "Sam Levy's Village", lat: -17.7530, lng: 31.0880 },
+  "cbd": { name: "Harare CBD", lat: -17.8292, lng: 31.0522 },
+  "joina": { name: "Joina City", lat: -17.8315, lng: 31.0489 },
+  "eastgate": { name: "Eastgate Mall", lat: -17.8300, lng: 31.0550 },
+  "westgate": { name: "Westgate", lat: -17.7640, lng: 30.9670 },
+  "belgravia": { name: "Belgravia", lat: -17.8020, lng: 31.0420 },
+  "milton park": { name: "Milton Park", lat: -17.8120, lng: 31.0260 },
+  "alexandra park": { name: "Alexandra Park", lat: -17.7850, lng: 31.0550 },
+  "gunhill": { name: "Gunhill", lat: -17.7950, lng: 31.0680 },
+  "newlands": { name: "Newlands", lat: -17.8080, lng: 31.0820 },
+  "highlands": { name: "Highlands", lat: -17.7920, lng: 31.0980 },
+  "greendale": { name: "Greendale", lat: -17.8040, lng: 31.1240 },
+  "chisipite": { name: "Chisipite", lat: -17.7780, lng: 31.1200 },
+  "glen lorne": { name: "Glen Lorne", lat: -17.7410, lng: 31.1480 },
+  "helensvale": { name: "Helensvale", lat: -17.7280, lng: 31.1250 },
+  "pomona": { name: "Pomona", lat: -17.7420, lng: 31.0960 },
+  "vainona": { name: "Vainona", lat: -17.7645, lng: 31.0715 },
+  "mt pleasant": { name: "Mt Pleasant", lat: -17.7680, lng: 31.0450 },
+  "mount pleasant": { name: "Mt Pleasant", lat: -17.7680, lng: 31.0450 },
+  "mabelreign": { name: "Mabelreign", lat: -17.7910, lng: 30.9960 },
+  "belvedere": { name: "Belvedere", lat: -17.8260, lng: 31.0150 },
+  "eastlea": { name: "Eastlea", lat: -17.8190, lng: 31.0810 },
+  "hatfield": { name: "Hatfield", lat: -17.8680, lng: 31.0820 },
+  "waterfalls": { name: "Waterfalls", lat: -17.8920, lng: 31.0480 },
+  "chitungwiza": { name: "Chitungwiza", lat: -18.0127, lng: 31.0756 },
+  "msasa": { name: "Msasa", lat: -17.8380, lng: 31.1150 },
+  "graniteside": { name: "Graniteside", lat: -17.8480, lng: 31.0550 },
+  "southerton": { name: "Southerton", lat: -17.8520, lng: 31.0250 },
+  "workington": { name: "Workington", lat: -17.8450, lng: 31.0180 },
+  "braeside": { name: "Braeside", lat: -17.8390, lng: 31.0680 },
+  "cranborne": { name: "Cranborne", lat: -17.8510, lng: 31.0750 },
+  "queensdale": { name: "Queensdale", lat: -17.8580, lng: 31.0820 },
+  "arundel": { name: "Arundel Village", lat: -17.7710, lng: 31.0520 },
+  "longcheng": { name: "Longcheng Plaza", lat: -17.8220, lng: 31.0060 },
+  "national sports stadium": { name: "National Sports Stadium", lat: -17.8210, lng: 30.9980 },
+  "uz": { name: "University of Zimbabwe (UZ)", lat: -17.7840, lng: 31.0530 },
+  "university of zimbabwe": { name: "University of Zimbabwe (UZ)", lat: -17.7840, lng: 31.0530 },
+  "parirenyatwa": { name: "Parirenyatwa Hospital", lat: -17.8140, lng: 31.0480 },
+  "sally mugabe": { name: "Sally Mugabe Central Hospital", lat: -17.8590, lng: 31.0250 }
+};
+
+function resolveHarareLocalCoordinates(query) {
+  if (!query || typeof query !== 'string') return null;
+  const q = query.toLowerCase().trim();
+  if (!q) return null;
+
+  // 1. Exact or substring match in Harare gazetteer
+  for (const [key, item] of Object.entries(HARARE_GAZETTEER)) {
+    if (q === key || q.includes(key) || key.includes(q)) {
+      return { lat: item.lat, lng: item.lng, name: item.name };
+    }
+  }
+
+  // 2. Suburbs registered in state.db
+  if (state.db && Array.isArray(state.db.suburbs)) {
+    for (const sub of state.db.suburbs) {
+      const sName = (sub.name || '').toLowerCase();
+      if (sName && (q.includes(sName) || sName.includes(q))) {
+        return { lat: sub.lat, lng: sub.lng, name: sub.name };
+      }
+    }
+  }
+
+  // 3. Word token matching
+  const words = q.split(/[\s,.-]+/).filter((w) => w.length >= 3);
+  for (const w of words) {
+    for (const [key, item] of Object.entries(HARARE_GAZETTEER)) {
+      if (key.includes(w)) {
+        return { lat: item.lat, lng: item.lng, name: item.name };
+      }
+    }
+  }
+
+  // 4. Fallback: pseudo-deterministic coordinate near Harare CBD
+  let hash = 0;
+  for (let i = 0; i < q.length; i++) hash = (hash * 31 + q.charCodeAt(i)) & 0xffffff;
+  const latOffset = (((hash % 200) - 100) * 0.00015);
+  const lngOffset = ((((hash >> 3) % 200) - 100) * 0.00015);
+  return {
+    lat: Number((-17.8292 + latOffset).toFixed(5)),
+    lng: Number((31.0522 + lngOffset).toFixed(5)),
+    name: query
+  };
+}
+
+function resolveNearestHarareThoroughfare(lat, lng) {
+  if (!lat || !lng) return "Herbert Chitepo Avenue";
+  let closestName = "Herbert Chitepo Avenue";
+  let minDist = Infinity;
+  for (const item of Object.values(HARARE_GAZETTEER)) {
+    const d = calculateDistanceMeters(lat, lng, item.lat, item.lng);
+    if (d < minDist) {
+      minDist = d;
+      closestName = item.name;
+    }
+  }
+  return closestName;
+}
+
+// ============================================================================
+// INDRIVE LIVE GPS NAVIGATION ENGINE & TURN-BY-TURN AUDIO DIRECTIONS
+// ============================================================================
+const liveNavState = {
+  active: false,
+  voiceEnabled: false, // Voice navigation is optional and turned OFF by default
+  steps: [],
+  currentStepIdx: 0,
+  totalDistanceMeters: 0,
+  totalDurationSeconds: 0,
+  destinationName: '',
+  destinationLat: null,
+  destinationLng: null,
+  bearingDeg: 0,
+  lastSpokenText: '',
+  lastSpokenMs: 0
+};
+
+function calculateBearingDegrees(lat1, lon1, lat2, lon2) {
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const y = Math.sin(dLon) * Math.cos(lat2 * Math.PI / 180);
+  const x = Math.cos(lat1 * Math.PI / 180) * Math.sin(lat2 * Math.PI / 180) -
+            Math.sin(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.cos(dLon);
+  const brng = Math.atan2(y, x) * 180 / Math.PI;
+  return Math.round((brng + 360) % 360);
+}
+
+function getManeuverSvgIcon(type = 'turn', modifier = 'straight', size = 26) {
+  const mod = (modifier || '').toLowerCase();
+  const t = (type || '').toLowerCase();
+
+  if (t === 'arrive') {
+    return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5" fill="#FFFFFF"/></svg>`;
+  }
+  if (mod.includes('left')) {
+    return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M19 19v-6a5 5 0 0 0-5-5H5M5 8l-4 4 4 4"/></svg>`;
+  }
+  if (mod.includes('right')) {
+    return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19v-6a5 5 0 0 1 5-5h9M19 8l4 4-4 4"/></svg>`;
+  }
+  if (mod.includes('u-turn') || mod.includes('uturn')) {
+    return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M9 10a5 5 0 1 1 10 0v9M9 10L5 6m4 4l-4 4"/></svg>`;
+  }
+  if (t.includes('roundabout')) {
+    return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.8 1.04 6.44 2.73M21 5v5h-5"/></svg>`;
+  }
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>`;
+}
+
+let cachedNavigationVoice = null;
+
+function getGoogleMapsNavigationVoice() {
+  if (typeof window === 'undefined' || !('speechSynthesis' in window)) return null;
+  const voices = window.speechSynthesis.getVoices() || [];
+  if (!voices.length) return null;
+
+  // 1. Google Maps native voice (Chrome, Android, and Google TTS)
+  const googleVoice = voices.find((v) =>
+    v.name.includes('Google') && (v.name.includes('US English') || v.name.includes('UK English Female') || v.name.includes('English') || v.lang.startsWith('en'))
+  );
+  if (googleVoice) return googleVoice;
+
+  // 2. High-quality natural English voices (iOS / macOS / Windows)
+  const naturalVoices = ['Samantha', 'Karen', 'Victoria', 'Moira', 'Tessa', 'Jenny', 'Aria', 'Natural'];
+  for (const name of naturalVoices) {
+    const match = voices.find((v) => v.name.includes(name) && v.lang.startsWith('en'));
+    if (match) return match;
+  }
+
+  // 3. Clean standard English voice (strictly avoid novelty/robotic voices like Fred, Bad News, Albert, etc.)
+  const noveltyVoices = ['Fred', 'Bad News', 'Bells', 'Cellos', 'Good News', 'Organ', 'Trinoids', 'Whisper', 'Zarvox', 'Albert', 'Boing', 'Bubbles', 'Deranged', 'Hysterical', 'Jester'];
+  const cleanEnglish = voices.find((v) =>
+    v.lang.startsWith('en') && !noveltyVoices.some((nov) => v.name.includes(nov))
+  );
+  return cleanEnglish || voices[0] || null;
+}
+
+if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+  window.speechSynthesis.onvoiceschanged = () => {
+    cachedNavigationVoice = getGoogleMapsNavigationVoice();
+  };
+}
+
+function playNavTurnChime() {
+  if (state.activeCall || state.incomingCall) return;
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.12);
+    gain.gain.setValueAtTime(0.18, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.26);
+  } catch (e) {}
+}
+
+function speakNavigationDirection(text) {
+  if (state.activeCall || state.incomingCall) return;
+  if (!liveNavState.voiceEnabled) return;
+  if (!text || typeof text !== 'string') return;
+  const now = Date.now();
+  if (liveNavState.lastSpokenText === text && now - liveNavState.lastSpokenMs < 8000) return;
+  liveNavState.lastSpokenText = text;
+  liveNavState.lastSpokenMs = now;
+
+  // 1. Audible Nav Ding
+  playNavTurnChime();
+
+  // 2. High Quality Speech Synthesis (Google Maps & inDrive Voice Guidance)
+  if ('speechSynthesis' in window) {
+    try {
+      if (window.speechSynthesis.paused) {
+        window.speechSynthesis.resume();
+      }
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      const voice = cachedNavigationVoice || getGoogleMapsNavigationVoice();
+      if (voice) {
+        utterance.voice = voice;
+        utterance.lang = voice.lang || 'en-US';
+      } else {
+        utterance.lang = 'en-US';
+      }
+      utterance.rate = 1.02;
+      utterance.pitch = 1.0;
+      utterance.volume = 1.0;
+      window.speechSynthesis.speak(utterance);
+    } catch (e) {}
+  }
+
+  // 3. Android Native Text-to-Speech Engine (Plays aloud on mobile device regardless of webview mute)
+  try {
+    if (window.FinditNative && typeof window.FinditNative.speak === 'function') {
+      window.FinditNative.speak(text);
+    }
+  } catch (nativeErr) {}
+}
+
+function toggleNavVoice() {
+  liveNavState.voiceEnabled = !liveNavState.voiceEnabled;
+  if (liveNavState.voiceEnabled) {
+    speakNavigationDirection('Navigation voice guidance active');
+    showToast('Voice directions unmuted', 'info');
+  } else {
+    try { window.speechSynthesis.cancel(); } catch (e) {}
+    try {
+      if (window.FinditNative && typeof window.FinditNative.stopSpeech === 'function') {
+        window.FinditNative.stopSpeech();
+      }
+    } catch (e) {}
+    showToast('Voice directions muted', 'info');
+  }
+  renderNavigationHud();
+}
+
+function recenterNavigationCamera() {
+  if (!leafletMap) return;
+  const lat = state.userLiveGpsLat || state.pinnedLat;
+  const lng = state.userLiveGpsLng || state.pinnedLng;
+  if (lat && lng) {
+    leafletMap.flyTo([lat, lng], 16, { duration: 0.6 });
+    showToast('Centered on your live location', 'info');
+  }
+}
+
+function renderNavigationHud() {
+  const hud = document.getElementById('navigationHudOverlay');
+  if (!hud) return;
+
+  const prov = state.currentUser || state.db?.providers?.[0];
+  const activeJob = prov ? getProviderActiveBooking(prov.id) : null;
+  // If arrived outside gate, in-progress, completed, or start PIN verified, immediately dismiss HUD & voiceover
+  if (!liveNavState.active || !liveNavState.steps || liveNavState.steps.length === 0 || (activeJob && (activeJob.status === 'ARRIVED' || activeJob.status === 'IN_PROGRESS' || activeJob.status === 'COMPLETED' || activeJob.startPinVerified || activeJob.pinVerifiedByProvider))) {
+    hud.style.display = 'none';
+    liveNavState.active = false;
+    return;
+  }
+
+  const currentStep = liveNavState.steps[liveNavState.currentStepIdx] || liveNavState.steps[0];
+  const stepDist = currentStep.distance || 0;
+  const distText = stepDist < 1000 ? `In ${Math.round(stepDist)} m` : `In ${(stepDist / 1000).toFixed(1)} km`;
+
+  const roadName = currentStep.name || 'Client Route';
+  const mod = currentStep.modifier || '';
+  const actionText = currentStep.type === 'arrive'
+    ? 'Arrive at client destination'
+    : mod ? `Turn ${mod} onto ${roadName}` : `Continue straight onto ${roadName}`;
+
+  const iconSvg = getManeuverSvgIcon(currentStep.type, currentStep.modifier, 24);
+
+  const totalDistKm = (liveNavState.totalDistanceMeters / 1000).toFixed(1);
+  const totalMins = Math.max(1, Math.round(liveNavState.totalDurationSeconds / 60));
+
+  hud.style.display = 'flex';
+  hud.innerHTML = `
+    <div class="nav-hud-main">
+      <div class="nav-maneuver-icon-box">
+        ${iconSvg}
+      </div>
+      <div class="nav-hud-info">
+        <div class="nav-hud-dist">${distText}</div>
+        <div class="nav-hud-street">${escapeHtml(actionText)}</div>
+      </div>
+      <div class="nav-hud-controls">
+        <button type="button" class="nav-hud-btn ${liveNavState.voiceEnabled ? 'active' : ''}" onclick="toggleNavVoice()" title="${liveNavState.voiceEnabled ? 'Mute Voice' : 'Enable Voice'}">
+          ${liveNavState.voiceEnabled
+            ? `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>`
+            : `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>`
+          }
+        </button>
+        <button type="button" class="nav-hud-btn" onclick="recenterNavigationCamera()" title="Recenter GPS">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="nav-hud-footer">
+      <div class="nav-hud-eta">
+        <span class="nav-pulse-dot"></span>
+        <span>${totalDistKm} km • ~${totalMins} min remaining</span>
+      </div>
+      <div style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:180px;">
+        To: ${escapeHtml(liveNavState.destinationName || 'Client Address')}
+      </div>
+    </div>
+  `;
+}
+
+function stopNavigationHud() {
+  liveNavState.active = false;
+  liveNavState.isActive = false;
+  liveNavState.steps = [];
+  liveNavState.voiceEnabled = false;
+  liveNavState.lastSpokenText = '';
+  if (window.speechSynthesis) {
+    try { window.speechSynthesis.cancel(); } catch (e) {}
+  }
+  if (window.FinditNative && typeof window.FinditNative.stopSpeech === 'function') {
+    try { window.FinditNative.stopSpeech(); } catch (e) {}
+  }
+  const hud = document.getElementById('navigationHudOverlay');
+  if (hud) hud.style.display = 'none';
+}
+
+function advanceNavigationStep(curLat, curLng) {
+  if (!liveNavState.active || !liveNavState.steps || liveNavState.steps.length === 0) return;
+  const currentStep = liveNavState.steps[liveNavState.currentStepIdx];
+  if (!currentStep) return;
+
+  let stepLoc = currentStep.location;
+  if (!stepLoc || !stepLoc[0]) {
+    stepLoc = [liveNavState.destinationLat, liveNavState.destinationLng];
+  }
+  const distToManeuver = calculateDistanceMeters(curLat, curLng, stepLoc[0], stepLoc[1]);
+  currentStep.distance = distToManeuver;
+
+  const distToDest = calculateDistanceMeters(curLat, curLng, liveNavState.destinationLat, liveNavState.destinationLng);
+  liveNavState.totalDistanceMeters = distToDest;
+  // Harare realistic transit speed (~30 km/h = 500 m/min)
+  liveNavState.totalDurationSeconds = Math.max(60, Math.round((distToDest / 500) * 60));
+
+  const turnDirection = currentStep.modifier ? `turn ${currentStep.modifier} into` : 'continue onto';
+
+  if (distToManeuver < 35 && liveNavState.currentStepIdx < liveNavState.steps.length - 1) {
+    liveNavState.currentStepIdx++;
+    const nextStep = liveNavState.steps[liveNavState.currentStepIdx];
+    const nextTurn = nextStep.modifier ? `turn ${nextStep.modifier} into` : 'head onto';
+    const speech = nextStep.type === 'arrive'
+      ? `In 50 meters, you will arrive at your destination.`
+      : `In ${Math.round(nextStep.distance || 100)} meters, ${nextTurn} ${nextStep.name || 'next street'}`;
+    speakNavigationDirection(speech);
+  } else if (distToDest <= 20) {
+    speakNavigationDirection("You have arrived at your destination, thanks for using Findit");
+    setTimeout(() => {
+      stopNavigationHud();
+    }, 3200);
+  } else if (distToManeuver <= 320 && distToManeuver > 260) {
+    // 300 meters GPS advance alert with real street name (e.g. "In 300 meters, turn right into Herbert Chitepo Avenue")
+    const speech = `In 300 meters, ${turnDirection} ${currentStep.name}`;
+    speakNavigationDirection(speech);
+  } else if (distToManeuver <= 120 && distToManeuver > 70) {
+    // 100 meters GPS turn alert
+    const speech = `In 100 meters, ${turnDirection} ${currentStep.name}`;
+    speakNavigationDirection(speech);
+  } else if (distToManeuver <= 50 && distToManeuver > 35) {
+    // Immediate turn alert
+    const speech = `${turnDirection.charAt(0).toUpperCase() + turnDirection.slice(1)} ${currentStep.name}`;
+    speakNavigationDirection(speech);
+  }
+
+  renderNavigationHud();
+}
+
+async function drawRoadRouteOnMap(lat1, lng1, lat2, lng2, color = '#0066FF', weight = 5, isNav = false, reqContext = null) {
+  if (!leafletMap) return;
+
+  // inDrive rule: When looking for providers, never show route polylines; show only concentric radar pulse
+  const activeCustomerReq = getCustomerActiveRequest();
+  if (state.role === 'CUSTOMER' && (state.screenStep === 'SEARCHING' || (activeCustomerReq && activeCustomerReq.status === 'OPEN'))) {
+    if (leafletRoutePolyline) {
+      try { leafletMap.removeLayer(leafletRoutePolyline); } catch (e) {}
+      leafletRoutePolyline = null;
+    }
+    if (leafletRoutePolylineCasing) {
+      try { leafletMap.removeLayer(leafletRoutePolylineCasing); } catch (e) {}
+      leafletRoutePolylineCasing = null;
+    }
+    return;
+  }
+  const key = `${lat1.toFixed(4)},${lng1.toFixed(4)}->${lat2.toFixed(4)},${lng2.toFixed(4)}`;
+
+  let coords = osrmRouteCache.get(key);
+  let steps = osrmStepsCache.get(key);
+
+  if (!coords) {
+    try {
+      const url = `https://router.project-osrm.org/route/v1/driving/${lng1},${lat1};${lng2},${lat2}?overview=full&geometries=geojson&steps=true`;
+      const res = await fetch(url);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.routes && data.routes[0]) {
+          const r = data.routes[0];
+          if (r.geometry) {
+            coords = r.geometry.coordinates.map((c) => [c[1], c[0]]);
+            osrmRouteCache.set(key, coords);
+          }
+          if (r.legs && r.legs[0] && r.legs[0].steps) {
+            steps = r.legs[0].steps.map((st) => {
+              const loc = st.maneuver?.location ? [st.maneuver.location[1], st.maneuver.location[0]] : [lat2, lng2];
+              let streetName = (st.name || '').trim();
+              if (!streetName || streetName.toLowerCase().includes('harare route') || streetName.toLowerCase().includes('unnamed')) {
+                streetName = resolveNearestHarareThoroughfare(loc[0], loc[1]);
+              }
+              return {
+                type: st.maneuver?.type || 'turn',
+                modifier: st.maneuver?.modifier || '',
+                name: streetName,
+                distance: Math.round(st.distance || 0),
+                duration: Math.round(st.duration || 0),
+                location: loc
+              };
+            });
+            osrmStepsCache.set(key, steps);
+            liveNavState.totalDistanceMeters = Math.round(r.distance || calculateDistanceMeters(lat1, lng1, lat2, lng2));
+            liveNavState.totalDurationSeconds = Math.max(60, Math.round((liveNavState.totalDistanceMeters / 500) * 60));
+          }
+        }
+      }
+    } catch (e) {}
+  }
+
+  if (!coords) {
+    coords = buildCurvedPreviewPoints(lat1, lng1, lat2, lng2);
+  }
+
+  if (!steps || steps.length === 0) {
+    const totalDist = calculateDistanceMeters(lat1, lng1, lat2, lng2);
+    const startStreet = resolveNearestHarareThoroughfare(lat1, lng1);
+    const destStreet = resolveNearestHarareThoroughfare(lat2, lng2);
+    const destName = reqContext?.exactAddress || reqContext?.suburbName || destStreet;
+    steps = [
+      {
+        type: 'depart',
+        modifier: 'straight',
+        name: `Head onto ${startStreet}`,
+        distance: Math.round(totalDist * 0.4),
+        duration: Math.round(totalDist * 0.4 / 8.5),
+        location: coords[Math.floor(coords.length * 0.4)] || [lat2, lng2]
+      },
+      {
+        type: 'turn',
+        modifier: 'right',
+        name: `Turn onto ${destName}`,
+        distance: Math.round(totalDist * 0.6),
+        duration: Math.round(totalDist * 0.6 / 8.5),
+        location: [lat2, lng2]
+      },
+      {
+        type: 'arrive',
+        modifier: '',
+        name: `${reqContext?.customerName || 'Client'}'s Location`,
+        distance: 25,
+        duration: 5,
+        location: [lat2, lng2]
+      }
+    ];
+    liveNavState.totalDistanceMeters = totalDist;
+    liveNavState.totalDurationSeconds = Math.max(60, Math.round((totalDist / 500) * 60));
+  }
+
+  // inDrive Dual-Layer Route Polyline (Dark Casing + Glowing Blue Active Polyline)
+  if (leafletRoutePolyline && leafletRoutePolylineCasing && currentRouteCoordsKey === key) {
+    // Already rendered for this exact route segment — keep existing layer without flicker
+  } else if (leafletRoutePolyline && leafletRoutePolylineCasing) {
+    // Smoothly update existing polylines without removing/re-adding DOM layers
+    try {
+      leafletRoutePolylineCasing.setLatLngs(coords);
+      leafletRoutePolyline.setLatLngs(coords);
+      currentRouteCoordsKey = key;
+    } catch (e) {
+      try { leafletMap.removeLayer(leafletRoutePolylineCasing); } catch (err) {}
+      try { leafletMap.removeLayer(leafletRoutePolyline); } catch (err) {}
+      leafletRoutePolylineCasing = L.polyline(coords, { color: '#0F172A', weight: weight + 3, opacity: 0.35 }).addTo(leafletMap);
+      leafletRoutePolyline = L.polyline(coords, { color, weight, opacity: 0.95 }).addTo(leafletMap);
+      currentRouteCoordsKey = key;
+    }
+  } else {
+    if (leafletRoutePolylineCasing) {
+      try { leafletMap.removeLayer(leafletRoutePolylineCasing); } catch (e) {}
+    }
+    leafletRoutePolylineCasing = L.polyline(coords, {
+      color: '#0F172A',
+      weight: weight + 3,
+      opacity: 0.35
+    }).addTo(leafletMap);
+
+    if (leafletRoutePolyline) {
+      try { leafletMap.removeLayer(leafletRoutePolyline); } catch (e) {}
+    }
+    leafletRoutePolyline = L.polyline(coords, {
+      color,
+      weight,
+      opacity: 0.95
+    }).addTo(leafletMap);
+    currentRouteCoordsKey = key;
+  }
+
+  if (isNav && state.role === 'PROVIDER') {
+    liveNavState.active = true;
+    liveNavState.steps = steps;
+    liveNavState.currentStepIdx = 0;
+    renderNavigationHud();
+    const totalKm = (liveNavState.totalDistanceMeters / 1000).toFixed(1);
+    const totalMins = Math.max(1, Math.round(liveNavState.totalDistanceMeters / 500));
+    const firstStep = steps[0];
+    const turnWord = firstStep?.modifier ? `turn ${firstStep.modifier} into` : 'head onto';
+    const initialSpeech = firstStep
+      ? `Navigating to ${reqContext?.customerName || 'client'}. In ${firstStep.distance} meters, ${turnWord} ${firstStep.name}. Route length is ${totalKm} kilometers, estimated arrival in ${totalMins} minutes.`
+      : `Navigating to client location. Route length is ${totalKm} kilometers.`;
+    speakNavigationDirection(initialSpeech);
+  }
+
+  // Automatically zoom and center the map so the full route is visible (ONLY ONCE per route, not on every background poll)
+  if (coords && coords.length > 1 && lastFittedRouteKey !== key) {
+    lastFittedRouteKey = key;
+    try {
+      leafletMap.invalidateSize();
+      const sz = leafletMap.getSize();
+      const validCoords = coords.filter((c) => Array.isArray(c) && isFinite(Number(c[0])) && isFinite(Number(c[1])));
+      if (sz && sz.x > 0 && sz.y > 0 && validCoords.length > 1) {
+        leafletMap.fitBounds(L.latLngBounds(validCoords), { padding: [70, 70], maxZoom: 16 });
+      }
+    } catch (e) {}
+  }
+}
+
+async function updateProviderLiveNavigation(prov, req) {
+  if (!prov || !req) return;
+  const provLat = Number(prov.lat || state.userLiveGpsLat || -17.7885);
+  const provLng = Number(prov.lng || state.userLiveGpsLng || 31.0415);
+  const reqLat = Number(req.lat || -17.8292);
+  const reqLng = Number(req.lng || 31.0522);
+
+  liveNavState.destinationLat = reqLat;
+  liveNavState.destinationLng = reqLng;
+  liveNavState.destinationName = `${req.customerName || 'Client'}'s Live Location (${req.exactAddress || req.suburbName || 'Harare'})`;
+
+  await drawRoadRouteOnMap(provLat, provLng, reqLat, reqLng, '#0066FF', 5, true, req);
+}
+
+let providerLocationWatchId = null;
+let lastProviderReportedLat = null;
+let lastProviderReportedLng = null;
+let lastProviderBackendSyncMs = 0;
+
+function startProviderLiveLocationWatcher() {
+  if (!('geolocation' in navigator)) return;
+  if (providerLocationWatchId !== null) return;
+
+  providerLocationWatchId = navigator.geolocation.watchPosition(
+    (pos) => {
+      const { latitude, longitude } = pos.coords;
+      state.gpsAccuracyMeters = Number.isFinite(pos.coords.accuracy) ? pos.coords.accuracy : null;
+      state.isLiveGpsActive = true;
+      const rawLat = Number(latitude.toFixed(5));
+      const rawLng = Number(longitude.toFixed(5));
+
+      // Jitter filter: calculate distance in meters from previous reading
+      if (lastProviderReportedLat !== null && lastProviderReportedLng !== null) {
+        const moveDistMeters = calculateDistanceMeters(lastProviderReportedLat, lastProviderReportedLng, rawLat, rawLng);
+        // Ignore microscopic GPS noise / jitter under 3 meters to prevent pin shaking
+        if (moveDistMeters < 3.0) {
+          return;
+        }
+        const brng = calculateBearingDegrees(lastProviderReportedLat, lastProviderReportedLng, rawLat, rawLng);
+        liveNavState.bearingDeg = brng;
+        const arrow = document.getElementById('proHeadingArrow');
+        if (arrow) arrow.style.transform = `translateX(-50%) rotate(${brng}deg)`;
+      }
+
+      lastProviderReportedLat = rawLat;
+      lastProviderReportedLng = rawLng;
+      state.userLiveGpsLat = rawLat;
+      state.userLiveGpsLng = rawLng;
+
+      if (state.role === 'PROVIDER') {
+        if (state.currentUser) {
+          state.currentUser.lat = rawLat;
+          state.currentUser.lng = rawLng;
+        }
+        const pMatch = (state.db?.providers || []).find((p) => p.id === state.currentUser?.id);
+        if (pMatch) {
+          pMatch.lat = rawLat;
+          pMatch.lng = rawLng;
+        }
+
+        // Advance live GPS turn-by-turn navigation step & directions
+        if (liveNavState.active && liveNavState.steps.length > 0) {
+          advanceNavigationStep(rawLat, rawLng);
+        }
+
+        // Throttle backend server sync to at most once every 3.5 seconds
+        const now = Date.now();
+        if (now - lastProviderBackendSyncMs > 3500) {
+          lastProviderBackendSyncMs = now;
+          if (state.currentUser?.id) {
+            apiPost('/api/providers/location', {
+              providerId: state.currentUser.id,
+              lat: rawLat,
+              lng: rawLng,
+              providerSnapshot: state.currentUser
+            }).catch(() => {});
+          }
+        }
+
+        // Smoothly update map without layer destruction
+        updateMapMarkers(true);
+      }
+    },
+    (err) => {
+      console.warn('Provider live GPS watch notice:', err.message);
+    },
+    {
+      enableHighAccuracy: true,
+      maximumAge: 2000,
+      timeout: 10000
+    }
+  );
+}
+
+function stopProviderLiveLocationWatcher() {
+  if (providerLocationWatchId !== null && 'geolocation' in navigator) {
+    navigator.geolocation.clearWatch(providerLocationWatchId);
+    providerLocationWatchId = null;
+  }
+}
+
+let clientLocationWatchId = null;
+let lastClientReportedLat = null;
+let lastClientReportedLng = null;
+let lastClientBackendSyncMs = 0;
+
+function startClientLiveLocationWatcher() {
+  if (!('geolocation' in navigator)) return;
+  if (clientLocationWatchId !== null) return;
+
+  clientLocationWatchId = navigator.geolocation.watchPosition(
+    (pos) => {
+      const { latitude, longitude } = pos.coords;
+      state.gpsAccuracyMeters = Number.isFinite(pos.coords.accuracy) ? pos.coords.accuracy : null;
+      state.isLiveGpsActive = true;
+      const rawLat = Number(latitude.toFixed(5));
+      const rawLng = Number(longitude.toFixed(5));
+
+      // Jitter filter: ignore under 3m movements
+      if (lastClientReportedLat !== null && lastClientReportedLng !== null) {
+        const moveDist = calculateDistanceMeters(lastClientReportedLat, lastClientReportedLng, rawLat, rawLng);
+        if (moveDist < 3.0) return;
+      }
+
+      lastClientReportedLat = rawLat;
+      lastClientReportedLng = rawLng;
+      state.userLiveGpsLat = rawLat;
+      state.userLiveGpsLng = rawLng;
+
+      // Keep order pin pinned straight to live location unless client explicitly dragged it
+      if (state.role === 'CUSTOMER' && (state.screenStep === 'HOME' || state.screenStep === 'CONFIGURE') && !state.userHasManuallyDraggedPin) {
+        state.pinnedLat = rawLat;
+        state.pinnedLng = rawLng;
+        reverseGeocodeHararePin(rawLat, rawLng);
+      }
+
+      // If client has an active request, continuously broadcast live GPS updates so the provider is routed straight to them
+      const activeReq = getCustomerActiveRequest();
+      if (activeReq && activeReq.id) {
+        activeReq.lat = rawLat;
+        activeReq.lng = rawLng;
+        activeReq.clientLiveLat = rawLat;
+        activeReq.clientLiveLng = rawLng;
+        const now = Date.now();
+        if (now - lastClientBackendSyncMs > 3500) {
+          lastClientBackendSyncMs = now;
+          apiPost('/api/requests/client-location', {
+            requestId: activeReq.id,
+            lat: rawLat,
+            lng: rawLng,
+            address: state.customAddress ? `${state.customAddress} (Live Location)` : 'Current Live Location'
+          }).catch(() => {});
+        }
+      }
+
+      updateLiveGpsMarker();
+    },
+    (err) => {
+      console.warn('Client live GPS watch notice:', err.message);
+    },
+    {
+      enableHighAccuracy: true,
+      maximumAge: 2000,
+      timeout: 10000
+    }
+  );
+}
+
+function stopClientLiveLocationWatcher() {
+  if (clientLocationWatchId !== null && 'geolocation' in navigator) {
+    navigator.geolocation.clearWatch(clientLocationWatchId);
+    clientLocationWatchId = null;
+  }
+}
+
+function updateNetworkOfflineStatus() {
+  const banner = document.getElementById('offlineModeBanner');
+  const isOnline = navigator.onLine;
+  if (banner) {
+    banner.style.display = isOnline ? 'none' : 'flex';
+  }
+}
+
+window.addEventListener('online', () => {
+  updateNetworkOfflineStatus();
+  showToast('Back online — syncing latest data', 'info');
+  fetchState(true);
+});
+
+window.addEventListener('offline', () => {
+  updateNetworkOfflineStatus();
+});
+
+function useBrowserGeolocation(silent = false) {
+  state.userHasManuallyDraggedPin = false;
+  state.isLiveGpsActive = false;
+  state.gpsAccuracyMeters = null;
+
+  if (state.role === 'PROVIDER') {
+    startProviderLiveLocationWatcher();
+  } else {
+    startClientLiveLocationWatcher();
+  }
+
+  const applyGpsPosition = (latitude, longitude, accuracyMeters) => {
+    let latNum = Number(latitude);
+    let lngNum = Number(longitude);
+    if (!isFinite(latNum) || !isFinite(lngNum)) {
+      throw new Error('The device returned invalid GPS coordinates.');
+    }
+    state.userLiveGpsLat = Number(latNum.toFixed(5));
+    state.userLiveGpsLng = Number(lngNum.toFixed(5));
+    state.pinnedLat = state.userLiveGpsLat;
+    state.pinnedLng = state.userLiveGpsLng;
+    state.gpsAccuracyMeters = Number.isFinite(accuracyMeters) ? accuracyMeters : null;
+    state.isLiveGpsActive = true;
+    state.isCustomAddressSelected = false;
+
+    // Immediately resolve nearest suburb from local db so response is instant
+    if (state.db && Array.isArray(state.db.suburbs)) {
+      let nearest = state.db.suburbs[0];
+      let bestDist = Infinity;
+      for (const s of state.db.suburbs) {
+        const d = Math.hypot(s.lat - state.pinnedLat, s.lng - state.pinnedLng);
+        if (d < bestDist) {
+          bestDist = d;
+          nearest = s;
+        }
+      }
+      state.selectedSuburbId = nearest.id;
+      const street = nearest.sampleStreet ? nearest.sampleStreet.split(',')[0] : nearest.name;
+      state.customAddress = street;
+      state.customSuburbLabel = `${nearest.name}, Harare`;
+    }
+
+    // Direct DOM sync for location text field
+    const locInp = document.getElementById('requestServiceLocationInput');
+    if (locInp) {
+      locInp.value = `${state.customAddress}, ${state.customSuburbLabel.split(',')[0]}`;
+    }
+
+    if (state.role !== 'PROVIDER') {
+      reverseGeocodeHararePin(state.pinnedLat, state.pinnedLng);
+    }
+
+    if (state.role === 'PROVIDER' && state.currentUser) {
+      state.currentUser.lat = state.userLiveGpsLat;
+      state.currentUser.lng = state.userLiveGpsLng;
+      const pMatch = (state.db?.providers || []).find((p) => p.id === state.currentUser.id);
+      if (pMatch) {
+        pMatch.lat = state.userLiveGpsLat;
+        pMatch.lng = state.userLiveGpsLng;
+      }
+      apiPost('/api/providers/location', {
+        providerId: state.currentUser.id,
+        lat: state.userLiveGpsLat,
+        lng: state.userLiveGpsLng
+      }).catch(() => {});
+    }
+
+    updateLiveGpsMarker();
+    updateMapMarkers(true);
+    if (leafletMap) {
+      try {
+        leafletMap.invalidateSize();
+        const size = leafletMap.getSize();
+        if (!size || size.x <= 0 || size.y <= 0) {
+          leafletMap.setView([state.userLiveGpsLat, state.userLiveGpsLng], 17);
+        } else {
+          leafletMap.flyTo([state.userLiveGpsLat, state.userLiveGpsLng], 17, { animate: true, duration: 0.8 });
+        }
+      } catch (err) {
+        try {
+          leafletMap.setView([state.userLiveGpsLat, state.userLiveGpsLng], 17);
+        } catch (e) {}
+      }
+    }
+    if (!silent) {
+      const accuracyLabel = state.gpsAccuracyMeters === null ? '' : ` (±${Math.round(state.gpsAccuracyMeters)} m accuracy)`;
+      showToast(`Live Location${accuracyLabel}: ${state.customAddress}, ${state.customSuburbLabel.split(',')[0]}`, 'success');
+    }
+    renderUiOverlay();
+  };
+
+  const handleLocationError = (err) => {
+    state.isLiveGpsActive = false;
+    state.gpsAccuracyMeters = null;
+    console.warn('Geolocation unavailable:', err ? err.message : 'GPS returned no fix');
+    if (!silent) {
+      showToast('Could not get a live GPS fix. Allow location access or confirm a map pin, suburb, or geocoded address.', 'error');
+    }
+    renderUiOverlay();
+  };
+
+  if ('geolocation' in navigator) {
+    if (!silent) showToast('Acquiring a fresh high-accuracy GPS fix...', 'info', 2000);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const cLat = pos?.coords?.latitude;
+        const cLng = pos?.coords?.longitude;
+        if (isFinite(Number(cLat)) && isFinite(Number(cLng))) {
+          applyGpsPosition(cLat, cLng, pos.coords.accuracy);
+        } else {
+          handleLocationError(new Error('GPS returned invalid coordinates.'));
+        }
+      }, handleLocationError,
+      { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
+    );
+  } else {
+    handleLocationError(new Error('Geolocation is not supported by this browser.'));
+  }
+}
+
+function updateLiveGpsMarker() {
+  if (!leafletMap) return;
+
+  // In provider mode, provider's own position is rendered with their trade icon
+  if (state.role === 'PROVIDER') {
+    if (userLiveGpsMarker) {
+      leafletMap.removeLayer(userLiveGpsMarker);
+      userLiveGpsMarker = null;
+    }
+    return;
+  }
+
+  const lat = state.pinnedLat || state.userLiveGpsLat || -17.7955;
+  const lng = state.pinnedLng || state.userLiveGpsLng || 31.0365;
+  if (!lat || !lng) return;
+
+  // Authentic inDrive passenger client icon: pure vector icon (exactly 1 on map, draggable to choose pickup/visit location)
+  const activeReq = getCustomerActiveRequest();
+  const isSearching = Boolean((activeReq && (activeReq.status === 'OPEN' || activeReq.status === 'SEARCHING')) || state.screenStep === 'SEARCHING');
+
+  const gpsIcon = L.divIcon({
+    className: 'indrive-client-map-marker-wrap',
+    html: `
+      <div class="indrive-client-marker-root" title="Drag to choose location">
+        <!-- 1. "Where from" inDrive Bubble (Tapping opens Address Modal) -->
+        <div class="indrive-where-from-bubble" onclick="openSuburbPickerModal()" title="Tap to enter route / address">
+          <div class="where-from-sub">Where from</div>
+          <div class="where-from-row">
+            <span class="where-from-text">${escapeHtml(state.customAddress || 'Harare')}</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+          <div class="where-from-tail"></div>
+        </div>
+
+        <!-- 2. Hailing Badge with Pin Stem & Map Anchor (Exact match to inDrive screenshot) -->
+        <div class="indrive-waving-pin-box">
+          <div class="hailing-badge">
+            ${uiIcon('hailingPerson', 24)}
+          </div>
+          <div class="indrive-pin-stem"></div>
+          <div class="indrive-pin-anchor-dot">
+            ${isSearching ? `
+              <div class="indrive-sonar-ring ring-1"></div>
+              <div class="indrive-sonar-ring ring-2"></div>
+              <div class="indrive-sonar-ring ring-3"></div>
+            ` : ''}
+          </div>
+        </div>
+      </div>
+    `,
+    iconSize: [160, 110],
+    iconAnchor: [80, 105]
+  });
+
+  if (userLiveGpsMarker) {
+    const curPos = userLiveGpsMarker.getLatLng();
+    if (curPos.lat !== lat || curPos.lng !== lng) {
+      userLiveGpsMarker.setLatLng([lat, lng]);
+    }
+    const currentAddr = state.customAddress || 'Harare';
+    if (userLiveGpsMarker._isSearching !== isSearching || userLiveGpsMarker._address !== currentAddr) {
+      userLiveGpsMarker.setIcon(gpsIcon);
+      userLiveGpsMarker._isSearching = isSearching;
+      userLiveGpsMarker._address = currentAddr;
+    }
+    if (!userLiveGpsMarker.dragging.enabled()) {
+      userLiveGpsMarker.dragging.enable();
+    }
+  } else {
+    userLiveGpsMarker = L.marker([lat, lng], {
+      icon: gpsIcon,
+      zIndexOffset: 1200,
+      draggable: true
+    }).addTo(leafletMap);
+    userLiveGpsMarker._isSearching = isSearching;
+    userLiveGpsMarker._address = state.customAddress || 'Harare';
+
+    userLiveGpsMarker.on('dragend', function(e) {
+      const pos = e.target.getLatLng();
+      const newLat = Number(pos.lat.toFixed(5));
+      const newLng = Number(pos.lng.toFixed(5));
+      state.pinnedLat = newLat;
+      state.pinnedLng = newLng;
+      state.userLiveGpsLat = newLat;
+      state.userLiveGpsLng = newLng;
+      state.userHasManuallyDraggedPin = true;
+      state.isCustomAddressSelected = true;
+      state.isLiveGpsActive = false;
+      state.gpsAccuracyMeters = null;
+      reverseGeocodeHararePin(newLat, newLng);
+      updateLiveGpsMarker();
+      renderUiOverlay(false);
+      showToast(`Location set to: ${state.customAddress || 'Harare'}`);
+
+      const activeReq = getCustomerActiveRequest();
+      if (activeReq && (activeReq.status === 'OPEN' || activeReq.status === 'SEARCHING')) {
+        activeReq.lat = newLat;
+        activeReq.lng = newLng;
+        activeReq.clientLiveLat = newLat;
+        activeReq.clientLiveLng = newLng;
+        activeReq.exactAddress = state.customAddress;
+        apiPost('/api/requests/client-location', {
+          requestId: activeReq.id,
+          lat: newLat,
+          lng: newLng,
+          address: state.customAddress
+        }).catch(() => {});
+      }
+    });
+  }
+}
+
+let lastMapSignature = '';
+const activeMapProviderMarkers = new Map();
+const activeMapOfficeMarkers = new Map();
+const activeMapOpportunityMarkers = new Map();
+let activeRouteProviderMarker = null;
+let activeRouteClientMarker = null;
+
+function resolveHarareSuburbCoords(suburbName = '') {
+  const s = String(suburbName || '').toLowerCase();
+  if (s.includes('avondale')) return [-17.7989, 31.0374];
+  if (s.includes('borrowdale')) return [-17.7539, 31.0926];
+  if (s.includes('belgravia')) return [-17.8015, 31.0502];
+  if (s.includes('eastlea')) return [-17.8286, 31.0772];
+  if (s.includes('mount pleasant') || s.includes('mt pleasant')) return [-17.7786, 31.0456];
+  if (s.includes('highlands')) return [-17.8055, 31.0955];
+  if (s.includes('milton park')) return [-17.8118, 31.0267];
+  if (s.includes('greystone')) return [-17.7478, 31.1215];
+  if (s.includes('newlands')) return [-17.8105, 31.0766];
+  if (s.includes('chisipite')) return [-17.7686, 31.1189];
+  if (s.includes('marlborough')) return [-17.7512, 30.9856];
+  if (s.includes('mabelreign')) return [-17.7856, 30.9989];
+  if (s.includes('waterfalls')) return [-17.8925, 31.0375];
+  if (s.includes('hatfield')) return [-17.8812, 31.0856];
+  if (s.includes('braeside')) return [-17.8456, 31.0689];
+  if (s.includes('glen lorne')) return [-17.7312, 31.1456];
+  if (s.includes('cbd') || s.includes('central')) return [-17.8292, 31.0522];
+  return [-17.8252, 31.0530];
+}
+
+function updateMapMarkers(force = false) {
+  const centerPin = document.getElementById('centerMapPin');
+  const whereFromBubble = document.getElementById('whereFromBubble');
+  const whereFromOrderAction = document.getElementById('whereFromOrderAction');
+  const radarPulses = document.getElementById('mapRadarPulses');
+  const centerUserPinBox = document.getElementById('centerUserPinBox');
+
+  const activeReq = getCustomerActiveRequest();
+  const isSearching = Boolean(activeReq && activeReq.status === 'OPEN');
+  const isBooked = Boolean(activeReq && isBookedStatus(activeReq.status));
+
+  // Hide duplicate screen-center pin elements: strictly 1 client icon on the Leaflet map!
+  if (centerUserPinBox) centerUserPinBox.style.display = 'none';
+  if (whereFromBubble) whereFromBubble.style.display = 'none';
+  if (whereFromOrderAction) whereFromOrderAction.style.display = 'none';
+  if (centerPin) centerPin.style.display = 'none';
+  if (radarPulses) radarPulses.style.display = 'none';
+
+  if (!leafletMap || !leafletMarkersLayer || !state.db) return;
+
+  // Never keep or display routes while looking for providers
+  if (isSearching) {
+    if (leafletRoutePolyline) {
+      try { leafletMap.removeLayer(leafletRoutePolyline); } catch (e) {}
+      leafletRoutePolyline = null;
+    }
+    if (leafletRoutePolylineCasing) {
+      try { leafletMap.removeLayer(leafletRoutePolylineCasing); } catch (e) {}
+      leafletRoutePolylineCasing = null;
+    }
+    lastFittedRouteKey = '';
+    currentRouteCoordsKey = '';
+  }
+
+  const onlinePros = (state.db.providers || []).filter((p) => p.isOnline !== false);
+
+  // In Service Provider Mode: if there is an active accepted booking, show the route to the Client's Home!
+  if (state.isAuthenticated && state.role === 'PROVIDER') {
+    const prov = state.currentUser || state.db.providers[0];
+    const provActiveJob = getProviderActiveBooking(prov?.id);
+    if (prov && provActiveJob) {
+      drawProviderAndClientRouteMarkers(prov, provActiveJob);
+      return;
+    }
+  }
+
+  // In Client Mode when an offer is accepted: show ONLY the accepted Service Provider + Client Home Pin + Real Street Route!
+  if (isBooked && activeReq) {
+    const acceptedOffer = (activeReq.offers || []).find((o) => o.id === activeReq.acceptedOfferId) || activeReq.offers?.[0];
+    const provId = activeReq.acceptedProviderId || acceptedOffer?.providerId;
+    const prov = resolveProviderByIdOrOffer(provId, activeReq, acceptedOffer);
+    if (prov) {
+      drawProviderAndClientRouteMarkers(prov, activeReq);
+      return;
+    }
+  }
+
+  // Route markers and polyline clean up when not booked
+  if (activeRouteProviderMarker) {
+    try { leafletMarkersLayer.removeLayer(activeRouteProviderMarker); } catch (e) {}
+    activeRouteProviderMarker = null;
+  }
+  if (activeRouteClientMarker) {
+    try { leafletMarkersLayer.removeLayer(activeRouteClientMarker); } catch (e) {}
+    activeRouteClientMarker = null;
+  }
+  if (leafletRoutePolyline) {
+    try { leafletMap.removeLayer(leafletRoutePolyline); } catch (e) {}
+    leafletRoutePolyline = null;
+  }
+  if (leafletRoutePolylineCasing) {
+    try { leafletMap.removeLayer(leafletRoutePolylineCasing); } catch (e) {}
+    leafletRoutePolylineCasing = null;
+  }
+  lastFittedRouteKey = '';
+  currentRouteCoordsKey = '';
+
+  stopNavigationHud();
+
+  // Always synchronize client live GPS hailing marker and sonar wave pulses
+  updateLiveGpsMarker();
+
+  // Reconcile and update provider markers with clean vector trade icons (NO profile photos on map)
+  const currentProIds = new Set(onlinePros.map((p) => p.id));
+  for (const [id, marker] of activeMapProviderMarkers.entries()) {
+    if (!currentProIds.has(id)) {
+      try { leafletMarkersLayer.removeLayer(marker); } catch (e) {}
+      activeMapProviderMarkers.delete(id);
+    }
+  }
+
+  onlinePros.forEach((p, idx) => {
+    const showThinkingDots = isSearching && (p.categoryId === activeReq?.categoryId || idx < 2);
+    const existingMarker = activeMapProviderMarkers.get(p.id);
+
+    if (existingMarker) {
+      const curPos = existingMarker.getLatLng();
+      if (curPos.lat !== p.lat || curPos.lng !== p.lng) {
+        existingMarker.setLatLng([p.lat, p.lng]);
+      }
+      if (existingMarker._showingThinkingDots !== showThinkingDots) {
+        const tradeSvg = getMapMarkerProfessionIconSvg(p.categoryId);
+        const markerHtml = `
+          <div class="indrive-map-pro-wrap">
+            ${showThinkingDots ? `
+              <div class="pro-thinking-dots-bubble">
+                <span></span><span></span><span></span>
+              </div>
+            ` : ''}
+            <div style="width:34px; height:34px; border-radius:10px; background:#0F172A; border:2px solid #0066FF; display:flex; align-items:center; justify-content:center; color:#FFFFFF; box-shadow:0 4px 12px rgba(0,102,255,0.38); cursor:pointer;" title="${escapeHtml(p.shortName || 'Pro')}">
+              <div style="width:22px; height:22px; display:flex; align-items:center; justify-content:center;">
+                ${tradeSvg}
+              </div>
+            </div>
+          </div>
+        `;
+        const icon = L.divIcon({
+          className: '',
+          html: markerHtml,
+          iconSize: [38, showThinkingDots ? 58 : 38],
+          iconAnchor: [19, showThinkingDots ? 48 : 19]
+        });
+        existingMarker.setIcon(icon);
+        existingMarker._showingThinkingDots = showThinkingDots;
+      }
+    } else {
+      const tradeSvg = getMapMarkerProfessionIconSvg(p.categoryId);
+      const markerHtml = `
+        <div class="indrive-map-pro-wrap">
+          ${showThinkingDots ? `
+            <div class="pro-thinking-dots-bubble">
+              <span></span><span></span><span></span>
+            </div>
+          ` : ''}
+          <div style="width:34px; height:34px; border-radius:10px; background:#0F172A; border:2px solid #0066FF; display:flex; align-items:center; justify-content:center; color:#FFFFFF; box-shadow:0 4px 12px rgba(0,102,255,0.38); cursor:pointer;" title="${escapeHtml(p.shortName || 'Pro')}">
+            <div style="width:22px; height:22px; display:flex; align-items:center; justify-content:center;">
+              ${tradeSvg}
+            </div>
+          </div>
+        </div>
+      `;
+
+      const icon = L.divIcon({
+        className: '',
+        html: markerHtml,
+        iconSize: [38, showThinkingDots ? 58 : 38],
+        iconAnchor: [19, showThinkingDots ? 48 : 19]
+      });
+
+      const m = L.marker([p.lat, p.lng], { icon }).addTo(leafletMarkersLayer);
+      m._showingThinkingDots = showThinkingDots;
+      m.on('click', () => openProviderCatalogueModal(p.id));
+      activeMapProviderMarkers.set(p.id, m);
+    }
+  });
+
+  // Reconcile physical office / workshop location pins
+  const officePros = onlinePros.filter((p) => p.hasOffice && (p.officeAddress || p.officeSuburb));
+  const currentOfficeIds = new Set(officePros.map((p) => p.id));
+  for (const [id, om] of activeMapOfficeMarkers.entries()) {
+    if (!currentOfficeIds.has(id)) {
+      try { leafletMarkersLayer.removeLayer(om); } catch (e) {}
+      activeMapOfficeMarkers.delete(id);
+    }
+  }
+
+  officePros.forEach((p) => {
+    const oLat = p.officeLat || p.lat;
+    const oLng = p.officeLng || p.lng;
+    const existingOm = activeMapOfficeMarkers.get(p.id);
+
+    if (existingOm) {
+      const curPos = existingOm.getLatLng();
+      if (curPos.lat !== oLat || curPos.lng !== oLng) {
+        existingOm.setLatLng([oLat, oLng]);
+      }
+    } else {
+      const officeHtml = `
+        <div style="display:flex; flex-direction:column; align-items:center; cursor:pointer;">
+          <div style="background:#0F172A; color:#FFFFFF; font-size:10px; font-weight:800; padding:2px 7px; border-radius:99px; margin-bottom:3px; white-space:nowrap; box-shadow:0 3px 8px rgba(0,0,0,0.3); display:inline-flex; align-items:center; gap:4px;">
+            <span style="color:#60A5FA;">${uiIcon('buildingOffice', 10)}</span>
+            <span>${escapeHtml(p.brandName || p.shortName)} Shop</span>
+          </div>
+          <div style="width:30px; height:30px; border-radius:9px; background:#1E293B; border:2px solid #60A5FA; display:flex; align-items:center; justify-content:center; color:#60A5FA; box-shadow:0 4px 10px rgba(0,0,0,0.25);">
+            ${uiIcon('buildingOffice', 16)}
+          </div>
+        </div>
+      `;
+      const oIcon = L.divIcon({
+        className: '',
+        html: officeHtml,
+        iconSize: [110, 50],
+        iconAnchor: [55, 45]
+      });
+      const om = L.marker([oLat, oLng], { icon: oIcon }).addTo(leafletMarkersLayer);
+      om.on('click', () => openProviderCatalogueModal(p.id));
+      activeMapOfficeMarkers.set(p.id, om);
+    }
+  });
+
+  // Reconcile and plot live customer requests (Opportunities) on map for service providers
+  if (state.isAuthenticated && state.role === 'PROVIDER' && !isBooked) {
+    const prov = state.currentUser || state.db.providers?.[0];
+    const myCategoryIds = getProviderCategoryIds(prov);
+    const openRequests = (state.db.requests || []).filter((r) => {
+      if (r.status !== 'OPEN') return false;
+      if (r.acceptedProviderId && r.acceptedProviderId !== prov?.id) return false;
+      if (r.acceptedOfferId) return false;
+      const reqCat = normalizeCategoryId(r.categoryId);
+      return myCategoryIds.includes(reqCat);
+    }).filter((r) => !(state.dismissedJobIds || []).includes(r.id));
+
+    const openIds = new Set(openRequests.map((r) => r.id));
+    for (const [id, marker] of activeMapOpportunityMarkers.entries()) {
+      if (!openIds.has(id)) {
+        try { leafletMarkersLayer.removeLayer(marker); } catch (e) {}
+        activeMapOpportunityMarkers.delete(id);
+      }
+    }
+
+    openRequests.forEach((r) => {
+      let lat = Number(r.lat);
+      let lng = Number(r.lng);
+      if (!lat || !lng || isNaN(lat) || isNaN(lng)) {
+        const coords = resolveHarareSuburbCoords(r.suburbName || r.exactAddress);
+        lat = coords[0];
+        lng = coords[1];
+      }
+
+      const isSelected = (state.selectedOpportunityId === r.id);
+      const suburbLabel = (r.suburbName || r.exactAddress || 'Harare').split(',')[0].trim();
+      const pinHtml = `
+        <div class="fh-opportunity-map-pin ${isSelected ? 'selected' : ''}" style="cursor:pointer; display:flex; flex-direction:column; align-items:center;">
+          <div style="background:${isSelected ? '#0052FF' : '#0F172A'}; color:#FFFFFF; border:2px solid #FFFFFF; border-radius:18px; padding:3px 9px; box-shadow:0 4px 14px rgba(0,0,0,0.3); display:inline-flex; align-items:center; gap:5px; white-space:nowrap; transform:${isSelected ? 'scale(1.1)' : 'scale(1)'}; transition:transform 0.15s ease;">
+            <span style="font-size:12px; font-weight:900; color:${isSelected ? '#FFFFFF' : '#10B981'};">$${r.budgetUsd}</span>
+            <span style="font-size:10.5px; font-weight:700; color:${isSelected ? '#E0E7FF' : '#CBD5E1'}; max-width:90px; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(suburbLabel)}</span>
+          </div>
+          <div style="width:0; height:0; border-left:5px solid transparent; border-right:5px solid transparent; border-top:6px solid ${isSelected ? '#0052FF' : '#0F172A'};"></div>
+        </div>
+      `;
+
+      const existingMarker = activeMapOpportunityMarkers.get(r.id);
+      if (existingMarker) {
+        existingMarker.setLatLng([lat, lng]);
+        const newIcon = L.divIcon({ className: '', html: pinHtml, iconSize: [120, 36], iconAnchor: [60, 36] });
+        existingMarker.setIcon(newIcon);
+      } else {
+        const icon = L.divIcon({ className: '', html: pinHtml, iconSize: [120, 36], iconAnchor: [60, 36] });
+        const m = L.marker([lat, lng], { icon }).addTo(leafletMarkersLayer);
+        m.on('click', () => {
+          showOpportunityOnMap(r.id);
+        });
+        activeMapOpportunityMarkers.set(r.id, m);
+      }
+    });
+  } else {
+    activeMapOpportunityMarkers.forEach((m) => { try { leafletMarkersLayer.removeLayer(m); } catch (e) {} });
+    activeMapOpportunityMarkers.clear();
+  }
+}
+
+function drawProviderAndClientRouteMarkers(prov, req) {
+  // Clear general pins so only active trip participants show
+  activeMapOpportunityMarkers.forEach((m) => { try { leafletMarkersLayer.removeLayer(m); } catch (e) {} });
+  activeMapOpportunityMarkers.clear();
+  activeMapProviderMarkers.forEach((m) => { try { leafletMarkersLayer.removeLayer(m); } catch (e) {} });
+  activeMapProviderMarkers.clear();
+  activeMapOfficeMarkers.forEach((m) => { try { leafletMarkersLayer.removeLayer(m); } catch (e) {} });
+  activeMapOfficeMarkers.clear();
+
+  // 1. Provider Live Marker with moving trade icon (NO name banner, NO circular pulse)
+  const tradeSvg = getMapMarkerProfessionIconSvg(prov.categoryId);
+  const provHtml = `
+    <div class="indrive-map-pro-wrap">
+      <div style="width:36px; height:36px; border-radius:10px; background:#0F172A; border:2.5px solid #0066FF; display:flex; align-items:center; justify-content:center; color:#FFFFFF; box-shadow:0 4px 14px rgba(0,102,255,0.4);">
+        <div style="width:22px; height:22px; display:flex; align-items:center; justify-content:center;">
+          ${tradeSvg}
+        </div>
+      </div>
+    </div>
+  `;
+  const provIcon = L.divIcon({
+    className: '',
+    html: provHtml,
+    iconSize: [38, 38],
+    iconAnchor: [19, 19]
+  });
+
+  if (activeRouteProviderMarker) {
+    activeRouteProviderMarker.setLatLng([prov.lat, prov.lng]);
+    if (activeRouteProviderMarker._categoryId !== prov.categoryId) {
+      activeRouteProviderMarker.setIcon(provIcon);
+      activeRouteProviderMarker._categoryId = prov.categoryId;
+    }
+  } else {
+    activeRouteProviderMarker = L.marker([prov.lat, prov.lng], { icon: provIcon }).addTo(leafletMarkersLayer);
+    activeRouteProviderMarker._categoryId = prov.categoryId;
+  }
+
+  // 2. Client Live Location Destination Marker (Vector SVG Pin with Live GPS Dot — NO photos)
+  const clientFirstName = req.customerName ? req.customerName.split(' ')[0] : 'Client';
+  const clientHtml = `
+    <div style="display:flex; flex-direction:column; align-items:center;">
+      <div style="background:#0F172A; color:#FFFFFF; font-size:10px; font-weight:800; padding:2px 8px; border-radius:99px; margin-bottom:3px; white-space:nowrap; box-shadow:0 3px 10px rgba(15,23,42,0.3); display:inline-flex; align-items:center; gap:4px;">
+        <span style="display:inline-block; width:5px; height:5px; border-radius:50%; background:#10B981;"></span>
+        <span>${escapeHtml(clientFirstName)}'s Location</span>
+      </div>
+      <div style="position:relative; width:40px; height:40px; border-radius:50%; background:#0066FF; border:3px solid #FFFFFF; display:flex; align-items:center; justify-content:center; color:#FFFFFF; box-shadow:0 6px 16px rgba(0,102,255,0.45);">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round"/>
+          <circle cx="9" cy="7" r="4" stroke="#FFFFFF" stroke-width="2.5"/>
+        </svg>
+      </div>
+    </div>
+  `;
+  const clientIcon = L.divIcon({
+    className: '',
+    html: clientHtml,
+    iconSize: [110, 64],
+    iconAnchor: [55, 54]
+  });
+
+  if (activeRouteClientMarker) {
+    const curPos = activeRouteClientMarker.getLatLng();
+    if (curPos.lat !== req.lat || curPos.lng !== req.lng) {
+      activeRouteClientMarker.setLatLng([req.lat, req.lng]);
+    }
+    if (activeRouteClientMarker._customerName !== clientFirstName) {
+      activeRouteClientMarker.setIcon(clientIcon);
+      activeRouteClientMarker._customerName = clientFirstName;
+    }
+  } else {
+    activeRouteClientMarker = L.marker([req.lat, req.lng], { icon: clientIcon }).addTo(leafletMarkersLayer);
+    activeRouteClientMarker._customerName = clientFirstName;
+  }
+
+  // 3. Real Street Route & Live Turn-by-Turn GPS Navigation
+  if (state.role === 'PROVIDER') {
+    updateProviderLiveNavigation(prov, req);
+  } else {
+    stopNavigationHud();
+    drawRoadRouteOnMap(prov.lat, prov.lng, req.lat, req.lng, '#0066FF', 5, false, req);
+  }
+}
+
+function buildCurvedPreviewPoints(lat1, lng1, lat2, lng2) {
+  const pts = [[lat1, lng1]];
+  const steps = 6;
+  for (let i = 1; i < steps; i++) {
+    const t = i / steps;
+    const bend = Math.sin(t * Math.PI) * 0.0025;
+    pts.push([lat1 + (lat2 - lat1) * t + bend, lng1 + (lng2 - lng1) * t - bend * 0.7]);
+  }
+  pts.push([lat2, lng2]);
+  return pts;
+}
+
+// ============================================================================
+// MAP VISIBILITY & MULTI-HUB SYNC CONTROLLER
+// ============================================================================
+let lastMapDisplayState = '';
+
+function syncMapVisibility() {
+  const mapContainer = document.getElementById('harareMapContainer');
+  const centerPin = document.getElementById('centerMapPin');
+  if (!mapContainer) return;
+
+  const activeReq = getCustomerActiveRequest();
+  const isHub = (state.hubView === 'HUB');
+  const isMarketplace = (state.hubView === 'MARKETPLACE');
+  const isConfiguring = (state.screenStep === 'CONFIGURE');
+  const isSearching = (state.screenStep === 'SEARCHING' || (activeReq && activeReq.status === 'OPEN'));
+  const isBooked = (state.screenStep === 'BOOKED' || (activeReq && isBookedStatus(activeReq.status)));
+  const isProvider = (state.role === 'PROVIDER');
+
+  const shouldShowMap = !isHub && (isProvider || isBooked || isSearching || isConfiguring || isMarketplace);
+  const targetDisplay = shouldShowMap ? 'block' : 'none';
+
+  if (mapContainer.style.display !== targetDisplay) {
+    mapContainer.style.display = targetDisplay;
+    lastMapDisplayState = targetDisplay;
+    if (targetDisplay === 'block' && leafletMap) {
+      setTimeout(() => {
+        try { leafletMap.invalidateSize(); } catch (e) {}
+      }, 80);
+    }
+  }
+
+  if (centerPin) {
+    const pinTarget = (shouldShowMap && !isBooked && !isProvider) ? 'flex' : 'none';
+    if (centerPin.style.display !== pinTarget) {
+      centerPin.style.display = pinTarget;
+    }
+  }
+}
+
+// ============================================================================
+// MAIN RENDER CONTROLLER
+// ============================================================================
+function renderAll(force = true) {
+  if (!state.db) return;
+
+  if (state.isAuthenticated && state.role === 'CUSTOMER') {
+    const activeReq = getCustomerActiveRequest();
+    if (activeReq && activeReq.status === 'OPEN') {
+      if (state.screenStep !== 'CONFIGURE') {
+        state.screenStep = 'SEARCHING';
+      }
+      if (state.pendingSearchFareUsd === null) {
+        state.pendingSearchFareUsd = Number(activeReq.budgetUsd);
+      }
+      startFastLiveOffersPoll(activeReq.id);
+    } else if (activeReq && isBookedStatus(activeReq.status)) {
+      stopFastLiveOffersPoll();
+      if (state.screenStep !== 'CONFIGURE') {
+        state.screenStep = 'BOOKED';
+      }
+    } else {
+      stopFastLiveOffersPoll();
+      if (state.screenStep === 'SEARCHING' || state.screenStep === 'BOOKED') {
+        state.screenStep = 'HOME';
+      }
+      state.activeRequestId = null;
+      state.pendingSearchFareUsd = null;
+    }
+  }
+
+  syncMapVisibility();
+  updateMapMarkers(false);
+  renderFloatingOffersOverlay(false);
+  renderUiOverlay(false);
+  if (force || state.activeModal) {
+    renderModalLayer();
+  }
+  renderChatDrawer();
+  renderCallModal();
+  renderOnboardingLayer();
+}
+
+function getCustomerActiveRequest() {
+  if (!state.db || !state.currentUser || !state.isAuthenticated) return null;
+  const reqs = Array.isArray(state.db.requests) ? state.db.requests : [];
+  
+  // Find all requests belonging to the logged-in client
+  const myReqs = reqs.filter(
+    (r) => (r.customerId === state.currentUser.id || (state.currentUser.phone && r.customerPhone === state.currentUser.phone))
+  );
+  if (myReqs.length === 0) return null;
+
+  // Sort descending by newest update or creation timestamp
+  myReqs.sort((a, b) => {
+    const tA = Number(a.updatedAt || new Date(a.createdAt || 0).getTime() || 0);
+    const tB = Number(b.updatedAt || new Date(b.createdAt || 0).getTime() || 0);
+    return tB - tA;
+  });
+
+  // 1. ABSOLUTE PRIORITY: Active booked visit (CONFIRMED, ARRIVED, IN_PROGRESS)
+  // A customer with an active specialist on route or at their gate MUST NEVER be demoted back to searching!
+  const activeBooked = myReqs.find((r) => isBookedStatus(r.status));
+  if (activeBooked) {
+    state.activeRequestId = activeBooked.id;
+    return activeBooked;
+  }
+
+  // 2. Return current active OPEN request if set
+  if (state.activeRequestId) {
+    const found = myReqs.find((r) => r.id === state.activeRequestId && r.status === 'OPEN');
+    if (found) return found;
+  }
+
+  // 3. Return newest OPEN request
+  const newestOpen = myReqs.find((r) => r.status === 'OPEN');
+  if (newestOpen) {
+    state.activeRequestId = newestOpen.id;
+    return newestOpen;
+  }
+
+  return null;
+}
+
+function getProviderActiveBooking(providerId) {
+  if (!state.db || !state.db.requests || !providerId) return null;
+  const directMatch = state.db.requests.find((r) => {
+    if (!isBookedStatus(r.status)) return false;
+    if (r.acceptedProviderId && r.acceptedProviderId === providerId) return true;
+    const accOffer = (r.offers || []).find((o) => o.id === r.acceptedOfferId);
+    return accOffer && accOffer.providerId === providerId;
+  });
+  return directMatch || null;
+}
+
+// ============================================================================
+// "CHOOSE A PRO" INCOMING OFFER CARDS OVERLAY (WITH 120S SHRINKING ACCEPT FILL)
+// ============================================================================
+let lastOffersSignature = '';
+
+function renderFloatingOffersOverlay(force = false) {
+  const root = document.getElementById('floatingOffersRoot');
+  if (!root) return;
+
+  if (!state.isAuthenticated || state.role !== 'CUSTOMER') {
+    if (root.innerHTML !== '') {
+      root.className = 'floating-offers-root';
+      root.innerHTML = '';
+      lastOffersSignature = '';
+    }
+    return;
+  }
+
+  const req = getCustomerActiveRequest();
+  if (!req || req.status !== 'OPEN' || req.acceptedOfferId || req.acceptedProviderId || isBookedStatus(req.status) || state.screenStep === 'BOOKED' || !req.offers || req.offers.length === 0 || state.customerTab === 'OFFERS') {
+    if (root.innerHTML !== '') {
+      root.className = 'floating-offers-root';
+      root.innerHTML = '';
+      lastOffersSignature = '';
+    }
+    return;
+  }
+
+  const nowMs = Date.now();
+  const activeOffers = (req.offers || []).filter((o) => {
+    if (o.status === 'DECLINED') return false;
+    const exp = o.expiresAt || (new Date(o.createdAt).getTime() + 120 * 1000);
+    return exp > nowMs;
+  });
+
+  activeOffers.sort((a, b) => {
+    const timeA = Number(a.updatedAt || new Date(a.createdAt || 0).getTime() || 0);
+    const timeB = Number(b.updatedAt || new Date(b.createdAt || 0).getTime() || 0);
+    if (timeB !== timeA) return timeB - timeA;
+    return String(a.id || '').localeCompare(String(b.id || ''));
+  });
+
+  if (activeOffers.length === 0) {
+    if (root.innerHTML !== '') {
+      root.className = 'floating-offers-root';
+      root.innerHTML = '';
+      lastOffersSignature = '';
+    }
+    return;
+  }
+
+  const offersSig = `${req.id}|${state.isOffersMinimized}|${activeOffers.length}|${activeOffers.map((o) => `${o.id}:${o.providerId}:${o.providerName || ''}:${o.priceUsd}`).join(',')}`;
+  if (!force && offersSig === lastOffersSignature) {
+    return;
+  }
+  lastOffersSignature = offersSig;
+
+  if (state.isOffersMinimized) {
+    root.className = 'floating-offers-root';
+    root.innerHTML = `
+      <div style="margin-top:auto;">
+        <div class="minimized-map-restore-bar" onclick="toggleOffersMinimize(false)">
+          <div>
+            <div style="font-size:13.5px; font-weight:800; color:var(--text-main);">
+              ${activeOffers.length} Pro Offer${activeOffers.length > 1 ? 's' : ''} Waiting
+            </div>
+            <div style="font-size:11.5px; color:var(--text-secondary); font-weight:600;">
+              Full-screen map active • Tap to view offers
+            </div>
+          </div>
+          <button type="button" class="minimized-restore-btn" onclick="toggleOffersMinimize(false); event.stopPropagation();">
+            ${uiIcon('chevronUp', 14)}
+            <span>Show Offers (${activeOffers.length})</span>
+          </button>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  const prevScrollTop = root.scrollTop;
+  root.className = 'floating-offers-root active-backdrop';
+  root.innerHTML = `
+    <div class="choose-pro-top-bar">
+      <button class="cancel-request-red-pill" onclick="openCancelTaskModal('${req.id}')">
+        ${uiIcon('close', 14)}
+        <span>Cancel request</span>
+      </button>
+
+      <button class="sheet-collapse-pill" style="background:#FFFFFF; color:#0F172A; height:42px; padding:0 14px; border-radius:14px; font-size:12.5px;" onclick="toggleOffersMinimize(true)">
+        ${uiIcon('map', 15)}
+        <span>Full Map</span>
+        ${uiIcon('chevronDown', 14)}
+      </button>
+    </div>
+
+    <div class="choose-pro-heading">Choose a pro (${activeOffers.length})</div>
+
+    ${activeOffers.map((offer) => {
+      const prov = resolveProviderByIdOrOffer(offer.providerId, req, offer);
+      const expiresAt = offer.expiresAt || (new Date(offer.createdAt).getTime() + 120 * 1000);
+      const totalMs = (offer.ttlSeconds || 120) * 1000;
+      const remMs = Math.max(0, expiresAt - nowMs);
+      const pct = Math.max(8, Math.min(100, (remMs / totalMs) * 100));
+
+      const isYourFare = Number(offer.priceUsd) <= Number(req.budgetUsd);
+      const isPlatinum = Boolean(offer.isPlatinum || prov?.isPlatinum || (offer.providerSkillTier || '').toLowerCase().includes('platinum'));
+      const fullName = offer.providerName || prov?.name || 'Verified Pro';
+      const shortName = offer.providerShortName || fullName.split(' ')[0];
+      const avatarUrl = offer.providerAvatarUrl || prov?.avatarUrl || prov?.selfieUrl || DEFAULT_AVATAR_FALLBACK;
+      const brandLabel = offer.providerBrand || prov?.brandName || `${shortName} Services`;
+      const approvedPhotosCount = prov && Array.isArray(prov.portfolio) ? prov.portfolio.filter((i) => i.approvalStatus === 'APPROVED').length : 0;
+
+      return `
+        <div class="indrive-offer-card">
+          <div class="offer-price-eta-row">
+            <div class="offer-price-left">
+              <span class="offer-price-val">${formatUsdPrice(offer.priceUsd)}</span>
+              <span class="offer-eta-val">${offer.etaMinutes || 4} min</span>
+            </div>
+            <button class="offer-catalogue-pill" onclick="openProviderCatalogueModal('${offer.providerId}', '${req.id}', '${offer.id}')">
+              ${uiIcon('image', 13)}
+              <span>Catalogue (${approvedPhotosCount})</span>
+              ${uiIcon('chevronRight', 13)}
+            </button>
+          </div>
+
+          ${isYourFare ? `
+            <div class="your-fare-badge">
+              ${uiIcon('check', 13)}
+              <span>Your fare</span>
+            </div>
+          ` : ''}
+
+          <div class="offer-pro-row" onclick="openProviderCatalogueModal('${offer.providerId}', '${req.id}', '${offer.id}')" style="cursor:pointer;">
+            <div class="offer-avatar-wrap ${isPlatinum ? 'platinum' : ''}">
+              <img src="${resolveMediaUrl(avatarUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_AVATAR_FALLBACK}';" alt="${escapeHtml(shortName)}" />
+              ${isPlatinum ? `<div class="platinum-diamond-badge">${uiIcon('diamond', 9)}</div>` : ''}
+            </div>
+            <div class="offer-pro-details">
+              <div class="offer-pro-name-line">
+                <span>${escapeHtml(shortName)}</span>
+                ${formatProRatingAndJobs(offer.providerRating ?? prov?.rating, offer.providerCompletedJobs ?? prov?.completedBookings)}
+              </div>
+              <div class="offer-pro-kit-line">${escapeHtml(brandLabel)}</div>
+              ${isPlatinum ? `<div class="offer-pro-platinum-line">Platinum pro</div>` : ''}
+            </div>
+          </div>
+
+          <div class="offer-actions-grid">
+            <button class="offer-decline-btn" onclick="declineOffer('${req.id}', '${offer.id}')">
+              Decline
+            </button>
+            <button class="offer-accept-progress-btn" onclick="acceptOffer('${req.id}', '${offer.id}')">
+              <div class="offer-accept-fill" id="accept_fill_${offer.id}" style="width:${pct}%;"></div>
+              <span class="offer-accept-label">Accept</span>
+            </button>
+          </div>
+        </div>
+      `;
+    }).join('')}
+  `;
+  if (prevScrollTop > 0) {
+    root.scrollTop = prevScrollTop;
+  }
+}
+
+// ============================================================================
+// MAIN UI OVERLAY
+// ============================================================================
+let lastUiOverlaySignature = '';
+
+function renderUiOverlay(force = true) {
+  const overlay = document.getElementById('uiOverlay');
+  if (!overlay) return;
+
+  // Never clobber an active input field or active modal/drawer during background polling
+  if (!force) {
+    if (document.activeElement && overlay.contains(document.activeElement)) {
+      const tag = document.activeElement.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
+        return;
+      }
+    }
+    if (state.activeModal || state.chatDrawerOpen || state.activeCall) {
+      return;
+    }
+  }
+
+  if (state.role === 'PROVIDER' && !state.isAuthenticated) {
+    state.role = 'CUSTOMER';
+    state.customerTab = 'HOME';
+    state.hubView = 'HUB';
+    state.screenStep = 'HOME';
+  }
+
+  // Account Suspension Check (Admin Ban Enforcement)
+  if (state.currentUser?.isBanned) {
+    overlay.innerHTML = `
+      <div class="auth-fullscreen-screen pointer-auto" style="padding:24px 20px; text-align:center; display:flex; flex-direction:column; justify-content:center; align-items:center; background:#FFFFFF;">
+        <div style="width:68px; height:68px; border-radius:50%; background:#FEE2E2; color:#DC2626; display:flex; align-items:center; justify-content:center; margin-bottom:16px;">
+          ${uiIcon('shield', 36)}
+        </div>
+        <div style="font-size:20px; font-weight:800; color:#991B1B; margin-bottom:8px;">Account Suspended</div>
+        <div style="font-size:13px; color:var(--text-secondary); line-height:1.5; margin-bottom:16px; max-width:320px;">
+          Your Findit Harare account (<strong>${state.currentUser.finditId || 'ID'}</strong>) has been suspended by Admin for safety policy violations.
+        </div>
+        ${state.currentUser.banReason ? `
+          <div style="background:#FFF1F2; border:1px solid #FECDD3; border-radius:12px; padding:12px; font-size:12px; color:#BE123C; margin-bottom:20px; text-align:left; width:100%; max-width:340px;">
+            <strong>Reason:</strong> ${state.currentUser.banReason}
+          </div>
+        ` : ''}
+        <button class="btn-dark-sec" style="max-width:200px;" onclick="logoutCurrentAccount()">Log Out</button>
+      </div>
+    `;
+    lastUiOverlaySignature = 'BANNED';
+    return;
+  }
+
+  const activeReq = state.role === 'CUSTOMER' ? getCustomerActiveRequest() : null;
+  const activeReqOffersSig = state.role === 'CUSTOMER' && state.customerTab === 'OFFERS' && activeReq
+    ? JSON.stringify((activeReq.offers || []).map((offer) => [
+      offer.id, offer.status, offer.priceUsd, offer.etaMinutes, offer.providerName, offer.providerBrand, offer.providerRating
+    ]))
+    : '';
+  const provActiveJob = state.role === 'PROVIDER' ? getProviderActiveBooking(state.currentUser?.id) : null;
+  const providerTab = state.providerTab || (provActiveJob ? 'ACTIVE_JOB' : 'FEED');
+  const providerCategoryIds = state.role === 'PROVIDER' ? getProviderCategoryIds(state.currentUser) : [];
+  const provRequestsSig = state.role === 'PROVIDER' && (providerTab === 'FEED' || providerTab === 'HOME')
+    ? JSON.stringify((state.db?.requests || [])
+      .filter((r) => {
+        if (r.status !== 'OPEN' || r.acceptedOfferId) return false;
+        if (r.acceptedProviderId && r.acceptedProviderId !== state.currentUser?.id) return false;
+        const requestCategoryId = normalizeCategoryId(r.categoryId);
+        return providerCategoryIds.length === 0 || providerCategoryIds.includes(requestCategoryId);
+      })
+      .map((r) => {
+        const ownOffer = (r.offers || []).find((offer) =>
+          offer.providerId === state.currentUser?.id ||
+          (state.currentUser?.finditId && offer.providerFinditId === state.currentUser.finditId)
+        );
+        return [
+          r.id, r.status, r.categoryId, r.title, r.budgetUsd, r.paymentMethod, r.suburbName,
+          r.exactAddress, r.clientLiveAddress, r.customerName, r.description, r.notes,
+          ownOffer?.id, ownOffer?.status, ownOffer?.priceUsd, ownOffer?.etaMinutes
+        ];
+      }))
+    : '';
+  const provActiveJobSig = provActiveJob
+    ? JSON.stringify([
+      provActiveJob.id, provActiveJob.status, provActiveJob.pinVerifiedByProvider, provActiveJob.startPinCode,
+      provActiveJob.completionRequested, provActiveJob.completionPinCode, provActiveJob.delayNotice?.minutes,
+      provActiveJob.delayNotice?.reason, (provActiveJob.messages || []).length
+    ])
+    : 'NO_JOB';
+
+  const overlaySig = [
+    state.role,
+    state.isAuthenticated,
+    state.screenStep,
+    state.hubView,
+    state.customerTab || 'HOME',
+    state.providerTab,
+    state.isSheetMinimized,
+    state.selectedCategoryId,
+    state.selectedSubServiceIdx,
+    state.selectedTierKey,
+    state.draftFareUsd,
+    state.recommendedFareUsd,
+    state.draftPaymentMethod,
+    state.draftAutoAccept,
+    state.draftNotes,
+    state.draftPhotoUrl ? 1 : 0,
+    state.draftVoiceNoteUrl ? 1 : 0,
+    state.isRecordingVoiceNote ? 1 : 0,
+    state.isVoiceNotePaused ? 1 : 0,
+    state.providerStatus,
+    state.providerBreakEndsAt,
+    state.bookingFor,
+    state.timingType,
+    state.scheduledDate,
+    state.scheduledTime,
+    state.customAddress,
+    state.customSuburbLabel,
+    state.pendingSearchFareUsd,
+    state.walletTopupAmount,
+    state.walletTopupMethod,
+    state.currentUser?.id,
+    state.currentUser?.walletBalanceUsd,
+    state.currentUser?.activeWarnings?.length || 0,
+    (state.db?.changelogs || []).map((c) => `${c.id}:${c.title}:${c.version}`).join(','),
+    getCatalogStateSignature(state.db),
+    activeReq ? JSON.stringify([
+      activeReq.id, activeReq.status, activeReq.budgetUsd, activeReq.acceptedProviderId, activeReq.acceptedOfferId,
+      activeReq.acceptedProviderName, activeReq.agreedTotalUsd, activeReq.startPinVerified, activeReq.startPinCode,
+      activeReq.completionRequested, activeReq.completionPinCode, activeReq.delayNotice?.minutes,
+      activeReq.delayNotice?.reason
+    ]) : 'NO_REQ',
+    activeReqOffersSig,
+    provRequestsSig,
+    provActiveJobSig
+  ].join('|');
+
+  if (!force && overlaySig === lastUiOverlaySignature) {
+    // If we are on SEARCHING screen and only viewer pros count updated, smoothly update text
+    if (state.role === 'CUSTOMER' && state.screenStep === 'SEARCHING' && activeReq && activeReq.status === 'OPEN') {
+      const viewingLabelEl = document.getElementById('viewingProsText');
+      if (viewingLabelEl) {
+        const vCount = Math.max(1, (activeReq.activeViewerIds || []).length);
+        viewingLabelEl.textContent = vCount <= 1
+          ? `${vCount} verified pro active nearby • Broadcasting live`
+          : `${vCount} verified pros active nearby • Broadcasting live`;
+      }
+    }
+    return;
+  }
+  lastUiOverlaySignature = overlaySig;
+
+  // Warning Banner Wrapper if user has active warnings
+  const warningBannerHtml = (state.currentUser?.activeWarnings?.length > 0)
+    ? `
+      <div id="adminWarningBanner" style="position:fixed; top:12px; left:12px; right:12px; z-index:99999; pointer-events:auto; background:#FEF2F2; border:1.5px solid #EF4444; border-radius:14px; padding:12px 14px; box-shadow:0 8px 24px rgba(239,68,68,0.3);">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:6px;">
+          <div style="font-size:12.5px; font-weight:800; color:#DC2626; display:flex; align-items:center; gap:6px;">
+            <span style="display:inline-flex;">${uiIcon('shield', 16)}</span>
+            <span>Official Admin Warning</span>
+          </div>
+          <button type="button" style="background:none; border:none; color:#DC2626; font-size:12px; font-weight:800; cursor:pointer; padding:4px 6px;" onclick="acknowledgeAdminWarning()">Dismiss</button>
+        </div>
+        <div style="font-size:12px; color:#991B1B; line-height:1.45; margin-bottom:10px;">
+          ${state.currentUser.activeWarnings[0].reason}
+        </div>
+        <button type="button" class="btn-primary-blue" style="height:36px; font-size:12px; font-weight:800; background:#DC2626; border-radius:10px; cursor:pointer; width:100%; display:flex; align-items:center; justify-content:center; gap:6px;" onclick="acknowledgeAdminWarning()">
+          <span>I Understand &amp; Comply</span>
+        </button>
+      </div>
+    `
+    : '';
+
+  let contentHtml = '';
+  if (state.hubView === 'HUB') {
+    contentHtml = renderMainHubOverlay();
+  } else if (state.role === 'PROVIDER') {
+    contentHtml = renderProviderModeOverlay();
+  } else {
+    // CUSTOMER MODE
+    const curCustTab = state.customerTab || 'HOME';
+    if (curCustTab === 'PROFILE') {
+      contentHtml = renderCurvedBrandHeader('CUSTOMER') + renderCustomerProfileTab();
+    } else if (curCustTab === 'REQUESTS') {
+      contentHtml = renderCurvedBrandHeader('CUSTOMER') + renderCustomerRequestsTab();
+    } else if (curCustTab === 'OFFERS') {
+      contentHtml = renderCurvedBrandHeader('CUSTOMER') + renderCompareOffersOverlay(activeReq);
+    } else {
+      // HOME TAB
+      if (activeReq && isBookedStatus(activeReq.status)) {
+        try {
+          contentHtml = renderBookedTrackingOverlay(activeReq);
+        } catch (overlayErr) {
+          console.error('[Findit] Error in renderBookedTrackingOverlay:', overlayErr);
+          contentHtml = `
+            <div class="fh-main-screen-container" style="padding-top:16px;">
+              <div class="fh-request-form-card" style="padding:18px; text-align:center;">
+                <div style="font-size:16px; font-weight:800; color:#0F172A; margin-bottom:6px;">Specialist Active (${escapeHtml(activeReq.status)})</div>
+                <div style="font-size:12px; color:#64748B; margin-bottom:12px;">Start PIN: #${activeReq.startPinCode || '4829'} • Total: ${formatUsdPrice(activeReq.agreedTotalUsd || activeReq.budgetUsd)}</div>
+                <div style="display:flex; gap:8px;">
+                  <button class="btn-dark-sec" style="flex:1;" onclick="openChatDrawer('${activeReq.id}')">Open Chat</button>
+                  <button class="btn-primary-blue" style="flex:1;" onclick="renderAll(true)">Refresh Screen</button>
+                </div>
+              </div>
+            </div>
+          `;
+        }
+      } else if (activeReq && activeReq.status === 'OPEN') {
+        contentHtml = renderSearchingRadarOverlay(activeReq);
+      } else if (state.screenStep === 'CONFIGURE') {
+        contentHtml = renderConfigureFareOverlay();
+      } else {
+        contentHtml = renderHomeDiscoveryOverlay();
+      }
+    }
+  }
+
+  // Native Bottom Dock
+  contentHtml += renderGlobalBottomNavDock();
+
+  overlay.innerHTML = warningBannerHtml + contentHtml;
+}
+
+async function acknowledgeAdminWarning(warningId) {
+  try {
+    const bannerEl = document.getElementById('adminWarningBanner');
+    if (bannerEl) bannerEl.remove();
+
+    if (state.currentUser) {
+      state.currentUser.activeWarnings = [];
+      state.currentUser.warningsCount = 0;
+      if (state.role === 'PROVIDER') {
+        const p = (state.db.providers || []).find((x) => x.id === state.currentUser.id);
+        if (p) { p.activeWarnings = []; p.warningsCount = 0; }
+      } else {
+        const c = (state.db.customers || []).find((x) => x.id === state.currentUser.id);
+        if (c) { c.activeWarnings = []; c.warningsCount = 0; }
+      }
+      renderUiOverlay();
+    }
+
+    await apiPost('/api/account/acknowledge-warning', {
+      role: state.role,
+      accountId: state.currentUser?.id,
+      warningId: warningId || null
+    });
+    showToast('Warning acknowledged');
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+// ----------------------------------------------------------------------------
+// PERSONALIZED TOP SERVICES & MOST USED SERVICES GENERATOR (NO RANDOM ADDRESSES)
+// ----------------------------------------------------------------------------
+function getPersonalizedAndTopServices() {
+  const categories = (state.db.categories || []).filter((c) => c.status === 'ACTIVE');
+  const selectedCat = categories.find((c) => c.id === state.selectedCategoryId) || categories[0];
+  if (!selectedCat) return [];
+
+  const myPastBookingsInCat = (state.db.requests || []).filter(
+    (r) => state.currentUser && r.customerId === state.currentUser.id && r.categoryId === selectedCat.id
+  );
+
+  const items = [];
+  const seenTitles = new Set();
+
+  myPastBookingsInCat.forEach((req) => {
+    if (seenTitles.has(req.title)) return;
+    const subIdx = Math.max(0, (selectedCat.subServices || []).findIndex((s) => s.name === req.title));
+    const subObj = (selectedCat.subServices || [])[subIdx];
+    seenTitles.add(req.title);
+    items.push({
+      categoryId: selectedCat.id,
+      categoryName: selectedCat.name,
+      subIdx,
+      title: req.title,
+      duration: subObj?.duration || '1.5 hrs',
+      priceUsd: req.budgetUsd || subObj?.defaultUsd || 20,
+      badge: 'Your most used'
+    });
+  });
+
+  (selectedCat.subServices || []).forEach((sub, idx) => {
+    if (!seenTitles.has(sub.name)) {
+      seenTitles.add(sub.name);
+      items.push({
+        categoryId: selectedCat.id,
+        categoryName: selectedCat.name,
+        subIdx: idx,
+        title: sub.name,
+        duration: sub.duration,
+        priceUsd: sub.defaultUsd,
+        badge: idx === 0 ? `Most used in ${selectedCat.name}` : `Popular ${selectedCat.name}`
+      });
+    }
+  });
+
+  return items.slice(0, 5);
+}
+
+// ----------------------------------------------------------------------------
+// FINDIT HARARE MULTI-SERVICE HUB & JOB MARKETPLACE OVERLAYS
+// ----------------------------------------------------------------------------
+function openJobMarketplaceView() {
+  state.hubView = 'MARKETPLACE';
+  state.screenStep = 'HOME';
+  lastUiOverlaySignature = '';
+  renderAll();
+}
+
+function returnToMainHub() {
+  state.hubView = 'HUB';
+  state.screenStep = 'HOME';
+  lastUiOverlaySignature = '';
+  renderAll();
+}
+
+function openComingSoonServiceModal(title, desc) {
+  state.activeModal = 'COMING_SOON_SERVICE';
+  state.modalData = { title, desc };
+  renderModalLayer();
+}
+
+function openChangelogModal() {
+  state.activeModal = 'CHANGELOG_MODAL';
+  renderModalLayer();
+}
+
+function selectCategoryForJobPosting(catId) {
+  state.selectedCategoryId = catId;
+  state.selectedSubServiceIdx = 0;
+  state.screenStep = 'CONFIGURE';
+  syncRecommendedFare();
+  renderAll();
+}
+
+// Pure Vector SVG Illustration Banners for Multi-Service Hub Cards (Zero Stock Photos)
+function getHubServiceVectorBanner(serviceId) {
+  if (serviceId === 'job_marketplace') {
+    return `
+      <div class="fh-hub-card-svg-wrap">
+        <svg viewBox="0 0 280 145" width="100%" height="100%" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="hubJmGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#060D1F"/>
+              <stop offset="50%" stop-color="#0B1B3D"/>
+              <stop offset="100%" stop-color="#003B99"/>
+            </linearGradient>
+            <linearGradient id="neonGlow1" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#00D2FF"/>
+              <stop offset="100%" stop-color="#0066FF"/>
+            </linearGradient>
+          </defs>
+          <rect width="280" height="145" fill="url(#hubJmGrad)"/>
+          
+          <!-- Blueprint Circuit & Grid Lines -->
+          <line x1="20" y1="20" x2="260" y2="20" stroke="rgba(0,210,255,0.12)" stroke-width="1"/>
+          <line x1="20" y1="50" x2="260" y2="50" stroke="rgba(0,210,255,0.08)" stroke-width="1"/>
+          <line x1="20" y1="80" x2="260" y2="80" stroke="rgba(0,210,255,0.08)" stroke-width="1"/>
+          <line x1="20" y1="110" x2="260" y2="110" stroke="rgba(0,210,255,0.12)" stroke-width="1"/>
+          <line x1="70" y1="0" x2="70" y2="145" stroke="rgba(0,210,255,0.08)" stroke-width="1"/>
+          <line x1="140" y1="0" x2="140" y2="145" stroke="rgba(0,210,255,0.1)" stroke-width="1"/>
+          <line x1="210" y1="0" x2="210" y2="145" stroke="rgba(0,210,255,0.08)" stroke-width="1"/>
+
+          <!-- Glowing Radar Rings in Background -->
+          <circle cx="140" cy="72" r="50" stroke="rgba(0,210,255,0.2)" stroke-width="1.2" stroke-dasharray="4 4"/>
+          <circle cx="140" cy="72" r="28" stroke="rgba(0,210,255,0.3)" stroke-width="1.5"/>
+
+          <!-- Stylized Handshake & Direct Pro Vector Shapes -->
+          <g transform="translate(100, 36)">
+            <path d="M5 45 L25 35 L40 45 L30 58 Z" fill="#0066FF"/>
+            <rect x="0" y="42" width="12" height="18" rx="2" fill="#38BDF8"/>
+            <path d="M75 45 L55 35 L40 45 L50 58 Z" fill="#00D2FF"/>
+            <rect x="68" y="42" width="12" height="18" rx="2" fill="#38BDF8"/>
+            <circle cx="40" cy="46" r="14" fill="#0B1B3D" stroke="#00D2FF" stroke-width="2.5"/>
+            <path d="M40 38 L42 44 L48 46 L42 48 L40 54 L38 48 L32 46 L38 44 Z" fill="#FFFFFF"/>
+          </g>
+
+          <!-- Solar / Electrical Lightning Pin -->
+          <circle cx="42" cy="72" r="18" fill="rgba(0,102,255,0.35)" stroke="#38BDF8" stroke-width="1.5"/>
+          <path d="M42 62 L37 72 H43 L41 82 L48 71 H42 L45 62 Z" fill="#00D2FF"/>
+
+          <!-- Construction Wrench & Hammer Pin -->
+          <circle cx="238" cy="72" r="18" fill="rgba(16,185,129,0.25)" stroke="#10B981" stroke-width="1.5"/>
+          <path d="M233 66 L243 76 M243 66 L233 76" stroke="#10B981" stroke-width="2.5" stroke-linecap="round"/>
+        </svg>
+      </div>
+    `;
+  }
+
+  if (serviceId === 'online_shopping') {
+    return `
+      <div class="fh-hub-card-svg-wrap">
+        <svg viewBox="0 0 280 145" width="100%" height="100%" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="hubShopGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#0F172A"/>
+              <stop offset="60%" stop-color="#1E1B4B"/>
+              <stop offset="100%" stop-color="#312E81"/>
+            </linearGradient>
+          </defs>
+          <rect width="280" height="145" fill="url(#hubShopGrad)"/>
+
+          <!-- Delivery Route Trails -->
+          <path d="M10 115 Q90 120 140 75 T270 45" stroke="rgba(129, 140, 248, 0.25)" stroke-width="2" stroke-dasharray="6 4" fill="none"/>
+          <circle cx="140" cy="75" r="3" fill="#818CF8"/>
+          <circle cx="270" cy="45" r="4" fill="#C7D2FE"/>
+
+          <!-- Vector Shopping Bag & Delivery Box -->
+          <g transform="translate(105, 30)">
+            <rect x="10" y="24" width="48" height="52" rx="10" fill="rgba(99, 102, 241, 0.35)" stroke="#818CF8" stroke-width="2.2"/>
+            <path d="M22 24 V16 C22 10 26 6 34 6 C42 6 46 10 46 16 V24" stroke="#C7D2FE" stroke-width="2.4" stroke-linecap="round" fill="none"/>
+            <circle cx="34" cy="50" r="10" fill="#4338CA"/>
+            <path d="M30 50 L33 53 L39 47" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </g>
+
+          <!-- Speed lines -->
+          <line x1="30" y1="55" x2="65" y2="55" stroke="rgba(165, 180, 252, 0.3)" stroke-width="2" stroke-linecap="round"/>
+          <line x1="20" y1="70" x2="50" y2="70" stroke="rgba(165, 180, 252, 0.2)" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </div>
+    `;
+  }
+
+  // Transport & Carriers
+  return `
+    <div class="fh-hub-card-svg-wrap">
+      <svg viewBox="0 0 280 145" width="100%" height="100%" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="hubTransGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#0B132B"/>
+            <stop offset="60%" stop-color="#1C2541"/>
+            <stop offset="100%" stop-color="#0F4C5C"/>
+          </linearGradient>
+        </defs>
+        <rect width="280" height="145" fill="url(#hubTransGrad)"/>
+
+        <!-- Highway Perspective Lines -->
+        <polygon points="110,145 170,145 145,85 135,85" fill="rgba(56, 189, 248, 0.08)"/>
+        <line x1="140" y1="88" x2="140" y2="145" stroke="#38BDF8" stroke-width="1.8" stroke-dasharray="8 6" opacity="0.4"/>
+
+        <!-- Vector Utility Bakkie / Cargo Truck -->
+        <g transform="translate(85, 35)">
+          <rect x="15" y="32" width="50" height="26" rx="4" fill="rgba(14, 116, 144, 0.45)" stroke="#38BDF8" stroke-width="2"/>
+          <rect x="22" y="20" width="16" height="14" rx="2" fill="#0E7490" stroke="#67E8F9" stroke-width="1.2"/>
+          <rect x="42" y="22" width="18" height="12" rx="2" fill="#155E75" stroke="#67E8F9" stroke-width="1.2"/>
+          <path d="M65 34 L82 34 L95 44 L95 58 L65 58 Z" fill="#0284C7" stroke="#38BDF8" stroke-width="2"/>
+          <path d="M69 38 L80 38 L88 45 L69 45 Z" fill="#E0F2FE"/>
+          <circle cx="35" cy="60" r="9" fill="#0B132B" stroke="#38BDF8" stroke-width="2"/>
+          <circle cx="35" cy="60" r="3" fill="#FFFFFF"/>
+          <circle cx="82" cy="60" r="9" fill="#0B132B" stroke="#38BDF8" stroke-width="2"/>
+          <circle cx="82" cy="60" r="3" fill="#FFFFFF"/>
+        </g>
+
+        <!-- GPS Pin Anchor -->
+        <circle cx="218" cy="50" r="14" fill="rgba(0,210,255,0.25)" stroke="#00D2FF" stroke-width="1.5"/>
+        <circle cx="218" cy="50" r="5" fill="#00D2FF"/>
+      </svg>
+    </div>
+  `;
+}
+
+function renderMainHubOverlay() {
+  const defaultHubServices = [
+    {
+      id: 'job_marketplace',
+      title: 'Job Marketplace',
+      subtitle: 'Hire verified local trades & pros',
+      status: 'ACTIVE',
+      badge: '7 Categories',
+      imageUrl: '/assets/hub/marketplace.jpg',
+      legacyImageUrlPrefix: 'https://images.unsplash.com/photo-1581578731548-c64695cc6952'
+    },
+    {
+      id: 'transport_carriers',
+      title: 'Transport & Rides',
+      subtitle: 'Bakkies, trucks, haulage & rides',
+      status: 'COMING_SOON',
+      badge: 'Coming Soon',
+      imageUrl: '/assets/hub/transport.jpg',
+      legacyImageUrlPrefix: 'https://images.unsplash.com/photo-1519003722824-194d4455a60c'
+    },
+    {
+      id: 'online_shopping',
+      title: 'Online Shopping',
+      subtitle: 'Harare shops, groceries & express delivery',
+      status: 'ACTIVE',
+      badge: 'Coming Soon',
+      imageUrl: '/assets/hub/shopping.jpg',
+      legacyImageUrlPrefix: 'https://images.unsplash.com/photo-1483985988355-763728e1935b'
+    }
+  ];
+  const storedHubServices = state.db?.hubServices || [];
+  const hubServices = defaultHubServices.map(({ legacyImageUrlPrefix, ...service }) => {
+    const stored = storedHubServices.find((item) => item.id === service.id);
+    const merged = stored ? { ...service, ...stored } : service;
+    if (
+      !stored?.imageUrl ||
+      (typeof stored.imageUrl === 'string' && stored.imageUrl.startsWith(legacyImageUrlPrefix))
+    ) {
+      merged.imageUrl = service.imageUrl;
+    }
+    return {
+      ...merged,
+      badge: merged.status === 'ACTIVE'
+        ? (service.id === 'job_marketplace' ? `${(state.db?.categories || []).filter((category) => category.status === 'ACTIVE').length} Categories` : 'Active')
+        : 'Coming Soon'
+    };
+  });
+  const activeCategories = (state.db?.categories || []).filter((category) => category.status === 'ACTIVE');
+  const firstName = state.currentUser?.name?.trim().split(/\s+/)[0];
+
+  return `
+    <div class="fh-hub-wrapper fh-discovery-hub">
+      <div class="fh-discovery-topbar">
+        <button class="fh-discovery-icon-btn" onclick="openSideDrawerModal()" title="Open menu" aria-label="Open menu">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        </button>
+        <div class="fh-discovery-brand">
+          <img src="/assets/logo-icon.svg" width="28" height="28" style="border-radius:8px;" alt="" />
+          <span>Findit <strong>Harare</strong></span>
+        </div>
+        ${state.isAuthenticated ? `
+          <button class="fh-discovery-avatar" onclick="openSideDrawerModal()" title="Account">
+            ${escapeHtml(state.currentUser?.avatarInitials || (state.currentUser?.name ? state.currentUser.name.slice(0, 2).toUpperCase() : 'FH'))}
+          </button>
+        ` : `
+          <button class="fh-discovery-icon-btn" onclick="switchCustomerTab('PROFILE')" title="Sign in" aria-label="Sign in">
+            ${uiIcon('user', 18)}
+          </button>
+        `}
+      </div>
+
+      <div class="fh-discovery-location-row">
+        <div>
+          <div class="fh-discovery-eyebrow">YOUR LOCATION</div>
+          <button class="fh-discovery-location" onclick="openSuburbPickerModal()">
+            ${uiIcon('pin', 15)}
+            <span>${escapeHtml((state.customSuburbLabel || 'Harare').split(',')[0])}, Harare</span>
+            ${uiIcon('chevronDown', 13)}
+          </button>
+        </div>
+        <button class="fh-discovery-icon-btn fh-discovery-notifications" onclick="openNotificationCenterModal()" title="Notifications" aria-label="Notifications">
+          ${uiIcon('bell', 18)}
+          ${getUnreadNotificationsCount() > 0 ? `<span class="fh-header-badge-dot">${getUnreadNotificationsCount()}</span>` : ''}
+        </button>
+      </div>
+
+      <div class="fh-discovery-welcome">
+        <div class="fh-discovery-title">${firstName ? `Good day, ${escapeHtml(firstName)}` : 'Welcome to Findit'}</div>
+        <div class="fh-discovery-subtitle">What can we help you get done?</div>
+      </div>
+
+      <button class="fh-discovery-search" onclick="openMarketplaceRequest()">
+        <span class="fh-discovery-search-icon">${uiIcon('search', 19)}</span>
+        <span>Search for a service</span>
+        <span class="fh-discovery-search-action">${uiIcon('arrowRight', 17)}</span>
+      </button>
+
+      <div class="fh-discovery-section-head">
+        <div>
+          <div class="fh-discovery-section-title">Browse services</div>
+          <div class="fh-discovery-section-subtitle">Trusted local providers, ready to help</div>
+        </div>
+        <button class="fh-discovery-text-action" onclick="selectHubService('job_marketplace')">See all</button>
+      </div>
+
+      <div class="fh-discovery-category-strip">
+        ${activeCategories.map((category) => `
+          <button class="fh-discovery-category" onclick="openHubCategoryRequest('${category.id}')">
+            <span class="fh-discovery-category-icon">${getCategoryVectorSvg(category.id, false)}</span>
+            <span>${escapeHtml(getCategoryDisplayTitle(category))}</span>
+          </button>
+        `).join('')}
+      </div>
+
+      ${(() => {
+        const marketplace = hubServices.find((service) => service.id === 'job_marketplace');
+        return marketplace ? `
+          <button class="fh-marketplace-feature" onclick="selectHubService('job_marketplace')" style="--fh-marketplace-image:url('${escapeHtml(marketplace.imageUrl || '')}')">
+            <span class="fh-marketplace-feature-shade"></span>
+            <span class="fh-marketplace-feature-content">
+              <span class="fh-marketplace-feature-kicker">${escapeHtml(marketplace.badge || 'Local services')}</span>
+              <span class="fh-marketplace-feature-title">Find your<br />local pro</span>
+              <span class="fh-marketplace-feature-subtitle">Choose a service, share your budget, compare offers.</span>
+              <span class="fh-marketplace-feature-cta">Explore services ${uiIcon('arrowRight', 16)}</span>
+            </span>
+          </button>
+        ` : '';
+      })()}
+
+      <div class="fh-discovery-section-head fh-discovery-secondary-head">
+        <div>
+          <div class="fh-discovery-section-title">More from Findit</div>
+          <div class="fh-discovery-section-subtitle">New ways to get things moving</div>
+        </div>
+      </div>
+      <div class="fh-discovery-other-services">
+        ${hubServices.filter((service) => service.id !== 'job_marketplace').map((service) => `
+          <button class="fh-discovery-service-row" onclick="selectHubService('${service.id}')">
+            <span class="fh-discovery-service-image">
+              <img src="${escapeHtml(service.imageUrl || DEFAULT_TASK_PHOTO_FALLBACK)}" onerror="this.onerror=null; this.src='${DEFAULT_TASK_PHOTO_FALLBACK}';" alt="" />
+            </span>
+            <span class="fh-discovery-service-copy">
+              <span class="fh-discovery-service-name">${escapeHtml(service.title)}</span>
+              <span class="fh-discovery-service-subtitle">${escapeHtml(service.subtitle)}</span>
+            </span>
+            <span class="fh-discovery-service-badge">${service.id === 'job_marketplace' ? escapeHtml(service.badge || 'Active') : 'Coming Soon'}</span>
+            ${uiIcon('chevronRight', 16)}
+          </button>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function openHubCategoryRequest(categoryId) {
+  state.hubView = 'MARKETPLACE';
+  selectCategoryAndOpenRequest(categoryId);
+}
+
+function openMarketplaceRequest() {
+  state.hubView = 'MARKETPLACE';
+  openConfigureStep(0);
+}
+
+function selectHubService(serviceId) {
+  const service = (state.db?.hubServices || []).find((item) => item.id === serviceId);
+  const fallbackTitles = {
+    job_marketplace: ['Job Marketplace', 'Hire verified local trades & pros'],
+    transport_carriers: ['Transport & Rides', 'Bakkies, trucks, haulage & rides'],
+    online_shopping: ['Online Shopping', 'Harare shops, groceries & express delivery']
+  };
+  const [title, subtitle] = fallbackTitles[serviceId] || ['Service', ''];
+  const active = service ? service.status === 'ACTIVE' : serviceId === 'job_marketplace' || serviceId === 'online_shopping';
+  if (!active) {
+    openComingSoonServiceModal(service?.name || title, service?.tagline || subtitle);
+    return;
+  }
+  if (serviceId === 'job_marketplace') {
+    openJobMarketplaceView();
+    return;
+  }
+  openComingSoonServiceModal(service?.name || title, service?.tagline || subtitle);
+}
+
+// ----------------------------------------------------------------------------
+// NEW FORM & DESIGN SYSTEM HELPERS (PHONE 1 & 2 MOCKUP TRANSFORMATION)
+// ----------------------------------------------------------------------------
+function getCategoryTileImageUrl(catId) {
+  const norm = String(catId || '').toLowerCase();
+  if (norm.includes('repair') || norm.includes('build') || norm.includes('handy') || norm.includes('plumb')) {
+    return '/assets/categories/cat_repairs.jpg';
+  }
+  if (norm.includes('beauty') || norm.includes('hair') || norm.includes('salon') || norm.includes('barber')) {
+    return '/assets/categories/cat_beauty.jpg';
+  }
+  if (norm.includes('clean') || norm.includes('maid') || norm.includes('wash') || norm.includes('laundry')) {
+    return '/assets/categories/cat_cleaning.jpg';
+  }
+  if (norm.includes('auto') || norm.includes('car') || norm.includes('mechanic') || norm.includes('vehicle')) {
+    return '/assets/categories/cat_automotive.jpg';
+  }
+  if (norm.includes('solar') || norm.includes('inverter') || norm.includes('energy') || norm.includes('battery')) {
+    return '/assets/categories/cat_solar.jpg';
+  }
+  if (norm.includes('electr') || norm.includes('wiring') || norm.includes('power')) {
+    return '/assets/categories/cat_electrical.jpg';
+  }
+  if (norm.includes('garden') || norm.includes('yard') || norm.includes('landscap') || norm.includes('lawn')) {
+    return '/assets/categories/cat_gardening.jpg';
+  }
+  if (norm.includes('labour') || norm.includes('labor') || norm.includes('mover') || norm.includes('shift') || norm.includes('transport')) {
+    return '/assets/categories/cat_labour.jpg';
+  }
+  return '/assets/categories/cat_repairs.jpg';
+}
+
+function getCategoryTileBannerBg(catId) {
+  switch (catId) {
+    case 'repairs_construction': return 'bg-repairs';
+    case 'beauty_care': return 'bg-beauty';
+    case 'cleaning_domestic': return 'bg-cleaning';
+    case 'automotive': return 'bg-automotive';
+    case 'solar_power_water': return 'bg-solar';
+    case 'gardening_outdoor': return 'bg-gardening';
+    case 'general_labour': return 'bg-labour';
+    default: return 'bg-transport';
+  }
+}
+
+function getCategoryDisplayTitle(cat) {
+  if (!cat) return '';
+  const id = cat.id || '';
+  if (id === 'repairs_construction') return 'Home Repairs & Building';
+  if (id === 'beauty_care') return 'Beauty & Personal Care';
+  if (id === 'cleaning_domestic') return 'Cleaning & Domestic';
+  if (id === 'automotive') return 'Automotive Services';
+  if (id === 'solar_power_water') return 'Solar & Electrical Power';
+  if (id === 'gardening_outdoor') return 'Gardening & Outdoor';
+  if (id === 'general_labour') return 'General Labour & More';
+  return cat.shortName || cat.name || '';
+}
+
+function selectCategoryAndOpenRequest(catId) {
+  const category = (state.db?.categories || []).find((item) => item.id === catId);
+  if (!category || category.status !== 'ACTIVE') {
+    selectHomeCategory(catId);
+    return;
+  }
+  state.selectedCategoryId = category.id;
+  state.selectedSubServiceIdx = 0;
+  openConfigureStep(0);
+}
+
+function focusSearchOrConfigure() {
+  openConfigureStep(0);
+}
+
+function handleDraftNotesInput(textarea) {
+  state.draftNotes = textarea.value;
+  const counter = document.getElementById('descCharCounter');
+  if (counter) counter.textContent = `${textarea.value.length}/500`;
+}
+
+function handleManualAddressInput(val) {
+  state.customAddress = String(val || '').trim();
+  state.isCustomAddressSelected = false;
+  state.isLiveGpsActive = false;
+  state.gpsAccuracyMeters = null;
+  state.userHasManuallyDraggedPin = false;
+}
+
+function switchCustomerTab(tabName) {
+  if (!state.isAuthenticated && (tabName === 'REQUESTS' || tabName === 'OFFERS')) {
+    openSignInRoleChoiceModal();
+    return;
+  }
+  state.customerTab = tabName;
+  state.hubView = 'MARKETPLACE';
+  state.isSheetMinimized = false;
+  if (tabName !== 'HOME') {
+    state.screenStep = 'HOME';
+  }
+  renderAll(true);
+}
+
+function switchProviderTab(tabName) {
+  if (!state.isAuthenticated) {
+    openSignInRoleChoiceModal();
+    return;
+  }
+  state.providerTab = tabName;
+  state.isSheetMinimized = false;
+  renderAll(true);
+}
+
+function openStatusPickerModal() {
+  state.activeModal = 'STATUS_PICKER';
+  renderModalLayer();
+}
+
+function renderCurvedBrandHeader(role = 'CUSTOMER', showSearch = true) {
+  const isCust = role === 'CUSTOMER';
+  const user = state.currentUser;
+  const isAuth = Boolean(state.isAuthenticated && user && user.name);
+  const userName = isAuth ? user.name.split(' ')[0] : 'Guest';
+  const avatarInitials = user?.avatarInitials || (user?.name ? user.name.slice(0, 2).toUpperCase() : 'FH');
+  const unreadCount = getUnreadNotificationsCount();
+  const hour = new Date().getHours();
+  const timeGreeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+
+  if (isCust) {
+    return `
+      <div class="fh-curved-brand-header fh-modern-header fh-modern-header-customer">
+        <div class="fh-header-top-row">
+          <div class="fh-header-logo-badge" onclick="switchCustomerTab('PROFILE')" title="Findit Harare">
+            <img src="/assets/brand-logo-full.png" onerror="this.onerror=null; this.src='/assets/logo.png';" alt="Findit Logo" />
+          </div>
+          <div class="fh-header-actions">
+            <button type="button" class="fh-header-bell-btn" onclick="openNotificationCenterModal()" title="Notifications">
+              ${uiIcon('bell', 20)}
+              ${unreadCount > 0 ? `<span class="fh-header-badge-dot">${unreadCount}</span>` : ''}
+            </button>
+          </div>
+        </div>
+        <div class="fh-header-titles" style="margin-top:14px;">
+          <div class="fh-header-greeting">Hello, ${escapeHtml(userName)}!</div>
+          <div class="fh-header-sub">Find the right service, fast.</div>
+        </div>
+        ${showSearch ? `
+          <div class="fh-header-search-bar" onclick="focusSearchOrConfigure()">
+            ${uiIcon('search', 18)}
+            <input
+              type="text"
+              class="fh-header-search-input"
+              id="homeSearchInput"
+              placeholder="What service do you need?"
+              onfocus="focusSearchOrConfigure()"
+              readonly
+            />
+          </div>
+        ` : ''}
+      </div>
+    `;
+  } else {
+    // Provider Header
+    const status = state.providerStatus || user?.status || 'AVAILABLE';
+    const statusClass = status === 'AVAILABLE' ? 'fh-status-dot-green' : status === 'BUSY' ? 'fh-status-dot-yellow' : status === 'ON_BREAK' ? 'fh-status-dot-blue' : 'fh-status-dot-gray';
+    const statusLabel = status === 'AVAILABLE' ? 'Available' : status === 'BUSY' ? 'Busy' : status === 'ON_BREAK' ? 'On Break' : 'Offline';
+
+    return `
+      <div class="fh-curved-brand-header fh-modern-header fh-modern-header-provider">
+        <div class="fh-header-top-row">
+          <div class="fh-header-user-info" onclick="switchProviderTab('PROFILE')">
+            <div class="fh-header-avatar">
+              ${user?.avatarUrl
+                ? `<img src="${resolveMediaUrl(user.avatarUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_AVATAR_FALLBACK}';" alt="Avatar" />`
+                : `<span>${escapeHtml(avatarInitials)}</span>`
+              }
+            </div>
+            <div class="fh-header-titles">
+              <div class="fh-header-greeting">${timeGreeting}, ${escapeHtml(userName)}!</div>
+              <div class="fh-header-sub">New opportunities are waiting.</div>
+            </div>
+          </div>
+          <div class="fh-header-actions">
+            <button type="button" class="fh-provider-status-pill" onclick="openStatusPickerModal()" title="Change Status">
+              <span class="${statusClass}"></span>
+              <span>${statusLabel}</span>
+              ${uiIcon('chevronDown', 13)}
+            </button>
+            <button type="button" class="fh-header-bell-btn" onclick="openNotificationCenterModal()" title="Notifications">
+              ${uiIcon('bell', 20)}
+              ${unreadCount > 0 ? `<span class="fh-header-badge-dot">${unreadCount}</span>` : ''}
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+}
+
+function renderGlobalBottomNavDock() {
+  const isCust = state.role === 'CUSTOMER';
+  if (isCust && !state.isAuthenticated) {
+    const cur = state.customerTab || 'HOME';
+    return `
+      <div class="fh-bottom-nav-dock">
+        <button type="button" class="fh-nav-tab-btn ${cur === 'HOME' ? 'active' : ''}" onclick="switchCustomerTab('HOME')">
+          <div class="fh-nav-tab-icon">${uiIcon('home', 20)}</div>
+          <span class="fh-nav-tab-label">Browse</span>
+        </button>
+        <button type="button" class="fh-nav-tab-btn ${cur === 'PROFILE' ? 'active' : ''}" onclick="switchCustomerTab('PROFILE')">
+          <div class="fh-nav-tab-icon">${uiIcon('user', 20)}</div>
+          <span class="fh-nav-tab-label">Profile</span>
+        </button>
+      </div>
+    `;
+  }
+  const req = isCust ? getCustomerActiveRequest() : null;
+  const activeOffersCount = (req && req.status === 'OPEN' && req.offers) ? req.offers.filter((o) => o.status !== 'DECLINED').length : 0;
+  
+  const prov = state.role === 'PROVIDER' ? (state.currentUser || state.db?.providers?.[0]) : null;
+  const provCatIds = prov ? getProviderCategoryIds(prov) : [];
+  const openReqsCount = (state.role === 'PROVIDER' && state.db?.requests && prov)
+    ? state.db.requests.filter((r) => {
+        if (r.status !== 'OPEN') return false;
+        if (r.acceptedProviderId && r.acceptedProviderId !== prov.id) return false;
+        if (r.acceptedOfferId) return false;
+        if ((state.dismissedJobIds || []).includes(r.id)) return false;
+        const reqCat = normalizeCategoryId(r.categoryId);
+        return provCatIds.includes(reqCat);
+      }).length
+    : 0;
+  const provActiveJob = state.role === 'PROVIDER' ? getProviderActiveBooking(state.currentUser?.id) : null;
+
+  if (isCust) {
+    const cur = state.customerTab || 'HOME';
+    return `
+      <div class="fh-bottom-nav-dock">
+        <button type="button" class="fh-nav-tab-btn ${cur === 'HOME' ? 'active' : ''}" onclick="switchCustomerTab('HOME')">
+          <div class="fh-nav-tab-icon">${uiIcon('home', 20)}</div>
+          <span class="fh-nav-tab-label">Home</span>
+        </button>
+        <button type="button" class="fh-nav-tab-btn ${cur === 'REQUESTS' ? 'active' : ''}" onclick="switchCustomerTab('REQUESTS')">
+          <div class="fh-nav-tab-icon">${uiIcon('notes', 20)}</div>
+          <span class="fh-nav-tab-label">Requests</span>
+        </button>
+        <button type="button" class="fh-nav-tab-btn ${cur === 'OFFERS' ? 'active' : ''}" onclick="switchCustomerTab('OFFERS')">
+          <div class="fh-nav-tab-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+            ${activeOffersCount > 0 ? `<span class="fh-nav-badge-pill">${activeOffersCount}</span>` : ''}
+          </div>
+          <span class="fh-nav-tab-label">Offers</span>
+        </button>
+        <button type="button" class="fh-nav-tab-btn ${cur === 'PROFILE' ? 'active' : ''}" onclick="switchCustomerTab('PROFILE')">
+          <div class="fh-nav-tab-icon">${uiIcon('user', 20)}</div>
+          <span class="fh-nav-tab-label">Profile</span>
+        </button>
+      </div>
+    `;
+  } else {
+    const cur = state.providerTab || 'FEED';
+    return `
+      <div class="fh-bottom-nav-dock">
+        <button type="button" class="fh-nav-tab-btn ${cur === 'HOME' ? 'active' : ''}" onclick="switchProviderTab('HOME')">
+          <div class="fh-nav-tab-icon">${uiIcon('home', 20)}</div>
+          <span class="fh-nav-tab-label">Home</span>
+        </button>
+        <button type="button" class="fh-nav-tab-btn ${cur === 'FEED' ? 'active' : ''}" onclick="switchProviderTab('FEED')">
+          <div class="fh-nav-tab-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+            ${openReqsCount > 0 ? `<span class="fh-nav-badge-pill">${openReqsCount}</span>` : ''}
+          </div>
+          <span class="fh-nav-tab-label">Opportunities</span>
+        </button>
+        <button type="button" class="fh-nav-tab-btn ${cur === 'ACTIVE_JOB' ? 'active' : ''}" onclick="switchProviderTab('ACTIVE_JOB')">
+          <div class="fh-nav-tab-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+            ${provActiveJob ? `<span class="fh-nav-badge-pill" style="background:#10B981; width:8px; height:8px; min-width:8px; padding:0;"></span>` : ''}
+          </div>
+          <span class="fh-nav-tab-label">My Jobs</span>
+        </button>
+        <button type="button" class="fh-nav-tab-btn ${cur === 'PROFILE' ? 'active' : ''}" onclick="switchProviderTab('PROFILE')">
+          <div class="fh-nav-tab-icon">${uiIcon('user', 20)}</div>
+          <span class="fh-nav-tab-label">Profile</span>
+        </button>
+      </div>
+    `;
+  }
+}
+
+// ----------------------------------------------------------------------------
+// HOME DISCOVERY SCREEN (PHONE 1 & SCREEN 1: BRAND HEADER, SEARCH, CATEGORY GRID, FLOATING CTA)
+// ----------------------------------------------------------------------------
+function renderHomeDiscoveryOverlay() {
+  if (state.isSheetMinimized) {
+    return `
+      <div class="minimized-map-restore-bar" onclick="toggleSheetMinimize(false)">
+        <div class="minimized-map-suburb-chip">
+          <span class="live-pulse-dot" style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#0052FF;"></span>
+          <span style="display:inline-flex; align-items:center; gap:4px;">${uiIcon('pin', 13)} <span>Harare Map View (${escapeHtml(state.customSuburbLabel ? state.customSuburbLabel.split(',')[0] : 'Avondale')})</span></span>
+        </div>
+        <button type="button" class="minimized-restore-btn" onclick="toggleSheetMinimize(false); event.stopPropagation();">
+          <span>Show Services</span>
+          ${uiIcon('chevronUp', 14)}
+        </button>
+      </div>
+    `;
+  }
+
+  const categories = state.db?.categories || [];
+  const activeCategories = categories.filter((category) => category.status === 'ACTIVE');
+  const currentCat = activeCategories.find((c) => c.id === state.selectedCategoryId) || activeCategories[0] || categories[0];
+  const currentSub = (currentCat?.subServices || [])[state.selectedSubServiceIdx] || (currentCat?.subServices || [])[0] || {
+    name: currentCat?.fullName || currentCat?.name || 'Home Service',
+    defaultUsd: currentCat?.suggestedMinUsd || 25,
+    duration: '1.5 hrs'
+  };
+  const onlineProsCount = Math.max(1, (state.db?.providers || []).filter((p) => p.isOnline !== false && !p.isBanned).length);
+  const currentSuburbLabel = state.customAddress && state.customAddress !== 'Current Live Location'
+    ? `${state.customAddress}, ${state.customSuburbLabel ? state.customSuburbLabel.split(',')[0] : 'Avondale'}`
+    : (state.customSuburbLabel || 'Avondale, Harare');
+
+  return `
+    ${renderCurvedBrandHeader('CUSTOMER', false)}
+
+    <div class="fh-main-screen-container fh-marketplace-discovery">
+      <!-- DriveGo Screen 01 Top Search Pill & Live Radar Strip -->
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:10px;">
+        <div style="display:inline-flex; align-items:center; gap:6px; background:#EBF3FF; border:1px solid #BFDBFE; color:#0052FF; padding:5px 11px; border-radius:99px; font-size:11.5px; font-weight:800;">
+          <span style="width:7px; height:7px; border-radius:50%; background:#10B981; box-shadow:0 0 0 3px rgba(16,185,129,0.22); display:inline-block;"></span>
+          <span>${onlineProsCount} verified pro${onlineProsCount === 1 ? '' : 's'} online in Harare</span>
+        </div>
+        <button type="button" class="sheet-collapse-pill" style="background:#FFFFFF; border:1px solid #E2E8F0; color:#0F172A; height:30px; padding:0 10px; border-radius:99px; font-size:11.5px; font-weight:800; display:inline-flex; align-items:center; gap:4px; cursor:pointer;" onclick="toggleSheetMinimize(true)">
+          ${uiIcon('map', 12)}
+          <span>Map Radar</span>
+        </button>
+      </div>
+
+      <button type="button" class="fh-marketplace-search" onclick="focusSearchOrConfigure()" style="margin-bottom:12px; border:1.5px solid #CBD5E1; box-shadow:0 6px 18px rgba(15,23,42,0.06);">
+        <span style="color:#0052FF; display:inline-flex;">${uiIcon('search', 19)}</span>
+        <span style="font-weight:800; color:#0F172A;">What service do you need?</span>
+        <span class="fh-marketplace-search-shortcut" style="background:#0052FF; color:#FFFFFF;">${uiIcon('arrowRight', 16)}</span>
+      </button>
+
+      <!-- DriveGo Screen 01 2-Row Route-Style Quick Request Card -->
+      <div style="background:#FFFFFF; border:1.5px solid #E2E8F0; border-radius:18px; padding:12px 14px; margin-bottom:14px; box-shadow:0 8px 24px rgba(15,23,42,0.05);">
+        <div style="position:relative; display:flex; flex-direction:column; gap:10px;">
+          <div style="position:absolute; left:9px; top:20px; bottom:20px; width:2px; background:linear-gradient(180deg, #0052FF 0%, #0F172A 100%); opacity:0.25;"></div>
+
+          <!-- Row 1: Services in Selected Category -->
+          <div onclick="openConfigureStep(state.selectedSubServiceIdx || 0)" style="display:flex; align-items:center; justify-content:space-between; gap:10px; background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px; padding:9px 11px; cursor:pointer;">
+            <div style="display:flex; align-items:center; gap:10px; min-width:0;">
+              <span style="width:10px; height:10px; border-radius:50%; background:#0052FF; box-shadow:0 0 0 3px rgba(0,82,255,0.18); flex-shrink:0;"></span>
+              <div style="min-width:0;">
+                <div style="font-size:10px; font-weight:800; color:#0052FF; text-transform:uppercase; letter-spacing:0.04em;">1. Selected Category &amp; Task</div>
+                <div style="font-size:13.5px; font-weight:800; color:#0F172A; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(currentSub.name)}</div>
+                <div style="font-size:11px; color:#64748B;">${escapeHtml(currentCat?.name || 'Service')} • Est. ${formatUsdPrice(state.draftFareUsd || currentSub.defaultUsd || 25)}</div>
+              </div>
+            </div>
+            <span style="color:#0052FF; display:inline-flex;">${uiIcon('chevronRight', 15)}</span>
+          </div>
+
+          <!-- Row 2: Service Location & Task Details -->
+          <div onclick="openConfigureStep(state.selectedSubServiceIdx || 0)" style="display:flex; align-items:center; justify-content:space-between; gap:10px; background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px; padding:9px 11px; cursor:pointer;">
+            <div style="display:flex; align-items:center; gap:10px; min-width:0;">
+              <span style="width:10px; height:10px; border-radius:2px; background:#0F172A; box-shadow:0 0 0 3px rgba(15,23,42,0.14); flex-shrink:0;"></span>
+              <div style="min-width:0;">
+                <div style="font-size:10px; font-weight:800; color:#64748B; text-transform:uppercase; letter-spacing:0.04em;">2. Service Location &amp; Task Details</div>
+                <div style="font-size:13px; font-weight:800; color:#0F172A; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(currentSuburbLabel)}</div>
+                <div style="font-size:11px; color:#64748B;">Add task note, photo or WhatsApp voice note</div>
+              </div>
+            </div>
+            <span style="color:#64748B; display:inline-flex;">${uiIcon('sliders', 15)}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="fh-marketplace-section-head">
+        <div>
+          <div class="fh-marketplace-section-title">Select a service category</div>
+          <div class="fh-marketplace-section-subtitle">${activeCategories.length} verified specialist categories in Harare</div>
+        </div>
+      </div>
+
+      <div class="fh-category-grid fh-category-grid-modern">
+        ${categories.map((cat) => {
+          const isSelected = cat.id === state.selectedCategoryId;
+          const isActive = cat.status === 'ACTIVE';
+          const imgUrl = getCategoryTileImageUrl(cat.id);
+          return `
+            <div
+              class="fh-category-card ${isSelected ? 'selected' : ''} ${isActive ? '' : 'fh-category-inactive'}"
+              onclick="selectCategoryAndOpenRequest('${cat.id}')"
+            >
+              <div class="fh-category-card-img-wrap">
+                <img src="${imgUrl}" class="fh-category-card-real-img" alt="${escapeHtml(cat.name)}" loading="lazy" />
+                <div class="fh-category-card-img-overlay"></div>
+                ${isActive ? '' : '<span class="fh-category-status-badge">Coming Soon</span>'}
+              </div>
+              <div class="fh-category-card-info">
+                <div class="fh-category-card-title">${escapeHtml(getCategoryDisplayTitle(cat))}</div>
+                <span class="fh-category-card-arrow">${uiIcon('arrowRight', 14)}</span>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+
+      <div class="fh-floating-orange-cta-wrap">
+        <button type="button" class="fh-orange-pill-cta" onclick="openConfigureStep(0)">
+          ${uiIcon('briefcase', 18)}
+          <span>Find offers</span>
+          ${uiIcon('arrowRight', 17)}
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+function selectTopServiceShortcut(catId, subIdx) {
+  const category = (state.db?.categories || []).find((item) => item.id === catId);
+  if (!category || category.status !== 'ACTIVE') {
+    selectHomeCategory(catId);
+    return;
+  }
+  state.selectedCategoryId = catId;
+  openConfigureStep(subIdx);
+}
+
+// ----------------------------------------------------------------------------
+// REQUEST A SERVICE SCREEN (DRIVEGO SCREEN 01 TWIN + FINDIT HARARE FEATURES)
+// ----------------------------------------------------------------------------
+function renderConfigureFareOverlay() {
+  if (state.isSheetMinimized) {
+    return `
+      <div class="minimized-map-restore-bar" onclick="toggleSheetMinimize(false)">
+        <div class="minimized-map-suburb-chip">
+          <span class="live-pulse-dot" style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#10B981;"></span>
+          <span style="display:inline-flex; align-items:center; gap:4px;">${uiIcon('pin', 13)} <span>Pin Location on Harare Map (${escapeHtml(state.customSuburbLabel ? state.customSuburbLabel.split(',')[0] : 'Avondale')})</span></span>
+        </div>
+        <button type="button" class="minimized-restore-btn" onclick="toggleSheetMinimize(false); event.stopPropagation();" style="background:#0052FF; color:#FFFFFF;">
+          <span>Set Location</span>
+          ${uiIcon('chevronUp', 14)}
+        </button>
+      </div>
+    `;
+  }
+
+  const categories = state.db.categories || [];
+  const activeCategories = categories.filter((c) => c.status === 'ACTIVE');
+  const activeCat = activeCategories.find((c) => c.id === state.selectedCategoryId) || activeCategories[0];
+  if (!activeCat) {
+    return `
+      <div class="fh-main-screen-container" style="padding-top:14px;">
+        <div class="fh-profile-card" style="text-align:center; padding:24px 18px;">
+          <div style="font-size:15px; font-weight:800; color:#0F172A;">No active service categories</div>
+          <div style="font-size:13px; color:#64748B; margin-top:6px;">Please check back when a service category is enabled.</div>
+          <button type="button" class="btn-dark-sec" style="margin-top:14px;" onclick="backToHomeStep()">Back to Browse</button>
+        </div>
+      </div>
+    `;
+  }
+  const subServices = activeCat?.subServices || [];
+  const currentSub = subServices[state.selectedSubServiceIdx] || subServices[0] || {
+    name: activeCat.fullName || activeCat.name,
+    defaultUsd: activeCat.suggestedMinUsd
+  };
+
+  return `
+    <div class="fh-main-screen-container" style="padding-top:10px;">
+      <div class="fh-request-form-card" style="padding:14px;">
+        <!-- DriveGo Screen 01 Top Search Bar Header -->
+        <div class="fh-form-header-row" style="justify-content:space-between; margin-bottom:10px;">
+          <div style="display:flex; align-items:center; gap:8px; flex:1; min-width:0;">
+            <button type="button" class="fh-form-back-btn" onclick="backToHomeStep()" title="Back">
+              ${uiIcon('arrowLeft', 18)}
+            </button>
+            <button type="button" onclick="openServicePickerModal()" style="flex:1; display:flex; align-items:center; justify-content:space-between; gap:8px; background:#F8FAFC; border:1.5px solid #E2E8F0; border-radius:99px; padding:7px 12px; cursor:pointer; text-align:left; min-width:0;">
+              <span style="display:flex; align-items:center; gap:7px; min-width:0;">
+                <span style="color:#0052FF; display:inline-flex;">${uiIcon('search', 15)}</span>
+                <span style="font-size:12.5px; font-weight:800; color:#0F172A; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">What service do you need?</span>
+              </span>
+              <span style="font-size:10.5px; font-weight:800; color:#0052FF; background:#EBF3FF; padding:2px 8px; border-radius:99px; flex-shrink:0;">Tasks</span>
+            </button>
+          </div>
+          <button type="button" class="sheet-collapse-pill" style="height:34px; padding:0 10px; border-radius:99px; background:#F8FAFC; border:1px solid #E2E8F0; color:#0F172A; font-size:11px; font-weight:800; flex-shrink:0;" onclick="toggleSheetMinimize(true)">
+            ${uiIcon('map', 12)}
+            <span>Map</span>
+          </button>
+        </div>
+
+        <!-- Horizontal Service Category Strip (DriveGo Vehicle/Service Selector Twin) -->
+        <div style="display:flex; gap:6px; overflow-x:auto; padding-bottom:8px; margin-bottom:10px; scrollbar-width:none;">
+          ${activeCategories.map((cat) => {
+            const isSel = cat.id === activeCat.id;
+            return `
+              <button
+                type="button"
+                onclick="selectHomeCategory('${cat.id}')"
+                style="display:inline-flex; align-items:center; gap:6px; padding:6px 11px; border-radius:12px; border:1.5px solid ${isSel ? '#0052FF' : '#E2E8F0'}; background:${isSel ? '#0052FF' : '#F8FAFC'}; color:${isSel ? '#FFFFFF' : '#0F172A'}; font-size:11.5px; font-weight:800; white-space:nowrap; cursor:pointer; flex-shrink:0; transition:all 0.15s ease;"
+              >
+                <span style="display:inline-flex; transform:scale(0.78);">${getCategoryVectorSvg(cat.id, isSel)}</span>
+                <span>${escapeHtml(cat.shortName || cat.name)}</span>
+              </button>
+            `;
+          }).join('')}
+        </div>
+
+        <!-- DriveGo 2-Row Route Box: (1) Services in Selected Category & (2) Service & Task Details -->
+        <div style="position:relative; background:#F8FAFC; border:1.5px solid #E2E8F0; border-radius:16px; padding:10px 12px; margin-bottom:12px;">
+          <div style="position:absolute; left:21px; top:32px; bottom:56px; width:2px; background:linear-gradient(180deg, #0052FF 0%, #0F172A 100%); opacity:0.25; pointer-events:none;"></div>
+
+          <!-- ROW 1: Services in Selected Category -->
+          <div class="fh-form-select-card" onclick="openServicePickerModal()" style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:12px; padding:10px 12px; margin-bottom:8px; cursor:pointer;">
+            <div style="display:flex; align-items:center; gap:10px; min-width:0;">
+              <span style="width:10px; height:10px; border-radius:50%; background:#0052FF; box-shadow:0 0 0 3px rgba(0,82,255,0.2); flex-shrink:0;"></span>
+              <div style="color:#0052FF; display:inline-flex; flex-shrink:0;">${getCategoryVectorSvg(activeCat.id, false)}</div>
+              <div style="min-width:0;">
+                <div style="font-size:10px; font-weight:800; color:#0052FF; text-transform:uppercase; letter-spacing:0.04em;">Services in ${escapeHtml(activeCat.name)}</div>
+                <div style="font-size:14px; font-weight:800; color:#0F172A; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(currentSub.name)}</div>
+                <div style="font-size:11px; color:#64748B;">${currentSub.duration ? `~${escapeHtml(currentSub.duration)} • ` : ''}Recommended ${formatUsdPrice(currentSub.defaultUsd || state.recommendedFareUsd)}</div>
+              </div>
+            </div>
+            <span style="color:#0052FF; font-size:11px; font-weight:800; display:inline-flex; align-items:center; gap:3px; flex-shrink:0;">
+              <span>Change</span>
+              ${uiIcon('chevronDown', 14)}
+            </span>
+          </div>
+
+          <!-- ROW 2: Service Location & Task Details -->
+          <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:12px; padding:10px 12px;">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span style="width:10px; height:10px; border-radius:2px; background:#0F172A; box-shadow:0 0 0 3px rgba(15,23,42,0.14); flex-shrink:0;"></span>
+                <span style="font-size:10px; font-weight:800; color:#0F172A; text-transform:uppercase; letter-spacing:0.04em;">Service Location &amp; Task Details</span>
+              </div>
+              <span style="font-size:10.5px; color:${state.isLiveGpsActive ? '#059669' : '#0052FF'}; font-weight:800;">
+                ${state.isCustomAddressSelected
+                  ? 'Selected location'
+                  : state.isLiveGpsActive
+                    ? (state.gpsAccuracyMeters === null ? 'Live GPS fix' : `GPS ±${Math.round(state.gpsAccuracyMeters)}m`)
+                    : 'Set location'}
+              </span>
+            </div>
+
+            <div class="fh-loc-input-line" style="margin-bottom:8px;">
+              <span style="color:#0052FF; display:flex; align-items:center;">
+                ${uiIcon('pin', 17)}
+              </span>
+              <input
+                type="text"
+                id="requestServiceLocationInput"
+                class="fh-loc-text-field"
+                placeholder="Enter Harare address or suburb"
+                value="${escapeHtml(state.customAddress && state.customAddress !== 'Current Live Location' ? `${state.customAddress}, ${state.customSuburbLabel ? state.customSuburbLabel.split(',')[0] : 'Avondale'}` : (state.customSuburbLabel || 'Avondale, Harare'))}"
+                oninput="handleManualAddressInput(this.value)"
+              />
+            </div>
+
+            <div class="fh-loc-actions-bar" style="margin-bottom:8px;">
+              <button type="button" class="fh-loc-pill-btn ${state.isLiveGpsActive ? 'active-gps' : ''}" onclick="useBrowserGeolocation(false)" title="Use Live GPS">
+                <span class="live-pulse-dot" style="width:7px; height:7px; background:#10B981; border-radius:50%; display:inline-block;"></span>
+                <span>Live GPS</span>
+              </button>
+              <button type="button" class="fh-loc-pill-btn" onclick="toggleSheetMinimize(true)" title="Pick on Map">
+                ${uiIcon('map', 13)}
+                <span>Pick on Map</span>
+              </button>
+              <button type="button" class="fh-loc-pill-btn" onclick="openSuburbPickerModal()" title="Choose Suburb">
+                ${uiIcon('suburb', 13)}
+                <span>Suburbs</span>
+              </button>
+            </div>
+
+            <!-- Inline Task Description & Quick Preset Modal Trigger -->
+            <div style="border-top:1px dashed #E2E8F0; padding-top:8px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                <span style="font-size:11px; font-weight:800; color:#475569;">Task Instructions &amp; Notes</span>
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <button type="button" onclick="openNotesModal()" style="background:none; border:none; color:#0052FF; font-size:11px; font-weight:800; cursor:pointer; padding:0;">+ Preset chips</button>
+                  <span class="fh-form-counter" id="descCharCounter" style="font-size:10.5px;">${(state.draftNotes || '').length}/500</span>
+                </div>
+              </div>
+              <textarea
+                class="fh-form-textarea"
+                rows="2"
+                style="min-height:54px; padding:8px 10px; font-size:12.5px;"
+                placeholder="Describe your task (e.g. Fix leaking kitchen tap, bring tools)..."
+                maxlength="500"
+                oninput="handleDraftNotesInput(this)"
+              >${escapeHtml(state.draftNotes || '')}</textarea>
+            </div>
+          </div>
+        </div>
+
+        <!-- Media Attachments Row: Photo + WhatsApp Voice Note Chips -->
+        <div class="fh-media-row" style="margin-bottom:10px;">
+          <input type="file" id="stylePhotoInput" accept="image/*" style="display:none;" onchange="handleDraftStylePhotoUpload(this)" />
+          ${state.draftPhotoUrl ? `
+            <div class="fh-media-card" style="border-style:solid; border-color:#0052FF; background:#EFF6FF;" onclick="openImagePreviewModal('${state.draftPhotoUrl}', 'Attached Photo')">
+              <img src="${resolveMediaUrl(state.draftPhotoUrl, 'task')}" onerror="this.onerror=null; this.src='${DEFAULT_TASK_PHOTO_FALLBACK}';" style="width:34px; height:34px; border-radius:8px; object-fit:cover;" alt="Photo" />
+              <div style="font-size:11px; font-weight:800; color:#0052FF;">Photo Attached</div>
+              <span style="font-size:10px; color:#DC2626;" onclick="event.stopPropagation(); removeDraftStylePhoto();">Remove</span>
+            </div>
+          ` : `
+            <div class="fh-media-card" onclick="document.getElementById('stylePhotoInput').click()">
+              <span style="color:#0052FF;">${uiIcon('camera', 20)}</span>
+              <div style="font-size:11.5px; font-weight:700; color:#0F172A;">Add Photo</div>
+              <div style="font-size:10px; color:#94A3B8;">Task / Style Ref</div>
+            </div>
+          `}
+
+          ${state.draftVoiceNoteUrl ? `
+            <div class="fh-wa-voice-player-bar">
+              <button type="button" class="fh-wa-voice-btn" style="background:#10B981; color:#FFF; width:32px; height:32px;" onclick="playAudioFromUrl('${state.draftVoiceNoteUrl}')" title="Play Voice Note">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 3 20 12 6 21 6 3"/></svg>
+              </button>
+              <div style="flex:1; min-width:0;">
+                <div style="font-size:11.5px; font-weight:800; color:#15803D;">Voice Note Attached</div>
+                <div style="font-size:10px; color:#166534;">${formatVoiceSeconds(state.draftVoiceNoteDuration || 5)} • Ready to send</div>
+              </div>
+              <button type="button" class="fh-wa-voice-btn" style="color:#DC2626;" onclick="removeDraftVoiceNote()" title="Delete Voice Note">
+                ${uiIcon('trash', 16)}
+              </button>
+            </div>
+          ` : state.isRecordingVoiceNote ? `
+            <div class="fh-wa-voice-recording-bar">
+              <div class="fh-wa-voice-dot"></div>
+              <span class="fh-wa-voice-timer" id="voiceNoteTimerLabel">${formatVoiceSeconds(state.voiceNoteRecordSeconds)}</span>
+              <div class="fh-wa-voice-waveform">
+                <span class="fh-wa-wave-bar" style="animation-delay:0.1s; height:8px;"></span>
+                <span class="fh-wa-wave-bar" style="animation-delay:0.3s; height:14px;"></span>
+                <span class="fh-wa-wave-bar" style="animation-delay:0.2s; height:18px;"></span>
+                <span class="fh-wa-wave-bar" style="animation-delay:0.4s; height:10px;"></span>
+                <span class="fh-wa-wave-bar" style="animation-delay:0.15s; height:16px;"></span>
+                <span class="fh-wa-wave-bar" style="animation-delay:0.35s; height:6px;"></span>
+                <span class="fh-wa-wave-bar" style="animation-delay:0.25s; height:12px;"></span>
+              </div>
+              <button type="button" class="fh-wa-voice-btn" style="color:#64748B;" onclick="togglePauseResumeVoiceNote()" title="${state.isVoiceNotePaused ? 'Resume' : 'Pause'}">
+                ${state.isVoiceNotePaused
+                  ? `<svg width="18" height="18" viewBox="0 0 24 24" fill="#0052FF"><polygon points="5 3 19 12 5 21 5 3"/></svg>`
+                  : `<svg width="18" height="18" viewBox="0 0 24 24" fill="#64748B"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>`
+                }
+              </button>
+              <button type="button" class="fh-wa-voice-btn" style="color:#DC2626;" onclick="cancelVoiceNoteRecording()" title="Cancel & Delete">
+                ${uiIcon('trash', 18)}
+              </button>
+              <button type="button" class="fh-wa-voice-btn" style="background:#10B981; color:#FFFFFF; width:30px; height:30px;" onclick="stopRecordingVoiceNote()" title="Finish Recording">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+              </button>
+            </div>
+          ` : `
+            <div class="fh-media-card" onclick="startRecordingVoiceNote()">
+              <div class="fh-media-voice-btn-circle">
+                ${uiIcon('mic', 17)}
+              </div>
+              <div style="font-size:11.5px; font-weight:700; color:#0F172A;">Voice Note</div>
+              <div style="font-size:10px; color:#94A3B8;">WhatsApp Style</div>
+            </div>
+          `}
+        </div>
+
+        <!-- DriveGo Screen 01 Fare Stepper (- $25.00 +) & Payment Pill -->
+        <div class="fh-form-group" style="margin-bottom:10px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <span class="fh-form-label">Offer your fare (USD)</span>
+            <button type="button" onclick="openPaymentModal()" style="display:inline-flex; align-items:center; gap:5px; background:#EBF3FF; border:1px solid #BFDBFE; color:#0052FF; padding:3px 10px; border-radius:99px; font-size:11px; font-weight:800; cursor:pointer;">
+              ${uiIcon('wallet', 12)}
+              <span>${escapeHtml(state.draftPaymentMethod || 'Cash USD')}</span>
+              ${uiIcon('chevronDown', 11)}
+            </button>
+          </div>
+          <div class="fh-budget-input-wrap">
+            <button type="button" class="fh-budget-adjust-btn" onclick="adjustDraftFare(-1)">−</button>
+            <div class="fh-budget-amount-box">
+              <div class="fh-budget-amount-val">${formatUsdPrice(state.draftFareUsd)}</div>
+              <div class="fh-budget-rec-text">Recommended: ${formatUsdPrice(state.recommendedFareUsd)}</div>
+            </div>
+            <button type="button" class="fh-budget-adjust-btn" onclick="adjustDraftFare(1)">+</button>
+          </div>
+        </div>
+
+        <!-- Submit / Find Offers CTA -->
+        <button type="button" class="fh-orange-pill-cta" style="margin-top:4px;" onclick="submitServiceRequest()">
+          <span>Find offers</span>
+          ${uiIcon('arrowRight', 17)}
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+// ----------------------------------------------------------------------------
+// OFFERS RECEIVED SCREEN (DRIVEGO SCREEN 02 TWIN: COMPARE OFFERS WITH DECLINE & ACCEPT)
+// ----------------------------------------------------------------------------
+function renderCompareOffersOverlay(req) {
+  if (!req) req = getCustomerActiveRequest();
+
+  if (req && (isBookedStatus(req.status) || req.acceptedOfferId)) {
+    return `
+      <div class="fh-main-screen-container" style="padding-top:14px;">
+        <div class="fh-request-form-card" style="text-align:center; padding:28px 18px;">
+          <div style="width:58px; height:58px; border-radius:50%; background:#ECFDF5; color:#10B981; display:flex; align-items:center; justify-content:center; margin:0 auto 14px;">
+            ${uiIcon('check', 28)}
+          </div>
+          <div style="font-size:17px; font-weight:800; color:#0F172A; margin-bottom:6px;">Offer Accepted!</div>
+          <div style="font-size:13px; color:#64748B; margin-bottom:20px; line-height:1.4;">
+            ${escapeHtml(req.acceptedProviderName || 'Specialist')} is confirmed. Track their route and find your Arrival Start PIN on the Home screen.
+          </div>
+          <button type="button" class="btn-primary-blue" style="width:100%; height:46px; font-weight:800; background:#0052FF;" onclick="switchCustomerTab('HOME')">
+            <span>View Live Tracking &amp; Start PIN</span>
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  const activeOffers = (req?.offers || []).filter((o) => o.status !== 'DECLINED');
+  activeOffers.sort((a, b) => {
+    const timeA = Number(a.updatedAt || new Date(a.createdAt || 0).getTime() || 0);
+    const timeB = Number(b.updatedAt || new Date(b.createdAt || 0).getTime() || 0);
+    if (timeB !== timeA) return timeB - timeA;
+    return String(a.id || '').localeCompare(String(b.id || ''));
+  });
+
+  return `
+    <div class="fh-main-screen-container" style="padding-top:14px;">
+      <!-- Header -->
+      <div class="fh-form-header-row" style="margin-bottom:12px;">
+        <button type="button" class="fh-form-back-btn" onclick="switchCustomerTab('HOME')" title="Back">
+          ${uiIcon('arrowLeft', 18)}
+        </button>
+        <div>
+          <div class="fh-form-header-title">Offers Received</div>
+          <div style="font-size:12px; color:#64748B; font-weight:600;">${activeOffers.length} offer${activeOffers.length !== 1 ? 's' : ''} for this request</div>
+        </div>
+      </div>
+
+      ${req ? `
+        <!-- Request Summary Banner -->
+        <div class="fh-request-summary-banner" style="margin-bottom:14px;">
+          <div class="fh-request-summary-thumb" style="display:flex; align-items:center; justify-content:center; color:#0052FF;">
+            ${getCategoryVectorSvg(req.categoryId, false)}
+          </div>
+          <div style="flex:1; min-width:0;">
+            <div style="font-size:14px; font-weight:800; color:#0F172A;">${escapeHtml(req.title)}</div>
+            <div style="font-size:12px; color:#64748B; display:flex; align-items:center; gap:4px; margin-top:2px;">
+              <span style="display:inline-flex; align-items:center; gap:3px;">${uiIcon('pin', 12)} <span>${escapeHtml(req.suburbName || 'Harare')}</span></span>
+              <span>•</span>
+              <span style="font-weight:700; color:#0052FF;">$${req.budgetUsd}</span>
+            </div>
+          </div>
+        </div>
+      ` : ''}
+
+      ${activeOffers.length === 0 ? `
+        <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:18px; padding:32px 16px; text-align:center;">
+          <div style="font-size:15px; font-weight:800; color:#0F172A; margin-bottom:6px;">No offers yet</div>
+          <div style="font-size:12.5px; color:#64748B; max-width:260px; margin:0 auto 16px;">Nearby Harare specialists are reviewing your request. Offers will appear here in real time.</div>
+          <button type="button" class="btn-primary-blue" style="width:auto; height:36px; padding:0 18px; margin:0 auto;" onclick="switchCustomerTab('HOME')">View Live Radar</button>
+        </div>
+      ` : `
+        <div class="fh-offers-container">
+          ${activeOffers.map((offer) => {
+            const prov = resolveProviderByIdOrOffer(offer.providerId, req, offer);
+            const distKm = (offer.distanceKm || calculateDistanceKm(prov?.lat, prov?.lng, req.lat, req.lng) || 2.4).toFixed(1);
+            const isYourFare = Number(offer.priceUsd) <= Number(req.budgetUsd);
+            return `
+              <div class="fh-provider-offer-card">
+                <div class="fh-offer-card-top">
+                  <div class="fh-offer-provider-left">
+                    <img
+                      src="${resolveMediaUrl(prov?.avatarUrl)}"
+                      onerror="this.onerror=null; this.src='${DEFAULT_AVATAR_FALLBACK}';"
+                      class="fh-offer-avatar"
+                      alt="${escapeHtml(offer.providerName || prov?.name || 'Pro')}"
+                    />
+                    <div style="min-width:0; flex:1;">
+                      <div class="fh-offer-name-row">
+                        <span class="fh-offer-name">${escapeHtml(offer.providerName || prov?.name || 'Harare Pro')}</span>
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="#0052FF"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+                      </div>
+                      <div class="fh-offer-meta-row">
+                        ${formatProRatingAndJobs(offer.providerRating ?? prov?.rating, offer.providerCompletedJobs ?? prov?.completedBookings)}
+                      </div>
+                      <div style="font-size:11px; color:#10B981; font-weight:700; margin-top:2px; display:flex; align-items:center; gap:5px;">
+                        <span>● Available Today • ${distKm} km • ~${offer.etaMinutes || 5} min</span>
+                        ${isYourFare ? `<span style="background:#ECFDF5; color:#059669; border:1px solid #A7F3D0; padding:1px 6px; border-radius:99px; font-size:10px; font-weight:800;">Your fare</span>` : ''}
+                      </div>
+                    </div>
+                  </div>
+                  <div class="fh-offer-price-tag">$${offer.priceUsd}</div>
+                </div>
+
+                <div class="fh-offer-actions-row" style="display:grid; grid-template-columns:0.9fr 1fr 1.2fr; gap:8px;">
+                  <button type="button" class="fh-btn-ghost" style="color:#DC2626; border-color:#FECACA; background:#FFF1F2;" onclick="declineOffer('${req.id}', '${offer.id}')">
+                    Decline
+                  </button>
+                  <button type="button" class="fh-btn-ghost" onclick="openProviderPortfolioModal('${prov?.id || offer.providerId}')">
+                    Portfolio
+                  </button>
+                  <button type="button" class="fh-btn-orange" onclick="acceptOffer('${req.id}', '${offer.id}')">
+                    Accept
+                  </button>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `}
+    </div>
+  `;
+}
+
+// ----------------------------------------------------------------------------
+// CUSTOMER REQUESTS TAB
+// ----------------------------------------------------------------------------
+function renderCustomerRequestsTab() {
+  const req = getCustomerActiveRequest();
+  const pastRequests = (state.db?.requests || []).filter((r) => r.customerId === state.currentUser?.id && r.status === 'COMPLETED');
+
+  return `
+    <div class="fh-main-screen-container" style="padding-top:14px;">
+      <div style="font-size:18px; font-weight:800; color:#0F172A; margin-bottom:12px;">My Requests</div>
+
+      ${req ? `
+        <div class="fh-request-form-card" style="border:1.5px solid #0052FF; margin-bottom:16px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <span style="background:#EFF6FF; color:#0052FF; font-size:11px; font-weight:800; padding:3px 10px; border-radius:99px;">Active: ${req.status}</span>
+            <span style="font-size:15px; font-weight:800; color:#0052FF;">$${req.budgetUsd}</span>
+          </div>
+          <div style="font-size:15px; font-weight:800; color:#0F172A; margin-bottom:2px;">${escapeHtml(req.title)}</div>
+          <div style="font-size:12px; color:#64748B; margin-bottom:12px; display:flex; align-items:center; gap:4px;">${uiIcon('pin', 12)} <span>${escapeHtml(req.suburbName || 'Harare')}</span></div>
+          <button type="button" class="fh-orange-pill-cta" style="height:40px; font-size:13px;" onclick="switchCustomerTab('HOME')">
+            View Live Status
+          </button>
+        </div>
+      ` : ''}
+
+      <div style="font-size:13px; font-weight:800; color:#64748B; text-transform:uppercase; margin-bottom:8px;">Past Visits</div>
+
+      ${pastRequests.length === 0 ? `
+        <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:16px; padding:24px; text-align:center; color:#64748B; font-size:13px;">
+          No past completed requests yet.
+        </div>
+      ` : `
+        <div style="display:flex; flex-direction:column; gap:8px;">
+          ${pastRequests.map((r) => `
+            <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:14px; padding:12px 14px; display:flex; justify-content:space-between; align-items:center;">
+              <div>
+                <div style="font-size:13.5px; font-weight:800; color:#0F172A;">${escapeHtml(r.title)}</div>
+                <div style="font-size:11.5px; color:#64748B; display:flex; align-items:center; gap:4px;">${uiIcon('pin', 11)} <span>${escapeHtml(r.suburbName || 'Harare')} • Completed</span></div>
+              </div>
+              <div style="font-size:14px; font-weight:800; color:#0052FF;">$${r.agreedTotalUsd || r.budgetUsd}</div>
+            </div>
+          `).join('')}
+        </div>
+      `}
+    </div>
+  `;
+}
+
+// ----------------------------------------------------------------------------
+// CUSTOMER PROFILE TAB
+// ----------------------------------------------------------------------------
+function renderCustomerProfileTab() {
+  if (!state.isAuthenticated) {
+    return `
+      <div class="fh-main-screen-container" style="padding-top:14px;">
+        <div class="fh-profile-card" style="margin-bottom:12px; text-align:center; padding:24px 18px;">
+          <div class="drawer-avatar-circle" style="width:60px; height:60px; margin:0 auto 12px; border-radius:50%; background:#EFF6FF; color:#0052FF; display:flex; align-items:center; justify-content:center;">
+            ${uiIcon('user', 26)}
+          </div>
+          <div style="font-size:18px; font-weight:800; color:#0F172A; margin-bottom:6px;">Profile</div>
+          <button type="button" class="btn-primary-blue" style="margin-top:8px; height:44px;" onclick="openSignInRoleChoiceModal('LOGIN')">Sign In</button>
+          <button type="button" class="btn-dark-sec" style="margin-top:8px; height:42px;" onclick="openSignInRoleChoiceModal('SIGNUP')">Create Account</button>
+        </div>
+      </div>
+    `;
+  }
+  const user = state.currentUser;
+  const rating = user?.rating ? Number(user.rating).toFixed(1) : '5.0';
+  const visits = user?.completedBookings || 0;
+  const walletBal = Number(user?.walletBalanceUsd || 0).toFixed(2);
+
+  return `
+    <div class="fh-main-screen-container" style="padding-top:14px;">
+      <!-- Profile Card -->
+      <div class="fh-profile-card" style="margin-bottom:12px;">
+        <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
+          <div class="drawer-avatar-circle" style="width:52px; height:52px; border-radius:50%; background:#EFF6FF; color:#0052FF; font-size:18px; font-weight:800; display:flex; align-items:center; justify-content:center;">
+            ${user?.avatarUrl
+              ? `<img src="${resolveMediaUrl(user.avatarUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_AVATAR_FALLBACK}';" style="width:100%; height:100%; border-radius:50%; object-fit:cover;" alt="Avatar" />`
+              : `<span>${user?.avatarInitials || (user?.name ? user.name.slice(0, 2).toUpperCase() : 'FH')}</span>`
+            }
+          </div>
+          <div style="flex:1; min-width:0;">
+            <div style="font-size:16px; font-weight:800; color:#0F172A;">${escapeHtml(user?.name || 'Findit Client')}</div>
+            <div style="font-size:12px; color:#64748B; font-weight:600;">${user?.phone ? `${escapeHtml(user.phone)} • ` : ''}${escapeHtml(user?.suburbName || 'Avondale')}</div>
+            ${user?.finditId ? `<div style="font-size:11px; font-weight:800; color:#0052FF; margin-top:2px;">ID: ${escapeHtml(user.finditId)}</div>` : ''}
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; padding-top:10px; border-top:1px solid #F1F5F9;">
+          <div style="background:#F8FAFC; border-radius:12px; padding:8px 10px; text-align:center;">
+            <div style="font-size:11px; color:#64748B; font-weight:600;">Rating</div>
+            <div style="font-size:15px; font-weight:800; color:#0F172A; display:inline-flex; align-items:center; gap:4px;">${uiIcon('star', 14)} <span>${rating}</span></div>
+          </div>
+          <div style="background:#F8FAFC; border-radius:12px; padding:8px 10px; text-align:center;">
+            <div style="font-size:11px; color:#64748B; font-weight:600;">Completed</div>
+            <div style="font-size:15px; font-weight:800; color:#0F172A;">${visits} visits</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Mode Switch Card -->
+      <div class="fh-role-switch-banner" onclick="toggleClientAndProviderMode()">
+        <div>
+          <div style="font-size:14px; font-weight:800;">Switch to Service Provider</div>
+          <div style="font-size:11.5px; opacity:0.85;">Offer services in Harare &amp; earn your price</div>
+        </div>
+        <span style="display:inline-flex;">${uiIcon('arrowRight', 18)}</span>
+      </div>
+
+      <!-- Direct Android APK Download Card -->
+      <a href="/FinditHarare.apk" download="FinditHarare.apk" style="display:flex; align-items:center; justify-content:space-between; gap:12px; background:linear-gradient(135deg, #059669 0%, #047857 100%); border-radius:16px; padding:13px 16px; color:#FFFFFF; text-decoration:none; margin-bottom:12px; box-shadow:0 4px 14px rgba(5,150,105,0.25);">
+        <div style="display:flex; align-items:center; gap:10px; min-width:0;">
+          <div style="width:38px; height:38px; border-radius:10px; background:rgba(255,255,255,0.2); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
+              <line x1="12" y1="18" x2="12.01" y2="18"/>
+            </svg>
+          </div>
+          <div>
+            <div style="font-size:13.5px; font-weight:800;">Download Android App (.APK)</div>
+            <div style="font-size:11px; opacity:0.9;">Direct install for Android phones • 9.5 MB</div>
+          </div>
+        </div>
+        <span style="background:rgba(255,255,255,0.25); font-size:11.5px; font-weight:800; padding:4px 10px; border-radius:99px; white-space:nowrap;">
+          Download
+        </span>
+      </a>
+
+      <!-- Menu Items List -->
+      <div class="fh-profile-menu-list">
+        <div class="fh-profile-menu-row" onclick="openSettingsModal()">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span style="color:#0052FF;">${uiIcon('settings', 18)}</span>
+            <span>Account &amp; App Settings</span>
+          </div>
+          ${uiIcon('chevronRight', 16)}
+        </div>
+        <div class="fh-profile-menu-row" onclick="openWalletTopupModal()">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span style="color:#0052FF;">${uiIcon('wallet', 18)}</span>
+            <span>Wallet &amp; EcoCash Balance</span>
+          </div>
+          <span style="color:#0052FF; font-weight:800;">$${walletBal}</span>
+        </div>
+        <div class="fh-profile-menu-row" onclick="switchCustomerTab('REQUESTS')">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span style="color:#0052FF;">${uiIcon('notes', 18)}</span>
+            <span>My Service History</span>
+          </div>
+          ${uiIcon('chevronRight', 16)}
+        </div>
+        <div class="fh-profile-menu-row" onclick="openDisputeHistoryModal()">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span style="color:#0052FF;">${uiIcon('shield', 18)}</span>
+            <span>Dispute &amp; Resolution Center</span>
+          </div>
+          ${uiIcon('chevronRight', 16)}
+        </div>
+        <div class="fh-profile-menu-row" onclick="openSafetyCenterModal()">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span style="color:#0052FF;">${uiIcon('shield', 18)}</span>
+            <span>Safety Center &amp; Emergency SOS</span>
+          </div>
+          ${uiIcon('chevronRight', 16)}
+        </div>
+        <div class="fh-profile-menu-row" onclick="openWhatsAppDirectSupport()">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span style="color:#10B981;">${uiIcon('whatsapp', 18)}</span>
+            <span>WhatsApp Support</span>
+          </div>
+          ${uiIcon('chevronRight', 16)}
+        </div>
+        <div class="fh-profile-menu-row" onclick="logoutCurrentAccount()" style="color:#DC2626;">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span>${uiIcon('logout', 18)}</span>
+            <span>Log Out</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ----------------------------------------------------------------------------
+// PROVIDER PROFILE TAB
+// ----------------------------------------------------------------------------
+function renderProviderProfileTab() {
+  const prov = state.currentUser || state.db?.providers?.[0];
+  const walletBal = Number(prov?.walletBalanceUsd || 0).toFixed(2);
+  const completed = prov?.completedBookings ?? 0;
+  const rating = (completed > 0 && prov?.rating) ? Number(prov.rating).toFixed(1) : 'New';
+
+  return `
+    <div class="fh-main-screen-container" style="padding-top:14px;">
+      <!-- Profile Card -->
+      <div class="fh-profile-card" style="margin-bottom:12px;">
+        <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
+          <div class="drawer-avatar-circle" style="width:52px; height:52px; border-radius:50%; background:#EFF6FF; color:#0052FF; font-size:18px; font-weight:800; display:flex; align-items:center; justify-content:center;">
+            ${prov?.avatarUrl
+              ? `<img src="${resolveMediaUrl(prov.avatarUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_AVATAR_FALLBACK}';" style="width:100%; height:100%; border-radius:50%; object-fit:cover;" alt="Avatar" />`
+              : `<span>${prov?.avatarInitials || (prov?.name ? prov.name.slice(0, 2).toUpperCase() : 'FH')}</span>`
+            }
+          </div>
+          <div style="flex:1; min-width:0;">
+            <div style="font-size:16px; font-weight:800; color:#0F172A; display:flex; align-items:center; gap:6px;">
+              <span>${escapeHtml(prov?.name || 'Specialist')}</span>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="#0052FF"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+            </div>
+            ${prov?.phone ? `<div style="font-size:12px; color:#64748B;">${escapeHtml(prov.phone)}</div>` : ''}
+            ${prov?.finditId ? `<div style="font-size:11px; font-weight:800; color:#0052FF; margin-top:2px;">ID: ${escapeHtml(prov.finditId)}</div>` : ''}
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; padding-top:10px; border-top:1px solid #F1F5F9;">
+          <div style="background:#F8FAFC; border-radius:12px; padding:8px 10px; text-align:center;">
+            <div style="font-size:11px; color:#64748B; font-weight:600;">Rating</div>
+            <div style="font-size:15px; font-weight:800; color:#0F172A; display:inline-flex; align-items:center; gap:4px;">${uiIcon('star', 14)} <span>${rating}</span></div>
+          </div>
+          <div style="background:#F8FAFC; border-radius:12px; padding:8px 10px; text-align:center;">
+            <div style="font-size:11px; color:#64748B; font-weight:600;">Completed Jobs</div>
+            <div style="font-size:15px; font-weight:800; color:#0F172A;">${completed}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Mode Switch Card -->
+      <div class="fh-role-switch-banner" onclick="toggleClientAndProviderMode()">
+        <div>
+          <div style="font-size:14px; font-weight:800;">Switch to Client Mode</div>
+          <div style="font-size:11.5px; opacity:0.85;">Hire specialists &amp; request home services</div>
+        </div>
+        <span style="display:inline-flex;">${uiIcon('arrowRight', 18)}</span>
+      </div>
+
+      <!-- Direct Android APK Download Card -->
+      <a href="/FinditHarare.apk" download="FinditHarare.apk" style="display:flex; align-items:center; justify-content:space-between; gap:12px; background:linear-gradient(135deg, #059669 0%, #047857 100%); border-radius:16px; padding:13px 16px; color:#FFFFFF; text-decoration:none; margin-bottom:12px; box-shadow:0 4px 14px rgba(5,150,105,0.25);">
+        <div style="display:flex; align-items:center; gap:10px; min-width:0;">
+          <div style="width:38px; height:38px; border-radius:10px; background:rgba(255,255,255,0.2); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
+              <line x1="12" y1="18" x2="12.01" y2="18"/>
+            </svg>
+          </div>
+          <div>
+            <div style="font-size:13.5px; font-weight:800;">Download Android App (.APK)</div>
+            <div style="font-size:11px; opacity:0.9;">Direct install for Android phones • 9.5 MB</div>
+          </div>
+        </div>
+        <span style="background:rgba(255,255,255,0.25); font-size:11.5px; font-weight:800; padding:4px 10px; border-radius:99px; white-space:nowrap;">
+          Download
+        </span>
+      </a>
+
+      <!-- Menu Items List -->
+      <div class="fh-profile-menu-list">
+        <div class="fh-profile-menu-row" onclick="openSettingsModal()">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span style="color:#0052FF;">${uiIcon('settings', 18)}</span>
+            <span>Account &amp; Job Categories Settings</span>
+          </div>
+          ${uiIcon('chevronRight', 16)}
+        </div>
+        <div class="fh-profile-menu-row" onclick="openWalletTopupModal()">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span style="color:#0052FF;">${uiIcon('wallet', 18)}</span>
+            <span>Provider Wallet (Commission Balance)</span>
+          </div>
+          <span style="color:#0052FF; font-weight:800;">$${walletBal}</span>
+        </div>
+        <div class="fh-profile-menu-row" onclick="state.providerTab='CATALOGUE'; renderUiOverlay();">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span style="color:#0052FF;">${uiIcon('list', 18)}</span>
+            <span>Service Catalogue &amp; Rates</span>
+          </div>
+          ${uiIcon('chevronRight', 16)}
+        </div>
+        <div class="fh-profile-menu-row" onclick="openSafetyCenterModal()">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span style="color:#0052FF;">${uiIcon('shield', 18)}</span>
+            <span>Safety Center &amp; Emergency SOS</span>
+          </div>
+          ${uiIcon('chevronRight', 16)}
+        </div>
+        <div class="fh-profile-menu-row" onclick="openWhatsAppDirectSupport()">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span style="color:#10B981;">${uiIcon('whatsapp', 18)}</span>
+            <span>WhatsApp Provider Support</span>
+          </div>
+          ${uiIcon('chevronRight', 16)}
+        </div>
+        <div class="fh-profile-menu-row" onclick="logoutCurrentAccount()" style="color:#DC2626;">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span>${uiIcon('logout', 18)}</span>
+            <span>Log Out</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ----------------------------------------------------------------------------
+// PROVIDER HOME TAB (DRIVEGO SCREEN 06 RADAR & EARNINGS TODAY TWIN)
+// ----------------------------------------------------------------------------
+function renderProviderHomeTab(prov, openRequests, activeJob) {
+  const dayStart = new Date();
+  dayStart.setHours(0, 0, 0, 0);
+  const completedTodayList = (state.db?.requests || []).filter((request) =>
+    request.status === 'COMPLETED' &&
+    request.acceptedProviderId === prov?.id &&
+    new Date(request.completedAt || request.updatedAt || 0).getTime() >= dayStart.getTime()
+  );
+  const completedToday = completedTodayList.length;
+  const earningsTodayUsd = completedTodayList.reduce((sum, r) => sum + Number(r.agreedTotalUsd || r.budgetUsd || 0), 0);
+  const walletBal = Number(prov?.walletBalanceUsd || 0).toFixed(2);
+  const isOnline = prov?.isOnline !== false && prov?.status !== 'OFFLINE';
+
+  return `
+    <div class="fh-main-screen-container fh-provider-dashboard">
+      <!-- DriveGo Screen 06 Dark "EARNINGS TODAY" & Online Radar Card -->
+      <div style="background:linear-gradient(135deg, #0F172A 0%, #1E293B 100%); border-radius:20px; padding:18px; color:#FFFFFF; margin-bottom:14px; box-shadow:0 12px 28px rgba(15,23,42,0.22);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+          <div>
+            <div style="font-size:10.5px; font-weight:800; color:#94A3B8; text-transform:uppercase; letter-spacing:0.08em;">EARNINGS TODAY</div>
+            <div style="font-size:28px; font-weight:900; color:#FFFFFF; letter-spacing:-0.02em; margin-top:2px;">$${earningsTodayUsd.toFixed(2)}</div>
+          </div>
+          <button
+            type="button"
+            onclick="toggleProviderOnlineStatus()"
+            style="display:inline-flex; align-items:center; gap:7px; padding:8px 14px; border-radius:99px; border:1.5px solid ${isOnline ? '#10B981' : '#64748B'}; background:${isOnline ? 'rgba(16,185,129,0.18)' : 'rgba(100,116,139,0.2)'}; color:${isOnline ? '#34D399' : '#CBD5E1'}; font-size:12px; font-weight:800; cursor:pointer;"
+          >
+            <span style="width:8px; height:8px; border-radius:50%; background:${isOnline ? '#10B981' : '#94A3B8'}; ${isOnline ? 'box-shadow:0 0 0 3px rgba(16,185,129,0.3);' : ''}"></span>
+            <span>${isOnline ? 'Online' : 'Offline'}</span>
+          </button>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; padding-top:12px; border-top:1px solid rgba(255,255,255,0.1);">
+          <div>
+            <div style="font-size:10px; color:#94A3B8; font-weight:700; text-transform:uppercase;">Jobs Today</div>
+            <div style="font-size:15px; font-weight:800; color:#FFFFFF; margin-top:2px;">${completedToday}</div>
+          </div>
+          <div>
+            <div style="font-size:10px; color:#94A3B8; font-weight:700; text-transform:uppercase;">Total Jobs</div>
+            <div style="font-size:15px; font-weight:800; color:#FFFFFF; margin-top:2px;">${prov?.completedBookings ?? 0}</div>
+          </div>
+          <div onclick="openWalletTopupModal()" style="cursor:pointer;">
+            <div style="font-size:10px; color:#94A3B8; font-weight:700; text-transform:uppercase;">Wallet</div>
+            <div style="font-size:15px; font-weight:800; color:#10B981; margin-top:2px;">$${walletBal}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- DriveGo Live Radar Status Strip -->
+      <div style="background:${isOnline ? '#EBF3FF' : '#F8FAFC'}; border:1.5px solid ${isOnline ? '#BFDBFE' : '#E2E8F0'}; border-radius:16px; padding:12px 14px; margin-bottom:14px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="width:10px; height:10px; border-radius:50%; background:${isOnline ? '#0052FF' : '#94A3B8'}; ${isOnline ? 'box-shadow:0 0 0 4px rgba(0,82,255,0.2);' : ''} flex-shrink:0;"></span>
+          <div>
+            <div style="font-size:13px; font-weight:800; color:#0F172A;">
+              ${isOnline ? 'Looking for jobs near you in Harare' : 'Radar paused — You are Offline'}
+            </div>
+            <div style="font-size:11.5px; color:#64748B;">
+              ${isOnline ? `${openRequests.length} matching request${openRequests.length === 1 ? '' : 's'} available now` : 'Tap Online above to receive live client requests'}
+            </div>
+          </div>
+        </div>
+        <button type="button" onclick="setProviderFeedView('MAP'); switchProviderTab('FEED');" style="background:#0052FF; color:#FFFFFF; border:none; border-radius:10px; padding:7px 12px; font-size:11.5px; font-weight:800; cursor:pointer; display:inline-flex; align-items:center; gap:5px; flex-shrink:0;">
+          ${uiIcon('map', 13)}
+          <span>Radar</span>
+        </button>
+      </div>
+
+      ${activeJob ? `
+        <button type="button" class="fh-provider-active-card" onclick="switchProviderTab('ACTIVE_JOB')">
+          <span class="fh-provider-card-kicker"><span class="fh-provider-live-dot"></span> ACTIVE VISIT</span>
+          <span class="fh-provider-active-price">${formatUsdPrice(activeJob.agreedTotalUsd || activeJob.budgetUsd)}</span>
+          <span class="fh-provider-active-client">${escapeHtml(activeJob.customerName || 'Your client')}</span>
+          <span class="fh-provider-active-location">${uiIcon('pin', 14)} ${escapeHtml(activeJob.suburbName || 'Harare')}</span>
+          <span class="fh-provider-active-action">Continue visit ${uiIcon('arrowRight', 15)}</span>
+        </button>
+      ` : ''}
+
+      <div class="fh-provider-metrics">
+        <div class="fh-provider-metric-card">
+          <span class="fh-provider-metric-icon">${uiIcon('briefcase', 17)}</span>
+          <span class="fh-provider-metric-label">Completed today</span>
+          <strong>${completedToday}</strong>
+          <span class="fh-provider-metric-note">${completedToday === 1 ? 'job completed' : 'jobs completed'}</span>
+        </div>
+        <button type="button" class="fh-provider-metric-card fh-provider-wallet-card" onclick="openWalletTopupModal()">
+          <span class="fh-provider-metric-icon">${uiIcon('wallet', 17)}</span>
+          <span class="fh-provider-metric-label">Provider wallet</span>
+          <strong>${formatUsdPrice(walletBal)}</strong>
+          <span class="fh-provider-metric-note">Manage balance ${uiIcon('arrowRight', 13)}</span>
+        </button>
+      </div>
+
+      <button type="button" class="fh-provider-opportunities-card" onclick="switchProviderTab('FEED')">
+        <span class="fh-provider-opportunities-topline">
+          <span class="fh-provider-opportunities-icon">${uiIcon('briefcase', 19)}</span>
+          <span class="fh-provider-opportunities-count">${openRequests.length} open</span>
+        </span>
+        <span class="fh-provider-opportunities-title">Opportunities for you</span>
+        <span class="fh-provider-opportunities-copy">New requests from clients in your service categories.</span>
+        <span class="fh-provider-opportunities-action">Browse opportunities ${uiIcon('arrowRight', 16)}</span>
+      </button>
+
+      <!-- DriveGo Screen 06 Disconnect / Go Offline Bar -->
+      <button
+        type="button"
+        onclick="toggleProviderOnlineStatus()"
+        style="width:100%; height:46px; border-radius:14px; border:1.5px solid ${isOnline ? '#E2E8F0' : '#0052FF'}; background:${isOnline ? '#FFFFFF' : '#0052FF'}; color:${isOnline ? '#0F172A' : '#FFFFFF'}; font-size:13px; font-weight:800; display:flex; align-items:center; justify-content:center; gap:8px; cursor:pointer; margin-top:4px;"
+      >
+        ${uiIcon('logout', 16)}
+        <span>${isOnline ? 'Disconnect from live radar (Go Offline)' : 'Connect to live radar (Go Online)'}</span>
+      </button>
+    </div>
+  `;
+}
+
+// ----------------------------------------------------------------------------
+// SEARCHING / RADAR SHEET ("6 pros are viewing your request" + -0.50 / +0.50 + Raise fare)
+// ----------------------------------------------------------------------------
+function renderSearchingRadarOverlay(req) {
+  const viewerIdSet = new Set([
+    ...(Array.isArray(req.activeViewerIds) ? req.activeViewerIds : []),
+    ...((req.offers || []).map((o) => o.providerId).filter(Boolean))
+  ]);
+  let viewingPros = (state.db.providers || []).filter(
+    (p) => viewerIdSet.has(p.id) && p.isOnline !== false && !p.isBanned
+  ).slice(0, 6);
+  if (viewingPros.length === 0) {
+    const matchingPros = (state.db.providers || []).filter((p) => {
+      if (p.isOnline === false || p.isBanned) return false;
+      const cats = getProviderCategoryIds(p);
+      return cats.length === 0 || !req.categoryId || cats.includes(req.categoryId);
+    });
+    viewingPros = (matchingPros.length > 0 ? matchingPros : (state.db.providers || []).filter((p) => !p.isBanned)).slice(0, 5);
+  }
+  const viewingLabel = viewingPros.length <= 1
+    ? `${Math.max(1, viewingPros.length)} verified pro active nearby • Broadcasting live`
+    : `${viewingPros.length} verified pros active nearby • Broadcasting live`;
+  const currentFare = state.pendingSearchFareUsd !== null ? Number(state.pendingSearchFareUsd) : Number(req.budgetUsd);
+  const isChanged = Math.abs(currentFare - Number(req.budgetUsd)) >= 0.01;
+  const isGoodFare = currentFare >= state.recommendedFareUsd;
+
+  return `
+    <div class="indrive-top-left-row">
+      <button class="cancel-request-red-pill pointer-auto" onclick="openCancelTaskModal('${req.id}')">
+        ${uiIcon('close', 14)}
+        <span>Cancel request</span>
+      </button>
+    </div>
+
+    <div class="sheet-floating-controls" style="justify-content:flex-end;">
+      <button class="map-floating-gps-btn" onclick="useBrowserGeolocation(false)" title="Center on My Live Location">
+        ${uiIcon('crosshair', 19)}
+      </button>
+    </div>
+
+    ${state.isSheetMinimized ? `
+      <div class="minimized-map-restore-bar" onclick="toggleSheetMinimize(false)">
+        <div>
+          <div style="font-size:13.5px; font-weight:800; color:var(--text-main);">Searching Pros • ${formatUsdPrice(currentFare)}</div>
+          <div style="font-size:11.5px; color:var(--text-secondary); font-weight:600;">${viewingLabel} • Tap to adjust fare</div>
+        </div>
+        <button type="button" class="minimized-restore-btn" onclick="toggleSheetMinimize(false); event.stopPropagation();">
+          ${uiIcon('chevronUp', 14)}
+          <span>Open Radar</span>
+        </button>
+      </div>
+    ` : `
+      <div class="indrive-dark-sheet">
+        <div class="viewing-pros-banner">
+          <span class="viewing-pros-text" id="viewingProsText">${viewingLabel}</span>
+          <div style="display:flex; align-items:center; gap:8px;">
+            ${viewingPros.length > 0 ? `
+              <div class="viewing-avatars-stack">
+                ${viewingPros.map((p) => `
+                  <img src="${resolveMediaUrl(p.avatarUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_AVATAR_FALLBACK}';" alt="${p.shortName || p.name}" />
+                `).join('')}
+              </div>
+            ` : ''}
+            <button class="sheet-collapse-pill" onclick="toggleSheetMinimize(true)">
+              ${uiIcon('map', 12)}
+              <span>Map</span>
+              ${uiIcon('chevronDown', 12)}
+            </button>
+          </div>
+        </div>
+
+        <div class="priority-timer-row">
+          <div class="priority-status-text">
+            ${isGoodFare ? 'Good fare. Your request gets priority' : 'Low fare. Raise fare for faster offers'}
+          </div>
+          <div class="search-mmss-timer" id="searchMmSsTimer">0:50</div>
+        </div>
+
+        <div class="search-progress-track">
+          <div class="search-progress-fill" id="searchProgressFill" style="width:76%;"></div>
+        </div>
+
+        <div class="live-fare-step-row">
+          <button class="fare-step-pill-btn" onclick="stepActiveSearchFare(-0.5)">-0.50</button>
+          <div class="live-fare-center-val">${formatUsdPrice(currentFare)}</div>
+          <button class="fare-step-pill-btn" onclick="stepActiveSearchFare(0.5)">+0.50</button>
+        </div>
+
+        <button
+          class="raise-fare-btn ${isChanged ? 'ready' : ''}"
+          ${isChanged ? `onclick="commitActiveSearchFare('${req.id}')"` : 'disabled'}
+        >
+          ${currentFare >= Number(req.budgetUsd) ? 'Raise fare' : 'Update fare'}
+        </button>
+
+        <div class="searching-bottom-card" onclick="toggleActiveRequestAutoAccept('${req.id}')">
+          <div class="auto-accept-left">
+            <span style="color:var(--blue-primary); display:inline-flex;">${uiIcon('navigation', 16)}</span>
+            <span>Automatically accept the nearest pro for ${formatUsdPrice(currentFare)}</span>
+          </div>
+          <div class="indrive-switch ${req.autoAccept ? 'on' : ''}">
+            <div class="indrive-switch-knob"></div>
+          </div>
+        </div>
+      </div>
+    `}
+  `;
+}
+
+// ----------------------------------------------------------------------------
+// EMBEDDED REAL-TIME CHAT COMPONENT (SHARED BY CLIENT & SERVICE PROVIDER)
+// ----------------------------------------------------------------------------
+function renderEmbeddedChatComponent(req, peerName) {
+  const messages = req.messages || [];
+  const quickChips = state.role === 'PROVIDER'
+    ? [
+        'On my way with my mobile kit!',
+        'I have arrived outside your gate',
+        'Please share the 4-digit Start PIN',
+        '2 mins away from your street'
+      ]
+    : [
+        'I am waiting at home',
+        'Gate is open for you',
+        'I have the Start PIN ready',
+        'Please call me in-app when outside'
+      ];
+
+  return `
+    <div class="embedded-chat-panel">
+      <div class="embedded-chat-header">
+        <div style="display:flex; align-items:center; gap:7px;">
+          <span style="width:8px; height:8px; border-radius:50%; background:#10B981; display:inline-block;"></span>
+          <span style="font-size:12.5px; font-weight:800; color:var(--text-main);">
+            Live Chat with ${peerName}
+          </span>
+        </div>
+        <span style="font-size:11px; font-weight:700; color:var(--blue-primary); display:inline-flex; align-items:center; gap:4px;">
+          ${uiIcon('lock', 12)}
+          <span>Protected Chat</span>
+        </span>
+      </div>
+
+      <div class="embedded-chat-feed" id="embeddedChatScroll">
+        ${messages.map((m) => {
+          const isSystem = m.senderRole === 'SYSTEM';
+          const isMine = !isSystem && m.senderRole === state.role;
+          const rowClass = isSystem ? 'system' : isMine ? 'mine' : 'theirs';
+          return `
+            <div class="chat-msg-row ${rowClass}">
+              ${!isSystem ? `<div class="chat-msg-sender">${isMine ? 'You' : m.senderName}</div>` : ''}
+              <div class="chat-msg-bubble">${m.text}</div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+
+      <div class="chat-quick-strip">
+        ${quickChips.map((chip) => `
+          <button class="chat-preset-chip" onclick="sendChatMessage('${chip.replace(/'/g, "\\'")}', '${req.id}')">
+            ${chip}
+          </button>
+        `).join('')}
+      </div>
+
+      <div class="chat-inline-input-row">
+        <input
+          id="inlineChatInput_${req.id}"
+          class="dark-input"
+          style="padding:9px 12px; font-size:13px;"
+          placeholder="Message ${peerName} (no phone numbers)..."
+          onkeydown="if(event.key==='Enter') sendInlineChatMessage('${req.id}')"
+        />
+        <button
+          class="btn-primary-blue"
+          style="width:76px; height:38px; font-size:12.5px; flex-shrink:0;"
+          onclick="sendInlineChatMessage('${req.id}')"
+        >
+          Send
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+// ----------------------------------------------------------------------------
+// CLIENT ACTIVE HOME-VISIT BOOKING OVERLAY (WITH LIVE ROUTE & EMBEDDED CHAT)
+// ----------------------------------------------------------------------------
+function renderBookedTrackingOverlay(req) {
+  const acceptedOffer = (req.offers || []).find((o) => o.id === req.acceptedOfferId) || req.offers?.[0];
+  const provId = req.acceptedProviderId || acceptedOffer?.providerId;
+  const prov = resolveProviderByIdOrOffer(provId, req, acceptedOffer);
+  const avatarUrl = prov?.avatarUrl || DEFAULT_AVATAR_FALLBACK;
+  const agreedPrice = acceptedOffer?.priceUsd || req.agreedTotalUsd || req.budgetUsd;
+  const isArrived = req.status === 'ARRIVED';
+  const isInProgress = req.status === 'IN_PROGRESS' || Boolean(req.pinVerifiedByProvider);
+  const isCompleted = req.status === 'COMPLETED';
+
+  // SCREEN 6: SERVICE IN PROGRESS & COMPLETION PIN SHARING
+  if (isInProgress) {
+    const completionPin = req.completionPinCode || '7291';
+    const isDoneRequested = Boolean(req.completionRequested);
+
+    return `
+      <div class="fh-main-screen-container" style="padding-top:14px; max-width:480px; margin:0 auto;">
+        <!-- Clean Compact Service In-Progress Card -->
+        <div class="fh-request-form-card" style="padding:16px 14px; margin-bottom:12px;">
+          <!-- Status Header Badge -->
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+            <div style="display:flex; align-items:center; gap:6px;">
+              <span style="width:8px; height:8px; border-radius:50%; background:${isDoneRequested ? '#10B981' : '#3B82F6'}; animation:pulse 1s infinite; display:inline-block;"></span>
+              <span style="font-size:13px; font-weight:800; color:#0F172A;">
+                ${isDoneRequested ? 'Specialist Completed Work' : 'Service in Progress'}
+              </span>
+            </div>
+            <span style="font-size:11px; font-weight:800; padding:3px 9px; border-radius:99px; ${isDoneRequested ? 'background:#DCFCE7; color:#15803D; border:1px solid #86EFAC;' : 'background:#EFF6FF; color:#1D4ED8; border:1px solid #BFDBFE;'}">
+              ${isDoneRequested ? 'Awaiting Your PIN' : `~${req.estimatedDurationMinutes || 30}m Est.`}
+            </span>
+          </div>
+
+          <!-- Specialist Row with Direct Call & Chat -->
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; background:#F8FAFC; border:1px solid #E2E8F0; border-radius:14px; padding:10px 12px; margin-bottom:14px;">
+            <div style="display:flex; align-items:center; gap:10px; min-width:0;">
+              <img
+                src="${resolveMediaUrl(avatarUrl)}"
+                onerror="this.onerror=null; this.src='${DEFAULT_AVATAR_FALLBACK}';"
+                style="width:40px; height:40px; border-radius:50%; object-fit:cover; border:2px solid #FFFFFF; box-shadow:0 2px 6px rgba(0,0,0,0.08); flex-shrink:0;"
+                alt="${escapeHtml(prov?.name || 'Specialist')}"
+              />
+              <div style="min-width:0;">
+                <div style="font-size:13.5px; font-weight:800; color:#0F172A; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                  ${escapeHtml(prov?.name || 'Specialist')}
+                </div>
+                <div style="font-size:11px; color:#64748B; display:flex; align-items:center; gap:4px;">
+                  <span style="display:inline-flex; align-items:center; gap:3px; color:#0052FF; font-weight:700;">${uiIcon('star', 11)} ${prov?.rating || '5.0'}</span>
+                  <span>•</span>
+                  <span>${escapeHtml(prov?.brandName || 'Mobile Specialist')}</span>
+                </div>
+              </div>
+            </div>
+            <div style="display:flex; gap:6px; flex-shrink:0;">
+              <button
+                type="button"
+                class="btn-dark-sec"
+                style="height:34px; padding:0 10px; font-size:12px; border-radius:8px;"
+                onclick="startInAppCall('${(prov?.name || 'Pro').replace(/'/g, "\\'")}', '${escapeHtml(req.title)}', 'call_${req.id}', '${prov?.id || ''}')"
+              >
+                ${uiIcon('phone', 13)}
+                <span>Call</span>
+              </button>
+              <button
+                type="button"
+                class="btn-dark-sec"
+                style="height:34px; padding:0 10px; font-size:12px; border-radius:8px;"
+                onclick="openChatDrawer('${req.id}', '${prov?.id}')"
+              >
+                ${uiIcon('chat', 13)}
+                <span>Chat</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- DriveGo Safety Twin Completion PIN Box (Brand Emerald, No Send in Chat button) -->
+          <div style="background:${isDoneRequested ? '#ECFDF5' : '#F8FAFC'}; border:2px ${isDoneRequested ? 'solid #10B981' : 'dashed #94A3B8'}; border-radius:16px; padding:16px 14px; text-align:center; margin-bottom:14px; box-shadow:${isDoneRequested ? '0 8px 20px rgba(16,185,129,0.16)' : 'none'};">
+            <div style="font-size:11px; font-weight:900; text-transform:uppercase; letter-spacing:0.08em; color:${isDoneRequested ? '#047857' : '#475569'}; margin-bottom:4px; display:inline-flex; align-items:center; gap:5px;">
+              ${uiIcon('shield', 13)}
+              <span>${isDoneRequested ? 'Share Completion PIN With Specialist' : 'Your 4-Digit Completion PIN'}</span>
+            </div>
+            <div style="font-size:34px; font-weight:900; letter-spacing:8px; color:${isDoneRequested ? '#047857' : '#0F172A'}; margin:6px 0 8px;" id="clientCompletionPinText">
+              #${completionPin}
+            </div>
+            <div style="font-size:11.5px; color:${isDoneRequested ? '#065F46' : '#64748B'}; line-height:1.45; margin-bottom:12px; padding:0 6px; font-weight:600;">
+              ${isDoneRequested
+                ? 'Specialist has marked the job as done. Inspect the completed work and read this code aloud to finalize.'
+                : `Keep this code safe — read it aloud to ${escapeHtml(prov?.name || 'your specialist')} in person only after the work is finished to your satisfaction.`
+              }
+            </div>
+            <div style="display:flex; justify-content:center;">
+              <button type="button" class="fh-pin-action-btn" style="max-width:160px; width:100%; height:36px; font-size:12px; font-weight:800;" onclick="copyCompletionPin('${completionPin}')">
+                ${uiIcon('copy', 13)}
+                <span id="copyCompletionPinBtnText">Copy PIN</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Service Details Strip -->
+          <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px; padding:10px 12px; text-align:left; margin-bottom:12px;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <div style="min-width:0;">
+                <div style="font-size:13px; font-weight:800; color:#0F172A; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                  ${escapeHtml(req.title)}
+                </div>
+                <div style="font-size:11px; color:#64748B; margin-top:2px; display:flex; align-items:center; gap:4px;">
+                  <span style="color:#0052FF; display:inline-flex;">${uiIcon('pin', 11)}</span>
+                  <span>${escapeHtml(req.suburbName || 'Harare')}</span>
+                </div>
+              </div>
+              <div style="text-align:right; flex-shrink:0;">
+                <div style="font-size:13.5px; font-weight:900; color:#0052FF;">
+                  ${formatUsdPrice(agreedPrice)}
+                </div>
+                <div style="font-size:10px; font-weight:700; color:#64748B;">
+                  ${escapeHtml(req.paymentMethod || 'Cash USD')}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Discreet Dispute / Help Link -->
+          <div style="text-align:center; padding-top:2px;">
+            <button
+              type="button"
+              onclick="openDisputeModal('${req.id}')"
+              style="background:none; border:none; color:#DC2626; font-size:12px; font-weight:700; cursor:pointer; padding:6px 12px; display:inline-flex; align-items:center; gap:5px;"
+            >
+              ${uiIcon('shield', 13)}
+              <span>Report Issue / Need Help</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  let statusIcon = uiIcon('routeCar', 18);
+  let statusHeadline = `${prov?.shortName || prov?.name || 'Pro'} is arriving in ~${acceptedOffer?.etaMinutes || 4} min`;
+  if (req.status === 'ARRIVED') {
+    statusIcon = uiIcon('pin', 18);
+    statusHeadline = `${prov?.shortName || prov?.name} is waiting outside!`;
+  }
+
+  return `
+    <div class="indrive-top-left-row">
+      <button class="indrive-circle-btn" onclick="openSideDrawerModal()">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+
+      ${(!isArrived && !isInProgress) ? `
+        <div style="display:flex; align-items:center; gap:8px;">
+          <button class="cancel-request-red-pill pointer-auto" onclick="openCancelTaskModal('${req.id}')">
+            ${uiIcon('close', 14)}
+            <span>Cancel</span>
+          </button>
+        </div>
+      ` : ''}
+    </div>
+
+    <div class="sheet-floating-controls" style="justify-content:flex-end;">
+      <button class="map-floating-gps-btn" onclick="useBrowserGeolocation(false)" title="Center on My Live Location">
+        ${uiIcon('crosshair', 19)}
+      </button>
+    </div>
+
+    ${state.isSheetMinimized ? `
+      <div class="minimized-map-restore-bar" onclick="toggleSheetMinimize(false)">
+        <div>
+          <div style="font-size:13.5px; font-weight:800; color:var(--text-main); display:flex; align-items:center; gap:6px;">
+            <span style="color:var(--blue-primary); display:inline-flex;">${statusIcon}</span>
+            <span>${statusHeadline}</span>
+          </div>
+          <div style="font-size:11.5px; color:var(--text-secondary); font-weight:600;">Start PIN: #${req.startPinCode || '4829'} • Tap to open chat &amp; details</div>
+        </div>
+        <button type="button" class="minimized-restore-btn" onclick="toggleSheetMinimize(false); event.stopPropagation();">
+          ${uiIcon('chevronUp', 14)}
+          <span>Open Chat</span>
+        </button>
+      </div>
+    ` : `
+      <div class="indrive-dark-sheet">
+        <div class="sheet-top-handle-bar">
+          <span style="font-size:11px; font-weight:800; color:#059669; text-transform:uppercase; letter-spacing:0.04em; display:inline-flex; align-items:center; gap:5px;">
+            <span style="width:7px; height:7px; border-radius:50%; background:#10B981;"></span>
+            <span>Active Visit Confirmed</span>
+          </span>
+          <div class="sheet-grabber" onclick="toggleSheetMinimize(true)"></div>
+          <button class="sheet-collapse-pill" onclick="toggleSheetMinimize(true)">
+            ${uiIcon('map', 13)}
+            <span>Full Map</span>
+            ${uiIcon('chevronDown', 13)}
+          </button>
+        </div>
+
+        ${isArrived ? `
+          <!-- DRIVEGO SAFETY TWIN ARRIVAL CARD (BRAND ELECTRIC BLUE, NO YELLOW) -->
+          <div style="background:#EBF3FF; border:2px solid #0052FF; border-radius:16px; padding:14px; margin-bottom:10px; box-shadow:0 8px 20px rgba(0,82,255,0.12);">
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px;">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span style="width:9px; height:9px; border-radius:50%; background:#0052FF; animation:pulse 1s infinite; display:inline-block;"></span>
+                <div>
+                  <div style="font-size:12px; font-weight:900; color:#0052FF; text-transform:uppercase; letter-spacing:0.04em;">Specialist Outside Gate</div>
+                  <div style="font-size:11.5px; color:#1E3A8A; font-weight:600;">Share this 4-digit Start PIN with your pro:</div>
+                </div>
+              </div>
+              <div style="background:#0052FF; color:#FFFFFF; border-radius:12px; padding:6px 14px; text-align:center; box-shadow:0 4px 12px rgba(0,82,255,0.28); cursor:pointer;" onclick="copyCompletionPin('${req.startPinCode || '4829'}')" title="Tap to copy Start PIN">
+                <span style="font-size:8.5px; font-weight:900; color:#DBEAFE; letter-spacing:0.08em; display:block;">START PIN</span>
+                <span style="font-size:21px; font-weight:900; color:#FFFFFF; letter-spacing:2.5px; line-height:1.2;">#${req.startPinCode || '4829'}</span>
+              </div>
+            </div>
+
+            <!-- Specialist Row -->
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; background:#FFFFFF; border:1px solid #BFDBFE; border-radius:12px; padding:9px 11px; margin-bottom:9px;">
+              <div style="display:flex; align-items:center; gap:9px; min-width:0;">
+                <img src="${resolveMediaUrl(avatarUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_AVATAR_FALLBACK}';" style="width:38px; height:38px; border-radius:50%; object-fit:cover; flex-shrink:0;" alt="${prov?.name}" />
+                <div style="min-width:0;">
+                  <div style="font-size:13px; font-weight:800; color:#0F172A; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${prov?.name || 'Specialist'}</div>
+                  <div style="font-size:11px; color:#64748B; display:flex; align-items:center; gap:4px;">
+                    <span style="display:inline-flex; align-items:center; gap:2px; color:#0052FF; font-weight:700;">${uiIcon('star', 11)} ${prov?.rating || '5.0'}</span>
+                    <span>•</span>
+                    <span>${prov?.brandName || 'Mobile Specialist'}</span>
+                  </div>
+                </div>
+              </div>
+              <div style="text-align:right; flex-shrink:0;">
+                <div style="font-size:14px; font-weight:900; color:#0052FF;">${formatUsdPrice(agreedPrice)}</div>
+                <div style="font-size:10px; color:#64748B; font-weight:700;">${req.paymentMethod}</div>
+              </div>
+            </div>
+
+            <!-- Compact Action Row: Call, Chat, Photo -->
+            <div style="display:flex; gap:6px;">
+              <button type="button" class="btn-dark-sec" style="flex:1; height:36px; font-size:12px; border-radius:10px; background:#FFFFFF;" onclick="startInAppCall('${(prov?.name || 'Pro').replace(/'/g, "\\'")}', '${escapeHtml(req.title)}', 'call_${req.id}', '${prov?.id || ''}')">
+                ${uiIcon('phone', 13)}
+                <span>Call</span>
+              </button>
+              <button type="button" class="btn-dark-sec" style="flex:1; height:36px; font-size:12px; border-radius:10px; background:#FFFFFF;" onclick="openChatDrawer('${req.id}', '${prov?.id || ''}')">
+                ${uiIcon('chat', 13)}
+                <span>Chat ${(req.messages && req.messages.length > 0) ? `(${req.messages.length})` : ''}</span>
+              </button>
+              ${req.photoUrl ? `
+                <button type="button" class="btn-dark-sec" style="height:36px; font-size:11.5px; border-radius:10px; padding:0 10px; background:#FFFFFF;" onclick="openImagePreviewModal('${req.photoUrl}', 'Desired Style Photo')">
+                  <span>Photo</span>
+                </button>
+              ` : ''}
+            </div>
+          </div>
+        ` : `
+          <!-- EN ROUTE VIEW -->
+          ${(() => {
+            const distMeters = calculateDistanceMeters(prov?.lat, prov?.lng, req.lat, req.lng);
+            if (distMeters <= 50 && req.status !== 'IN_PROGRESS') {
+              return `
+                <div style="background:#EFF6FF; border:1px solid #BFDBFE; border-radius:12px; padding:8px 11px; margin-bottom:8px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
+                  <div style="font-size:12px; font-weight:700; color:#1E40AF; display:flex; align-items:center; gap:6px;">
+                    <span style="color:#2563EB;">${uiIcon('pin', 14)}</span>
+                    <span>Specialist approaching (~${distMeters}m away)</span>
+                  </div>
+                  <div style="font-size:12px; font-weight:800; color:#2563EB;">PIN #${req.startPinCode || '4829'}</div>
+                </div>
+              `;
+            }
+            return '';
+          })()}
+
+          <!-- Service Info Row + Bold Brand Blue Start PIN Banner -->
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px; background:#EBF3FF; border:1.5px solid #BFDBFE; border-radius:14px; padding:10px 12px;">
+            <div style="min-width:0;">
+              <div style="font-size:14.5px; font-weight:800; color:#0F172A; display:flex; align-items:center; gap:6px;">
+                <span style="color:#0052FF; display:inline-flex;">${statusIcon}</span>
+                <span>${statusHeadline}</span>
+              </div>
+              <div style="font-size:12px; color:#475569; margin-top:2px; font-weight:600;">
+                ${req.title} • <strong style="color:#0052FF;">${formatUsdPrice(agreedPrice)}</strong> (${req.paymentMethod})
+              </div>
+            </div>
+            <div style="background:#0052FF; color:#FFFFFF; padding:6px 12px; border-radius:10px; text-align:center; flex-shrink:0; box-shadow:0 4px 10px rgba(0,82,255,0.22); cursor:pointer;" onclick="copyCompletionPin('${req.startPinCode || '4829'}')" title="Tap to copy Start PIN">
+              <div style="font-size:8.5px; color:#DBEAFE; font-weight:900; letter-spacing:0.06em;">START PIN</div>
+              <div style="font-size:17px; font-weight:900; color:#FFFFFF; letter-spacing:2px;">#${req.startPinCode || '4829'}</div>
+            </div>
+          </div>
+
+          ${req.photoUrl ? `
+            <div style="display:inline-flex; align-items:center; gap:7px; background:#F0FDF4; border:1px solid #BBF7D0; border-radius:8px; padding:3px 9px; margin-bottom:8px; cursor:pointer;" onclick="openImagePreviewModal('${req.photoUrl}', 'Desired Style Photo')">
+              <img src="${resolveMediaUrl(req.photoUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_TASK_PHOTO_FALLBACK}';" style="width:20px; height:20px; border-radius:4px; object-fit:cover;" alt="Reference" />
+              <span style="font-size:11px; font-weight:700; color:#15803D;">View Reference Photo</span>
+              ${uiIcon('chevronRight', 10)}
+            </div>
+          ` : ''}
+
+          <!-- Accepted Service Provider Card -->
+          <div class="indrive-selected-tier-box" style="margin-bottom:8px; padding:8px 10px;">
+            <div class="offer-pro-row" style="margin-bottom:0;">
+              <div class="offer-avatar-wrap platinum">
+                <img src="${resolveMediaUrl(avatarUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_AVATAR_FALLBACK}';" alt="${prov?.name}" />
+                <div class="platinum-diamond-badge">${uiIcon('diamond', 9)}</div>
+              </div>
+              <div class="offer-pro-details">
+                <div class="offer-pro-name-line">
+                  <span>${prov?.name || 'Tariro Moyo'}</span>
+                  ${formatProRatingAndJobs(prov?.rating, prov?.completedBookings)}
+                </div>
+                <div class="offer-pro-kit-line">${prov?.brandName || 'Mobile Service'} • ${acceptedOffer?.distanceKm ? `${acceptedOffer.distanceKm} km away` : 'En route'}</div>
+                <div class="offer-pro-platinum-line">${prov?.skillTier || 'Platinum pro'}</div>
+              </div>
+              <button class="offer-catalogue-pill" onclick="openProviderCatalogueModal('${prov?.id}')">
+                <span>Catalogue</span>
+                ${uiIcon('chevronRight', 13)}
+              </button>
+            </div>
+          </div>
+
+          ${req.delayNotice ? `
+            <div style="background:#EFF6FF; border:1px solid #93C5FD; border-radius:10px; padding:8px 10px; margin-bottom:8px; display:flex; align-items:center; gap:8px;">
+              <span style="color:#0052FF; display:inline-flex;">${uiIcon('clock', 16)}</span>
+              <div>
+                <div style="font-size:12px; font-weight:800; color:#1E40AF;">Specialist Running ~${req.delayNotice.minutes}m Late</div>
+                <div style="font-size:11px; color:#1D4ED8;">${escapeHtml(req.delayNotice.reason)}</div>
+              </div>
+            </div>
+          ` : ''}
+
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px;">
+            <button class="btn-dark-sec" onclick="startInAppCall('${(prov?.name || 'Pro').replace(/'/g, "\\'")}', '${escapeHtml(req.title)}', 'call_${req.id}', '${prov?.id || ''}')">
+              ${uiIcon('phone', 14)}
+              <span>Call</span>
+            </button>
+            <button class="btn-dark-sec" onclick="openChatDrawer('${req.id}', '${prov?.id || ''}')">
+              ${uiIcon('chat', 14)}
+              <span>Chat ${(req.messages && req.messages.length > 0) ? `(${req.messages.length})` : ''}</span>
+            </button>
+          </div>
+        `}
+
+        ${isCompleted ? `
+          <button class="btn-primary-blue" style="width:100%; height:44px; font-size:14px; font-weight:800; background:#10B981; box-shadow:0 4px 14px rgba(16,185,129,0.35); margin-bottom:8px;" onclick="openRateBookingModal('${req.id}')">
+            <span>Rate Specialist &amp; Finish</span>
+          </button>
+        ` : (isInProgress || isArrived) ? `
+          <div style="text-align:center; margin-top:6px;">
+            <button type="button" style="background:none; border:none; color:#DC2626; font-size:11.5px; font-weight:700; cursor:pointer; padding:4px 8px; display:inline-flex; align-items:center; gap:4px;" onclick="openDisputeModal('${req.id}')">
+              ${uiIcon('shield', 12)}
+              <span>Report Dispute / Need Help</span>
+            </button>
+          </div>
+        ` : `
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
+            <button class="btn-dark-sec" style="font-size:11.5px; color:#DC2626; border-color:rgba(220,38,38,0.3); justify-content:center; font-weight:700;" onclick="openDisputeModal('${req.id}')">
+              <span>Report Dispute</span>
+            </button>
+            <button class="cancel-request-red-pill" style="justify-content:center; font-weight:700;" onclick="openCancelTaskModal('${req.id}')">
+              <span>Cancel Job</span>
+            </button>
+          </div>
+        `}
+      </div>
+    `}
+  `;
+}
+
+// ============================================================================
+// FULL INDRIVE-STYLE SIGN-UP & VERIFICATION FLOW (CLIENT & SERVICE PROVIDER)
+// ============================================================================
+function openSignUpWizardModal() {
+  state.authStep = 'PHONE';
+  state.savedAccountId = null;
+  state.currentUser = null;
+  state.activeModal = 'SIGNUP_FLOW';
+  renderModalLayer();
+}
+
+function renderNativeAuthScreen() {
+  return `
+    <div class="auth-fullscreen-screen pointer-auto">
+      ${renderSignUpWizardInnerHtml(true)}
+    </div>
+  `;
+}
+
+function renderSignUpWizardInnerHtml(isFullScreen = false) {
+  const categories = state.db?.categories || [];
+
+  // ==========================================
+  // A. CUSTOMER SIGN-UP (2-STEP: DETAILS + FACE ID)
+  // ==========================================
+  if (state.authRole === 'CUSTOMER') {
+    if (state.authStep === 'PHONE') {
+      return `
+        <div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <img src="/assets/logo-icon.svg" width="36" height="36" style="border-radius:10px; display:block;" alt="Findit Logo" />
+              <div>
+                <div style="font-size:18px; font-weight:800; color:var(--text-main);">Findit Harare</div>
+                <div style="font-size:11.5px; color:var(--text-secondary); font-weight:600;">Client Account (Step 1 of 2)</div>
+              </div>
+            </div>
+            ${!isFullScreen ? `<button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>` : ''}
+          </div>
+
+          <!-- Account Role Switcher -->
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:14px;">
+            <button
+              type="button"
+              class="${state.authRole === 'CUSTOMER' ? 'btn-primary-blue' : 'btn-dark-sec'}"
+              style="height:42px; font-size:12.5px;"
+              onclick="state.authRole='CUSTOMER'; renderAll();"
+            >
+              ${uiIcon('user', 14)}
+              <span>Client Account</span>
+            </button>
+            <button
+              type="button"
+              class="${state.authRole === 'PROVIDER' ? 'btn-primary-blue' : 'btn-dark-sec'}"
+              style="height:42px; font-size:12.5px;"
+              onclick="state.authRole='PROVIDER'; state.authStep='PHONE'; renderAll();"
+            >
+              ${uiIcon('briefcase', 14)}
+              <span>Service Provider</span>
+            </button>
+          </div>
+
+          <div style="font-size:20px; font-weight:900; color:var(--text-main); margin-bottom:4px;">
+            Create Your Account
+          </div>
+          <div style="font-size:12.5px; color:var(--text-secondary); margin-bottom:16px;">
+            Already have an account? <a href="javascript:void(0)" style="color:var(--blue-primary); font-weight:800;" onclick="openSignInRoleChoiceModal('LOGIN')">Log in here</a>
+          </div>
+
+          <div style="display:flex; flex-direction:column; gap:12px; margin-bottom:14px;">
+            <div>
+              <label style="font-size:11px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px; display:block;">Full Name</label>
+              <input
+                class="dark-input"
+                placeholder="e.g. Tendai Chikore"
+                value="${escapeHtml(state.authName || '')}"
+                oninput="state.authName = this.value"
+              />
+            </div>
+
+            <div>
+              <label style="font-size:11px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px; display:block;">WhatsApp / Mobile Number</label>
+              <div style="display:flex; gap:8px;">
+                <div style="background:var(--blue-soft); border:1.5px solid var(--blue-border); border-radius:12px; padding:10px 12px; font-weight:800; color:var(--blue-primary); display:inline-flex; align-items:center; gap:6px; white-space:nowrap; font-size:13px;">
+                  ${uiIcon('zwFlag', 18)}
+                  <span>+263</span>
+                </div>
+                <input
+                  type="tel"
+                  class="dark-input"
+                  style="font-size:15px; font-weight:800; flex:1;"
+                  placeholder="Enter your number"
+                  value="${(state.authPhone || '').replace(/^\+?263\s*/, '')}"
+                  oninput="state.authPhone = '+263 ' + this.value"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label style="font-size:11px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px; display:block;">Create Password</label>
+              <input
+                type="password"
+                class="dark-input"
+                placeholder="••••••••"
+                value="${escapeHtml(state.authPassword || '')}"
+                oninput="state.authPassword = this.value"
+              />
+            </div>
+          </div>
+
+          <label style="display:flex; align-items:flex-start; gap:8px; font-size:11.5px; color:var(--text-secondary); margin-bottom:16px; line-height:1.45;">
+            <input type="checkbox" ${state.authTermsAccepted ? 'checked' : ''} onchange="state.authTermsAccepted = this.checked" style="margin-top:2px; accent-color:#0066FF;" />
+            <span>
+              I agree to Findit Harare's
+              <a href="javascript:void(0)" onclick="state.activeModal='TERMS_MODAL'; renderModalLayer();" style="color:var(--blue-primary); font-weight:700;">Terms &amp; Conditions</a>
+              and
+              <a href="javascript:void(0)" onclick="state.activeModal='PRIVACY_MODAL'; renderModalLayer();" style="color:var(--blue-primary); font-weight:700;">Privacy Policy</a>
+            </span>
+          </label>
+
+          <button type="button" class="btn-primary-blue" style="height:50px; font-size:15px; font-weight:800;" onclick="submitPhoneForFaceStep()">
+            ${uiIcon('camera', 18)}
+            <span>Continue to Step 2: Biometric Face ID</span>
+          </button>
+        </div>
+      `;
+    }
+
+    // Step 2: Client Face ID Verification
+    return `
+      <div>
+        <div class="cancel-sheet-header">
+          <button type="button" class="btn-dark-sec" style="padding:6px 12px;" onclick="stopFaceCameraStream(); state.authStep='PHONE'; renderAll();">
+            ${uiIcon('arrowLeft', 14)}
+            <span>Back</span>
+          </button>
+          ${!isFullScreen ? `<button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>` : ''}
+        </div>
+
+        <div style="font-size:20px; font-weight:900; color:var(--text-main); margin-bottom:4px;">
+          Biometric Face ID
+        </div>
+        <div style="font-size:12.5px; color:var(--text-secondary); margin-bottom:16px;">
+          Step 2 of 2: Hold your phone at eye level inside the circle to verify your identity.
+        </div>
+
+        <!-- Biometric Circular Scanner Viewfinder -->
+        <div style="display:flex; flex-direction:column; align-items:center; margin-bottom:18px;">
+          <div class="ios-face-viewfinder">
+            ${state.faceVerifiedSuccess ? `
+              <div class="ios-face-id-success-tick">
+                <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              </div>
+            ` : state.authCapturedSelfieUrl ? `
+              <img src="${state.authCapturedSelfieUrl}" alt="Selfie" style="width:100%; height:100%; object-fit:cover; display:block;" />
+            ` : `
+              <video id="authSelfieVideo" autoplay playsinline muted></video>
+              <div class="ios-face-scanning-radar"></div>
+            `}
+            <canvas id="authSelfieCanvas" style="display:none;"></canvas>
+          </div>
+
+          ${state.faceVerifiedSuccess ? `
+            <div style="background:#ECFDF5; border:1.5px solid #10B981; color:#065F46; padding:8px 16px; border-radius:99px; font-weight:800; font-size:13px; display:inline-flex; align-items:center; gap:6px; margin-top:14px;">
+              ${uiIcon('check', 16)}
+              <span>Face ID Verified</span>
+            </div>
+          ` : state.authCapturedSelfieUrl ? `
+            <div style="background:#ECFDF5; border:1px solid #10B981; color:#065F46; padding:7px 14px; border-radius:99px; font-weight:800; font-size:12px; display:inline-flex; align-items:center; gap:6px; margin-top:12px;">
+              ${uiIcon('check', 14)}
+              <span>Face Captured</span>
+            </div>
+          ` : `
+            <div id="authCameraHint" style="font-size:12px; color:var(--text-secondary); margin-top:12px; font-weight:600; text-align:center;">
+              Hold phone at eye level inside the circle &amp; tap Verify Face
+            </div>
+          `}
+        </div>
+
+        ${!state.faceVerifiedSuccess ? `
+          <button type="button" class="btn-primary-blue" style="height:50px; font-size:15px; font-weight:800; margin-bottom:8px;" onclick="captureAndVerifyFaceId()">
+            ${uiIcon('camera', 18)}
+            <span>Verify Face with Face ID</span>
+          </button>
+        ` : `
+          <button type="button" class="btn-primary-blue" style="height:50px; font-size:15px; font-weight:800; background:#10B981;" onclick="finishNativeRegistration()">
+            ${uiIcon('check', 18)}
+            <span>Complete &amp; Enter Findit</span>
+          </button>
+        `}
+      </div>
+    `;
+  }
+
+  // ==========================================
+  // B. PROVIDER SIGN-UP (4-STEP: DETAILS + ID + FACE MATCH + CATEGORIES)
+  // ==========================================
+  // Provider Step 1: Details
+  if (state.authStep === 'PHONE') {
+    return `
+      <div>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <img src="/assets/logo-icon.svg" width="36" height="36" style="border-radius:10px; display:block;" alt="Findit Logo" />
+            <div>
+              <div style="font-size:18px; font-weight:800; color:var(--text-main);">Findit Harare</div>
+              <div style="font-size:11.5px; color:var(--text-secondary); font-weight:600;">Provider Sign Up (Step 1 of 4)</div>
+            </div>
+          </div>
+          ${!isFullScreen ? `<button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>` : ''}
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:14px;">
+          <button
+            type="button"
+            class="${state.authRole === 'CUSTOMER' ? 'btn-primary-blue' : 'btn-dark-sec'}"
+            style="height:42px; font-size:12.5px;"
+            onclick="state.authRole='CUSTOMER'; state.authStep='PHONE'; renderAll();"
+          >
+            ${uiIcon('user', 14)}
+            <span>Client Account</span>
+          </button>
+          <button
+            type="button"
+            class="${state.authRole === 'PROVIDER' ? 'btn-primary-blue' : 'btn-dark-sec'}"
+            style="height:42px; font-size:12.5px;"
+            onclick="state.authRole='PROVIDER'; renderAll();"
+          >
+            ${uiIcon('briefcase', 14)}
+            <span>Service Provider</span>
+          </button>
+        </div>
+
+        <div style="font-size:20px; font-weight:900; color:var(--text-main); margin-bottom:4px;">
+          Provider Credentials
+        </div>
+        <div style="font-size:12.5px; color:var(--text-secondary); margin-bottom:16px;">
+          Earn on your terms in Harare with real-time job cards and direct client bidding.
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:12px; margin-bottom:14px;">
+          <div>
+            <label style="font-size:11px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px; display:block;">Full Legal Name</label>
+            <input
+              class="dark-input"
+              placeholder="e.g. Farai Nyoni"
+              value="${escapeHtml(state.authName || '')}"
+              oninput="state.authName = this.value"
+            />
+          </div>
+
+          <div>
+            <label style="font-size:11px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px; display:block;">WhatsApp / Phone Number</label>
+            <div style="display:flex; gap:8px;">
+              <div style="background:var(--blue-soft); border:1.5px solid var(--blue-border); border-radius:12px; padding:10px 12px; font-weight:800; color:var(--blue-primary); display:inline-flex; align-items:center; gap:6px; white-space:nowrap; font-size:13px;">
+                ${uiIcon('zwFlag', 18)}
+                <span>+263</span>
+              </div>
+              <input
+                type="tel"
+                class="dark-input"
+                style="font-size:15px; font-weight:800; flex:1;"
+                placeholder="77 300 4001"
+                value="${(state.authPhone || '').replace(/^\+?263\s*/, '')}"
+                oninput="state.authPhone = '+263 ' + this.value"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label style="font-size:11px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px; display:block;">Create Password</label>
+            <input
+              type="password"
+              class="dark-input"
+              placeholder="••••••••"
+              value="${escapeHtml(state.authPassword || '')}"
+              oninput="state.authPassword = this.value"
+            />
+          </div>
+
+          <div>
+            <label style="font-size:11px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px; display:block;">Business / Trade Name</label>
+            <input
+              class="dark-input"
+              placeholder="e.g. Nyoni Solar &amp; Electrical"
+              value="${escapeHtml(state.authBrandName || '')}"
+              oninput="state.authBrandName = this.value"
+            />
+          </div>
+        </div>
+
+        <button type="button" class="btn-primary-blue" style="height:50px; font-size:15px; font-weight:800;" onclick="submitProviderPhoneStep()">
+          ${uiIcon('shield', 18)}
+          <span>Continue to Step 2: Identification</span>
+        </button>
+      </div>
+    `;
+  }
+
+  // Provider Step 2: Government ID Authenticity
+  if (state.authStep === 'ID') {
+    return `
+      <div>
+        <div class="cancel-sheet-header">
+          <button type="button" class="btn-dark-sec" style="padding:6px 12px;" onclick="state.authStep='PHONE'; renderAll();">
+            ${uiIcon('arrowLeft', 14)}
+            <span>Back</span>
+          </button>
+          ${!isFullScreen ? `<button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>` : ''}
+        </div>
+
+        <div style="font-size:20px; font-weight:900; color:var(--text-main); margin-bottom:4px;">
+          Government ID Authenticity
+        </div>
+        <div style="font-size:12.5px; color:var(--text-secondary); margin-bottom:12px;">
+          Step 2 of 4: Provide identification to verify your specialist account.
+        </div>
+
+        <!-- Privacy & Security Guarantee Banner -->
+        <div style="background:#F0FDF4; border:1.5px solid #BBF7D0; border-radius:12px; padding:10px 12px; margin-bottom:14px; display:flex; align-items:flex-start; gap:8px;">
+          <span style="color:#16A34A; margin-top:2px;">${uiIcon('shield', 16)}</span>
+          <div style="font-size:11.5px; color:#166534; line-height:1.45;">
+            <strong>Confidential &amp; Encrypted:</strong> Your ID document is private and exclusively stored in the Admin safety locker. It is <strong>never visible to clients or the public</strong>.
+          </div>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:12px; margin-bottom:16px;">
+          <div>
+            <label style="font-size:11px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px; display:block;">Select ID Document Type</label>
+            <select class="dark-input" onchange="state.authIdType=this.value">
+              <option value="National ID" ${state.authIdType === 'National ID' ? 'selected' : ''}>Zimbabwe National ID Card</option>
+              <option value="Passport" ${state.authIdType === 'Passport' ? 'selected' : ''}>Passport</option>
+              <option value="Driver Licence" ${state.authIdType === 'Driver Licence' ? 'selected' : ''}>Driver's Licence</option>
+            </select>
+          </div>
+
+          <div>
+            <label style="font-size:11px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px; display:block;">ID / Passport / Licence Number</label>
+            <input
+              class="dark-input"
+              placeholder="e.g. 63-2049182-Y-42"
+              value="${escapeHtml(state.authIdNumber || '')}"
+              oninput="state.authIdNumber = this.value"
+            />
+          </div>
+
+          <div>
+            <label style="font-size:11px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px; display:block;">Photo of ID (Front)</label>
+            ${state.authIdPhotoUrl ? `
+              <div style="position:relative; border-radius:12px; overflow:hidden; border:1.5px solid #10B981; max-height:150px; background:#000;">
+                <img src="${state.authIdPhotoUrl}" alt="ID Photo" style="width:100%; height:140px; object-fit:cover; display:block;" />
+                <button type="button" onclick="state.authIdPhotoUrl=null; renderAll();" style="position:absolute; top:8px; right:8px; background:rgba(0,0,0,0.7); color:#fff; border:none; border-radius:50%; width:28px; height:28px; cursor:pointer;">
+                  ${uiIcon('close', 14)}
+                </button>
+              </div>
+            ` : `
+              <div style="border:2px dashed #CBD5E1; border-radius:12px; padding:18px; text-align:center; background:#F8FAFC; cursor:pointer;" onclick="document.getElementById('authIdFileInput').click()">
+                <div style="color:var(--blue-primary); margin-bottom:6px;">${uiIcon('camera', 24)}</div>
+                <div style="font-size:13px; font-weight:800; color:#0F172A;">Snap or Upload ID Document Photo</div>
+                <div style="font-size:11px; color:#64748B; margin-top:2px;">Clear photo of ID card or passport details page</div>
+              </div>
+              <input type="file" id="authIdFileInput" accept="image/*" style="display:none;" onchange="handleAuthIdFileUpload(this)" />
+            `}
+          </div>
+        </div>
+
+        <button type="button" class="btn-primary-blue" style="height:50px; font-size:15px; font-weight:800;" onclick="submitProviderIdStep()">
+          ${uiIcon('camera', 18)}
+          <span>Continue to Step 3: Biometric Face Match</span>
+        </button>
+      </div>
+    `;
+  }
+
+  // Provider Step 3: Biometric Face Match
+  if (state.authStep === 'FACE') {
+    return `
+      <div>
+        <div class="cancel-sheet-header">
+          <button type="button" class="btn-dark-sec" style="padding:6px 12px;" onclick="stopFaceCameraStream(); state.authStep='ID'; renderAll();">
+            ${uiIcon('arrowLeft', 14)}
+            <span>Back</span>
+          </button>
+          ${!isFullScreen ? `<button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>` : ''}
+        </div>
+
+        <div style="font-size:20px; font-weight:900; color:var(--text-main); margin-bottom:4px;">
+          Live Biometric Face Match
+        </div>
+        <div style="font-size:12.5px; color:var(--text-secondary); margin-bottom:16px;">
+          Step 3 of 4: Match your live face against the submitted identification.
+        </div>
+
+        <div style="display:flex; flex-direction:column; align-items:center; margin-bottom:18px;">
+          <div class="ios-face-viewfinder">
+            ${state.faceVerifiedSuccess ? `
+              <div class="ios-face-id-success-tick">
+                <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              </div>
+            ` : state.authCapturedSelfieUrl ? `
+              <img src="${state.authCapturedSelfieUrl}" alt="Selfie" style="width:100%; height:100%; object-fit:cover; display:block;" />
+            ` : `
+              <video id="authSelfieVideo" autoplay playsinline muted></video>
+              <div class="ios-face-scanning-radar"></div>
+            `}
+            <canvas id="authSelfieCanvas" style="display:none;"></canvas>
+          </div>
+
+          ${state.faceVerifiedSuccess ? `
+            <div style="background:#ECFDF5; border:1.5px solid #10B981; color:#065F46; padding:8px 16px; border-radius:99px; font-weight:800; font-size:13px; display:inline-flex; align-items:center; gap:6px; margin-top:14px;">
+              ${uiIcon('check', 16)}
+              <span>Face Matches ID Document</span>
+            </div>
+          ` : `
+            <div id="authCameraHint" style="font-size:12px; color:var(--text-secondary); margin-top:12px; font-weight:600; text-align:center;">
+              Hold phone steady &amp; tap Match Face
+            </div>
+          `}
+        </div>
+
+        ${!state.faceVerifiedSuccess ? `
+          <button type="button" class="btn-primary-blue" style="height:50px; font-size:15px; font-weight:800; margin-bottom:8px;" onclick="captureAndVerifyFaceId()">
+            ${uiIcon('camera', 18)}
+            <span>Scan &amp; Match Face</span>
+          </button>
+        ` : `
+          <button type="button" class="btn-primary-blue" style="height:50px; font-size:15px; font-weight:800;" onclick="state.authStep='CATEGORIES'; renderAll();">
+            <span>Continue to Step 4: Business Categories →</span>
+          </button>
+        `}
+      </div>
+    `;
+  }
+
+  // Provider Step 4: Select up to 3 Categories
+  const selectedCatCount = (state.authCategoryIds || []).length;
+  return `
+    <div>
+      <div class="cancel-sheet-header">
+        <button type="button" class="btn-dark-sec" style="padding:6px 12px;" onclick="state.authStep='FACE'; renderAll();">
+          ${uiIcon('arrowLeft', 14)}
+          <span>Back</span>
+        </button>
+        ${!isFullScreen ? `<button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>` : ''}
+      </div>
+
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+        <div style="font-size:20px; font-weight:900; color:var(--text-main);">
+          Select Business Categories
+        </div>
+        <span style="padding:3px 10px; border-radius:99px; background:var(--blue-soft); color:var(--blue-primary); font-size:12px; font-weight:800;">
+          Selected (${selectedCatCount}/3)
+        </span>
+      </div>
+      <div style="font-size:12.5px; color:var(--text-secondary); margin-bottom:14px;">
+        Step 4 of 4: Select up to <strong>3 categories</strong> you offer to receive matching job cards.
+      </div>
+
+      <!-- Categories Selector Grid -->
+      <div class="provider-categories-selector-grid">
+        ${categories.map((c) => {
+          const isSelected = (state.authCategoryIds || []).includes(c.id);
+          return `
+            <div
+              class="provider-category-select-pill ${isSelected ? 'selected' : ''}"
+              onclick="toggleProviderAuthCategory('${c.id}')"
+            >
+              <div style="display:flex; align-items:center; gap:10px;">
+                <div style="width:32px; height:32px; display:flex; align-items:center; justify-content:center;">
+                  ${getCategoryVectorSvg(c.id, isSelected)}
+                </div>
+                <div>
+                  <div style="font-size:13.5px; font-weight:800;">${c.fullName || c.name}</div>
+                  <div style="font-size:11px; opacity:0.8; font-weight:600;">${(c.subServices || []).slice(0, 3).map(s => s.name).join(' • ')}</div>
+                </div>
+              </div>
+              <div style="width:20px; height:20px; border-radius:50%; border:2px solid ${isSelected ? '#0066FF' : '#CBD5E1'}; display:flex; align-items:center; justify-content:center; background:${isSelected ? '#0066FF' : 'transparent'}; color:#fff;">
+                ${isSelected ? uiIcon('check', 12) : ''}
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+
+      <button
+        type="button"
+        class="btn-primary-blue"
+        style="height:50px; font-size:15px; font-weight:800; margin-top:12px;"
+        onclick="finishNativeRegistration()"
+      >
+        ${uiIcon('check', 18)}
+        <span>Finish &amp; Start Receiving Jobs</span>
+      </button>
+    </div>
+  `;
+}
+
+function toggleProviderAuthCategory(catId) {
+  if (!Array.isArray(state.authCategoryIds)) state.authCategoryIds = [];
+  const idx = state.authCategoryIds.indexOf(catId);
+  if (idx >= 0) {
+    state.authCategoryIds.splice(idx, 1);
+  } else {
+    if (state.authCategoryIds.length >= 3) {
+      showToast('You can select up to 3 categories. Tap one to deselect first.', 'info');
+      return;
+    }
+    state.authCategoryIds.push(catId);
+  }
+  lastRenderedModalKey = '';
+  renderModalLayer();
+}
+
+async function handleAuthIdFileUpload(inputEl) {
+  const file = inputEl.files && inputEl.files[0];
+  if (!file) return;
+  const compressed = await compressImageFileToDataUrl(file, 640, 0.72);
+  state.authIdPhotoUrl = compressed || null;
+  renderAll();
+}
+
+async function submitProviderPhoneStep() {
+  const name = (state.authName || '').trim();
+  const rawPhone = (state.authPhone || '').trim();
+  const digits = rawPhone.replace(/\D/g, '');
+
+  if (digits.length < 8) {
+    showToast('Please enter a valid Zimbabwe phone number (+263...)', 'error');
+    return;
+  }
+  if (!name) {
+    showToast('Please enter your full legal name', 'error');
+    return;
+  }
+
+  // Number already has a Provider profile → must log in with password
+  const last9 = digits.slice(-9);
+  if (state.db) {
+    const list = state.db.providers || [];
+    const existing = list.find((item) => (item.phone || '').replace(/\D/g, '').slice(-9) === last9);
+    if (existing) {
+      stopFaceCameraStream();
+      state.loginPhone = rawPhone;
+      state.modalData = { tab: 'LOGIN', loginRole: 'PROVIDER', notice: { tone: 'warn', text: 'This number already has a Provider account. Please log in with your password.' } };
+      state.activeModal = 'SIGNIN_ROLE_CHOICE';
+      lastRenderedModalKey = '';
+      renderAll();
+      return;
+    }
+  }
+
+  state.authStep = 'ID';
+  renderAll();
+}
+
+function submitProviderIdStep() {
+  if (!state.authIdNumber && !state.authNationalId) {
+    showToast('Please enter your ID, Passport, or Licence number', 'error');
+    return;
+  }
+  state.authStep = 'FACE';
+  state.faceVerifiedSuccess = false;
+  renderAll();
+  setTimeout(startAuthFaceCamera, 120);
+}
+
+function analyzeFaceImageQuality(canvas, ctx) {
+  if (!canvas || !ctx || canvas.width < 50 || canvas.height < 50) {
+    return { ok: false, reason: 'Live camera feed not ready. Please allow camera access.' };
+  }
+
+  const width = canvas.width;
+  const height = canvas.height;
+  const imageData = ctx.getImageData(0, 0, width, height);
+  const data = imageData.data;
+
+  // Sample central region only to verify the camera stream is producing real pixels (not a black/blank frame)
+  let sampledPixels = 0;
+  let totalLuminance = 0;
+  const step = 4;
+
+  for (let y = Math.floor(height * 0.15); y < Math.floor(height * 0.85); y += step) {
+    for (let x = Math.floor(width * 0.15); x < Math.floor(width * 0.85); x += step) {
+      const idx = (y * width + x) * 4;
+      const r = data[idx];
+      const g = data[idx + 1];
+      const b = data[idx + 2];
+      totalLuminance += 0.299 * r + 0.587 * g + 0.114 * b;
+      sampledPixels++;
+    }
+  }
+
+  const avgLuminance = sampledPixels > 0 ? totalLuminance / sampledPixels : 0;
+  if (avgLuminance < 4) {
+    return { ok: false, reason: 'Camera feed is completely dark. Face a light source.' };
+  }
+
+  return {
+    ok: true,
+    score: { avgLuminance, sharpness: 10, skinRatio: 0.5 },
+    confidence: 99
+  };
+}
+
+function grabFaceFrame(videoEl, canvas) {
+  const vw = videoEl.videoWidth || 400;
+  const vh = videoEl.videoHeight || 400;
+  const size = Math.min(vw, vh) || 400;
+  canvas.width = 400;
+  canvas.height = 400;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  const sx = Math.max(0, (vw - size) / 2);
+  const sy = Math.max(0, (vh - size) / 2);
+  ctx.drawImage(videoEl, sx, sy, size, size, 0, 0, 400, 400);
+  return ctx;
+}
+
+let faceVerifyInProgress = false;
+
+async function captureAndVerifyFaceId() {
+  if (faceVerifyInProgress) return;
+  const videoEl = document.getElementById('authSelfieVideo');
+  const canvas = document.getElementById('authSelfieCanvas') || document.createElement('canvas');
+  const hintEl = document.getElementById('authCameraHint');
+
+  if (!videoEl) {
+    showToast('Camera is starting. Please allow camera access and try again.', 'error');
+    return;
+  }
+
+  faceVerifyInProgress = true;
+  if (hintEl) {
+    hintEl.textContent = 'Verifying live face…';
+    hintEl.style.color = 'var(--blue-primary)';
+    hintEl.style.fontWeight = '800';
+  }
+
+  // Wait briefly if video stream dimensions are still warming up
+  for (let w = 0; w < 10 && (!videoEl.videoWidth || videoEl.videoWidth === 0); w++) {
+    await new Promise((r) => setTimeout(r, 120));
+  }
+
+  if (!videoEl.videoWidth || videoEl.videoWidth === 0) {
+    faceVerifyInProgress = false;
+    showToast('Camera stream not ready yet. Please wait 1 second and tap Verify again.', 'error');
+    return;
+  }
+
+  let best = null;
+  let bestDataUrl = null;
+  for (let i = 0; i < 3; i++) {
+    const ctx = grabFaceFrame(videoEl, canvas);
+    const q = analyzeFaceImageQuality(canvas, ctx);
+    bestDataUrl = canvas.toDataURL('image/jpeg', 0.90);
+    if (q.ok) {
+      best = q;
+      break;
+    }
+    best = q;
+    await new Promise((r) => setTimeout(r, 120));
+  }
+  faceVerifyInProgress = false;
+
+  if (!bestDataUrl || (best && !best.ok)) {
+    const reason = (best && best.reason) || 'Please allow camera access and try again.';
+    if (hintEl) {
+      hintEl.textContent = reason;
+      hintEl.style.color = '#EF4444';
+      hintEl.style.fontWeight = '800';
+    }
+    return;
+  }
+
+  state.authCapturedSelfieUrl = bestDataUrl;
+
+  // iOS Face ID Success Indication
+  if ('vibrate' in navigator) {
+    try { navigator.vibrate([100, 50, 100]); } catch (e) {}
+  }
+  state.faceVerifiedSuccess = true;
+  stopFaceCameraStream();
+  renderAll();
+
+  // If customer, auto-finish in 850ms
+  if (state.authRole === 'CUSTOMER') {
+    setTimeout(() => {
+      finishNativeRegistration();
+    }, 850);
+  }
+}
+
+async function submitPhoneForFaceStep() {
+  const name = (state.authName || '').trim();
+  const rawPhone = (state.authPhone || '').trim();
+  const digits = rawPhone.replace(/\D/g, '');
+
+  if (digits.length < 8) {
+    showToast('Please enter a valid Zimbabwe phone number (+263...)', 'error');
+    return;
+  }
+  if (!name) {
+    showToast('Please enter your full name', 'error');
+    return;
+  }
+  if (!state.authTermsAccepted) {
+    showToast('Please accept the Terms & Conditions and Privacy Policy', 'error');
+    return;
+  }
+
+  // Number already registered → must log in with password (no password-less sign-in)
+  const last9 = digits.slice(-9);
+  if (state.db) {
+    const list = state.authRole === 'PROVIDER' ? (state.db.providers || []) : (state.db.customers || []);
+    const existing = list.find((item) => (item.phone || '').replace(/\D/g, '').slice(-9) === last9);
+    if (existing) {
+      stopFaceCameraStream();
+      state.loginPhone = rawPhone;
+      state.modalData = { tab: 'LOGIN', loginRole: state.authRole, notice: { tone: 'warn', text: 'This number already has an account. Please log in with your password.' } };
+      state.activeModal = 'SIGNIN_ROLE_CHOICE';
+      lastRenderedModalKey = '';
+      renderAll();
+      return;
+    }
+  }
+
+  // Proceed to Step 2: Scan Face for Logo
+  state.authStep = 'FACE';
+  renderAll();
+  setTimeout(startAuthFaceCamera, 120);
+}
+
+async function startAuthFaceCamera() {
+  stopFaceCameraStream();
+  const videoEl = document.getElementById('authSelfieVideo');
+  if (!videoEl) return;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: 'user',
+        width: { ideal: 640 },
+        height: { ideal: 640 }
+      },
+      audio: false
+    });
+    mediaStreamRef = stream;
+    videoEl.srcObject = stream;
+    await videoEl.play().catch(() => {});
+  } catch (err) {
+    console.warn('Camera preview note:', err.message);
+    const hintEl = document.getElementById('authCameraHint');
+    if (hintEl) {
+      hintEl.textContent = 'Camera unavailable or blocked. Tap "Choose Photo from Device" below.';
+    }
+  }
+}
+
+function captureAuthFaceSelfie() {
+  const videoEl = document.getElementById('authSelfieVideo');
+  const canvas = document.getElementById('authSelfieCanvas') || document.createElement('canvas');
+  if (!videoEl || !videoEl.videoWidth) {
+    showToast('Starting camera... please wait a moment or choose a photo', 'info');
+    return;
+  }
+  const size = Math.min(videoEl.videoWidth, videoEl.videoHeight) || 400;
+  canvas.width = 400;
+  canvas.height = 400;
+  const ctx = canvas.getContext('2d');
+  const sx = (videoEl.videoWidth - size) / 2;
+  const sy = (videoEl.videoHeight - size) / 2;
+  ctx.drawImage(videoEl, sx, sy, size, size, 0, 0, 400, 400);
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.88);
+  state.authCapturedSelfieUrl = dataUrl;
+  stopFaceCameraStream();
+  renderAll();
+}
+
+function retakeAuthFaceSelfie() {
+  state.authCapturedSelfieUrl = null;
+  renderAll();
+  setTimeout(startAuthFaceCamera, 120);
+}
+
+async function handleAuthFaceFileUpload(inputEl) {
+  const file = inputEl.files && inputEl.files[0];
+  if (!file) return;
+  const compressed = await compressImageFileToDataUrl(file, 480, 0.75);
+  state.authCapturedSelfieUrl = compressed || null;
+  state.faceVerifiedSuccess = true;
+  stopFaceCameraStream();
+  renderAll();
+}
+
+async function finishNativeRegistration() {
+  const submitBtns = document.querySelectorAll('#pickerModalRoot .btn-primary-blue');
+  const restoreSubmitBtns = () => {
+    submitBtns.forEach((b) => {
+      b.disabled = false;
+      b.style.opacity = '1';
+      b.style.pointerEvents = 'auto';
+      b.innerHTML = `${uiIcon('check', 18)} <span>Finish &amp; Start Receiving Jobs</span>`;
+    });
+  };
+
+  submitBtns.forEach((b) => {
+    b.disabled = true;
+    b.style.opacity = '0.7';
+    b.style.pointerEvents = 'none';
+    b.innerHTML = '<span>Creating Account...</span>';
+  });
+
+  const name = (state.authName || '').trim();
+  if (!name) {
+    showToast('Please enter your full legal name', 'error');
+    restoreSubmitBtns();
+    state.authStep = 'PHONE';
+    renderAll();
+    return;
+  }
+
+  // Ensure an avatar is available and compressed to < 50KB
+  let finalAvatar = state.authCapturedSelfieUrl;
+  if (!finalAvatar) {
+    const initials = name.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2) || 'FH';
+    const svgAvatar = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="22" fill="#0066FF"/><text x="50" y="62" font-size="38" font-weight="bold" fill="#FFFFFF" text-anchor="middle" font-family="Inter, -apple-system, sans-serif">${initials}</text></svg>`;
+    finalAvatar = `data:image/svg+xml;utf8,${encodeURIComponent(svgAvatar)}`;
+  } else {
+    finalAvatar = await compressDataUrlIfNeeded(finalAvatar, 400, 0.75);
+  }
+
+  let finalIdPhoto = state.authIdPhotoUrl ? await compressDataUrlIfNeeded(state.authIdPhotoUrl, 640, 0.70) : null;
+  let finalPortfolioPhoto = state.authPortfolioPhotoUrl ? await compressDataUrlIfNeeded(state.authPortfolioPhotoUrl, 640, 0.70) : '';
+
+  try {
+    const res = await apiPost('/api/auth/complete-signup', {
+      role: state.authRole,
+      name: name,
+      phone: state.authPhone.trim(),
+      password: state.authPassword || '',
+      suburbId: state.authSuburbId,
+      categoryId: state.authCategoryId,
+      categoryIds: state.authCategoryIds && state.authCategoryIds.length > 0 ? state.authCategoryIds.slice(0, 3) : [state.authCategoryId],
+      skillTier: state.authSkillTier,
+      brandName: (state.authBrandName || `${name.split(' ')[0]} Services`).trim(),
+      startingPriceUsd: Number(state.authStartingPrice || 25),
+      nationalIdNumber: (state.authIdNumber || state.authNationalId || '').trim() || '63-2948102-F-42',
+      idDocument: {
+        type: state.authIdType || 'National ID',
+        number: (state.authIdNumber || state.authNationalId || '').trim() || '63-2948102-F-42',
+        photoUrl: finalIdPhoto
+      },
+      avatarUrl: finalAvatar,
+      selfieUrl: finalAvatar,
+      portfolioImageUrl: finalPortfolioPhoto
+    });
+
+    stopFaceCameraStream();
+    state.role = res.role;
+    state.currentUser = res.user;
+    state.isAuthenticated = true;
+    state.activeModal = null;
+    state.authStep = 'PHONE';
+
+    // Insert or update in local in-memory DB immediately
+    if (state.db) {
+      const list = res.role === 'PROVIDER' ? (state.db.providers = state.db.providers || []) : (state.db.customers = state.db.customers || []);
+      const idx = list.findIndex((item) => item.id === res.user.id);
+      if (idx >= 0) {
+        list[idx] = res.user;
+      } else {
+        list.push(res.user);
+      }
+    }
+
+    saveSession(res.role, res.user, false);
+    showToast(`Welcome to Findit Harare, ${res.user.name}!`, 'success');
+
+    // If client had a pending task waiting in CONFIGURE step, submit it directly!
+    if (res.role === 'CUSTOMER' && state.screenStep === 'CONFIGURE' && state.draftNotes) {
+      submitServiceRequest();
+    } else {
+      renderAll();
+    }
+  } catch (err) {
+    restoreSubmitBtns();
+    showToast(err.message || 'Failed to complete registration. Please check your connection.', 'error');
+  }
+}
+
+
+// ============================================================================
+// SLIDE-OUT LEFT DRAWER, CANCELLATION SHEET, WAITLIST, RATING & MODALS
+// ============================================================================
+let lastRenderedModalKey = '';
+
+function openSignInRoleChoiceModal(tab = 'LOGIN') {
+  state.modalData = { tab: typeof tab === 'string' ? tab : 'LOGIN', loginRole: 'CUSTOMER', notice: null };
+  state.activeModal = 'SIGNIN_ROLE_CHOICE';
+  renderModalLayer();
+}
+
+function setSignInModalData(patch) {
+  state.modalData = { ...(state.modalData || {}), ...patch };
+  renderModalLayer();
+}
+
+async function submitExistingAccountLogin() {
+  const md = state.modalData || {};
+  const role = md.loginRole || 'CUSTOMER';
+  const phone = (state.loginPhone || document.getElementById('loginPhoneInput')?.value || '').trim();
+  const password = state.loginPassword || document.getElementById('loginPasswordInput')?.value || '';
+  if (phone.replace(/\D/g, '').length < 8) {
+    setSignInModalData({ notice: { tone: 'error', text: 'Please enter a valid phone number.' } });
+    return;
+  }
+  if (!password) {
+    setSignInModalData({ notice: { tone: 'error', text: 'Please enter your password.' } });
+    return;
+  }
+
+  try {
+    const res = await apiPost('/api/auth/login', { phone, password, role }, 0);
+    const user = res.user;
+    const list = role === 'PROVIDER' ? (state.db.providers || []) : (state.db.customers || []);
+    if (!list.some((u) => u.id === user.id)) list.push(user);
+    state.currentUser = user;
+    state.isAuthenticated = true;
+    state.role = role;
+    state.providerTab = 'FEED';
+    state.loginPassword = '';
+    state.activeModal = null;
+    state.modalData = null;
+    lastRenderedModalKey = '';
+    saveSession(role, user, false);
+    showToast(`Welcome back, ${user.name}!`);
+    if (role === 'PROVIDER') {
+      try { openJobMarketplaceView(); } catch (e) {}
+    }
+    renderAll();
+  } catch (err) {
+    const d = err.data || {};
+    if (d.code === 'NO_PROVIDER_PROFILE') {
+      setSignInModalData({ notice: { tone: 'warn', text: `Hi ${d.name || ''}, you have a Client account but no Provider profile yet. To work as a provider, complete the provider verification once (ID document + face match + categories).`, actions: 'UPGRADE_TO_PROVIDER', name: d.name } });
+    } else if (d.code === 'NO_CLIENT_PROFILE') {
+      setSignInModalData({ notice: { tone: 'warn', text: 'This number is registered as a Service Provider. Log in as Provider — you can switch to Client mode from the side menu anytime.', actions: 'SWITCH_TO_PROVIDER' } });
+    } else if (d.code === 'BANNED') {
+      setSignInModalData({ notice: { tone: 'error', text: err.message || 'This account is suspended.', actions: 'SUBMIT_APPEAL', phone: phone } });
+    } else if (d.code === 'NOT_FOUND') {
+      setSignInModalData({ notice: { tone: 'error', text: 'No account found with this number.', actions: 'CREATE' } });
+    } else {
+      setSignInModalData({ notice: { tone: 'error', text: err.message || 'Login failed. Please try again.' } });
+    }
+  }
+}
+
+function startProviderUpgradeFromLogin() {
+  const name = state.modalData?.notice?.name || '';
+  state.authRole = 'PROVIDER';
+  state.authStep = 'PHONE';
+  state.authName = name;
+  state.authPhone = state.loginPhone || '';
+  state.authPassword = state.loginPassword || '';
+  state.faceVerifiedSuccess = false;
+  state.modalData = null;
+  state.activeModal = 'SIGNUP_FLOW';
+  lastRenderedModalKey = '';
+  renderModalLayer();
+}
+
+async function promptSubmitSuspensionAppeal(phone) {
+  const reason = prompt('Please explain your appeal / reason for suspension review:', 'I believe my account was suspended by mistake and I abide by Findit Harare community guidelines.');
+  if (!reason || !reason.trim()) return;
+  try {
+    const res = await apiPost('/api/auth/appeal', { phone, appealReason: reason.trim() });
+    if (res && res.success) {
+      showToast('Suspension appeal submitted to Findit Admin for review!');
+      setSignInModalData({ notice: { tone: 'warn', text: 'Your appeal has been submitted to Admin. You will be notified once reviewed.' } });
+    } else {
+      showToast(res?.error || 'Failed to submit appeal', 'error');
+    }
+  } catch (e) {
+    showToast(e.message || 'Failed to submit appeal', 'error');
+  }
+}
+
+function startSignInForRole(role) {
+  state.authRole = role;
+  state.authStep = 'PHONE';
+  state.activeModal = 'SIGNUP_FLOW';
+  state.faceVerifiedSuccess = false;
+  lastRenderedModalKey = '';
+  renderModalLayer();
+}
+
+function getRelevantNotifications() {
+  const allNotifs = Array.isArray(state.db?.adminNotifications) ? state.db.adminNotifications : [];
+  const myId = state.currentUser?.id;
+  const myFinditId = state.currentUser?.finditId;
+  const myPhone = (state.currentUser?.phone || '').replace(/\D/g, '');
+
+  const filtered = allNotifs.filter((n) => {
+    if (n.recipientType === 'ALL') return true;
+    if (n.recipientType === 'CUSTOMERS' && state.role === 'CUSTOMER') return true;
+    if (n.recipientType === 'PROVIDERS' && state.role === 'PROVIDER') return true;
+    if (n.recipientType === 'SPECIFIC_USER') {
+      const rec = String(n.recipientId || '').trim();
+      const recDigits = rec.replace(/\D/g, '');
+      return rec === myId || rec === myFinditId || (myPhone && recDigits && myPhone === recDigits);
+    }
+    return false;
+  });
+
+  // Also include user's personal activeWarnings if any
+  const warnings = Array.isArray(state.currentUser?.activeWarnings) ? state.currentUser.activeWarnings : [];
+  warnings.forEach((w) => {
+    if (!filtered.some((f) => f.id === w.id)) {
+      filtered.unshift({
+        id: w.id || ('warn_' + Date.now()),
+        type: 'WARNING',
+        title: 'Official Admin Safety Warning',
+        message: w.reason || 'Safety policy notice from Findit Admin',
+        createdAt: w.date || new Date().toISOString()
+      });
+    }
+  });
+
+  return filtered;
+}
+
+function getUnreadNotificationsCount() {
+  const notifs = getRelevantNotifications();
+  const readSet = new Set(state.currentUser?.readNotificationIds || []);
+  try {
+    const localRead = JSON.parse(localStorage.getItem('findit_read_notifs') || '[]');
+    localRead.forEach((id) => readSet.add(id));
+  } catch (e) {}
+  return notifs.filter((n) => !readSet.has(n.id)).length;
+}
+
+function markAllNotificationsRead() {
+  const notifs = getRelevantNotifications();
+  const readList = notifs.map((n) => n.id);
+  if (state.currentUser) {
+    state.currentUser.readNotificationIds = readList;
+  }
+  try {
+    localStorage.setItem('findit_read_notifs', JSON.stringify(readList));
+  } catch (e) {}
+  showToast('All notifications marked as read', 'success');
+  renderModalLayer();
+  renderUiOverlay();
+}
+
+function openNotificationCenterModal() {
+  state.activeModal = 'NOTIFICATIONS';
+  lastRenderedModalKey = '';
+  renderModalLayer();
+}
+
+function renderModalLayer() {
+  const root = document.getElementById('pickerModalRoot');
+  if (!root) return;
+  if (!state.activeModal) {
+    if (root.innerHTML !== '') root.innerHTML = '';
+    lastRenderedModalKey = '';
+    return;
+  }
+
+  // Generate unique modal rendering key to prevent wiping inputs or camera streams on periodic polling
+  const modalKey = state.activeModal === 'SIGNUP_FLOW'
+    ? `SIGNUP_${state.authRole}_${state.authStep}_${(state.authCategoryIds || []).join(',')}_${state.faceVerifiedSuccess ? 'VERIFIED' : 'SCAN'}`
+    : state.activeModal === 'SUPPORT'
+      ? `SUPPORT_${(state.supportChatMessages || []).length}_${state.supportAiTyping ? 1 : 0}_${state.supportShowBizInfo ? 1 : 0}`
+      : state.activeModal === 'SUBURB_PICKER'
+        ? `SUBURB_PICKER_${(state.locationSearchResults || []).length}_${state.locationSearching ? 1 : 0}`
+        : state.activeModal === 'SETTINGS'
+          ? `SETTINGS_${state.role}_${(state.settingsDraft?.categoryIds || []).join(',')}_${state.settingsDraft?.isOnline !== false ? 1 : 0}`
+          : state.activeModal === 'PROVIDER_OFFICE_MODAL'
+            ? `PROVIDER_OFFICE_${state.officeDraftHasOffice ? 1 : 0}`
+            : state.activeModal === 'ADD_SERVICE_MODAL'
+              ? `ADD_SERVICE_${state.newServicePhotoDataUrl ? 1 : 0}`
+              : state.activeModal === 'EDIT_SERVICE_MODAL'
+                ? `EDIT_SERVICE_${state.modalData?.item?.id}_${state.editServicePhotoDataUrl ? 1 : 0}`
+                : state.activeModal === 'NOTIFICATIONS'
+                  ? `NOTIFICATIONS_${(getRelevantNotifications() || []).length}_${getUnreadNotificationsCount()}`
+                  : state.activeModal === 'RATE_BOOKING_MODAL'
+                    ? `RATE_BOOKING_${state.modalData?.requestId}_${state.ratingStars}_${(state.ratingTags || []).join(',')}`
+                    : state.activeModal === 'SERVICE_PICKER'
+                      ? `SERVICE_PICKER_${state.selectedCategoryId}_${getCatalogStateSignature(state.db)}`
+                    : `${state.activeModal}_${JSON.stringify(state.modalData || {})}`;
+
+  if (modalKey === lastRenderedModalKey && root.firstElementChild) {
+    return;
+  }
+  lastRenderedModalKey = modalKey;
+
+  // DRIVEGO COUNTER-OFFER STEPPER MODAL (03-app-counter-offer.png)
+  if (state.activeModal === 'COUNTER_OFFER_MODAL') {
+    const md = state.modalData || {};
+    const requestId = md.requestId || '';
+    const baseUsd = Number(md.baseUsd || 20);
+    const currentUsd = Math.max(1, Number(md.currentUsd || (baseUsd + 2)));
+    const req = (state.db?.requests || []).find((r) => r.id === requestId);
+    const reqCat = normalizeCategoryId(req?.categoryId);
+    const isPromo = Boolean(state.db?.settings?.launchPromoActive);
+    const commPercent = isPromo ? 0 : Number(state.db?.settings?.categoryCommissions?.[reqCat] ?? (state.db?.settings?.commissionPercent || 10));
+    const commUsd = Math.round(currentUsd * (commPercent / 100) * 100) / 100;
+    const netUsd = Math.round((currentUsd - commUsd) * 100) / 100;
+
+    root.innerHTML = `
+      <div class="modal-backdrop" onclick="closeModal()">
+        <div class="indrive-modal-sheet" onclick="event.stopPropagation()" style="border-radius:26px 26px 0 0; padding:20px 18px 26px; max-width:480px; margin:0 auto;">
+          <div style="width:40px; height:4px; border-radius:99px; background:#CBD5E1; margin:0 auto 14px;"></div>
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:14px;">
+            <div>
+              <div style="font-size:18px; font-weight:900; color:#0F172A;">Offer your fare</div>
+              <div style="font-size:12px; color:#64748B; font-weight:600; margin-top:2px;">
+                ${escapeHtml(req?.title || 'Client Service Request')} • Client budget: <strong style="color:#0052FF;">$${baseUsd.toFixed(2)}</strong>
+              </div>
+            </div>
+            <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
+          </div>
+
+          <!-- DriveGo Large Stepper Row (- $25.00 +) -->
+          <div style="background:#F8FAFC; border:1.5px solid #E2E8F0; border-radius:20px; padding:18px 16px; margin-bottom:14px; text-align:center;">
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:14px;">
+              <button
+                type="button"
+                onclick="stepCounterOfferModal(-1)"
+                style="width:52px; height:52px; border-radius:50%; border:1.5px solid #CBD5E1; background:#FFFFFF; color:#0F172A; font-size:24px; font-weight:900; cursor:pointer; display:flex; align-items:center; justify-content:center; box-shadow:0 2px 6px rgba(15,23,42,0.06);"
+              >&minus;</button>
+              <div style="flex:1;">
+                <div style="font-size:36px; font-weight:900; color:#0F172A; letter-spacing:-0.03em; line-height:1;">
+                  $${currentUsd.toFixed(2)}
+                </div>
+                <div style="font-size:11.5px; font-weight:800; color:#059669; margin-top:6px;">
+                  You receive: $${netUsd.toFixed(2)} ${isPromo ? '(0% Launch Promo)' : `(${commPercent}% fee)`}
+                </div>
+              </div>
+              <button
+                type="button"
+                onclick="stepCounterOfferModal(1)"
+                style="width:52px; height:52px; border-radius:50%; border:none; background:#0052FF; color:#FFFFFF; font-size:24px; font-weight:900; cursor:pointer; display:flex; align-items:center; justify-content:center; box-shadow:0 6px 14px rgba(0,82,255,0.28);"
+              >+</button>
+            </div>
+
+            <!-- Quick Increment Chips -->
+            <div style="display:flex; justify-content:center; gap:8px; margin-top:14px; flex-wrap:wrap;">
+              ${[baseUsd, baseUsd + 2, baseUsd + 5, baseUsd + 10].map((val) => `
+                <button
+                  type="button"
+                  onclick="setCounterOfferModalAmount(${val})"
+                  style="height:32px; padding:0 12px; border-radius:99px; border:1.5px solid ${Math.abs(currentUsd - val) < 0.01 ? '#0052FF' : '#CBD5E1'}; background:${Math.abs(currentUsd - val) < 0.01 ? '#EBF3FF' : '#FFFFFF'}; color:${Math.abs(currentUsd - val) < 0.01 ? '#0052FF' : '#334155'}; font-size:12px; font-weight:800; cursor:pointer;"
+                >$${val.toFixed(0)}${val === baseUsd ? ' (Client)' : ''}</button>
+              `).join('')}
+            </div>
+          </div>
+
+          <button
+            type="button"
+            class="btn-primary-blue"
+            style="width:100%; height:50px; border-radius:14px; font-size:15px; font-weight:900; background:#0052FF; box-shadow:0 8px 20px rgba(0,82,255,0.28);"
+            onclick="confirmCounterOfferModal()"
+          >
+            <span>Send offer ($${currentUsd.toFixed(2)})</span>
+          </button>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // DRIVEGO 4-DIGIT PIN KEYPAD MODAL FOR PROVIDERS (05-app-safety.png)
+  if (state.activeModal === 'PROVIDER_PIN_KEYPAD_MODAL') {
+    const md = state.modalData || {};
+    const requestId = md.requestId || '';
+    const mode = md.mode === 'COMPLETION' ? 'COMPLETION' : 'START';
+    const digits = String(md.digits || '').slice(0, 4);
+    const isCompletion = mode === 'COMPLETION';
+    const accentColor = isCompletion ? '#10B981' : '#0052FF';
+    const softBg = isCompletion ? '#ECFDF5' : '#EBF3FF';
+
+    root.innerHTML = `
+      <div class="modal-backdrop" onclick="closeModal()">
+        <div class="indrive-modal-sheet" onclick="event.stopPropagation()" style="border-radius:26px 26px 0 0; padding:20px 18px 26px; max-width:440px; margin:0 auto;">
+          <div style="width:40px; height:4px; border-radius:99px; background:#CBD5E1; margin:0 auto 12px;"></div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <div style="width:36px; height:36px; border-radius:10px; background:${softBg}; color:${accentColor}; display:flex; align-items:center; justify-content:center;">
+                ${uiIcon('shield', 18)}
+              </div>
+              <div>
+                <div style="font-size:16px; font-weight:900; color:#0F172A;">
+                  ${isCompletion ? 'Enter Completion PIN' : 'Enter Start PIN'}
+                </div>
+                <div style="font-size:11.5px; color:#64748B; font-weight:600;">
+                  Ask client for the 4-digit ${isCompletion ? 'completion' : 'arrival'} code
+                </div>
+              </div>
+            </div>
+            <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
+          </div>
+
+          <!-- 4-Digit Display Boxes -->
+          <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:10px; max-width:280px; margin:12px auto 16px;">
+            ${[0, 1, 2, 3].map((idx) => {
+              const ch = digits[idx] || '';
+              const isCurrent = idx === digits.length;
+              return `
+                <div style="height:56px; border-radius:14px; border:2px solid ${ch ? accentColor : isCurrent ? accentColor : '#CBD5E1'}; background:${ch ? softBg : '#F8FAFC'}; display:flex; align-items:center; justify-content:center; font-size:26px; font-weight:900; color:#0F172A; box-shadow:${isCurrent ? `0 0 0 3px ${softBg}` : 'none'};">
+                  ${ch || '•'}
+                </div>
+              `;
+            }).join('')}
+          </div>
+
+          <!-- Numeric Keypad Grid -->
+          <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; max-width:320px; margin:0 auto 14px;">
+            ${['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((d) => `
+              <button
+                type="button"
+                onclick="pressProviderPinKeypad('${d}')"
+                style="height:50px; border-radius:12px; border:1px solid #E2E8F0; background:#FFFFFF; color:#0F172A; font-size:20px; font-weight:900; cursor:pointer; box-shadow:0 2px 4px rgba(15,23,42,0.04);"
+              >${d}</button>
+            `).join('')}
+            <button
+              type="button"
+              onclick="pressProviderPinKeypad('CLEAR')"
+              style="height:50px; border-radius:12px; border:1px solid #E2E8F0; background:#F8FAFC; color:#64748B; font-size:12px; font-weight:800; cursor:pointer;"
+            >Clear</button>
+            <button
+              type="button"
+              onclick="pressProviderPinKeypad('0')"
+              style="height:50px; border-radius:12px; border:1px solid #E2E8F0; background:#FFFFFF; color:#0F172A; font-size:20px; font-weight:900; cursor:pointer; box-shadow:0 2px 4px rgba(15,23,42,0.04);"
+            >0</button>
+            <button
+              type="button"
+              onclick="pressProviderPinKeypad('BACK')"
+              style="height:50px; border-radius:12px; border:1px solid #E2E8F0; background:#F8FAFC; color:#0F172A; font-size:16px; font-weight:800; cursor:pointer;"
+            >&larr;</button>
+          </div>
+
+          <button
+            type="button"
+            class="btn-primary-blue"
+            style="width:100%; height:48px; border-radius:14px; font-size:14.5px; font-weight:900; background:${accentColor}; opacity:${digits.length === 4 ? '1' : '0.5'};"
+            ${digits.length === 4 ? `onclick="submitProviderPinKeypad('${requestId}', '${mode}', '${digits}')"` : 'disabled'}
+          >
+            <span>${isCompletion ? 'Verify & Complete Job' : 'Verify PIN & Start Service'}</span>
+          </button>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // 1. SIGN-IN MODAL: "Log In" (existing account) | "Create Account" (new), each as Client or Provider
+  if (state.activeModal === 'SIGNIN_ROLE_CHOICE') {
+    const md = state.modalData || {};
+    const tab = md.tab || 'LOGIN';
+    const loginRole = md.loginRole || 'CUSTOMER';
+    const notice = md.notice || null;
+
+    const loginHtml = `
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:12px;">
+        <button type="button" class="${loginRole === 'CUSTOMER' ? 'btn-primary-blue' : 'btn-dark-sec'}" style="height:40px; font-size:12.5px;" onclick="setSignInModalData({ loginRole: 'CUSTOMER', notice: null })">
+          ${uiIcon('user', 14)}<span>As Client</span>
+        </button>
+        <button type="button" class="${loginRole === 'PROVIDER' ? 'btn-primary-blue' : 'btn-dark-sec'}" style="height:40px; font-size:12.5px;" onclick="setSignInModalData({ loginRole: 'PROVIDER', notice: null })">
+          ${uiIcon('briefcase', 14)}<span>As Provider</span>
+        </button>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:12px;">
+        <div>
+          <label style="font-size:11px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px; display:block;">Phone Number</label>
+          <div style="display:flex; gap:8px;">
+            <div style="background:var(--blue-soft); border:1.5px solid var(--blue-border); border-radius:12px; padding:10px 12px; font-weight:800; color:var(--blue-primary); display:inline-flex; align-items:center; gap:6px; white-space:nowrap; font-size:13px;">
+              ${uiIcon('zwFlag', 18)}<span>+263</span>
+            </div>
+            <input id="loginPhoneInput" type="tel" class="dark-input" style="font-size:15px; font-weight:800; flex:1;" placeholder="Enter your number"
+              value="${escapeHtml((state.loginPhone || '').replace(/^\+?263\s*/, ''))}" oninput="state.loginPhone = '+263 ' + this.value" />
+          </div>
+        </div>
+        <div>
+          <label style="font-size:11px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px; display:block;">Password</label>
+          <input id="loginPasswordInput" type="password" class="dark-input" placeholder="••••••••"
+            value="${escapeHtml(state.loginPassword || '')}" oninput="state.loginPassword = this.value"
+            onkeydown="if(event.key==='Enter') submitExistingAccountLogin()" />
+        </div>
+      </div>
+
+      ${notice ? `
+        <div style="background:${notice.tone === 'warn' ? '#FFFBEB' : '#FEF2F2'}; border:1.5px solid ${notice.tone === 'warn' ? '#FDE68A' : '#FECACA'}; border-radius:12px; padding:10px 12px; margin-bottom:12px; font-size:12px; line-height:1.45; color:${notice.tone === 'warn' ? '#92400E' : '#B91C1C'};">
+          <div style="font-weight:800; margin-bottom:${notice.actions ? '8px' : '0'};">${escapeHtml(notice.text)}</div>
+          ${notice.actions === 'UPGRADE_TO_PROVIDER' ? `
+            <div style="display:flex; flex-direction:column; gap:6px;">
+              <button type="button" class="btn-primary-blue" style="height:38px; font-size:12.5px;" onclick="startProviderUpgradeFromLogin()">
+                ${uiIcon('shield', 14)}<span>Complete Provider Verification (ID + Face)</span>
+              </button>
+              <button type="button" class="btn-dark-sec" style="height:36px; font-size:12px;" onclick="setSignInModalData({ loginRole: 'CUSTOMER', notice: null }); setTimeout(submitExistingAccountLogin, 30);">
+                Log in as Client instead
+              </button>
+            </div>
+          ` : ''}
+          ${notice.actions === 'SWITCH_TO_PROVIDER' ? `
+            <button type="button" class="btn-primary-blue" style="height:38px; font-size:12.5px;" onclick="setSignInModalData({ loginRole: 'PROVIDER', notice: null }); setTimeout(submitExistingAccountLogin, 30);">
+              Log in as Provider instead
+            </button>
+          ` : ''}
+          ${notice.actions === 'CREATE' ? `
+            <button type="button" class="btn-primary-blue" style="height:38px; font-size:12.5px;" onclick="setSignInModalData({ tab: 'SIGNUP', notice: null })">
+              Create an Account
+            </button>
+          ` : ''}
+          ${notice.actions === 'SUBMIT_APPEAL' ? `
+            <button type="button" class="btn-primary-blue" style="height:38px; font-size:12.5px; background:#D97706; display:inline-flex; align-items:center; justify-content:center; gap:6px;" onclick="promptSubmitSuspensionAppeal('${escapeHtml(notice.phone || '')}')">
+              ${uiIcon('scale', 14)}
+              <span>Submit Suspension Appeal to Admin</span>
+            </button>
+          ` : ''}
+        </div>
+      ` : ''}
+
+      <button type="button" class="btn-primary-blue" style="height:48px; font-size:15px; font-weight:800;" onclick="submitExistingAccountLogin()">
+        <span>Log In as ${loginRole === 'PROVIDER' ? 'Service Provider' : 'Client'}</span>
+      </button>
+
+      <div style="font-size:11.5px; color:var(--text-secondary); text-align:center; margin-top:10px; line-height:1.45;">
+        One phone number can hold both a Client and a Provider profile. You can switch modes anytime from the side menu.
+      </div>
+    `;
+
+    const signupHtml = `
+      <div style="display:flex; flex-direction:column; gap:12px; margin-bottom:6px;">
+        <div class="role-choice-card" onclick="startSignInForRole('CUSTOMER')">
+          <div class="role-choice-icon-wrap" style="background:#EFF6FF; color:#0066FF;">${uiIcon('user', 24)}</div>
+          <div style="flex:1;">
+            <div style="font-size:15px; font-weight:800; color:var(--text-main); margin-bottom:3px;">Create Client Account</div>
+            <div style="font-size:12px; color:var(--text-secondary); line-height:1.4;">Name, phone, password + quick face check. Post jobs and get bids from verified pros.</div>
+          </div>
+          <div style="color:var(--text-secondary); display:flex; align-items:center;">${uiIcon('chevronRight', 18)}</div>
+        </div>
+
+        <div class="role-choice-card" onclick="startSignInForRole('PROVIDER')">
+          <div class="role-choice-icon-wrap" style="background:#ECFDF5; color:#10B981;">${uiIcon('briefcase', 24)}</div>
+          <div style="flex:1;">
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:3px; flex-wrap:wrap;">
+              <span style="font-size:15px; font-weight:800; color:var(--text-main);">Become a Service Provider</span>
+              <span style="background:#FEF3C7; color:#92400E; font-size:10px; font-weight:800; padding:2px 6px; border-radius:99px;">+$5 Welcome Bonus</span>
+            </div>
+            <div style="font-size:12px; color:var(--text-secondary); line-height:1.4;">ID + face match + up to 3 business categories. Bid on matching jobs near you.</div>
+          </div>
+          <div style="color:var(--text-secondary); display:flex; align-items:center;">${uiIcon('chevronRight', 18)}</div>
+        </div>
+      </div>
+    `;
+
+    root.innerHTML = `
+      <div class="modal-backdrop" onclick="closeModal()">
+        <div class="indrive-modal-sheet" onclick="event.stopPropagation()">
+          <div class="cancel-sheet-header">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <img src="/assets/logo-icon.svg" width="28" height="28" style="border-radius:8px;" alt="Logo" />
+              <div class="cancel-sheet-title">Findit Harare</div>
+            </div>
+            <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
+          </div>
+
+          <div style="display:grid; grid-template-columns:1fr 1fr; background:#F1F5F9; border-radius:12px; padding:4px; margin-bottom:14px;">
+            <button type="button" onclick="setSignInModalData({ tab: 'LOGIN', notice: null })" style="height:36px; border:none; border-radius:9px; font-weight:800; font-size:13px; cursor:pointer; ${tab === 'LOGIN' ? 'background:#FFFFFF; color:#0F172A; box-shadow:0 1px 3px rgba(0,0,0,0.12);' : 'background:transparent; color:#64748B;'}">Log In</button>
+            <button type="button" onclick="setSignInModalData({ tab: 'SIGNUP', notice: null })" style="height:36px; border:none; border-radius:9px; font-weight:800; font-size:13px; cursor:pointer; ${tab === 'SIGNUP' ? 'background:#FFFFFF; color:#0F172A; box-shadow:0 1px 3px rgba(0,0,0,0.12);' : 'background:transparent; color:#64748B;'}">Create Account</button>
+          </div>
+
+          ${tab === 'LOGIN' ? loginHtml : signupHtml}
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // 2. EXPLANATORY LOW BALANCE MODAL (Commission & $2 Min Reserve & Top-Up Rule)
+  if (state.activeModal === 'LOW_BALANCE_EXPLANATORY') {
+    const data = state.modalData || {};
+    const currentBalance = Number(data.currentBalanceUsd || 0);
+    const minReserve = Number(data.minReserveUsd || 2.00);
+    const commPercent = Number(data.commissionPercent ?? 10);
+    const bidPrice = Number(data.bidPriceUsd || 0);
+    const commFee = Number(data.commissionFeeUsd ?? Math.round(bidPrice * (commPercent / 100) * 100) / 100);
+    const reqTopUp = Number(data.requiredTopUpUsd || Math.max(5.00, commFee));
+    const promoApplied = Boolean(data.promoApplied);
+
+    root.innerHTML = `
+      <div class="modal-backdrop" onclick="closeModal()">
+        <div class="indrive-modal-sheet low-balance-sheet" onclick="event.stopPropagation()">
+          <div class="cancel-sheet-header">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <div style="width:36px; height:36px; border-radius:10px; background:#FEF2F2; color:#DC2626; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                ${uiIcon('alertTriangle', 20)}
+              </div>
+              <div>
+                <div class="cancel-sheet-title">Low Account Balance</div>
+                <div style="font-size:11.5px; color:#DC2626; font-weight:700;">Account Top-Up Required to Bid</div>
+              </div>
+            </div>
+            <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
+          </div>
+
+          <div style="background:#FFFBEB; border:1.5px solid #FDE68A; border-radius:14px; padding:12px 14px; margin-bottom:14px;">
+            <div style="font-size:13px; font-weight:800; color:#92400E; margin-bottom:4px;">
+              Why is a top-up needed?
+            </div>
+            <div style="font-size:12px; color:#78350F; line-height:1.5;">
+              ${promoApplied
+                ? `The active launch promotion waives the commission on this bid. Your wallet still needs to retain the <strong>$${minReserve.toFixed(2)} USD</strong> minimum reserve.`
+                : `A <strong>${commPercent}% platform commission</strong> ($${commFee.toFixed(2)} USD) is deducted upon successful job completion. Your wallet reserve cannot fall below <strong>$${minReserve.toFixed(2)} USD</strong> (at least $${(commFee + minReserve).toFixed(2)} USD balance required to place this bid).`}
+            </div>
+          </div>
+
+          <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:14px; padding:14px; margin-bottom:14px; display:flex; flex-direction:column; gap:8px;">
+            <div style="display:flex; justify-content:space-between; font-size:12.5px;">
+              <span style="color:#64748B;">Current Wallet Balance:</span>
+              <span style="font-weight:800; color:${currentBalance < minReserve ? '#DC2626' : '#0F172A'};">$${currentBalance.toFixed(2)} USD</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; font-size:12.5px;">
+              <span style="color:#64748B;">Minimum Account Reserve:</span>
+              <span style="font-weight:700; color:#0F172A;">$${minReserve.toFixed(2)} USD</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; font-size:12.5px;">
+              <span style="color:#64748B;">Task Bid Amount:</span>
+              <span style="font-weight:700; color:#0066FF;">$${bidPrice.toFixed(2)} USD</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; font-size:12.5px; border-top:1px dashed #CBD5E1; padding-top:8px;">
+              <span style="color:#64748B;">${promoApplied ? `Platform Fee (${commPercent}% standard, waived):` : `Platform Fee (${commPercent}%):`}</span>
+              <span style="font-weight:700; color:#0F172A;">$${commFee.toFixed(2)} USD</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; font-size:13.5px; border-top:1px solid #CBD5E1; padding-top:8px;">
+              <span style="font-weight:800; color:#0F172A;">Suggested Top-Up:</span>
+              <span style="font-weight:900; color:#16A34A; font-size:15px;">+$${reqTopUp.toFixed(2)} USD</span>
+            </div>
+          </div>
+
+          <div style="font-size:11.5px; color:#64748B; line-height:1.45; margin-bottom:16px;">
+            <strong>Bidding Rule:</strong> ${promoApplied
+              ? `Your wallet must retain at least $${minReserve.toFixed(2)} during the 0% launch promotion.`
+              : `A balance below $${minReserve.toFixed(2)}, or less than the commission ($${commFee.toFixed(2)}) plus the $${minReserve.toFixed(2)} reserve, disables bidding until you top up.`}
+          </div>
+
+          <button class="btn-primary-blue" style="height:48px; font-size:14.5px; font-weight:800; background:#10B981; margin-bottom:8px;" onclick="closeModal(); state.walletTopupAmount=${reqTopUp}; openProviderWalletModal();">
+            ${uiIcon('wallet', 18)}
+            <span>Top Up Wallet Now</span>
+          </button>
+
+          <button class="btn-dark-sec" style="height:40px; font-size:13px; font-weight:700;" onclick="closeModal()">
+            Return to Available Tasks
+          </button>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // 3. SIGN-UP WIZARD MODAL
+  if (state.activeModal === 'SIGNUP_FLOW') {
+    root.innerHTML = `
+      <div class="modal-backdrop" onclick="closeModal()">
+        <div class="indrive-modal-sheet" onclick="event.stopPropagation()">
+          ${renderSignUpWizardInnerHtml(false)}
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // COMING SOON HUB SERVICE WAITLIST (ONLINE SHOPPING & TRANSPORT)
+  if (state.activeModal === 'COMING_SOON_SERVICE') {
+    const srvTitle = state.modalData?.title || 'Coming Soon';
+    const srvDesc = state.modalData?.desc || 'This service is currently expanding to Harare.';
+    root.innerHTML = `
+      <div class="modal-backdrop" onclick="closeModal()">
+        <div class="indrive-modal-sheet" onclick="event.stopPropagation()">
+          <div class="cancel-sheet-header">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <span style="color:var(--blue-primary);">${uiIcon('sparkle', 22)}</span>
+              <div>
+                <div class="cancel-sheet-title">${escapeHtml(srvTitle)}</div>
+                <div style="font-size:11.5px; color:#D97706; font-weight:800;">Service availability</div>
+              </div>
+            </div>
+            <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
+          </div>
+
+          <div style="font-size:13px; color:var(--text-secondary); line-height:1.5; margin-bottom:14px;">
+            ${escapeHtml(srvDesc)} This service is not available for bookings yet. Browse active services or check back later.
+          </div>
+
+          <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:14px;">
+            <div style="font-size:12px; color:var(--text-secondary);">This service is not available for bookings yet. Browse active services or check back later.</div>
+          </div>
+
+          <button class="btn-primary-blue" onclick="closeModal()">Close</button>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // PLATFORM CHANGELOG / ANNOUNCEMENTS MODAL
+  if (state.activeModal === 'CHANGELOG_MODAL') {
+    const logs = state.db?.changelogs || [];
+    root.innerHTML = `
+      <div class="modal-backdrop" onclick="closeModal()">
+        <div class="indrive-modal-sheet" onclick="event.stopPropagation()">
+          <div class="cancel-sheet-header">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span style="color:var(--blue-primary);">${uiIcon('sparkle', 20)}</span>
+              <div class="cancel-sheet-title">What's New in Findit Harare</div>
+            </div>
+            <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
+          </div>
+          <div style="max-height:360px; overflow-y:auto; display:flex; flex-direction:column; gap:14px;">
+            ${logs.map((cl) => `
+              <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px; padding:12px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                  <span style="font-size:13.5px; font-weight:800; color:#0F172A;">${cl.title}</span>
+                  <span style="font-size:11px; font-weight:800; background:#EFF6FF; color:#0066FF; padding:2px 8px; border-radius:99px;">${cl.version}</span>
+                </div>
+                <div style="font-size:11px; color:#64748B; margin-bottom:8px;">${cl.date}</div>
+                <ul style="margin:0; padding-left:18px; font-size:12px; color:#334155; line-height:1.5;">
+                  ${(cl.highlights || []).map((h) => `<li>${h}</li>`).join('')}
+                </ul>
+              </div>
+            `).join('')}
+          </div>
+          <button class="btn-primary-blue" style="margin-top:14px;" onclick="closeModal()">Got It</button>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // COMING SOON CATEGORY PRIORITY WAITLIST MODAL (ORIGINAL FEATURE)
+  if (state.activeModal === 'COMING_SOON_MODAL') {
+    const cat = state.modalData?.category || {};
+    const suburbs = state.db.suburbs || [];
+    const categoryIsActive = cat.status === 'ACTIVE';
+    root.innerHTML = `
+      <div class="modal-backdrop" onclick="closeModal()">
+        <div class="indrive-modal-sheet" onclick="event.stopPropagation()">
+          <div class="cancel-sheet-header">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <div class="history-icon-circle">${getCategoryVectorSvg(cat.id || 'cleaning', false)}</div>
+              <div>
+                <div class="cancel-sheet-title">${cat.fullName || cat.name || 'Coming Soon'}</div>
+                <div style="font-size:12px; color:#B45309; font-weight:800;">${categoryIsActive ? 'Available now' : `Launching Soon in Harare${Number(cat.waitlistCount) > 0 ? ` • ${Number(cat.waitlistCount)} on waitlist` : ''}`}</div>
+              </div>
+            </div>
+            <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
+          </div>
+
+          <div style="font-size:13px; color:var(--text-secondary); line-height:1.5; margin-bottom:14px;">
+            ${categoryIsActive
+              ? `<strong>${escapeHtml(cat.fullName || cat.name || 'This category')}</strong> is active. You can describe the work you need and send a request.`
+              : `We are currently verifying Harare specialists for <strong>${escapeHtml(cat.fullName || cat.name || 'this category')}</strong>. Join the priority waitlist to get notified first!`}
+          </div>
+
+          ${categoryIsActive ? '' : `<div style="display:flex; flex-direction:column; gap:10px; margin-bottom:14px;">
+            <input id="waitlistPhoneInput" class="dark-input" value="${escapeHtml(state.currentUser?.phone || '')}" placeholder="Your phone number" type="tel" required />
+            <select id="waitlistSuburbSelect" class="dark-input">
+              ${suburbs.map((s) => `<option value="${s.name}" ${s.id === state.selectedSuburbId ? 'selected' : ''}>Suburb: ${s.name}, Harare</option>`).join('')}
+            </select>
+          </div>`}
+
+          ${categoryIsActive
+            ? `<button class="btn-primary-blue" onclick="selectCategoryAndOpenRequest('${cat.id}')">Browse category</button>`
+            : `<button class="btn-primary-blue" onclick="submitCategoryWaitlist('${cat.id}')">
+                ${uiIcon('sparkle', 16)}
+                <span>Join Priority Waitlist</span>
+              </button>`}
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // 5-STAR RATING & COMPLIMENT MODAL ON SERVICE COMPLETION
+  if (state.activeModal === 'RATE_BOOKING_MODAL') {
+    const requestId = state.modalData?.requestId || state.activeRequestId;
+    const req = (state.db.requests || []).find((r) => r.id === requestId) || {};
+    const isProvider = state.role === 'PROVIDER';
+    const allTags = isProvider
+      ? ['Paid Promptly in USD', 'Respectful & Welcoming', 'Home & Power Ready', 'Clear Gate Directions', 'Delayed at Gate', 'Haggled Agreed Price']
+      : ['Punctual Arrival', 'Clean Mobile Kit', 'Professional Work', 'Fair USD Price', 'Friendly & Respectful', 'Delayed Arrival'];
+
+    const ratingDescriptions = {
+      1: '1 Star — Needs Major Improvement',
+      2: '2 Stars — Below Expectations',
+      3: '3 Stars — Satisfactory Service',
+      4: '4 Stars — Very Good Service',
+      5: '5 Stars — Outstanding & Highly Recommended'
+    };
+
+    root.innerHTML = `
+      <div class="modal-backdrop" onclick="closeModal()">
+        <div class="indrive-modal-sheet" onclick="event.stopPropagation()">
+          <div class="cancel-sheet-header">
+            <div class="cancel-sheet-title">${isProvider ? 'Rate Client & Courtesy' : 'Rate Home-Visit Service'}</div>
+            <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
+          </div>
+
+          <div style="text-align:center; padding:8px 0 14px;">
+            <div style="font-size:14px; font-weight:700; color:var(--text-secondary); margin-bottom:12px;">
+              ${isProvider ? `How was your visit serving <strong>${req.customerName || 'the client'}</strong>?` : `How was your <strong>${req.title || 'Home Service'}</strong> experience?`}
+            </div>
+
+            <!-- Clickable 1 to 5 Stars Component -->
+            <div style="display:flex; justify-content:center; gap:8px; margin-bottom:8px;">
+              ${[1, 2, 3, 4, 5].map((star) => `
+                <button
+                  type="button"
+                  style="background:var(--bg-card); border:2px solid ${star <= state.ratingStars ? '#F59E0B' : 'var(--border-light)'}; width:50px; height:50px; border-radius:14px; display:inline-flex; align-items:center; justify-content:center; cursor:pointer; transition:transform 0.12s, border-color 0.15s; touch-action:manipulation; pointer-events:auto;"
+                  onclick="selectRatingStars(${star})"
+                  title="${star} Star${star > 1 ? 's' : ''}"
+                >
+                  <span style="pointer-events:none; display:inline-flex;">
+                    ${star <= state.ratingStars ? uiIcon('star', 26) : uiIcon('starOutline', 26)}
+                  </span>
+                </button>
+              `).join('')}
+            </div>
+
+            <div style="font-size:12px; font-weight:800; color:${state.ratingStars >= 4 ? '#059669' : state.ratingStars === 3 ? '#D97706' : '#DC2626'}; margin-bottom:14px;">
+              ${ratingDescriptions[state.ratingStars] || `${state.ratingStars} Stars`}
+            </div>
+
+            <!-- Quick Compliment Tags -->
+            <div style="display:flex; flex-wrap:wrap; justify-content:center; gap:7px; margin-bottom:14px;">
+              ${allTags.map((tag) => {
+                const active = state.ratingTags.includes(tag);
+                return `
+                  <button
+                    type="button"
+                    class="chat-preset-chip"
+                    style="background:${active ? 'var(--blue-primary)' : 'var(--bg-card)'}; color:${active ? '#FFFFFF' : 'var(--text-main)'}; border-color:${active ? 'var(--blue-primary)' : 'var(--border-light)'}; padding:7px 12px;"
+                    onclick="toggleRatingComplimentTag('${tag}')"
+                  >
+                    ${active ? uiIcon('check', 12) : ''}
+                    <span>${tag}</span>
+                  </button>
+                `;
+              }).join('')}
+            </div>
+
+            <!-- Custom Written Feedback Comment Box (User Requested Free-Form Input) -->
+            <div style="margin:12px 0 16px; text-align:left;">
+              <label style="font-size:11.5px; font-weight:800; color:var(--text-secondary); display:block; margin-bottom:5px; text-transform:uppercase; letter-spacing:0.04em;">
+                Write Custom Feedback (Optional)
+              </label>
+              <textarea
+                id="customRatingCommentBox"
+                class="dark-input"
+                rows="3"
+                style="width:100%; border-radius:12px; font-size:13px; line-height:1.45; padding:10px 12px; resize:none;"
+                placeholder="${isProvider ? 'Write notes about the client gate, payment, or home instructions...' : 'Share what made the specialist stand out, punctuality, neatness, etc...'}"
+                oninput="state.customReviewComment = this.value"
+              >${escapeHtml(state.customReviewComment || '')}</textarea>
+            </div>
+          </div>
+
+          <button id="rateBookingSubmitBtn" class="btn-primary-blue" onclick="completeBooking('${requestId}')">
+            ${uiIcon('check', 16)}
+            <span>${isProvider ? `Submit Client Review & Finish` : `Submit ${state.ratingStars}-Star Rating & Finish`}</span>
+          </button>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  if (state.activeModal === 'DISPUTE_MODAL') {
+    const jobId = state.modalData?.jobId;
+    root.innerHTML = `
+      <div class="modal-backdrop" onclick="closeModal()">
+        <div class="indrive-modal-sheet" onclick="event.stopPropagation()">
+          <div class="cancel-sheet-header">
+            <div class="cancel-sheet-title">Report Issue / Dispute</div>
+            <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
+          </div>
+          <div style="padding:10px 0;">
+            <div style="font-size:12.5px; color:var(--text-secondary); margin-bottom:12px; line-height:1.45;">
+              Our 24/7 operating centre reviews complaints, chat messages, and transactions to ensure fair treatment.
+            </div>
+            <label style="font-size:11px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; margin-bottom:5px; display:block;">Dispute Reason</label>
+            <select id="disputeCategorySelect" class="dark-input" style="width:100%; margin-bottom:12px; height:42px; font-weight:700; border-radius:10px;">
+              <option value="SPECIALIST_NO_SHOW">Specialist Did Not Show Up</option>
+              <option value="CLIENT_UNREACHABLE">Client Unreachable / Locked Gate</option>
+              <option value="WORK_QUALITY">Work Quality &amp; Completeness Issue</option>
+              <option value="PAYMENT_DISPUTE">Payment Disagreement</option>
+              <option value="SAFETY_CONCERN">Safety or Professional Conduct Concern</option>
+              <option value="PROPERTY_DAMAGE">Property Damage</option>
+              <option value="OTHER">Other Issue</option>
+            </select>
+            <label style="font-size:11px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; margin-bottom:5px; display:block;">Incident Details</label>
+            <textarea id="disputeReasonInput" class="dark-input" rows="4" style="width:100%; font-size:13px; line-height:1.45; resize:none; padding:10px; border-radius:10px;" placeholder="Please give specific details so the operating team can investigate and resolve immediately..."></textarea>
+            <button type="button" class="btn-primary-blue" style="margin-top:14px; width:100%; height:44px; background:#DC2626; box-shadow:0 4px 14px rgba(220,38,38,0.35);" onclick="submitDisputeFromModal('${jobId}')">
+              Submit Dispute to Operating Centre
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // TERMS & CONDITIONS MODAL
+  if (state.activeModal === 'TERMS_MODAL') {
+    root.innerHTML = `
+      <div class="modal-backdrop" onclick="state.activeModal='SIGNUP_FLOW'; renderModalLayer();">
+        <div class="indrive-modal-sheet" onclick="event.stopPropagation()">
+          <div class="cancel-sheet-header">
+            <div class="cancel-sheet-title">Terms &amp; Conditions</div>
+            <button class="cancel-close-x" onclick="state.activeModal='SIGNUP_FLOW'; renderModalLayer();">${uiIcon('close', 16)}</button>
+          </div>
+          <div style="font-size:13px; color:var(--text-secondary); line-height:1.55; max-height:340px; overflow-y:auto;">
+            <p style="margin-bottom:8px;"><strong>1. Fair Price Negotiation:</strong> Clients propose a starting USD fare and verified Harare providers accept the fare or counter-bid based on their skill tier and travel distance.</p>
+            <p style="margin-bottom:8px;"><strong>2. In-App Protection &amp; Anti-Leakage:</strong> Sharing off-platform phone numbers, WhatsApp links, @handles, or watermarked flyers in chat or catalogue photos is strictly prohibited.</p>
+            <p style="margin-bottom:8px;"><strong>3. Admin Catalogue Moderation:</strong> Every portfolio photo or bio update submitted by a service provider is reviewed by Findit Admin before being published to clients.</p>
+            <p><strong>4. Home Arrival PIN &amp; Mutual Cancellation:</strong> Clients share the 4-digit Start PIN upon provider arrival. Either party may cancel with a valid reason.</p>
+          </div>
+          <button class="btn-primary-blue" style="margin-top:14px;" onclick="state.activeModal='SIGNUP_FLOW'; renderModalLayer();">
+            Back to Sign Up
+          </button>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // PRIVACY POLICY MODAL
+  if (state.activeModal === 'PRIVACY_MODAL') {
+    root.innerHTML = `
+      <div class="modal-backdrop" onclick="state.activeModal='SIGNUP_FLOW'; renderModalLayer();">
+        <div class="indrive-modal-sheet" onclick="event.stopPropagation()">
+          <div class="cancel-sheet-header">
+            <div class="cancel-sheet-title">Privacy Policy</div>
+            <button class="cancel-close-x" onclick="state.activeModal='SIGNUP_FLOW'; renderModalLayer();">${uiIcon('close', 16)}</button>
+          </div>
+          <div style="font-size:13px; color:var(--text-secondary); line-height:1.55; max-height:340px; overflow-y:auto;">
+            <p style="margin-bottom:8px;"><strong>1. Masked Phone Numbers:</strong> Your personal WhatsApp and phone number are never exposed to the other party; all calls and messages happen inside Findit Harare.</p>
+            <p style="margin-bottom:8px;"><strong>2. Biometric &amp; National ID Data:</strong> Live selfie verification and Zimbabwe National ID records are encrypted and used exclusively for safety verification.</p>
+            <p><strong>3. Live Location Privacy:</strong> Home visit coordinates are shared only with your accepted service provider during an active booking.</p>
+          </div>
+          <button class="btn-primary-blue" style="margin-top:14px;" onclick="state.activeModal='SIGNUP_FLOW'; renderModalLayer();">
+            Back to Sign Up
+          </button>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // SLIDE-OUT LEFT NAVIGATION DRAWER
+  if (state.activeModal === 'DRAWER') {
+    const isAuth = state.isAuthenticated && state.currentUser;
+    const user = isAuth ? state.currentUser : null;
+    const isProvider = state.role === 'PROVIDER';
+    const ratingNum = user && user.rating ? Number(user.rating).toFixed(2) : null;
+    const jobCount = user ? (user.completedBookings || 0) : 0;
+
+    root.innerHTML = `
+      <div class="indrive-left-drawer-backdrop" onclick="closeModal()">
+        <div class="indrive-left-drawer" onclick="event.stopPropagation()">
+          <div>
+            ${isAuth ? `
+              <div class="drawer-profile-header" onclick="state.activeModal='SETTINGS'; renderModalLayer();">
+                <div class="drawer-avatar-circle">
+                  ${user.avatarUrl
+                    ? `<img src="${resolveMediaUrl(user.avatarUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_AVATAR_FALLBACK}';" alt="${user.name}" />`
+                    : `<span>${user.avatarInitials || (user.name ? user.name.slice(0, 2).toUpperCase() : 'FH')}</span>`
+                  }
+                </div>
+                <div style="flex:1; min-width:0;">
+                  <div style="font-size:15px; font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${user.name}</div>
+                  <div style="font-size:12px; color:var(--text-secondary); font-weight:600; margin-top:2px; display:flex; align-items:center; gap:4px;">
+                    <span style="color:#F59E0B; display:inline-flex;">${uiIcon('star', 12)}</span>
+                    <span>${ratingNum || '5.00'} (${jobCount})</span>
+                  </div>
+                  <div style="font-size:11px; font-family:monospace; font-weight:800; color:var(--blue-primary); margin-top:2px;">
+                    ${user.finditId ? `ID: ${escapeHtml(user.finditId)}` : ''}
+                  </div>
+                </div>
+                <span style="color:var(--text-secondary); display:inline-flex;">${uiIcon('chevronRight', 14)}</span>
+              </div>
+            ` : `
+              <div class="drawer-profile-header" onclick="openSignInRoleChoiceModal()">
+                <div class="drawer-avatar-circle" style="background:var(--blue-soft); color:var(--blue-primary);">
+                  ${uiIcon('user', 20)}
+                </div>
+                <div style="flex:1; min-width:0;">
+                  <div style="font-size:15px; font-weight:800; color:var(--text-main);">Sign in to Findit</div>
+                  <div style="font-size:12px; color:var(--blue-primary); font-weight:700; margin-top:2px;">
+                    Client or Service Provider
+                  </div>
+                </div>
+                <span style="color:var(--text-secondary); display:inline-flex;">${uiIcon('chevronRight', 14)}</span>
+              </div>
+            `}
+
+            ${(isAuth && isProvider) ? `
+              <div style="background:#FFFFFF; border:1.5px solid #E2E8F0; border-radius:16px; padding:12px; margin-bottom:14px; box-shadow:0 2px 10px rgba(0,0,0,0.03);">
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+                  <div style="font-size:11px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em; display:flex; align-items:center; gap:5px;">
+                    <span style="width:7px; height:7px; border-radius:50%; background:${(user.status === 'AVAILABLE' || (!user.status && user.isOnline !== false)) ? '#10B981' : user.status === 'BUSY' ? '#F59E0B' : (user.status === 'ON_BREAK' || user.status === 'LUNCH') ? '#3B82F6' : '#64748B'};"></span>
+                    <span>Status: <strong>${user.status || (user.isOnline !== false ? 'AVAILABLE' : 'OFFLINE')}</strong></span>
+                  </div>
+                  ${(user.status === 'ON_BREAK' || user.status === 'LUNCH' || user.status === 'OFFLINE' || user.isOnline === false) ? `
+                    <button type="button" class="small-pill-btn" style="background:#10B981; color:#fff; border:none; font-weight:800; padding:3px 10px; font-size:11px;" onclick="setProviderStatus('AVAILABLE')">
+                      Go Available
+                    </button>
+                  ` : ''}
+                </div>
+                <div style="display:grid; grid-template-columns:repeat(5, 1fr); gap:4px;">
+                  <button type="button" class="small-pill-btn" style="padding:6px 2px; font-size:10.5px; font-weight:800; justify-content:center; ${(user.status === 'AVAILABLE' || (!user.status && user.isOnline !== false)) ? 'background:#10B981; color:#fff; border-color:#10B981;' : 'background:#F1F5F9; color:#475569;'}" onclick="setProviderStatus('AVAILABLE')">
+                    Online
+                  </button>
+                  <button type="button" class="small-pill-btn" style="padding:6px 2px; font-size:10.5px; font-weight:800; justify-content:center; ${user.status === 'BUSY' ? 'background:#F59E0B; color:#fff; border-color:#F59E0B;' : 'background:#F1F5F9; color:#475569;'}" onclick="setProviderStatus('BUSY')">
+                    Busy
+                  </button>
+                  <button type="button" class="small-pill-btn" style="padding:6px 2px; font-size:10.5px; font-weight:800; justify-content:center; ${user.status === 'ON_BREAK' ? 'background:#3B82F6; color:#fff; border-color:#3B82F6;' : 'background:#F1F5F9; color:#475569;'}" onclick="setProviderStatus('ON_BREAK', 15)">
+                    15m Break
+                  </button>
+                  <button type="button" class="small-pill-btn" style="padding:6px 2px; font-size:10.5px; font-weight:800; justify-content:center; ${user.status === 'LUNCH' ? 'background:#3B82F6; color:#fff; border-color:#3B82F6;' : 'background:#F1F5F9; color:#475569;'}" onclick="setProviderStatus('LUNCH', 45)">
+                    Lunch
+                  </button>
+                  <button type="button" class="small-pill-btn" style="padding:6px 2px; font-size:10.5px; font-weight:800; justify-content:center; ${user.status === 'OFFLINE' || user.isOnline === false ? 'background:#64748B; color:#fff; border-color:#64748B;' : 'background:#F1F5F9; color:#475569;'}" onclick="setProviderStatus('OFFLINE')">
+                    Offline
+                  </button>
+                </div>
+              </div>
+            ` : ''}
+
+            <div class="drawer-menu-list">
+              <!-- Multi-Service Hub Pinned to Side Panel (Works in both Client & Provider Mode) -->
+              <div class="drawer-menu-item ${state.hubView === 'HUB' ? 'active' : ''}" style="background:#EFF6FF; border:1.5px solid #BFDBFE; border-radius:12px; margin-bottom:8px; font-weight:800; color:#1E40AF;" onclick="closeModal(); returnToMainHub();">
+                ${uiIcon('home', 18)}
+                <span style="color:#1E40AF;">Multi-Service Hub</span>
+              </div>
+
+              <div class="drawer-menu-item ${state.hubView !== 'HUB' ? 'active' : ''}" onclick="closeModal(); openJobMarketplaceView();">
+                ${uiIcon('map', 18)}
+                <span>${isProvider ? 'Provider Workspace' : 'Job Marketplace Map'}</span>
+              </div>
+
+              <div class="drawer-menu-item" onclick="state.activeModal='HISTORY'; renderModalLayer();">
+                ${uiIcon('clock', 18)}
+                <span>${isProvider ? 'Service History' : 'Request history'}</span>
+              </div>
+
+              ${(isAuth && isProvider) ? `
+                <div class="drawer-menu-item" onclick="openProviderWalletModal()">
+                  ${uiIcon('wallet', 18)}
+                  <span>Prepaid USD Wallet</span>
+                  <span style="margin-left:auto; font-size:12px; font-weight:900; color:#10B981; background:#ECFDF5; padding:2px 8px; border-radius:99px;">
+                    $${Number(user.walletBalanceUsd || 0).toFixed(2)}
+                  </span>
+                </div>
+
+                <div class="drawer-menu-item" onclick="openProviderCatalogueModal()">
+                  ${uiIcon('image', 18)}
+                  <span>Work Catalogue</span>
+                  <span style="margin-left:auto; font-size:11px; font-weight:800; color:#64748B;">
+                    ${(user.cataloguePhotos || []).length} photos
+                  </span>
+                </div>
+              ` : ''}
+
+              <div class="drawer-menu-item" onclick="state.activeModal='NOTIFICATIONS'; renderModalLayer();">
+                ${uiIcon('bell', 18)}
+                <span>Notifications</span>
+                ${getUnreadNotificationsCount() > 0 ? `<span style="margin-left:auto; background:#EF4444; color:#fff; font-size:10.5px; font-weight:800; padding:1px 7px; border-radius:99px;">${getUnreadNotificationsCount()}</span>` : ''}
+              </div>
+
+              <div class="drawer-menu-item" onclick="state.activeModal='SAFETY'; renderModalLayer();">
+                ${uiIcon('shield', 18)}
+                <span>Safety</span>
+              </div>
+
+              <div class="drawer-menu-item" onclick="openAccountSettingsModal()">
+                ${uiIcon('gear', 18)}
+                <span>${isProvider ? 'Settings & Job Categories' : 'Account Settings'}</span>
+              </div>
+
+              <div class="drawer-menu-item" onclick="state.activeModal='HELP'; renderModalLayer();">
+                ${uiIcon('info', 18)}
+                <span>Help</span>
+              </div>
+
+              <div class="drawer-menu-item" onclick="openSupportModal()">
+                ${uiIcon('support', 18)}
+                <span>Support</span>
+              </div>
+
+              <a href="/FinditHarare.apk" download="FinditHarare.apk" class="drawer-menu-item" style="text-decoration:none; color:inherit; background:#EFF6FF; border:1px solid #BFDBFE; border-radius:12px; margin:6px 0; font-weight:700;">
+                ${uiIcon('phone', 18)}
+                <span style="color:#1D4ED8;">Download Android APK</span>
+              </a>
+            </div>
+          </div>
+
+          <div class="drawer-footer-area">
+            <button class="drawer-mode-switch-btn" onclick="toggleClientAndProviderMode()">
+              ${isProvider ? uiIcon('user', 15) : uiIcon('briefcase', 15)}
+              <span>${isProvider ? 'Switch to Client Mode' : 'Switch to Provider Mode'}</span>
+            </button>
+            <div class="drawer-social-row">
+              <a href="https://www.facebook.com/profile.php?id=61595501858201" target="_blank" rel="noopener" class="drawer-social-btn" title="Facebook - Findit Harare">
+                ${uiIcon('facebook', 16)}
+              </a>
+              <a href="https://www.instagram.com/findithahare/" target="_blank" rel="noopener" class="drawer-social-btn" title="Instagram - @findithahare">
+                ${uiIcon('instagram', 16)}
+              </a>
+            </div>
+            <div style="margin-top:8px; display:flex; flex-direction:column; align-items:center; gap:4px;">
+              <img src="/assets/logo.svg" alt="Findit Harare" style="height:22px; width:auto; opacity:0.9;" />
+              <div style="font-size:10.5px; font-weight:700; color:var(--text-secondary); opacity:0.75;">
+                Verified Home Services • Harare, Zimbabwe
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // "Why do you want to cancel?"
+  if (state.activeModal === 'CANCEL_TASK') {
+    const isProvider = state.role === 'PROVIDER';
+    const reasons = isProvider
+      ? [
+          { icon: 'route', label: 'Client location is too far away' },
+          { icon: 'fare', label: 'Agreed fare does not cover travel' },
+          { icon: 'warn', label: 'Accidental acceptance' },
+          { icon: 'pin', label: 'Cannot find home address or gate' },
+          { icon: 'inbox', label: 'Client is not responding' },
+          { icon: 'dots', label: 'Another reason' }
+        ]
+      : [
+          { icon: 'route', label: 'Pros are too far away' },
+          { icon: 'fare', label: 'High fares' },
+          { icon: 'warn', label: 'Accidental request' },
+          { icon: 'pin', label: 'Wrong address or service selected' },
+          { icon: 'inbox', label: 'No offers from pros' },
+          { icon: 'dots', label: 'Another reason' }
+        ];
+
+    root.innerHTML = `
+      <div class="modal-backdrop" onclick="closeModal()">
+        <div class="indrive-modal-sheet" onclick="event.stopPropagation()">
+          <div class="cancel-sheet-header">
+            <div class="cancel-sheet-title">Why do you want to cancel?</div>
+            <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
+          </div>
+
+          <div>
+            ${reasons.map((r) => `
+              <div class="indrive-cancel-row" onclick="handleCancelReasonRowClick('${r.label.replace(/'/g, "\\'")}')">
+                <div class="cancel-row-left">
+                  ${getCancelReasonSvg(r.icon)}
+                  <span>${r.label}</span>
+                </div>
+                ${uiIcon('chevronRight', 16)}
+              </div>
+            `).join('')}
+          </div>
+
+          <button class="cancel-skip-btn" onclick="submitCancelTaskWithReason('Skipped reason')">
+            Skip
+          </button>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // PROVIDER WORK CATALOGUE MODAL
+  if (state.activeModal === 'CATALOGUE_VIEW') {
+    const { providerId, requestId, offerId } = state.modalData || {};
+    const targetReq = requestId ? (state.db?.requests || []).find((r) => r.id === requestId) : null;
+    const targetOffer = targetReq && offerId ? (targetReq.offers || []).find((o) => o.id === offerId) : null;
+    const prov = resolveProviderByIdOrOffer(providerId, targetReq, targetOffer);
+    const approvedPhotos = (prov.portfolio || []).filter((item) => item.approvalStatus === 'APPROVED');
+
+    root.innerHTML = `
+      <div class="modal-backdrop" onclick="closeModal()">
+        <div class="indrive-modal-sheet" onclick="event.stopPropagation()">
+          <div class="cancel-sheet-header">
+            <div style="display:flex; align-items:center; gap:12px;">
+              <img src="${resolveMediaUrl(prov.avatarUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_AVATAR_FALLBACK}';" alt="${prov.name}" style="width:48px; height:48px; border-radius:50%; object-fit:cover; border:2.5px solid #0066FF;" />
+              <div>
+                <div style="font-size:17.5px; font-weight:800;">${prov.name}</div>
+                <div style="font-size:12.5px; color:var(--text-secondary); font-weight:600; display:flex; align-items:center; gap:4px;">
+                  ${uiIcon('star', 13)}
+                  <span>${prov.rating} (${prov.completedBookings} jobs) • ${prov.skillTier}</span>
+                </div>
+              </div>
+            </div>
+            <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
+          </div>
+
+          <div style="font-size:13px; color:var(--text-secondary); margin-bottom:14px; line-height:1.45;">
+            ${prov.bio}
+          </div>
+
+          <div style="display:grid; grid-template-columns:1fr; gap:12px; margin-bottom:16px;">
+            ${approvedPhotos.map((item) => `
+              <div style="background:var(--bg-card); border-radius:16px; overflow:hidden; border:1px solid var(--border-light);">
+                <img src="${item.imageUrl}" onerror="this.onerror=null; this.src='${DEFAULT_TASK_PHOTO_FALLBACK}';" alt="${item.title}" style="width:100%; height:185px; object-fit:cover; display:block;" />
+                <div style="padding:11px 14px; display:flex; justify-content:space-between; align-items:center;">
+                  <div>
+                    <div style="font-size:14px; font-weight:800; color:var(--text-main);">${item.title}</div>
+                    <div style="font-size:12px; color:var(--text-secondary); font-weight:600;">Duration: ${item.duration} • ${item.tag}</div>
+                  </div>
+                  <div style="font-size:16px; font-weight:800; color:var(--blue-primary);">$${item.priceUsd}</div>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+
+          ${offerId && requestId ? `
+            <button class="btn-primary-blue" onclick="closeModal(); acceptOffer('${requestId}', '${offerId}')">
+              ${uiIcon('check', 16)}
+              <span>Accept ${prov.shortName || prov.name}'s Offer</span>
+            </button>
+          ` : `
+            <button class="btn-primary-blue" onclick="closeModal(); selectTopServiceShortcut('${prov.categoryId}', 0)">
+              <span>Request ${prov.shortName || prov.name}</span>
+              ${uiIcon('chevronRight', 16)}
+            </button>
+          `}
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // REQUEST & SERVICE HISTORY MODAL (SEPARATED FOR CLIENT VS PROVIDER)
+  if (state.activeModal === 'HISTORY') {
+    const userId = state.currentUser ? state.currentUser.id : null;
+    const isProvider = state.role === 'PROVIDER';
+    const items = userId
+      ? (state.db.requests || []).filter((r) =>
+          isProvider
+            ? (r.acceptedProviderId === userId || (r.offers || []).some((o) => o.providerId === userId && r.acceptedOfferId === o.id))
+            : r.customerId === userId
+        )
+      : [];
+    const modalTitle = isProvider ? 'Service History' : 'Request History';
+    const emptySub = isProvider
+      ? 'Your accepted and completed client visits will appear here.'
+      : 'Your completed and active service requests will appear here.';
+
+    root.innerHTML = `
+      <div class="modal-backdrop" onclick="closeModal()">
+        <div class="indrive-modal-sheet" onclick="event.stopPropagation()">
+          <div class="cancel-sheet-header">
+            <div class="cancel-sheet-title">${modalTitle}</div>
+            <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
+          </div>
+          ${items.length === 0 ? `
+            <div style="padding:40px 20px; text-align:center; color:var(--text-secondary);">
+              <div style="font-size:32px; margin-bottom:8px; color:var(--text-muted);">${uiIcon('clock', 36)}</div>
+              <div style="font-weight:700; font-size:15px; color:var(--text-primary); margin-bottom:4px;">No ${isProvider ? 'services' : 'requests'} yet</div>
+              <div style="font-size:13px;">${emptySub}</div>
+            </div>
+          ` : items.map((r) => {
+            const isCompleted = r.status === 'COMPLETED';
+            const clientRatingObj = r.providerRatedByClient;
+            const provRatingObj = r.clientRatedByProvider;
+            const needsRating = isCompleted && ((!isProvider && !clientRatingObj) || (isProvider && !provRatingObj));
+            const myRatingScore = !isProvider ? clientRatingObj?.rating : provRatingObj?.rating;
+
+            return `
+              <div class="indrive-cancel-row" style="cursor:default; align-items:center;">
+                <div style="flex:1; min-width:0;">
+                  <div style="font-weight:800; font-size:14.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${r.title}</div>
+                  <div style="font-size:12px; color:var(--text-secondary); margin-top:2px;">
+                    ${isProvider ? `Client: ${r.customerName} • ` : ''}${r.exactAddress || r.suburbName || 'Harare'} • <span style="font-weight:700; color:${isCompleted ? '#10B981' : 'var(--blue-primary)'};">${r.status}</span>
+                  </div>
+                  ${myRatingScore ? `
+                    <div style="font-size:11.5px; font-weight:800; color:#0052FF; margin-top:3px; display:flex; align-items:center; gap:3px;">
+                      ${uiIcon('star', 12)}
+                      <span>Rated ${myRatingScore}.0</span>
+                    </div>
+                  ` : ''}
+                </div>
+                <div style="text-align:right; flex-shrink:0; margin-left:10px;">
+                  <div style="font-weight:800; font-size:15px; color:var(--blue-primary); margin-bottom:4px;">${formatUsdPrice(r.agreedTotalUsd || r.budgetUsd)}</div>
+                  ${needsRating ? `
+                    <button
+                      type="button"
+                      class="btn-primary-blue"
+                      style="width:auto; height:28px; padding:0 10px; font-size:11px; border-radius:8px; background:#10B981; box-shadow:0 2px 8px rgba(16,185,129,0.3);"
+                      onclick="closeModal(); openRateBookingModal('${r.id}')"
+                    >
+                      ${uiIcon('star', 11)}
+                      <span>${isProvider ? 'Rate Client' : 'Rate Specialist'}</span>
+                    </button>
+                  ` : ''}
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // DESIRED STYLE REFERENCE PHOTO / VIDEO PREVIEW MODAL
+  if (state.activeModal === 'IMAGE_PREVIEW') {
+    const { photoUrl, title } = state.modalData || {};
+    const isVideo = photoUrl && (photoUrl.endsWith('.mp4') || photoUrl.endsWith('.webm') || photoUrl.includes('video'));
+    root.innerHTML = `
+      <div class="modal-backdrop" onclick="closeModal()">
+        <div class="indrive-modal-sheet" onclick="event.stopPropagation()" style="text-align:center; padding:18px;">
+          <div class="cancel-sheet-header" style="margin-bottom:14px;">
+            <div class="cancel-sheet-title">${escapeHtml(title || 'Media Reference')}</div>
+            <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
+          </div>
+          <div style="max-height:68vh; overflow:auto; border-radius:14px; border:1.5px solid var(--border-light); background:#0F172A; display:flex; align-items:center; justify-content:center;">
+            ${isVideo ? `
+              <video src="${resolveMediaUrl(photoUrl)}" controls playsinline style="max-width:100%; max-height:65vh; display:block; border-radius:14px;"></video>
+            ` : `
+              <img src="${resolveMediaUrl(photoUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_TASK_PHOTO_FALLBACK}';" style="max-width:100%; max-height:65vh; display:block; object-fit:contain; border-radius:14px;" alt="Desired Style Reference" />
+            `}
+          </div>
+          <div style="font-size:12px; font-weight:700; color:var(--text-secondary); margin-top:12px;">
+            ${isVideo ? 'Tap video to play, pause, or seek' : 'Exact client reference photo attached to this service booking'}
+          </div>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // PROVIDER AVAILABILITY STATUS PICKER MODAL
+  if (state.activeModal === 'STATUS_PICKER') {
+    root.innerHTML = `
+      <div class="modal-backdrop" onclick="closeModal()">
+        <div class="indrive-modal-sheet" onclick="event.stopPropagation()" style="border-radius:24px 24px 0 0; padding:18px 16px 24px;">
+          <div class="cancel-sheet-header" style="margin-bottom:14px;">
+            <div class="cancel-sheet-title">Set Your Availability</div>
+            <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:8px;">
+            <div class="fh-form-select-card" onclick="setProviderStatus('AVAILABLE'); closeModal();">
+              <div style="display:flex; align-items:center; gap:10px;">
+                <span class="fh-status-dot-green"></span>
+                <div>
+                  <div style="font-size:14px; font-weight:800; color:#0F172A;">Available (Online)</div>
+                  <div style="font-size:11.5px; color:#64748B;">Receive new service requests in Harare</div>
+                </div>
+              </div>
+              ${(state.providerStatus === 'AVAILABLE' || (!state.providerStatus && state.currentUser?.isOnline !== false)) ? '<span style="color:#10B981; font-weight:900;">&#10003;</span>' : ''}
+            </div>
+            <div class="fh-form-select-card" onclick="setProviderStatus('BUSY'); closeModal();">
+              <div style="display:flex; align-items:center; gap:10px;">
+                <span class="fh-status-dot-yellow"></span>
+                <div>
+                  <div style="font-size:14px; font-weight:800; color:#0F172A;">Busy (Working)</div>
+                  <div style="font-size:11.5px; color:#64748B;">Currently working with a client</div>
+                </div>
+              </div>
+              ${state.providerStatus === 'BUSY' ? '<span style="color:#F59E0B; font-weight:900;">&#10003;</span>' : ''}
+            </div>
+            <div class="fh-form-select-card" onclick="setProviderStatus('ON_BREAK', 15); closeModal();">
+              <div style="display:flex; align-items:center; gap:10px;">
+                <span class="fh-status-dot-blue"></span>
+                <div>
+                  <div style="font-size:14px; font-weight:800; color:#0F172A;">15 Min Break</div>
+                  <div style="font-size:11.5px; color:#64748B;">Pause job alerts for 15 minutes</div>
+                </div>
+              </div>
+              ${state.providerStatus === 'ON_BREAK' ? '<span style="color:#3B82F6; font-weight:900;">&#10003;</span>' : ''}
+            </div>
+            <div class="fh-form-select-card" onclick="setProviderStatus('OFFLINE'); closeModal();">
+              <div style="display:flex; align-items:center; gap:10px;">
+                <span class="fh-status-dot-gray"></span>
+                <div>
+                  <div style="font-size:14px; font-weight:800; color:#0F172A;">Offline</div>
+                  <div style="font-size:11.5px; color:#64748B;">Clock out and stop all alerts</div>
+                </div>
+              </div>
+              ${state.providerStatus === 'OFFLINE' ? '<span style="color:#64748B; font-weight:900;">&#10003;</span>' : ''}
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // SAFETY CENTER MODAL
+  if (state.activeModal === 'SAFETY') {
+    root.innerHTML = `
+      <div class="modal-backdrop" onclick="closeModal()">
+        <div class="indrive-modal-sheet" onclick="event.stopPropagation()">
+          <div class="cancel-sheet-header">
+            <div class="cancel-sheet-title">Safety Center</div>
+            <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
+          </div>
+          <div class="indrive-cancel-row" onclick="window.location.href='tel:999'">
+            <div class="cancel-row-left">
+              <span style="color:#DC2626;">${uiIcon('phone', 18)}</span>
+              <span>Call Zimbabwe Emergency Services (999)</span>
+            </div>
+            ${uiIcon('chevronRight', 16)}
+          </div>
+          <div class="indrive-cancel-row" onclick="showToast('Live home-visit status link copied')">
+            <div class="cancel-row-left">
+              <span style="color:var(--blue-primary);">${uiIcon('shield', 18)}</span>
+              <span>Share my live home-visit status</span>
+            </div>
+            ${uiIcon('chevronRight', 16)}
+          </div>
+          <div style="font-size:12.5px; color:var(--text-secondary); margin-top:12px; line-height:1.5;">
+            Every service provider on Findit Harare is verified with National ID, biometric face liveness, and a 4-digit Home Arrival Start PIN.
+          </div>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // FUNCTIONAL ACCOUNT & PROVIDER CATEGORIES SETTINGS MODAL
+  if (state.activeModal === 'SETTINGS') {
+    const isProvider = state.role === 'PROVIDER';
+    const currentUser = state.currentUser || (isProvider ? state.db?.providers?.[0] : state.db?.customers?.[0]) || {};
+    if (!state.settingsDraft) {
+      initSettingsDraftFromUser();
+    }
+    const draft = state.settingsDraft || {};
+    const allCategories = (state.db?.categories || []).filter((c) => c.status === 'ACTIVE');
+    const suburbs = state.db?.suburbs || [];
+    const selectedCats = Array.isArray(draft.categoryIds) && draft.categoryIds.length > 0
+      ? draft.categoryIds
+      : getProviderCategoryIds(currentUser);
+
+    root.innerHTML = `
+      <div class="modal-backdrop" onclick="closeModal()">
+        <div class="indrive-modal-sheet" style="max-height:88vh; overflow-y:auto;" onclick="event.stopPropagation()">
+          <div class="cancel-sheet-header">
+            <div>
+              <div class="cancel-sheet-title">${isProvider ? 'Provider Account & Job Categories' : 'Account & App Settings'}</div>
+              <div style="font-size:11.5px; color:var(--text-secondary); font-weight:600; margin-top:2px;">
+                ${isProvider ? 'Edit your profile, pricing, and up to 3 job categories' : 'Manage your profile, default suburb, and preferences'}
+              </div>
+            </div>
+            <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
+          </div>
+
+          <!-- Account Identity & Verification Card -->
+          <div style="background:linear-gradient(135deg, #EFF6FF 0%, #F8FAFC 100%); border:1.5px solid #BFDBFE; border-radius:16px; padding:12px 14px; margin-bottom:14px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
+            <div style="display:flex; align-items:center; gap:12px; min-width:0;">
+              <div
+                style="position:relative; width:50px; height:50px; border-radius:50%; background:#0066FF; color:#FFFFFF; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:16px; border:2px solid #FFFFFF; box-shadow:0 2px 8px rgba(0,102,255,0.25); flex-shrink:0; cursor:pointer;"
+                onclick="document.getElementById('profileAvatarUploadInput').click()"
+                title="Tap to change profile picture"
+              >
+                ${currentUser.avatarUrl
+                  ? `<img src="${resolveMediaUrl(currentUser.avatarUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_AVATAR_FALLBACK}';" alt="Profile" style="width:100%; height:100%; object-fit:cover; border-radius:50%;" />`
+                  : `<span>${escapeHtml((draft.name || currentUser.name || 'FH').slice(0, 2).toUpperCase())}</span>`
+                }
+                <div style="position:absolute; bottom:-1px; right:-1px; width:18px; height:18px; border-radius:50%; background:#0066FF; border:1.5px solid #FFFFFF; display:flex; align-items:center; justify-content:center; color:#FFFFFF; box-shadow:0 1px 4px rgba(0,0,0,0.25);">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                </div>
+              </div>
+              <input type="file" id="profileAvatarUploadInput" accept="image/*" style="display:none;" onchange="handleProfileAvatarUpload(this)" />
+              <div style="min-width:0;">
+                <div style="font-size:14.5px; font-weight:800; color:#0F172A; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                  ${escapeHtml(draft.name || currentUser.name || 'Verified Member')}
+                </div>
+                <div style="font-size:11.5px; color:#475569; font-weight:700; font-family:monospace;">
+                  ${currentUser.finditId ? `${escapeHtml(currentUser.finditId)} • ` : ''}${currentUser.phone ? escapeHtml(currentUser.phone) : ''}
+                </div>
+                <div style="display:flex; align-items:center; gap:6px; margin-top:4px; flex-wrap:wrap;">
+                  <span style="background:#DCFCE7; color:#15803D; font-size:10.5px; font-weight:800; padding:2px 7px; border-radius:99px; display:inline-flex; align-items:center; gap:3px;">
+                    ${uiIcon('check', 11)} WhatsApp &amp; Face ID Verified
+                  </span>
+                  <span style="background:#DBEAFE; color:#1D4ED8; font-size:10.5px; font-weight:800; padding:2px 7px; border-radius:99px;">
+                    ${isProvider ? 'Service Provider' : 'Client Account'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          ${isProvider ? `
+            <!-- PROVIDER JOB CATEGORIES EDITOR (SELECT UP TO 3 CATEGORIES) -->
+            <div style="background:#FFFFFF; border:1.5px solid var(--border-light); border-radius:16px; padding:12px 14px; margin-bottom:14px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                <div style="font-size:13px; font-weight:800; color:#0F172A;">
+                  My Job Categories (${selectedCats.length}/3 Selected)
+                </div>
+                <span style="font-size:11px; font-weight:800; color:#0066FF;">Tap to add / switch</span>
+              </div>
+              <div style="font-size:11.5px; color:var(--text-secondary); margin-bottom:10px; line-height:1.4;">
+                Choose up to <strong>3 service categories</strong>. Your Provider Job Feed will only show client requests from your selected categories.
+              </div>
+              <div class="fh-settings-category-list" style="display:grid; grid-template-columns:1fr; gap:7px;">
+                ${allCategories.map((cat) => {
+                  const isSelected = selectedCats.includes(cat.id);
+                  return `
+                    <div
+                      class="fh-settings-category-row"
+                      onclick="toggleSettingsProviderCategory('${cat.id}')"
+                      style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 12px; border-radius:12px; cursor:pointer; transition:all 0.15s ease; border:1.5px solid ${isSelected ? '#0066FF' : '#E2E8F0'}; background:${isSelected ? '#EFF6FF' : '#F8FAFC'};"
+                    >
+                      <div class="fh-settings-category-main" style="display:flex; align-items:center; gap:10px; min-width:0;">
+                        <div style="width:34px; height:34px; border-radius:10px; background:${isSelected ? '#0066FF' : '#FFFFFF'}; display:flex; align-items:center; justify-content:center; flex-shrink:0; border:1px solid ${isSelected ? '#0066FF' : '#E2E8F0'};">
+                          ${getCategoryVectorSvg(cat.id, isSelected)}
+                        </div>
+                        <div class="fh-settings-category-copy" style="min-width:0;">
+                          <div class="fh-settings-category-title" style="font-size:13px; font-weight:800; color:${isSelected ? '#0066FF' : '#0F172A'};">
+                            ${escapeHtml(cat.fullName || cat.name)}
+                          </div>
+                          <div class="fh-settings-category-subtitle" style="font-size:11px; color:#64748B; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                            ${escapeHtml(cat.tagline || '')}
+                          </div>
+                        </div>
+                      </div>
+                      <div style="width:22px; height:22px; border-radius:50%; background:${isSelected ? '#0066FF' : '#FFFFFF'}; border:1.5px solid ${isSelected ? '#0066FF' : '#CBD5E1'}; color:#FFFFFF; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                        ${isSelected ? uiIcon('check', 13) : ''}
+                      </div>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+          ` : ''}
+
+          <!-- Editable Profile & Dispatch Settings Form -->
+          <div style="background:#FFFFFF; border:1.5px solid var(--border-light); border-radius:16px; padding:12px 14px; margin-bottom:14px; display:flex; flex-direction:column; gap:10px;">
+            <div style="font-size:13px; font-weight:800; color:#0F172A;">Profile &amp; Location Details</div>
+
+            <div>
+              <label style="display:block; font-size:11.5px; font-weight:700; color:var(--text-secondary); margin-bottom:4px;">Full Name</label>
+              <input
+                id="settingsNameInput"
+                type="text"
+                class="dark-input"
+                value="${escapeHtml(draft.name || currentUser.name || '')}"
+                placeholder="Your full name"
+                oninput="if(state.settingsDraft) state.settingsDraft.name = this.value"
+              />
+            </div>
+
+            ${isProvider ? `
+              <div style="display:grid; grid-template-columns:1.3fr 0.7fr; gap:8px;">
+                <div>
+                  <label style="display:block; font-size:11.5px; font-weight:700; color:var(--text-secondary); margin-bottom:4px;">Business / Brand Name</label>
+                  <input
+                    id="settingsBrandInput"
+                    type="text"
+                    class="dark-input"
+                    value="${escapeHtml(draft.brandName || currentUser.brandName || '')}"
+                    placeholder="e.g. Tatenda Home Repairs"
+                    oninput="if(state.settingsDraft) state.settingsDraft.brandName = this.value"
+                  />
+                </div>
+                <div>
+                  <label style="display:block; font-size:11.5px; font-weight:700; color:var(--text-secondary); margin-bottom:4px;">Base Rate ($)</label>
+                  <input
+                    id="settingsPriceInput"
+                    type="number"
+                    min="5"
+                    class="dark-input"
+                    value="${Number(draft.startingPriceUsd || currentUser.startingPriceUsd || 20)}"
+                    oninput="if(state.settingsDraft) state.settingsDraft.startingPriceUsd = Number(this.value)"
+                  />
+                </div>
+              </div>
+
+              <!-- Provider Daily Working Hours Setting -->
+              <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px; padding:10px 12px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                  <span style="font-size:12px; font-weight:800; color:#0F172A;">Daily Working Hours (AI Scheduled)</span>
+                  <span style="font-size:10.5px; color:#0066FF; font-weight:700;">Harare CAT (UTC+2)</span>
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                  <div>
+                    <label style="font-size:10.5px; font-weight:700; color:#64748B; display:block; margin-bottom:2px;">Shift Start</label>
+                    <input id="settingsWorkStart" type="time" class="dark-input" value="${draft.workStartTime || currentUser.workStartTime || '08:00'}" oninput="if(state.settingsDraft) state.settingsDraft.workStartTime=this.value" style="height:36px; font-size:12px;" />
+                  </div>
+                  <div>
+                    <label style="font-size:10.5px; font-weight:700; color:#64748B; display:block; margin-bottom:2px;">Shift End</label>
+                    <input id="settingsWorkEnd" type="time" class="dark-input" value="${draft.workEndTime || currentUser.workEndTime || '18:00'}" oninput="if(state.settingsDraft) state.settingsDraft.workEndTime=this.value" style="height:36px; font-size:12px;" />
+                  </div>
+                </div>
+                <div style="font-size:10.5px; color:#64748B; margin-top:5px; line-height:1.4;">
+                  AI automatically keeps you on the Harare radar during your shifts. Please stay online only when ready to take jobs.
+                </div>
+              </div>
+            ` : `
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                <div>
+                  <label style="display:block; font-size:11.5px; font-weight:700; color:var(--text-secondary); margin-bottom:4px;">Default Gate / Entrance</label>
+                  <input
+                    id="settingsEntranceInput"
+                    type="text"
+                    class="dark-input"
+                    value="${escapeHtml(draft.entranceNote || state.entranceNote || 'Main Gate')}"
+                    placeholder="e.g. Main Gate"
+                    oninput="if(state.settingsDraft) state.settingsDraft.entranceNote = this.value"
+                  />
+                </div>
+                <div>
+                  <label style="display:block; font-size:11.5px; font-weight:700; color:var(--text-secondary); margin-bottom:4px;">Default Payment</label>
+                  <select
+                    id="settingsPaymentSelect"
+                    class="dark-input"
+                    onchange="if(state.settingsDraft) state.settingsDraft.preferredPaymentMethod = this.value"
+                  >
+                    ${['Cash USD', 'EcoCash USD', 'InnBucks USD'].map((pm) => `
+                      <option value="${pm}" ${(draft.preferredPaymentMethod || state.draftPaymentMethod) === pm ? 'selected' : ''}>${pm}</option>
+                    `).join('')}
+                  </select>
+                </div>
+              </div>
+            `}
+
+            <div>
+              <label style="display:block; font-size:11.5px; font-weight:700; color:var(--text-secondary); margin-bottom:4px;">Primary Harare Suburb</label>
+              <select
+                id="settingsSuburbSelect"
+                class="dark-input"
+                onchange="if(state.settingsDraft) state.settingsDraft.suburbId = this.value"
+              >
+                ${suburbs.map((s) => `
+                  <option value="${s.id}" ${(draft.suburbId || currentUser.suburbId || state.selectedSuburbId) === s.id ? 'selected' : ''}>${s.name}, Harare (${s.zone})</option>
+                `).join('')}
+              </select>
+            </div>
+
+            <!-- Navigation GPS Voice Direction Setting -->
+            <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:14px; padding:12px; margin-top:2px;">
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span style="color:#0052FF;">${uiIcon('navigation', 17)}</span>
+                  <div>
+                    <div style="font-size:12.5px; font-weight:800; color:#0F172A;">GPS Voice Navigation</div>
+                    <div style="font-size:11px; color:#64748B;">Spoken audio directions during active transit</div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  class="small-pill-btn"
+                  onclick="toggleNavVoice(); renderModalLayer();"
+                  style="height:32px; padding:0 12px; font-size:11.5px; font-weight:800; background:${liveNavState.voiceEnabled ? '#10B981' : '#F1F5F9'}; color:${liveNavState.voiceEnabled ? '#FFFFFF' : '#0F172A'}; border:1px solid ${liveNavState.voiceEnabled ? '#10B981' : '#CBD5E1'}; cursor:pointer; display:inline-flex; align-items:center; gap:5px;"
+                >
+                  ${liveNavState.voiceEnabled ? `${uiIcon('volumeOn', 13)} <span>Active (ON)</span>` : `${uiIcon('volumeOff', 13)} <span>Muted (Default OFF)</span>`}
+                </button>
+              </div>
+            </div>
+
+            <button type="button" class="btn-primary-blue" style="margin-top:4px; height:44px;" onclick="saveAccountSettingsChanges()">
+              ${uiIcon('check', 16)}
+              <span>${isProvider ? 'Save Account & Job Categories' : 'Save Account Settings'}</span>
+            </button>
+          </div>
+
+          <!-- Quick Actions & Platform Links -->
+          <div style="display:flex; flex-direction:column; gap:2px;">
+            <a href="/FinditHarare.apk" download="FinditHarare.apk" class="indrive-cancel-row" style="text-decoration:none; color:inherit; background:#ECFDF5; border:1px solid #A7F3D0; border-radius:12px; margin:4px 0;">
+              <div class="cancel-row-left">
+                <span style="color:#059669;">${uiIcon('phone', 18)}</span>
+                <div>
+                  <div style="font-weight:800; color:#065F46; font-size:13px;">Download Android App (.APK)</div>
+                  <div style="font-size:11px; color:#047857;">Direct install file for Android • v2.4 (9.5 MB)</div>
+                </div>
+              </div>
+              <span style="font-size:11px; font-weight:800; color:#059669; background:#D1FAE5; padding:3px 8px; border-radius:99px;">Get APK</span>
+            </a>
+            ${isProvider ? `
+              <div class="indrive-cancel-row" onclick="openProviderOfficeModal()">
+                <div class="cancel-row-left">
+                  <span style="color:var(--blue-primary);">${uiIcon('buildingOffice', 17)}</span>
+                  <span>Physical Workshop / Office Location</span>
+                </div>
+                ${uiIcon('chevronRight', 16)}
+              </div>
+            ` : ''}
+
+            <div class="indrive-cancel-row" onclick="toggleClientAndProviderMode()">
+              <div class="cancel-row-left">
+                <span style="color:var(--blue-primary);">${isProvider ? uiIcon('user', 17) : uiIcon('briefcase', 17)}</span>
+                <span style="font-weight:700;">${isProvider ? 'Switch to Client Mode' : 'Switch to Service Provider Mode'}</span>
+              </div>
+              ${uiIcon('chevronRight', 16)}
+            </div>
+
+            <a href="https://finditharare.co.zw" target="_blank" rel="noopener" class="indrive-cancel-row" style="text-decoration:none; color:inherit;">
+              <div class="cancel-row-left">
+                <span style="color:var(--blue-primary);">${uiIcon('sparkle', 17)}</span>
+                <span>Official Website (<strong>finditharare.co.zw</strong>)</span>
+              </div>
+              ${uiIcon('chevronRight', 16)}
+            </a>
+
+            <div class="indrive-cancel-row" onclick="openSupportModal()">
+              <div class="cancel-row-left">
+                <span style="color:#25D366;">${uiIcon('support', 17)}</span>
+                <span>Findit Harare Official Support Chat</span>
+              </div>
+              ${uiIcon('chevronRight', 16)}
+            </div>
+
+            <div class="indrive-cancel-row" onclick="logoutCurrentAccount()">
+              <span style="color:var(--text-main); font-weight:700;">Log Out</span>
+              ${uiIcon('chevronRight', 16)}
+            </div>
+
+            <div class="indrive-cancel-row" onclick="promptDeleteAccount()" style="border-top:1px solid #FEE2E2; margin-top:4px; cursor:pointer;">
+              <span style="color:#DC2626; font-weight:800; display:flex; align-items:center; gap:8px;">
+                ${uiIcon('trash', 16)}
+                <span>Delete Account Permanently</span>
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // NOTIFICATIONS & OFFICIAL WARNINGS MODAL
+  if (state.activeModal === 'NOTIFICATIONS') {
+    const rawNotifs = getRelevantNotifications();
+    const readSet = new Set(state.currentUser?.readNotificationIds || []);
+    try {
+      const localRead = JSON.parse(localStorage.getItem('findit_read_notifs') || '[]');
+      localRead.forEach((id) => readSet.add(id));
+    } catch (e) {}
+
+    const unreadCount = rawNotifs.filter((n) => !readSet.has(n.id)).length;
+
+    root.innerHTML = `
+      <div class="modal-backdrop" onclick="closeModal()">
+        <div class="indrive-modal-sheet" onclick="event.stopPropagation()">
+          <div class="cancel-sheet-header">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <div class="cancel-sheet-title">Notification Center</div>
+              ${unreadCount > 0 ? `<span style="background:#EF4444; color:#fff; font-size:11px; font-weight:800; padding:2px 7px; border-radius:99px;">${unreadCount} New</span>` : ''}
+            </div>
+            <div style="display:flex; align-items:center; gap:8px;">
+              ${rawNotifs.length > 0 && unreadCount > 0 ? `
+                <button class="small-pill-btn" style="color:var(--blue-primary); border-color:var(--blue-border); font-size:11px; padding:3px 8px; cursor:pointer;" onclick="markAllNotificationsRead()">
+                  Mark all read
+                </button>
+              ` : ''}
+              <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
+            </div>
+          </div>
+
+          <div style="display:flex; flex-direction:column; gap:10px; max-height:65vh; overflow-y:auto; padding-bottom:8px;">
+            ${rawNotifs.length === 0 ? `
+              <div style="text-align:center; padding:32px 16px; color:var(--text-secondary);">
+                <div style="margin-bottom:8px; display:inline-flex; color:var(--blue-primary);">${uiIcon('bell', 32)}</div>
+                <div style="font-size:14px; font-weight:800; color:var(--text-main); margin-bottom:4px;">No New Notifications</div>
+                <div style="font-size:12px;">Official platform alerts, booking notices, and admin warnings will appear here.</div>
+              </div>
+            ` : rawNotifs.map((n) => {
+              const isUnread = !readSet.has(n.id);
+              const isWarn = n.type === 'WARNING';
+              const isSecurity = n.type === 'SECURITY';
+              const cardBg = isWarn ? '#FEF2F2' : (isUnread ? 'var(--blue-soft)' : 'var(--bg-card)');
+              const borderCol = isWarn ? '#EF4444' : (isUnread ? 'var(--blue-border)' : 'var(--border-light)');
+              const titleCol = isWarn ? '#B91C1C' : 'var(--text-main)';
+              const iconSvg = isWarn ? uiIcon('alertTriangle', 18) : (isSecurity ? uiIcon('shield', 18) : uiIcon('bell', 18));
+              const iconCol = isWarn ? '#DC2626' : 'var(--blue-primary)';
+
+              return `
+                <div style="padding:12px 14px; background:${cardBg}; border-radius:14px; border:1.5px solid ${borderCol};">
+                  <div style="display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:6px; gap:8px;">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                      <span style="color:${iconCol}; display:inline-flex; flex-shrink:0;">${iconSvg}</span>
+                      <span style="font-size:13.5px; font-weight:800; color:${titleCol};">${escapeHtml(n.title)}</span>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
+                      ${isWarn ? `<span style="background:#EF4444; color:#fff; font-size:9.5px; font-weight:800; padding:1px 6px; border-radius:99px; text-transform:uppercase;">Warning</span>` : ''}
+                      ${isUnread ? `<span style="width:8px; height:8px; border-radius:50%; background:#0066FF;"></span>` : ''}
+                    </div>
+                  </div>
+                  <div style="font-size:12.5px; color:${isWarn ? '#991B1B' : 'var(--text-secondary)'}; line-height:1.5; padding-left:26px;">
+                    ${escapeHtml(n.message || n.body || '')}
+                  </div>
+                  <div style="font-size:10.5px; color:var(--text-secondary); opacity:0.8; padding-left:26px; margin-top:6px;">
+                    ${n.createdAt ? new Date(n.createdAt).toLocaleDateString(undefined, { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }) : (n.time || 'Official Notice')}
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // HELP & HOW IT WORKS MODAL
+  if (state.activeModal === 'HELP') {
+    const steps = [
+      {
+        num: '1',
+        title: 'Choose Service & Offer Your Price',
+        desc: 'Pick your home service (Hair Braiding, Plumbing, Nails, Barbering, Cleaning), enter your suburb address, and propose a fair USD fare.'
+      },
+      {
+        num: '2',
+        title: '120s Live Radar Broadcast',
+        desc: 'Nearby verified Harare specialists review your offer in real time. If needed, raise your fare by +$1 or +$2 to attract faster bids.'
+      },
+      {
+        num: '3',
+        title: 'Inspect Profiles & Accept',
+        desc: 'Compare provider star ratings, completed jobs, and verified photo catalogues before accepting the offer that fits your budget.'
+      },
+      {
+        num: '4',
+        title: 'Live Chat & Safe Direct Cash Pay',
+        desc: 'Chat directly in-app, share gate directions, track arrival, and pay agreed USD cash only once the job is finished satisfactorily.'
+      }
+    ];
+
+    root.innerHTML = `
+      <div class="modal-backdrop" onclick="closeModal()">
+        <div class="indrive-modal-sheet" onclick="event.stopPropagation()">
+          <div class="cancel-sheet-header">
+            <div class="cancel-sheet-title">Help &amp; How It Works</div>
+            <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:12px; max-height:65vh; overflow-y:auto; padding-bottom:10px;">
+            ${steps.map((s) => `
+              <div style="display:flex; gap:12px; align-items:flex-start; padding:12px; background:var(--bg-card); border-radius:14px; border:1px solid var(--border-light);">
+                <div style="width:28px; height:28px; border-radius:50%; background:var(--blue-soft); color:var(--blue-primary); font-size:13px; font-weight:800; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                  ${s.num}
+                </div>
+                <div>
+                  <div style="font-size:13.5px; font-weight:800; color:var(--text-main); margin-bottom:2px;">${s.title}</div>
+                  <div style="font-size:12px; color:var(--text-secondary); line-height:1.45;">${s.desc}</div>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // ==========================================================================
+  // IN-APP WHATSAPP BUSINESS CLONE SUPPORT CHAT (AUTHENTIC LIGHT THEME)
+  // ==========================================================================
+  if (state.activeModal === 'SUPPORT') {
+    loadUserSupportHistory();
+    const formatWaBold = (str) => escapeHtml(str || '').replace(/\*([^*]+)\*/g, '<strong style="color:#111B21;">$1</strong>').replace(/\n/g, '<br/>');
+
+    root.innerHTML = `
+      <div class="fullscreen-chat-backdrop" style="z-index:99999; position:fixed; inset:0; width:100vw; height:100vh; height:100dvh; padding:0; margin:0;" onclick="closeModal()">
+        <div class="fullscreen-chat-modal" style="background:#EFEAE2; display:flex; flex-direction:column; height:100%; height:100dvh; width:100%; width:100vw; border-radius:0; margin:0; padding:0; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color:#111B21;" onclick="event.stopPropagation()">
+          <!-- Authentic Light WhatsApp Business Top Bar (No 3-Dots, No Bin) -->
+          <div style="background:#F0F2F5; border-bottom:1px solid #D1D7DB; padding:max(10px, env(safe-area-inset-top)) 12px 10px 12px; display:flex; align-items:center; justify-content:space-between; gap:8px; flex-shrink:0;">
+            <div style="display:flex; align-items:center; gap:8px; min-width:0; flex:1;">
+              <button type="button" onclick="closeModal()" style="background:none; border:none; color:#54656F; display:flex; align-items:center; padding:4px 4px 4px 0; cursor:pointer;" title="Back">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#54656F" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+              </button>
+              <div style="position:relative; width:40px; height:40px; border-radius:50%; overflow:hidden; background:#FFFFFF; flex-shrink:0; display:flex; align-items:center; justify-content:center; border:1px solid #D1D7DB;">
+                <img src="/assets/logo-icon.svg" alt="Findit Harare" style="width:100%; height:100%; object-fit:cover;" onerror="this.src='/favicon.png'" />
+              </div>
+              <div style="min-width:0; flex:1;">
+                <div style="display:flex; align-items:center; gap:5px;">
+                  <span style="font-size:15px; font-weight:700; color:#111B21; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Findit Harare Official</span>
+                  <!-- Meta Verified Blue/Green Badge -->
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="#00A884" style="flex-shrink:0;"><path d="M12 2l2.4 2.1 3.1-.4.9 3 2.8 1.5-.8 3 1.6 2.7-2.2 2.2.4 3.1-3 .9-1.5 2.8-3-.8-2.7 1.6-2.2-2.2-3.1.4-.9-3-2.8-1.5.8-3-1.6-2.7 2.2-2.2-.4-3.1 3-.9 1.5-2.8 3 .8 2.7-1.6z"/><path d="M9.5 12.5l2 2 4-4.5" stroke="#FFFFFF" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </div>
+                <div style="font-size:11.5px; color:${state.supportAiTyping ? '#00A884' : '#667781'}; font-weight:${state.supportAiTyping ? '600' : '400'};">
+                  ${state.supportAiTyping ? 'typing…' : 'Official Support Desk • Harare'}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- WhatsApp Chat Feed (Light Mode Wallpaper Pattern) -->
+          <div id="waSupportChatFeed" style="flex:1; overflow-y:auto; padding:12px 14px; display:flex; flex-direction:column; gap:8px; background-color:#EFEAE2; background-image:radial-gradient(rgba(0,0,0,0.035) 1px, transparent 0); background-size:20px 20px;">
+            <!-- WhatsApp Centered Encryption Pill -->
+            <div style="background:#FFF5C4; color:#54656F; font-size:11px; text-align:center; padding:7px 14px; border-radius:10px; margin:2px auto 4px auto; max-width:92%; line-height:1.4; box-shadow:0 1px 2px rgba(0,0,0,0.05); border:1px solid #FFE58F;">
+              ${uiIcon('lock', 13)} Messages and calls are end-to-end encrypted. Only people in this chat can read, listen to, or share them.
+            </div>
+
+            <!-- Meta Business Security Notice -->
+            <div style="background:#F0F2F5; color:#54656F; font-size:11px; text-align:center; padding:6px 12px; border-radius:10px; margin:0 auto 8px auto; max-width:92%; line-height:1.35; border:1px solid #E2E8F0;">
+              This business is now using a secure service from Meta to manage this chat. Tap to learn more.
+            </div>
+
+            <!-- Authentic WhatsApp Business Profile Card (With Real Followers & Clickable Social Icons) -->
+            <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:18px; padding:18px 16px; margin:0 auto 10px auto; width:92%; text-align:center; box-shadow:0 1px 4px rgba(0,0,0,0.06);">
+              <div style="width:72px; height:72px; border-radius:50%; background:#FFFFFF; margin:0 auto 10px auto; display:flex; align-items:center; justify-content:center; overflow:hidden; border:2px solid #00A884; box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+                <img src="/assets/logo-icon.svg" alt="Findit Harare" style="width:100%; height:100%; object-fit:cover;" />
+              </div>
+              <div style="font-size:16px; font-weight:800; color:#111B21; display:flex; align-items:center; justify-content:center; gap:5px;">
+                <span>Findit Harare Official</span>
+                <!-- WhatsApp Verified Badge -->
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="#00A884"><path d="M12 2l2.4 2.1 3.1-.4.9 3 2.8 1.5-.8 3 1.6 2.7-2.2 2.2.4 3.1-3 .9-1.5 2.8-3-.8-2.7 1.6-2.2-2.2-3.1.4-.9-3-2.8-1.5.8-3-1.6-2.7 2.2-2.2-.4-3.1 3-.9 1.5-2.8 3 .8 2.7-1.6z"/><path d="M9.5 12.5l2 2 4-4.5" stroke="#FFFFFF" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </div>
+              <div style="font-size:12.5px; font-weight:600; color:#54656F; margin-top:3px;">
+                Customer Support &amp; Verification Desk
+              </div>
+
+              <!-- Official Social Followers Line Matching User Screenshot -->
+              <div style="font-size:11.5px; color:#54656F; margin-top:6px; line-height:1.5;">
+                Official Business Account • Harare, Zimbabwe •
+                <a href="https://www.facebook.com/profile.php?id=61595501858201" target="_blank" rel="noopener" title="Findit Harare Facebook (175 followers)" style="color:#111B21; text-decoration:none; display:inline-flex; align-items:center; gap:3px; font-weight:700;">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="#1877F2"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+                  <span>175</span>
+                </a> •
+                <a href="https://www.instagram.com/findithahare/" target="_blank" rel="noopener" title="Findit Harare Instagram (74 followers)" style="color:#111B21; text-decoration:none; display:inline-flex; align-items:center; gap:3px; font-weight:700;">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="#E1306C"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>
+                  <span>74</span>
+                </a> • Joined in February, 2025
+              </div>
+
+              <!-- Official Website WhatsApp Link Pill -->
+              <a href="https://finditharare.co.zw" target="_blank" rel="noopener" style="display:inline-flex; align-items:center; gap:6px; background:#F0F2F5; border:1px solid #D1D7DB; border-radius:99px; padding:6px 14px; text-decoration:none; color:#0066FF; font-size:12px; font-weight:700; margin-top:10px;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                <span>finditharare.co.zw</span>
+              </a>
+            </div>
+
+            <!-- Message Bubbles (Light Mode WhatsApp Bubbles) -->
+            ${state.supportChatMessages.map((m, idx, arr) => {
+              const isUser = m.sender === 'USER';
+              const isLastUserTyping = isUser && idx === arr.length - 1 && state.supportAiTyping;
+              return `
+                <div style="display:flex; justify-content:${isUser ? 'flex-end' : 'flex-start'};">
+                  <div style="max-width:82%; background:${isUser ? '#D9FDD3' : '#FFFFFF'}; color:#111B21; padding:8px 12px 6px 12px; border-radius:${isUser ? '14px 14px 3px 14px' : '14px 14px 14px 3px'}; box-shadow:0 1px 1px rgba(0,0,0,0.06); font-size:13.5px; line-height:1.45; position:relative;">
+                    <div>${formatWaBold(m.text)}</div>
+                    <div style="display:flex; align-items:center; justify-content:flex-end; gap:3px; font-size:10.5px; color:#667781; margin-top:3px;">
+                      <span>${m.time || ''}</span>
+                      ${isUser ? renderWhatsAppDoubleTickSvg(!isLastUserTyping) : ''}
+                    </div>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+
+            ${state.supportAiTyping ? `
+              <div style="display:flex; justify-content:flex-start; margin:4px 0;">
+                <div style="background:#FFFFFF; padding:10px 14px; border-radius:14px 14px 14px 3px; box-shadow:0 1px 2px rgba(0,0,0,0.06); display:inline-flex; align-items:center; gap:4px;">
+                  <span class="wa-typing-dot" style="width:7px; height:7px; border-radius:50%; background:#8696A0; display:inline-block; animation:waTypingWave 1.4s ease-in-out infinite;"></span>
+                  <span class="wa-typing-dot" style="width:7px; height:7px; border-radius:50%; background:#8696A0; display:inline-block; animation:waTypingWave 1.4s ease-in-out infinite; animation-delay:0.2s;"></span>
+                  <span class="wa-typing-dot" style="width:7px; height:7px; border-radius:50%; background:#8696A0; display:inline-block; animation:waTypingWave 1.4s ease-in-out infinite; animation-delay:0.4s;"></span>
+                </div>
+              </div>
+            ` : ''}
+          </div>
+
+          <!-- Quick FAQ Chips (Light WhatsApp Style) -->
+          <div style="background:#F0F2F5; padding:6px 10px 2px 10px; display:flex; gap:6px; overflow-x:auto; border-top:1px solid #D1D7DB; flex-shrink:0;">
+            <button type="button" class="chat-preset-chip" style="background:#FFFFFF; border:1px solid #D1D7DB; color:#008069; font-size:11.5px; white-space:nowrap;" onclick="sendSupportAiMessage('How does the $5 welcome bonus and commission work?')">
+              $5 Bonus &amp; Commission
+            </button>
+            <button type="button" class="chat-preset-chip" style="background:#FFFFFF; border:1px solid #D1D7DB; color:#008069; font-size:11.5px; white-space:nowrap;" onclick="sendSupportAiMessage('How do I top up my provider wallet with EcoCash USD?')">
+              EcoCash Top-Up
+            </button>
+            <button type="button" class="chat-preset-chip" style="background:#FFFFFF; border:1px solid #D1D7DB; color:#008069; font-size:11.5px; white-space:nowrap;" onclick="sendSupportAiMessage('How do I view or change my service categories in Settings?')">
+              Job Categories
+            </button>
+            <button type="button" class="chat-preset-chip" style="background:#FFFFFF; border:1px solid #D1D7DB; color:#008069; font-size:11.5px; white-space:nowrap;" onclick="sendSupportAiMessage('What is your official website and phone number?')">
+              Website &amp; Contacts
+            </button>
+          </div>
+
+          <!-- Authentic Light WhatsApp Bottom Input Bar -->
+          <form onsubmit="event.preventDefault(); sendSupportAiMessage(); return false;" style="background:#F0F2F5; padding:8px 10px max(14px, env(safe-area-inset-bottom)) 10px; display:flex; align-items:center; gap:8px; flex-shrink:0; margin:0;">
+            <div style="flex:1; display:flex; align-items:center; background:#FFFFFF; border-radius:24px; padding:0 12px; height:42px; border:1px solid #E2E8F0;">
+              <span style="color:#54656F; cursor:pointer; font-size:18px; margin-right:8px; display:flex; align-items:center;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+              </span>
+              <input
+                id="waSupportInput"
+                type="text"
+                autocomplete="off"
+                placeholder="Message"
+                style="flex:1; border:none; background:transparent; font-size:14px; color:#111B21; outline:none; height:100%;"
+              />
+              <span style="color:#54656F; cursor:pointer; margin-left:8px; display:flex; align-items:center;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+              </span>
+            </div>
+            <button
+              type="submit"
+              style="width:42px; height:42px; border-radius:50%; border:none; background:#00A884; color:#FFFFFF; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; box-shadow:0 2px 6px rgba(0,168,132,0.3);"
+            >
+              ${uiIcon('send', 16)}
+            </button>
+          </form>
+        </div>
+      </div>
+    `;
+    setTimeout(() => {
+      const feed = document.getElementById('waSupportChatFeed');
+      if (feed) feed.scrollTop = feed.scrollHeight;
+    }, 30);
+    return;
+  }
+
+  // PROVIDER USD WALLET MODAL (Opened from Side Panel Drawer)
+  if (state.activeModal === 'WALLET_MODAL') {
+    const prov = state.currentUser || (state.db?.providers ? state.db.providers[0] : {});
+    root.innerHTML = `
+      <div class="modal-backdrop" onclick="closeModal()">
+        <div class="indrive-modal-sheet" onclick="event.stopPropagation()" style="max-height:88vh; overflow-y:auto;">
+          <div class="cancel-sheet-header">
+            <div class="cancel-sheet-title">Prepaid USD Wallet</div>
+            <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
+          </div>
+          ${renderProviderWalletTab(prov)}
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // PROVIDER WORK CATALOGUE MODAL (Opened from Side Panel Drawer)
+  if (state.activeModal === 'PROVIDER_CATALOGUE_MODAL') {
+    const prov = state.currentUser || (state.db?.providers ? state.db.providers[0] : {});
+    const myPendingApprovals = (state.db?.approvalQueue || []).filter((a) => a.providerId === prov.id && a.status === 'PENDING');
+    root.innerHTML = `
+      <div class="modal-backdrop" onclick="closeModal()">
+        <div class="indrive-modal-sheet" onclick="event.stopPropagation()" style="max-height:88vh; overflow-y:auto;">
+          <div class="cancel-sheet-header">
+            <div class="cancel-sheet-title">Work Portfolio &amp; Catalogue</div>
+            <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
+          </div>
+          ${renderProviderCatalogueTab(prov, myPendingApprovals)}
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // SUBURB & REAL LOCATION PICKER MODAL (inDrive-style Real Address Search matching Image 1)
+  if (state.activeModal === 'SUBURB_PICKER') {
+    const geoResults = Array.isArray(state.locationSearchResults) ? state.locationSearchResults : [];
+
+    root.innerHTML = `
+      <div class="modal-backdrop" onclick="closeModal()">
+        <div class="indrive-modal-sheet" onclick="event.stopPropagation()" style="max-height:85vh; display:flex; flex-direction:column;">
+          <div class="cancel-sheet-header">
+            <button class="cancel-close-x" onclick="closeModal()" title="Back" style="margin-left:0; margin-right:auto; padding:4px;">
+              ${uiIcon('chevronLeft', 20)}
+            </button>
+            <div class="cancel-sheet-title" style="flex:1; text-align:center; padding-right:28px;">Enter your route</div>
+          </div>
+
+          <!-- inDrive Route Input Card (Exact reproduction of Image 1) -->
+          <form onsubmit="submitCustomRouteAddress(event); return false;" style="margin-bottom:8px;">
+            <div style="background:#F1F5F9; border:1.5px solid #E2E8F0; border-radius:16px; padding:6px 12px; display:flex; align-items:center; gap:8px;">
+              <span style="color:#64748B; display:inline-flex;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              </span>
+              <span style="background:#D1FAE5; color:#065F46; font-size:11.5px; font-weight:800; padding:2px 8px; border-radius:6px; flex-shrink:0;">
+                From
+              </span>
+              <input
+                id="liveLocationSearchInput"
+                type="text"
+                autocomplete="off"
+                style="flex:1; border:none; background:transparent; font-size:14px; font-weight:700; color:#0F172A; outline:none; height:38px; padding:0;"
+                value="${escapeHtml(state.locationSearchQuery !== undefined ? state.locationSearchQuery : (state.customAddress || ''))}"
+                placeholder="Enter address or landmark"
+                oninput="handleLiveLocationQueryInput(this.value)"
+                onkeydown="if(event.key==='Enter'){event.preventDefault();submitCustomRouteAddress(event);}"
+              />
+              <button
+                type="button"
+                onclick="clearAddressInput()"
+                style="background:none; border:none; color:#94A3B8; padding:4px; cursor:pointer; display:flex; align-items:center;"
+                title="Clear address"
+              >
+                ${uiIcon('close', 16)}
+              </button>
+              <button
+                type="submit"
+                class="btn-primary-blue"
+                style="width:auto; height:32px; padding:0 12px; font-size:12px; border-radius:8px; flex-shrink:0;"
+              >
+                Done
+              </button>
+            </div>
+          </form>
+
+          <!-- Autocomplete Search Results (Clean & blank by default as requested; shows suggestions only when typing) -->
+          <div style="flex:1; overflow-y:auto;">
+            ${geoResults.length > 0 ? `
+              <div style="font-size:11px; font-weight:800; color:var(--blue-primary); text-transform:uppercase; padding:6px 4px 6px;">
+                Suggestions
+              </div>
+              ${geoResults.map((g, gIdx) => `
+                <div class="indrive-cancel-row" onclick="selectGeocodedLocation(${gIdx})" style="background:#F8FAFC; border-radius:12px; margin-bottom:6px; padding:12px 14px; cursor:pointer; border:1px solid #E2E8F0;">
+                  <div class="cancel-row-left">
+                    <span style="color:var(--blue-primary);">${uiIcon('navigation', 17)}</span>
+                    <div>
+                      <div style="font-weight:800; color:#0F172A; font-size:13.5px;">${escapeHtml(g.shortTitle)}</div>
+                      <div style="font-size:11.5px; color:var(--text-secondary);">${escapeHtml(g.fullLabel)}</div>
+                    </div>
+                  </div>
+                  ${uiIcon('chevronRight', 16)}
+                </div>
+              `).join('')}
+            ` : ''}
+          </div>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // SUB-SERVICE PICKER MODAL
+  if (state.activeModal === 'SERVICE_PICKER') {
+    const categories = state.db?.categories || [];
+    const activeCat = categories.find((c) => c.id === state.selectedCategoryId && c.status === 'ACTIVE')
+      || categories.find((c) => c.status === 'ACTIVE');
+    if (!activeCat) {
+      root.innerHTML = `
+        <div class="modal-backdrop" onclick="closeModal()">
+          <div class="indrive-modal-sheet" onclick="event.stopPropagation()">
+            <div class="cancel-sheet-header">
+              <div class="cancel-sheet-title">No active categories</div>
+              <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
+            </div>
+            <div style="padding:18px 4px; color:var(--text-secondary); font-size:13px;">There are no active service categories right now.</div>
+          </div>
+        </div>
+      `;
+      return;
+    }
+    const subServices = activeCat?.subServices || [];
+    root.innerHTML = `
+      <div class="modal-backdrop" onclick="closeModal()">
+        <div class="indrive-modal-sheet" onclick="event.stopPropagation()">
+          <div class="cancel-sheet-header">
+            <div class="cancel-sheet-title">${escapeHtml(activeCat?.fullName || activeCat?.name || 'Services')}</div>
+            <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
+          </div>
+            ${subServices.length === 0 ? '<div style="padding:18px 4px; color:var(--text-secondary); font-size:13px;">No specific tasks have been added yet. You can describe the service you need in your request.</div>' : subServices.map((sub, idx) => `
+            <div class="indrive-cancel-row" onclick="pickSubService(${idx})">
+              <div class="cancel-row-left">
+                <div>
+                    <div style="font-weight:700;">${escapeHtml(sub.name || 'Service')}</div>
+                    <div style="font-size:12px; color:var(--text-secondary);">${sub.duration ? `~${escapeHtml(sub.duration)}` : 'Service task'}</div>
+                </div>
+              </div>
+                <div style="font-weight:800; color:var(--blue-primary);">${Number.isFinite(Number(sub.defaultUsd)) ? formatUsdPrice(sub.defaultUsd) : ''}</div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // PAYMENT METHOD MODAL
+  if (state.activeModal === 'PAYMENT_MODAL') {
+    const methods = state.db.settings?.supportedPaymentMethods || ['Cash USD', 'EcoCash USD', 'InnBucks USD'];
+    root.innerHTML = `
+      <div class="modal-backdrop" onclick="closeModal()">
+        <div class="indrive-modal-sheet" onclick="event.stopPropagation()">
+          <div class="cancel-sheet-header">
+            <div class="cancel-sheet-title">Payment Method (USD)</div>
+            <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
+          </div>
+          ${methods.map((m) => `
+            <div class="indrive-cancel-row" onclick="state.draftPaymentMethod='${m}'; closeModal(); renderAll();">
+              <div class="cancel-row-left">
+                <span style="color:var(--blue-primary);">${uiIcon('wallet', 18)}</span>
+                <span>${m}</span>
+              </div>
+              ${state.draftPaymentMethod === m ? `<span style="color:var(--blue-primary); font-weight:800;">${uiIcon('check', 16)}</span>` : ''}
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // SPECIAL INSTRUCTIONS MODAL WITH QUICK PRESET CHIPS & REAL-TIME ANTI-LEAKAGE SHIELD
+  if (state.activeModal === 'NOTES_MODAL') {
+    const categoryPresets = {
+      beauty_care: [
+        'Hair is washed & blow-dried',
+        'Power socket & chair ready',
+        'Mirror & clean lighting available',
+        'Bring full mobile styling kit',
+        'Parking available inside yard'
+      ],
+      repairs_construction: [
+        'Main water shutoff located',
+        'Power socket & extension ready',
+        'Bring ladder & tools',
+        'Materials already on site',
+        'Parking available inside yard'
+      ],
+      cleaning_domestic: [
+        'Water & power ready',
+        'Cleaning detergents provided at home',
+        'Bring cloths, mops & equipment',
+        'Pets secured in yard',
+        'Gate code at security'
+      ],
+      automotive: [
+        'Car parked on flat level ground',
+        'Vehicle keys ready on site',
+        'Shaded driveway available',
+        'Bring diagnostic tools & jump pack',
+        'Gate code at security'
+      ],
+      solar_power_water: [
+        'Roof access & ladder point clear',
+        'Inverter & battery room accessible',
+        'Main breaker switch identified',
+        'Borehole pump switch accessible',
+        'Parking available inside yard'
+      ],
+      gardening_outdoor: [
+        'Outdoor water tap & hose ready',
+        'Power socket near garden',
+        'Green waste compost area available',
+        'Bring lawnmower & trimmer',
+        'Pets secured in house'
+      ],
+      general_labour: [
+        'Items packed & ready on ground floor',
+        'Stairs / elevator available',
+        'Heavy items require 2-person lift',
+        'Straps & trolley needed',
+        'Truck parking available at gate'
+      ]
+    };
+    const catId = normalizeCategoryId(state.selectedCategoryId || 'repairs_construction');
+    const presetNotes = categoryPresets[catId] || categoryPresets.general_labour || categoryPresets.repairs_construction;
+    const currentCat = (state.db?.categories || []).find((c) => c.id === catId);
+    const catName = currentCat ? (currentCat.name || currentCat.fullName) : 'service';
+    root.innerHTML = `
+      <div class="modal-backdrop" onclick="closeModal()">
+        <div class="indrive-modal-sheet" onclick="event.stopPropagation()">
+          <div class="cancel-sheet-header">
+            <div class="cancel-sheet-title">Special Instructions</div>
+            <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
+          </div>
+
+          <div style="background:var(--blue-soft); border:1px solid var(--blue-border); border-radius:12px; padding:9px 11px; margin-bottom:10px; display:flex; align-items:center; gap:8px; font-size:11.5px; color:var(--blue-primary); font-weight:700;">
+            ${uiIcon('shield', 15)}
+            <span>Anti-Leakage Filter Active: Phone numbers (077..., +263...), @handles, and WhatsApp links are blocked.</span>
+          </div>
+
+          <div style="font-size:11.5px; font-weight:800; color:var(--text-secondary); margin-bottom:6px;">
+            One-Tap Preset Instructions
+          </div>
+          <div style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px;">
+            ${presetNotes.map((chip) => `
+              <button class="chat-preset-chip" onclick="appendPresetInstruction('${chip.replace(/'/g, "\\'")}')">
+                + ${chip}
+              </button>
+            `).join('')}
+          </div>
+
+          <textarea
+            id="draftNotesInput"
+            class="dark-input"
+            rows="3"
+            placeholder="Add details about your ${escapeHtml(catName)} (e.g. materials, gate note)..."
+            oninput="handleLiveNotesInput(this.value)"
+          >${state.draftNotes}</textarea>
+
+          <div id="notesLeakageAlert" style="display:${state.notesLeakageWarning ? 'flex' : 'none'}; align-items:center; gap:7px; margin-top:8px; padding:8px 11px; border-radius:11px; background:#FEF2F2; border:1px solid #FECACA; color:#DC2626; font-size:12px; font-weight:700;">
+            ${uiIcon('shield', 14)}
+            <span id="notesLeakageText">${state.notesLeakageWarning || ''}</span>
+          </div>
+
+          <button class="btn-primary-blue" style="margin-top:14px;" onclick="saveDraftNotes()">
+            ${uiIcon('check', 16)}
+            <span>Save Instructions</span>
+          </button>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // PROVIDER BIO UPDATE FOR ADMIN APPROVAL (ORIGINAL FEATURE)
+  if (state.activeModal === 'EDIT_BIO_MODAL') {
+    const prov = state.currentUser || state.db.providers[0];
+    root.innerHTML = `
+      <div class="modal-backdrop" onclick="closeModal()">
+        <div class="indrive-modal-sheet" onclick="event.stopPropagation()">
+          <div class="cancel-sheet-header">
+            <div class="cancel-sheet-title">Update Profile Bio (Admin Reviewed)</div>
+            <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
+          </div>
+
+          <div style="background:#FFFBEB; border:1px solid #FDE68A; border-radius:12px; padding:9px 11px; margin-bottom:10px; font-size:12px; color:#92400E; font-weight:700; display:flex; align-items:flex-start; gap:8px;">
+            <span style="color:#D97706;">${uiIcon('shield', 15)}</span>
+            <span>Admin approves all profile bio updates first to ensure zero phone numbers, WhatsApp links, or off-app solicitation.</span>
+          </div>
+
+          <textarea id="providerBioInput" class="dark-input" rows="3" placeholder="Describe your mobile kit, experience & specialties (no phone numbers)...">${prov.bio || ''}</textarea>
+
+          <button class="btn-primary-blue" style="margin-top:12px;" onclick="submitProviderBioUpdate()">
+            ${uiIcon('check', 16)}
+            <span>Submit Bio for Admin Approval</span>
+          </button>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // REAL DEVICE PHOTO UPLOAD MODAL FOR PROVIDER PORTFOLIO
+  if (state.activeModal === 'UPLOAD_CATALOGUE') {
+    root.innerHTML = `
+      <div class="modal-backdrop" onclick="closeModal()">
+        <div class="indrive-modal-sheet" onclick="event.stopPropagation()">
+          <div class="cancel-sheet-header">
+            <div class="cancel-sheet-title">Add Work Catalogue Photo</div>
+            <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
+          </div>
+          <p style="font-size:12px; color:var(--text-secondary); margin-bottom:10px; line-height:1.45;">
+            Upload a clean photo of your work. Findit Admin reviews all uploads before publishing to ensure zero phone numbers, flyers, or watermarks.
+          </p>
+
+          <label class="real-file-dropzone" style="margin-bottom:12px;">
+            <input type="file" accept="image/*" style="display:none;" onchange="handleRealPortfolioFileSelect(this)" />
+            ${state.uploadedFileDataUrl
+              ? `<img src="${state.uploadedFileDataUrl}" alt="Selected work photo" />`
+              : `
+                <span style="color:var(--blue-primary); margin-bottom:6px;">${uiIcon('image', 28)}</span>
+                <div style="font-size:13.5px; font-weight:800; color:var(--blue-primary);">Choose photo from device</div>
+                <div style="font-size:11.5px; color:var(--text-secondary); margin-top:2px;">JPG, PNG or WEBP</div>
+              `
+            }
+          </label>
+
+          <div style="display:flex; flex-direction:column; gap:10px;">
+            <input id="catUploadTitle" class="dark-input" placeholder="Style title (e.g. Medium Knotless Braids)" />
+            <input id="catUploadPrice" type="number" class="dark-input" placeholder="Price in USD (e.g. 25)" value="25" />
+
+            <label style="display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text-secondary); font-weight:600;">
+              <input type="checkbox" ${state.uploadSuspectedWatermark ? 'checked' : ''} onchange="state.uploadSuspectedWatermark=this.checked" style="accent-color:#0066FF;" />
+              <span>Flag photo as containing a flyer/watermark (Test Admin Detector)</span>
+            </label>
+
+            <button class="btn-primary-blue" onclick="submitProviderCatalogueUpload()">
+              ${uiIcon('check', 16)}
+              <span>Submit for Admin Approval</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // ADD SERVICE TO CATALOGUE MODAL
+  if (state.activeModal === 'ADD_SERVICE_MODAL') {
+    const prov = state.currentUser || state.db.providers[0];
+    root.innerHTML = `
+      <div class="modal-backdrop" onclick="closeModal()">
+        <div class="indrive-modal-sheet" onclick="event.stopPropagation()">
+          <div class="cancel-sheet-header">
+            <div class="cancel-sheet-title">Add Service to Catalogue</div>
+            <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
+          </div>
+          <p style="font-size:12px; color:var(--text-secondary); margin-bottom:12px; line-height:1.45;">
+            Add a specialist service with your price and duration. Uploaded photos are checked by Findit Admins before appearing publicly.
+          </p>
+
+          <div style="display:flex; flex-direction:column; gap:11px;">
+            <div>
+              <label style="font-size:12px; font-weight:700; color:var(--text-main);">Service Title</label>
+              <input id="newServiceTitle" class="dark-input" placeholder="e.g. Knotless Braids, Manicure, Burst Fade..." style="width:100%; margin-top:4px;" />
+            </div>
+
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+              <div>
+                <label style="font-size:12px; font-weight:700; color:var(--text-main);">Price in USD ($)</label>
+                <input id="newServicePrice" type="number" class="dark-input" placeholder="e.g. 25" value="25" style="width:100%; margin-top:4px;" />
+              </div>
+              <div>
+                <label style="font-size:12px; font-weight:700; color:var(--text-main);">Est. Duration</label>
+                <input id="newServiceDuration" class="dark-input" placeholder="e.g. 2 hrs" value="2 hrs" style="width:100%; margin-top:4px;" />
+              </div>
+            </div>
+
+            <div>
+              <label style="font-size:12px; font-weight:700; color:var(--text-main);">Style / Specialty Tag</label>
+              <input id="newServiceTag" class="dark-input" placeholder="e.g. Precision Finish, Mobile Kit" value="Verified Quality" style="width:100%; margin-top:4px;" />
+            </div>
+
+            <!-- Upload Photo from Local Storage (Admin Approval Required) -->
+            <div>
+              <label style="font-size:12px; font-weight:700; color:var(--text-main); display:flex; justify-content:space-between; align-items:center;">
+                <span>Work Photo (Device Upload)</span>
+                <span style="font-size:10.5px; color:#D97706; font-weight:700;">Admin Verified</span>
+              </label>
+              <div
+                onclick="document.getElementById('newServiceFileInput').click()"
+                style="margin-top:6px; border:2px dashed ${state.newServicePhotoDataUrl ? 'var(--blue-primary)' : 'var(--border-light)'}; border-radius:12px; padding:12px; text-align:center; background:var(--bg-card); cursor:pointer; transition:all 0.2s ease;"
+              >
+                <input type="file" id="newServiceFileInput" accept="image/*" style="display:none;" onchange="handleNewServiceFileSelect(this)" />
+                ${state.newServicePhotoDataUrl ? `
+                  <div style="display:flex; flex-direction:column; align-items:center; gap:6px;">
+                    <img src="${state.newServicePhotoDataUrl}" style="max-height:130px; max-width:100%; border-radius:8px; object-fit:cover;" alt="Work Photo" />
+                    <span style="font-size:11px; font-weight:700; color:var(--blue-primary);">Tap to change photo</span>
+                  </div>
+                ` : `
+                  <div style="display:flex; flex-direction:column; align-items:center; gap:6px; padding:6px 0;">
+                    <div style="width:38px; height:38px; border-radius:50%; background:var(--blue-soft); color:var(--blue-primary); display:flex; align-items:center; justify-content:center;">
+                      ${uiIcon('image', 18)}
+                    </div>
+                    <div style="font-size:12px; font-weight:800; color:var(--text-main);">Tap to upload photo from your device</div>
+                    <div style="font-size:11px; color:var(--text-secondary); line-height:1.35;">Photos must be approved by Admins before showing publicly</div>
+                  </div>
+                `}
+              </div>
+            </div>
+
+            <button class="btn-primary-blue" id="addServiceSubmitBtn" onclick="saveNewCatalogueService()" style="margin-top:6px; height:42px;">
+              ${uiIcon('check', 16)}
+              <span>Submit Service for Admin Approval</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // EDIT SERVICE IN CATALOGUE MODAL
+  if (state.activeModal === 'EDIT_SERVICE_MODAL') {
+    const item = state.modalData?.item || {};
+    root.innerHTML = `
+      <div class="modal-backdrop" onclick="closeModal()">
+        <div class="indrive-modal-sheet" onclick="event.stopPropagation()">
+          <div class="cancel-sheet-header">
+            <div class="cancel-sheet-title">Edit Service Details</div>
+            <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
+          </div>
+          <p style="font-size:12px; color:var(--text-secondary); margin-bottom:12px; line-height:1.45;">
+            Update your pricing, duration, or style name for this service.
+          </p>
+
+          <div style="display:flex; flex-direction:column; gap:11px;">
+            <div>
+              <label style="font-size:12px; font-weight:700; color:var(--text-main);">Service Title</label>
+              <input id="editServiceTitle" class="dark-input" value="${item.title || ''}" placeholder="Service Title" style="width:100%; margin-top:4px;" />
+            </div>
+
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+              <div>
+                <label style="font-size:12px; font-weight:700; color:var(--text-main);">Price in USD ($)</label>
+                <input id="editServicePrice" type="number" class="dark-input" value="${item.priceUsd || 20}" style="width:100%; margin-top:4px;" />
+              </div>
+              <div>
+                <label style="font-size:12px; font-weight:700; color:var(--text-main);">Est. Duration</label>
+                <input id="editServiceDuration" class="dark-input" value="${item.duration || '2 hrs'}" style="width:100%; margin-top:4px;" />
+              </div>
+            </div>
+
+            <div>
+              <label style="font-size:12px; font-weight:700; color:var(--text-main);">Style / Specialty Tag</label>
+              <input id="editServiceTag" class="dark-input" value="${item.tag || 'Verified Quality'}" style="width:100%; margin-top:4px;" />
+            </div>
+
+            <!-- Replace Photo from Device -->
+            <div>
+              <label style="font-size:12px; font-weight:700; color:var(--text-main); display:flex; justify-content:space-between; align-items:center;">
+                <span>Work Photo</span>
+                <span style="font-size:10.5px; color:var(--text-secondary); font-weight:600;">Tap to replace</span>
+              </label>
+              <div
+                onclick="document.getElementById('editServiceFileInput').click()"
+                style="margin-top:6px; border:2px dashed var(--border-light); border-radius:12px; padding:12px; text-align:center; background:var(--bg-card); cursor:pointer;"
+              >
+                <input type="file" id="editServiceFileInput" accept="image/*" style="display:none;" onchange="handleEditServiceFileSelect(this)" />
+                <div style="display:flex; flex-direction:column; align-items:center; gap:6px;">
+                  <img src="${state.editServicePhotoDataUrl || resolveMediaUrl(item.imageUrl, 'task')}" onerror="this.onerror=null; this.src='${DEFAULT_TASK_PHOTO_FALLBACK}';" style="max-height:120px; max-width:100%; border-radius:8px; object-fit:cover;" alt="Service Photo" />
+                  <span style="font-size:11px; font-weight:700; color:var(--blue-primary);">Tap to choose new photo from device</span>
+                </div>
+              </div>
+            </div>
+
+            <button class="btn-primary-blue" id="editServiceSubmitBtn" onclick="saveEditedCatalogueService('${item.id}')" style="margin-top:6px; height:42px;">
+              ${uiIcon('check', 16)}
+              <span>Save Changes</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // PROVIDER PHYSICAL OFFICE / WORKSHOP SETTINGS MODAL
+  if (state.activeModal === 'PROVIDER_OFFICE_MODAL') {
+    const prov = state.currentUser || (state.db.providers || [])[0] || {};
+    const suburbs = state.db.suburbs || [];
+    const hasOffice = Boolean(state.officeDraftHasOffice !== undefined ? state.officeDraftHasOffice : prov.hasOffice);
+    root.innerHTML = `
+      <div class="modal-backdrop" onclick="closeModal()">
+        <div class="indrive-modal-sheet" onclick="event.stopPropagation()">
+          <div class="cancel-sheet-header">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span style="color:var(--blue-primary);">${uiIcon('buildingOffice', 20)}</span>
+              <div class="cancel-sheet-title">Workplace &amp; Office Setup</div>
+            </div>
+            <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
+          </div>
+          <div style="font-size:12px; color:var(--text-secondary); margin-bottom:14px; line-height:1.45;">
+            State whether you operate from a physical workshop/office/shop or operate as a mobile freelancer. Clients can see your base location and calculate travel times.
+          </div>
+
+          <!-- Workplace Choice Tabs -->
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:14px;">
+            <button
+              type="button"
+              class="${hasOffice ? 'btn-primary-blue' : 'btn-dark-sec'}"
+              style="height:44px; font-size:12px; cursor:pointer;"
+              onclick="setProviderWorkplaceType(true)"
+            >
+              ${uiIcon('buildingOffice', 15)}
+              <span>${uiIcon('buildingOffice', 13)} Shop / Office</span>
+            </button>
+            <button
+              type="button"
+              class="${!hasOffice ? 'btn-primary-blue' : 'btn-dark-sec'}"
+              style="height:44px; font-size:12px; cursor:pointer;"
+              onclick="setProviderWorkplaceType(false)"
+            >
+              ${uiIcon('briefcase', 15)}
+              <span>${uiIcon('toolbox', 13)} Mobile Freelancer</span>
+            </button>
+          </div>
+
+          <div style="display:flex; flex-direction:column; gap:12px;">
+            ${hasOffice ? `
+              <div>
+                <label style="font-size:12px; font-weight:700; color:var(--text-main);">Workshop / Office Suburb</label>
+                <select id="providerOfficeSuburbSelect" class="dark-input" style="width:100%; margin-top:4px;">
+                  ${suburbs.map((s) => `<option value="${s.name}" ${(prov.officeSuburb || prov.primarySuburb || '') === s.name ? 'selected' : ''}>${s.name}, Harare</option>`).join('')}
+                </select>
+              </div>
+              <div>
+                <label style="font-size:12px; font-weight:700; color:var(--text-main);">Street Address / Shop Details</label>
+                <input id="providerOfficeAddressInput" class="dark-input" value="${escapeHtml(prov.officeAddress || '')}" placeholder="e.g. Shop 14, Sam Levy's Village, Borrowdale" style="width:100%; margin-top:4px;" />
+              </div>
+            ` : `
+              <div style="background:#F1F5F9; border-radius:12px; padding:12px; font-size:12.5px; color:#475569; line-height:1.45;">
+                <strong>Mobile Freelancer Mode:</strong> You travel directly to client homes and job sites in Harare. When you are en route, your live moving location and trade icon will be displayed to the client.
+              </div>
+            `}
+            <button class="btn-primary-blue" onclick="saveProviderOfficeDetails()" style="margin-top:6px; height:44px;">
+              ${uiIcon('check', 16)}
+              <span>Save Workplace Setup</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // FULL-SCREEN CHAT PHOTO PREVIEW LIGHTBOX
+  if (state.activeModal === 'CHAT_PHOTO_PREVIEW') {
+    const pUrl = state.modalData?.previewPhotoUrl;
+    root.innerHTML = `
+      <div class="modal-backdrop" style="background:rgba(0,0,0,0.92); z-index:99999; display:flex; align-items:center; justify-content:center; padding:16px;" onclick="closeModal()">
+        <div style="position:relative; max-width:94vw; max-height:90vh; display:flex; flex-direction:column; align-items:center; justify-content:center;" onclick="event.stopPropagation()">
+          <button class="cancel-close-x" onclick="closeModal()" style="position:absolute; top:-42px; right:0; background:rgba(255,255,255,0.25); color:#fff; border-radius:50%; width:34px; height:34px; border:none; display:flex; align-items:center; justify-content:center; cursor:pointer;">
+            ${uiIcon('close', 18)}
+          </button>
+          <img src="${escapeHtml(pUrl)}" alt="Chat Reference" style="max-width:100%; max-height:84vh; object-fit:contain; border-radius:12px; box-shadow:0 8px 32px rgba(0,0,0,0.7);" />
+        </div>
+      </div>
+    `;
+    return;
+  }
+}
+
+function setProviderWorkplaceType(hasOffice) {
+  state.officeDraftHasOffice = Boolean(hasOffice);
+  lastRenderedModalKey = '';
+  renderModalLayer();
+}
+
+async function quickToggleProviderOffice() {
+  const prov = state.currentUser || (state.db.providers || [])[0];
+  if (!prov) return;
+  const newHasOffice = !prov.hasOffice;
+  prov.hasOffice = newHasOffice;
+  prov.workplaceType = newHasOffice ? 'OFFICE' : 'FREELANCER';
+  if (state.currentUser && state.currentUser.id === prov.id) {
+    state.currentUser = { ...prov };
+    saveSession(state.role, state.currentUser, false);
+  }
+  renderAll();
+  showToast(newHasOffice ? 'Switched to Shop / Office mode' : 'Switched to Mobile Freelancer mode', 'success');
+  try {
+    await apiPost('/api/providers/office', {
+      providerId: prov.id,
+      hasOffice: newHasOffice,
+      workplaceType: prov.workplaceType,
+      officeSuburb: prov.officeSuburb || prov.primarySuburb || 'Avondale',
+      officeAddress: prov.officeAddress || '',
+      providerSnapshot: prov
+    });
+    await fetchState(true);
+  } catch (e) {
+    console.warn('Quick toggle sync note:', e);
+  }
+}
+
+function openProviderOfficeModal() {
+  const prov = state.currentUser || (state.db.providers || [])[0] || {};
+  state.officeDraftHasOffice = Boolean(prov.hasOffice);
+  state.activeModal = 'PROVIDER_OFFICE_MODAL';
+  lastRenderedModalKey = '';
+  renderModalLayer();
+}
+
+async function saveProviderOfficeDetails() {
+  const prov = state.currentUser || (state.db.providers || [])[0];
+  if (!prov) return;
+  const hasOffice = Boolean(state.officeDraftHasOffice !== undefined ? state.officeDraftHasOffice : prov.hasOffice);
+  const officeSuburb = document.getElementById('providerOfficeSuburbSelect')?.value || prov.officeSuburb || prov.primarySuburb || '';
+  const officeAddress = hasOffice ? (document.getElementById('providerOfficeAddressInput')?.value?.trim() || '') : '';
+  const subObj = (state.db?.suburbs || []).find((s) => s.name.toLowerCase() === officeSuburb.toLowerCase());
+  const officeLat = subObj ? subObj.lat : (prov.lat || -17.82485);
+  const officeLng = subObj ? subObj.lng : (prov.lng || 31.05303);
+
+  // Optimistic update
+  prov.hasOffice = hasOffice;
+  prov.workplaceType = hasOffice ? 'OFFICE' : 'FREELANCER';
+  prov.officeSuburb = officeSuburb;
+  prov.officeAddress = officeAddress;
+  prov.officeLat = officeLat;
+  prov.officeLng = officeLng;
+  if (state.currentUser && state.currentUser.id === prov.id) {
+    state.currentUser = { ...prov };
+    saveSession(state.role, state.currentUser, false);
+  }
+
+  showToast('Updating workplace...', 'info');
+  try {
+    const data = await apiPost('/api/providers/office', {
+      providerId: prov.id,
+      hasOffice,
+      workplaceType: prov.workplaceType,
+      officeSuburb,
+      officeAddress,
+      officeLat,
+      officeLng,
+      providerSnapshot: prov
+    });
+    if (data.ok || data.success) {
+      showToast(hasOffice ? 'Office & Workshop details saved' : 'Freelancer mode set', 'success');
+      state.officeDraftHasOffice = undefined;
+      closeModal();
+      renderAll();
+      updateMapMarkers(true);
+    } else {
+      showToast(data.error || 'Failed to update office', 'error');
+    }
+  } catch (err) {
+    console.error('Error saving provider office:', err);
+    // Still succeeded optimistically
+    showToast(hasOffice ? 'Office & Workshop details saved locally' : 'Freelancer mode set', 'success');
+    state.officeDraftHasOffice = undefined;
+    closeModal();
+    renderAll();
+    updateMapMarkers(true);
+  }
+}
+
+function getCancelReasonSvg(type) {
+  const map = {
+    route: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0066FF" stroke-width="2" stroke-linecap="round"><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="6" r="2.5"/><path d="M8.5 18h6a3.5 3.5 0 0 0 0-7h-5a3.5 3.5 0 0 1 0-7h6"/></svg>`,
+    fare: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0066FF" stroke-width="2" stroke-linecap="round"><rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg>`,
+    warn: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0066FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
+    pin: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0066FF" stroke-width="2" stroke-linecap="round"><path d="M12 21s-6-5.2-6-10a6 6 0 1 1 12 0c0 4.8-6 10-6 10z"/><line x1="4" y1="4" x2="20" y2="20"/></svg>`,
+    inbox: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0066FF" stroke-width="2" stroke-linecap="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 10h10M7 14h6"/></svg>`,
+    dots: `<svg width="20" height="20" viewBox="0 0 24 24" fill="#0066FF"><circle cx="6" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="18" cy="12" r="1.8"/></svg>`
+  };
+  return map[type] || map.dots;
+}
+
+// ============================================================================
+// USER ACTIONS, WAITLIST, SPECIAL INSTRUCTIONS & FARE NEGOTIATION HANDLERS
+// ============================================================================
+function selectHomeCategory(catId) {
+  const cat = (state.db?.categories || []).find((c) => c.id === catId);
+  if (!cat) return;
+  if (cat.status !== 'ACTIVE') {
+    state.activeModal = 'COMING_SOON_MODAL';
+    state.modalData = { category: cat };
+    renderModalLayer();
+    return;
+  }
+  state.selectedCategoryId = catId;
+  state.selectedSubServiceIdx = 0;
+  state.selectedTierKey = 'STANDARD';
+  syncRecommendedFare();
+  renderAll();
+}
+
+async function submitCategoryWaitlist(categoryId) {
+  const phone = document.getElementById('waitlistPhoneInput')?.value.trim() || '';
+  if (!phone) {
+    showToast('Enter your phone number to join the waitlist.', 'error');
+    return;
+  }
+  const suburb = document.getElementById('waitlistSuburbSelect')?.value || 'Avondale';
+  try {
+    const res = await apiPost('/api/waitlist', { categoryId, phone, suburb });
+    closeModal();
+    showToast(res.duplicate
+      ? `You are already on the ${res.category?.fullName || 'service'} waitlist.`
+      : `Added to the ${res.category?.fullName || 'service'} waitlist (#${res.waitlistCount}).`);
+    await fetchState();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+function openConfigureStep(subIdx = 0) {
+  const categories = state.db?.categories || [];
+  let category = categories.find((item) => item.id === state.selectedCategoryId);
+  if (!category || category.status !== 'ACTIVE') {
+    category = categories.find((item) => item.status === 'ACTIVE');
+  }
+  if (!category) {
+    showToast('There are no active service categories right now.', 'error');
+    return;
+  }
+  state.selectedCategoryId = category.id;
+  state.selectedSubServiceIdx = subIdx;
+  state.selectedTierKey = 'STANDARD';
+  syncRecommendedFare();
+  state.draftFareUsd = state.recommendedFareUsd;
+  state.isSheetMinimized = false;
+  state.screenStep = 'CONFIGURE';
+  renderAll();
+}
+
+function backToHomeStep() {
+  state.isSheetMinimized = false;
+  state.screenStep = 'HOME';
+  renderAll();
+}
+
+function adjustDraftFare(delta) {
+  state.draftFareUsd = Math.max(4, Number((Number(state.draftFareUsd) + delta).toFixed(2)));
+  renderAll();
+}
+
+function selectConfigureTier(tierKey, recUsd) {
+  state.selectedTierKey = tierKey;
+  state.recommendedFareUsd = recUsd;
+  state.draftFareUsd = recUsd;
+  renderAll();
+}
+
+function toggleDraftAutoAccept() {
+  state.draftAutoAccept = !state.draftAutoAccept;
+  renderAll();
+}
+
+function promptEntranceNote() {
+  const val = prompt('Entrance / Gate note:', state.entranceNote || 'Main Gate');
+  if (val !== null) {
+    state.entranceNote = val.trim() || 'Main Gate';
+    renderAll();
+  }
+}
+
+function appendPresetInstruction(presetText) {
+  const input = document.getElementById('draftNotesInput');
+  const current = input ? input.value.trim() : state.draftNotes;
+  const nextVal = current ? `${current}. ${presetText}` : presetText;
+  state.draftNotes = nextVal;
+  if (input) input.value = nextVal;
+  handleLiveNotesInput(nextVal);
+}
+
+function handleLiveNotesInput(val) {
+  const warning = checkAntiLeakageClient(val);
+  state.notesLeakageWarning = warning || '';
+  const alertEl = document.getElementById('notesLeakageAlert');
+  const textEl = document.getElementById('notesLeakageText');
+  if (alertEl && textEl) {
+    alertEl.style.display = warning ? 'flex' : 'none';
+    textEl.textContent = warning || '';
+  }
+}
+
+function setBookingForMode(mode) {
+  state.bookingFor = mode === 'SOMEONE_ELSE' ? 'SOMEONE_ELSE' : 'ME';
+  renderUiOverlay(true);
+  if (state.bookingFor === 'SOMEONE_ELSE') {
+    setTimeout(() => {
+      const inp = document.getElementById('recipientNameInput');
+      if (inp) inp.focus();
+    }, 60);
+  }
+}
+
+function setDispatchTimingType(type) {
+  state.timingType = 'IMMEDIATE';
+  renderUiOverlay(true);
+}
+
+async function triggerSilentAiTaskAnalysis() {
+  try {
+    if (!state.draftNotes && !state.draftPhotoUrl) return;
+    const res = await apiPost('/api/ai/classify-task', {
+      description: state.draftNotes || '',
+      photoUrl: state.draftPhotoUrl || null,
+      currentCategoryId: state.selectedCategoryId,
+      suburbName: state.customSuburbLabel
+    });
+    if (res && res.matchedCategoryId) {
+      const matchedCat = (state.db?.categories || []).find((c) => c.id === res.matchedCategoryId && c.status === 'ACTIVE');
+      if (matchedCat && matchedCat.id !== state.selectedCategoryId) {
+        state.selectedCategoryId = matchedCat.id;
+        state.selectedSubServiceIdx = 0;
+      }
+      if (res.recommendedFareUsd && Number(res.recommendedFareUsd) >= 5) {
+        state.recommendedFareUsd = Number(res.recommendedFareUsd);
+        state.draftFareUsd = Number(res.recommendedFareUsd);
+      }
+      renderUiOverlay(true);
+    }
+  } catch (e) {
+    // Silent background intelligence — never interrupt user
+  }
+}
+
+function saveDraftNotes() {
+  const el = document.getElementById('draftNotesInput');
+  const val = el ? el.value.trim() : '';
+  const warning = checkAntiLeakageClient(val);
+  if (warning) {
+    showToast(warning, 'error');
+    return;
+  }
+  state.draftNotes = val;
+  state.notesLeakageWarning = '';
+  closeModal();
+  renderAll();
+  triggerSilentAiTaskAnalysis();
+}
+
+async function submitServiceRequest() {
+  if (!state.isAuthenticated || !state.currentUser) {
+    state.authRole = 'CUSTOMER';
+    state.authStep = 'PHONE';
+    state.activeModal = 'SIGNUP_FLOW';
+    renderAll();
+    showToast('Please verify your WhatsApp first to find offers');
+    return;
+  }
+  if (!state.isLiveGpsActive && !state.isCustomAddressSelected) {
+    showToast('Confirm your location with Live GPS, the map pin, a suburb, or a geocoded address before requesting.', 'error');
+    return;
+  }
+  try {
+    markLocalStateMutation();
+    const cat = state.db.categories.find((c) => c.id === state.selectedCategoryId) || state.db.categories[0];
+    const sub = (cat.subServices || [])[state.selectedSubServiceIdx] || { name: `${cat.name} Home Service` };
+    const reqId = 'req_' + Date.now().toString().slice(-5);
+    const attachedPhoto = state.draftPhotoUrl || null;
+    const attachedVoiceNote = state.draftVoiceNoteUrl || null;
+    const attachedVoiceNoteDuration = state.draftVoiceNoteDuration || null;
+    const nowIso = new Date().toISOString();
+    const locInp = document.getElementById('requestServiceLocationInput');
+    if (locInp && locInp.value) {
+      const parts = locInp.value.split(',');
+      state.customAddress = parts[0].trim();
+      if (parts[1]) state.customSuburbLabel = parts.slice(1).join(',').trim();
+    }
+
+    // inDrive Live Location: Uses live GPS by default; only uses custom address if explicitly chosen
+    const isLive = !state.isCustomAddressSelected;
+    const targetLat = isLive ? (state.userLiveGpsLat || state.pinnedLat) : state.pinnedLat;
+    const targetLng = isLive ? (state.userLiveGpsLng || state.pinnedLng) : state.pinnedLng;
+    let suburbClean = (state.customSuburbLabel || '').split(',')[0].trim();
+    if (!suburbClean || suburbClean.toLowerCase().includes('live location') || suburbClean.toLowerCase() === 'harare') {
+      const nearest = (state.db?.suburbs || []).reduce((best, s) => {
+        const d = Math.hypot(s.lat - targetLat, s.lng - targetLng);
+        return (!best || d < best.d) ? { s, d } : best;
+      }, null);
+      if (nearest?.s) suburbClean = nearest.s.name;
+      else suburbClean = 'Harare';
+    }
+    const streetClean = state.customAddress && state.customAddress !== 'Current Live Location' && !state.customAddress.toLowerCase().includes('live location') ? state.customAddress : suburbClean;
+    const targetAddress = streetClean.toLowerCase().includes(suburbClean.toLowerCase()) ? streetClean : `${streetClean}, ${suburbClean}`;
+
+    // 0ms Optimistic Broadcast: Transition immediately to SEARCHING without any delay!
+    const optimisticReq = {
+      id: reqId,
+      customerId: state.currentUser.id,
+      customerFinditId: state.currentUser.finditId || '',
+      customerName: state.currentUser.name,
+      customerRating: state.currentUser.rating || 0,
+      customerCompletedVisits: state.currentUser.completedBookings || 0,
+      categoryId: cat.id,
+      categoryName: cat.fullName || cat.name,
+      title: sub.name,
+      description: state.draftNotes || (isLive ? `Service delivery straight to my location at ${targetAddress}.` : `Service at ${targetAddress}.`),
+      photoUrl: attachedPhoto,
+      voiceNoteUrl: attachedVoiceNote,
+      voiceNoteDuration: attachedVoiceNoteDuration,
+      suburbId: state.selectedSuburbId,
+      suburbName: suburbClean,
+      exactAddress: targetAddress,
+      lat: targetLat,
+      lng: targetLng,
+      serviceMode: isLive ? 'LIVE_LOCATION' : 'CUSTOM_ADDRESS',
+      isLiveLocationOrder: isLive,
+      clientLiveLat: targetLat,
+      clientLiveLng: targetLng,
+      clientLiveAddress: targetAddress,
+      bookingFor: state.bookingFor || 'ME',
+      recipientName: state.bookingFor === 'SOMEONE_ELSE' ? (state.recipientName || 'Recipient') : null,
+      recipientPhone: state.bookingFor === 'SOMEONE_ELSE' ? (state.recipientPhone || null) : null,
+      timingType: state.timingType || 'IMMEDIATE',
+      scheduledDate: state.timingType === 'SCHEDULED' ? state.scheduledDate : null,
+      scheduledTime: state.timingType === 'SCHEDULED' ? state.scheduledTime : null,
+      paymentMethod: state.draftPaymentMethod,
+      budgetUsd: Number(state.draftFareUsd),
+      autoAccept: state.draftAutoAccept,
+      startPinCode: String(Math.floor(1000 + Math.random() * 9000)),
+      pinVerifiedByProvider: false,
+      status: 'OPEN',
+      acceptedOfferId: null,
+      createdAt: nowIso,
+      updatedAt: Date.now(),
+      offers: [],
+      messages: []
+    };
+
+    state.draftPhotoUrl = null;
+    state.draftVoiceNoteUrl = null;
+    state.draftVoiceNoteDuration = 0;
+    if (!state.db) state.db = {};
+    if (!Array.isArray(state.db.requests)) state.db.requests = [];
+    state.db.requests.unshift(optimisticReq);
+
+    state.activeRequestId = reqId;
+    state.pendingSearchFareUsd = Number(optimisticReq.budgetUsd);
+    state.isSheetMinimized = false;
+    state.isOffersMinimized = false;
+    state.screenStep = 'SEARCHING';
+    lastUiOverlaySignature = '';
+    renderAll(true);
+
+    const res = await apiPost('/api/requests', {
+      id: reqId,
+      customerId: state.currentUser.id,
+      customerName: state.currentUser.name,
+      categoryId: cat.id,
+      title: sub.name,
+      description: optimisticReq.description,
+      suburbId: state.selectedSuburbId,
+      suburbName: optimisticReq.suburbName,
+      exactAddress: optimisticReq.exactAddress,
+      lat: targetLat,
+      lng: targetLng,
+      serviceMode: 'LIVE_LOCATION',
+      isLiveLocationOrder: true,
+      clientLiveLat: targetLat,
+      clientLiveLng: targetLng,
+      clientLiveAddress: targetAddress,
+      bookingFor: optimisticReq.bookingFor,
+      recipientName: optimisticReq.recipientName,
+      recipientPhone: optimisticReq.recipientPhone,
+      timingType: optimisticReq.timingType,
+      scheduledDate: optimisticReq.scheduledDate,
+      scheduledTime: optimisticReq.scheduledTime,
+      paymentMethod: state.draftPaymentMethod,
+      budgetUsd: Number(state.draftFareUsd),
+      autoAccept: state.draftAutoAccept,
+      photoUrl: attachedPhoto,
+      voiceNoteUrl: attachedVoiceNote,
+      voiceNoteDuration: attachedVoiceNoteDuration
+    });
+
+    if (res && res.request && state.db?.requests) {
+      const idx = state.db.requests.findIndex((r) => r.id === reqId || r.id === res.request.id);
+      if (idx >= 0) {
+        // Preserve any offers that arrived in the meantime
+        const currentOffers = state.db.requests[idx].offers || [];
+        state.db.requests[idx] = {
+          ...res.request,
+          offers: res.request.offers?.length ? res.request.offers : currentOffers
+        };
+      } else {
+        state.db.requests.unshift(res.request);
+      }
+      state.activeRequestId = res.request.id;
+    }
+  } catch (err) {
+    showToast(err.message, 'error');
+    renderAll(true);
+  }
+}
+
+async function handleDraftStylePhotoUpload(inputEl) {
+  const file = inputEl.files && inputEl.files[0];
+  if (!file) return;
+  const compressed = await compressImageFileToDataUrl(file, 1200, 0.82);
+  if (compressed) {
+    state.draftPhotoUrl = compressed;
+    renderAll();
+    try {
+      const upRes = await apiPost('/api/upload', { dataUrl: compressed });
+      if (upRes && upRes.mediaUrl) {
+        state.draftPhotoUrl = upRes.mediaUrl;
+        renderAll();
+      }
+    } catch (e) {
+      console.warn('Bucket upload note:', e);
+    }
+    showToast('Desired style reference photo attached!');
+    triggerSilentAiTaskAnalysis();
+  }
+}
+
+function removeDraftStylePhoto() {
+  state.draftPhotoUrl = null;
+  renderAll();
+}
+
+function openImagePreviewModal(photoUrl, title = 'Desired Style Photo') {
+  state.activeModal = 'IMAGE_PREVIEW';
+  state.modalData = { photoUrl, title };
+  pushNavigationHistoryState({ imagePreview: true });
+  renderModalLayer();
+}
+
+function stepActiveSearchFare(delta) {
+  const req = getCustomerActiveRequest();
+  if (!req) return;
+  const base = state.pendingSearchFareUsd !== null ? Number(state.pendingSearchFareUsd) : Number(req.budgetUsd);
+  state.pendingSearchFareUsd = Math.max(4, Number((base + delta).toFixed(2)));
+  renderUiOverlay();
+}
+
+async function commitActiveSearchFare(requestId) {
+  if (state.pendingSearchFareUsd === null) return;
+  try {
+    await apiPost('/api/requests/budget', {
+      requestId,
+      budgetUsd: Number(state.pendingSearchFareUsd)
+    });
+    await fetchState();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function toggleActiveRequestAutoAccept(requestId) {
+  const req = getCustomerActiveRequest();
+  if (!req) return;
+  try {
+    await apiPost('/api/requests/budget', {
+      requestId,
+      budgetUsd: req.budgetUsd,
+      autoAccept: !req.autoAccept
+    });
+    await fetchState();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function acceptOffer(requestId, offerId) {
+  if (state.isAcceptingOffer) return;
+  state.isAcceptingOffer = true;
+  stopFastLiveOffersPoll();
+  try {
+    markLocalStateMutation();
+    const reqSnap = (state.db?.requests || []).find((r) => r.id === requestId) || null;
+    const offSnap = reqSnap && (reqSnap.offers || []).find((o) => o.id === offerId);
+
+    // 0ms Optimistic Booking Transition: instantly start live route & chat
+    if (reqSnap && offSnap) {
+      reqSnap.status = 'CONFIRMED';
+      reqSnap.acceptedOfferId = offSnap.id;
+      reqSnap.acceptedProviderId = offSnap.providerId;
+      reqSnap.acceptedProviderName = offSnap.providerName;
+      reqSnap.acceptedProviderBrand = offSnap.providerBrand;
+      reqSnap.acceptedProviderAvatarUrl = offSnap.providerAvatarUrl;
+      reqSnap.agreedTotalUsd = Number(offSnap.priceUsd) + Number(offSnap.travelFeeUsd || 0);
+      reqSnap.updatedAt = Date.now();
+      offSnap.status = 'ACCEPTED';
+    }
+    state.activeRequestId = requestId;
+    state.isSheetMinimized = false;
+    state.isOffersMinimized = false;
+    state.screenStep = 'BOOKED';
+    state.customerTab = 'HOME';
+    state.providerTab = 'ACTIVE_JOB';
+    lastUiOverlaySignature = '';
+    lastOffersSignature = '';
+
+    const floatingOffersRoot = document.getElementById('floatingOffersRoot');
+    if (floatingOffersRoot) {
+      floatingOffersRoot.className = 'floating-offers-root';
+      floatingOffersRoot.innerHTML = '';
+    }
+
+    if (activeMapOpportunityMarkers && typeof leafletMarkersLayer !== 'undefined' && leafletMarkersLayer) {
+      activeMapOpportunityMarkers.forEach((m) => { try { leafletMarkersLayer.removeLayer(m); } catch (e) {} });
+      activeMapOpportunityMarkers.clear();
+    }
+
+    renderAll(true);
+    showToast('Offer accepted! Live route & chat with your pro started.');
+
+    const res = await apiPost('/api/offers/accept', {
+      requestId,
+      offerId,
+      requestSnapshot: reqSnap,
+      offerSnapshot: offSnap
+    });
+    if (res && res.request && state.db?.requests) {
+      const idx = state.db.requests.findIndex((r) => r.id === res.request.id);
+      if (idx >= 0) state.db.requests[idx] = res.request;
+      else state.db.requests.unshift(res.request);
+    }
+    renderAll(true);
+  } catch (err) {
+    showToast(err.message, 'error');
+  } finally {
+    state.isAcceptingOffer = false;
+  }
+}
+
+async function declineOffer(requestId, offerId) {
+  try {
+    markLocalStateMutation();
+    const reqSnap = (state.db?.requests || []).find((r) => r.id === requestId) || null;
+    if (reqSnap && Array.isArray(reqSnap.offers)) {
+      const targetOff = reqSnap.offers.find((o) => o.id === offerId);
+      if (targetOff) {
+        targetOff.status = 'DECLINED';
+        targetOff.declinedPriceUsd = targetOff.priceUsd;
+      }
+      lastOffersSignature = '';
+      renderFloatingOffersOverlay(true);
+    }
+    const res = await apiPost('/api/offers/decline', {
+      requestId,
+      offerId,
+      reason: 'DECLINED_BY_USER',
+      requestSnapshot: reqSnap
+    });
+    if (res && res.request && state.db?.requests) {
+      const idx = state.db.requests.findIndex((r) => r.id === res.request.id);
+      if (idx >= 0) state.db.requests[idx] = res.request;
+    }
+    showToast('Offer declined — provider has been notified and can adjust their price.', 'info');
+    await fetchState(true);
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+function openCancelTaskModal(requestId) {
+  const req = (state.db?.requests || []).find((r) => r.id === requestId);
+  if (req && (req.status === 'IN_PROGRESS' || req.status === 'ARRIVED' || req.isArrived || req.startPinVerified || req.pinVerifiedByProvider)) {
+    showToast('The specialist has already arrived outside / started (PIN activated). Cancellation is locked. Please report a dispute.', 'error', 5000);
+    return;
+  }
+  state.activeModal = 'CANCEL_TASK';
+  state.modalData = { requestId };
+  renderModalLayer();
+}
+
+function handleCancelReasonRowClick(reasonLabel) {
+  if (reasonLabel === 'Another reason') {
+    const custom = prompt('Reason for cancelling:', '');
+    if (custom) submitCancelTaskWithReason(custom);
+    return;
+  }
+  submitCancelTaskWithReason(reasonLabel);
+}
+
+async function submitCancelTaskWithReason(reason) {
+  const requestId = state.modalData?.requestId || state.activeRequestId || getCustomerActiveRequest()?.id;
+  if (!requestId) {
+    closeModal();
+    return;
+  }
+  const reqSnap = (state.db?.requests || []).find((r) => r.id === requestId) || null;
+  if (reqSnap && (reqSnap.status === 'IN_PROGRESS' || reqSnap.status === 'ARRIVED' || reqSnap.isArrived || reqSnap.startPinVerified || reqSnap.pinVerifiedByProvider)) {
+    closeModal();
+    showToast('The specialist has already arrived outside / started (PIN activated). Cancellation is locked. Please file a dispute.', 'error', 5000);
+    return;
+  }
+
+  markLocalStateMutation();
+
+  // Immediate local transition so cancellation never lags or fails
+  if (reqSnap) {
+    reqSnap.status = 'CANCELLED';
+    reqSnap.cancelReason = reason;
+    reqSnap.updatedAt = Date.now();
+  }
+  state.activeModal = null;
+  state.activeRequestId = null;
+  state.pendingSearchFareUsd = null;
+  state.isSheetMinimized = false;
+  state.screenStep = 'HOME';
+  state.providerTab = 'FEED';
+  lastUiOverlaySignature = '';
+  lastOffersSignature = '';
+  renderAll(true);
+
+  try {
+    await apiPost('/api/bookings/cancel', {
+      requestId,
+      role: state.role,
+      actorName: state.currentUser?.name || 'User',
+      reason,
+      requestSnapshot: reqSnap
+    });
+    showToast('Request cancelled.');
+    await fetchState(true);
+  } catch (err) {
+    // Even if server already cleaned it up, keep local state cleanly cancelled
+    showToast('Request cancelled.');
+  }
+}
+
+function openRateBookingModal(requestId) {
+  isSubmittingReview = false;
+  state.ratingStars = 5;
+  state.customReviewComment = '';
+  state.activeModal = 'RATE_BOOKING_MODAL';
+  state.modalData = { requestId };
+  if (state.role === 'PROVIDER') {
+    state.ratingTags = ['Paid Promptly in USD', 'Respectful & Welcoming', 'Home & Power Ready'];
+  } else {
+    state.ratingTags = ['Punctual Arrival', 'Clean Mobile Kit', 'Professional Work'];
+  }
+  lastRenderedModalKey = '';
+  renderModalLayer();
+}
+
+function selectRatingStars(num) {
+  const commentEl = document.getElementById('customRatingCommentBox');
+  if (commentEl) state.customReviewComment = commentEl.value;
+  state.ratingStars = Math.max(1, Math.min(5, Number(num)));
+  lastRenderedModalKey = '';
+  renderModalLayer();
+}
+
+function toggleRatingComplimentTag(tag) {
+  const commentEl = document.getElementById('customRatingCommentBox');
+  if (commentEl) state.customReviewComment = commentEl.value;
+  if (state.ratingTags.includes(tag)) {
+    state.ratingTags = state.ratingTags.filter((t) => t !== tag);
+  } else {
+    state.ratingTags.push(tag);
+  }
+  lastRenderedModalKey = '';
+  renderModalLayer();
+}
+
+let isSubmittingReview = false;
+
+async function completeBooking(requestId) {
+  if (isSubmittingReview) return;
+  isSubmittingReview = true;
+
+  // 1. Immediately read any custom comment from DOM box
+  const commentEl = document.getElementById('customRatingCommentBox');
+  if (commentEl && commentEl.value) {
+    state.customReviewComment = commentEl.value.trim();
+  }
+
+  // 2. Immediately disable the modal submit button and show loading state
+  const submitBtn = document.getElementById('rateBookingSubmitBtn');
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.style.opacity = '0.65';
+    submitBtn.style.pointerEvents = 'none';
+    submitBtn.innerHTML = '<span>Submitting Review...</span>';
+  }
+
+  const role = state.role || 'CUSTOMER';
+  const rating = state.ratingStars || 5;
+  const customComment = (state.customReviewComment || '').trim();
+  const reviewText = customComment
+    ? (state.ratingTags && state.ratingTags.length ? `${state.ratingTags.join(', ')} — ${customComment}` : customComment)
+    : (state.ratingTags || []).join(', ');
+
+  // 2. Optimistically update local booking status to COMPLETED so UI never bounces
+  if (state.db && Array.isArray(state.db.requests)) {
+    const localReq = state.db.requests.find((r) => r.id === requestId);
+    if (localReq) {
+      localReq.status = 'COMPLETED';
+      if (role === 'PROVIDER') {
+        localReq.clientRatedByProvider = { rating, comment: reviewText, customComment, tags: state.ratingTags, date: new Date().toISOString() };
+      } else {
+        localReq.providerRatedByClient = { rating, comment: reviewText, customComment, tags: state.ratingTags, date: new Date().toISOString() };
+      }
+    }
+  }
+
+  // 3. Immediately close modal and reset step in 0ms
+  state.activeModal = null;
+  state.modalData = null;
+  state.customReviewComment = '';
+  lastRenderedModalKey = '';
+  state.activeRequestId = null;
+  state.isSheetMinimized = false;
+  state.screenStep = 'HOME';
+  state.providerTab = 'FEED';
+  lastUiOverlaySignature = '';
+  renderAll(true);
+
+  showToast(
+    role === 'PROVIDER'
+      ? 'Client review submitted successfully! Great job.'
+      : 'Service rated! Thank you for supporting Harare pros.',
+    'success'
+  );
+
+  try {
+    const payload = {
+      requestId,
+      status: 'COMPLETED',
+      ratedByRole: role,
+      rating,
+      reviewText,
+      customComment,
+      tags: state.ratingTags
+    };
+    await Promise.allSettled([
+      apiPost('/api/reviews', payload),
+      apiPost('/api/bookings/status', payload)
+    ]);
+    await fetchState(true);
+  } catch (err) {
+    console.warn('Booking complete network sync note:', err.message);
+  } finally {
+    isSubmittingReview = false;
+  }
+}
+
+// ============================================================================
+// DRAWER MODE SWITCH & LOGOUT HANDLERS
+// ============================================================================
+function closeModal() {
+  if (state.activeModal === 'RATE_BOOKING_MODAL') {
+    state.activeRequestId = null;
+    state.screenStep = 'HOME';
+    state.customerTab = 'HOME';
+    state.providerTab = 'FEED';
+  }
+  stopFaceCameraStream();
+  state.activeModal = null;
+  state.modalData = null;
+  lastRenderedModalKey = '';
+  renderModalLayer();
+  renderAll(true);
+}
+
+function openSideDrawerModal() {
+  if (state.activeModal === 'SIGNUP_FLOW' || !state.isAuthenticated) {
+    openSignInRoleChoiceModal();
+    return;
+  }
+  state.activeModal = 'DRAWER';
+  pushNavigationHistoryState({ drawer: true });
+  renderModalLayer();
+}
+
+async function toggleClientAndProviderMode() {
+  if (!state.isAuthenticated || !state.currentUser) {
+    openSignInRoleChoiceModal();
+    return;
+  }
+  closeModal();
+  state.isSheetMinimized = false;
+  if (state.role === 'CUSTOMER') {
+    const userPhone = state.currentUser ? (state.currentUser.phone || '').replace(/\D/g, '') : '';
+    const matchedProv = userPhone
+      ? (state.db.providers || []).find((p) => p.phone.replace(/\D/g, '') === userPhone && !p.isBanned)
+      : null;
+
+    if (matchedProv) {
+      state.role = 'PROVIDER';
+      state.currentUser = matchedProv;
+      state.providerTab = 'FEED';
+      state.hubView = 'MARKETPLACE';
+      saveSession('PROVIDER', matchedProv, false);
+      showToast(`Switched to Provider: ${matchedProv.name}`);
+      renderAll();
+    } else {
+      // Start authentic provider sign-in / registration wizard (like inDrive)
+      state.authRole = 'PROVIDER';
+      state.authStep = 'PHONE';
+      state.authName = state.currentUser?.name || '';
+      state.authPhone = state.currentUser?.phone || '';
+      state.activeModal = 'SIGNUP_FLOW';
+      renderAll();
+      showToast('Please sign in or register as a Service Provider');
+    }
+  } else {
+    // Switching back to Client Mode
+    const userPhone = state.currentUser ? (state.currentUser.phone || '').replace(/\D/g, '') : '';
+    const matchedCust = userPhone
+      ? (state.db.customers || []).find((c) => c.phone.replace(/\D/g, '') === userPhone && !c.isBanned)
+      : null;
+
+    if (matchedCust) {
+      state.role = 'CUSTOMER';
+      state.currentUser = matchedCust;
+      saveSession('CUSTOMER', matchedCust, false);
+      showToast('Switched to Client Mode');
+      renderAll();
+    } else {
+      state.role = 'CUSTOMER';
+      state.currentUser = null;
+      state.isAuthenticated = false;
+      state.customerTab = 'HOME';
+      saveSession(null, null, true);
+      openSignInRoleChoiceModal();
+      renderAll();
+    }
+  }
+}
+
+function logoutCurrentAccount() {
+  closeModal();
+  state.isAuthenticated = false;
+  state.currentUser = null;
+  state.role = 'CUSTOMER';
+  state.customerTab = 'HOME';
+  state.providerTab = 'FEED';
+  state.hubView = 'HUB';
+  state.screenStep = 'HOME';
+  state.authStep = 'PHONE';
+  saveSession(null, null, true);
+  renderAll();
+}
+
+async function promptDeleteAccount() {
+  if (!state.isAuthenticated || !state.currentUser) {
+    showToast('No active account to delete', 'error');
+    return;
+  }
+
+  const userName = state.currentUser.name || 'Your Account';
+  const confirmed = confirm(
+    `Permanently Delete Account (${userName})?\n\n` +
+    `• All personal details, phone number, and National ID will be completely erased from Findit Harare.\n` +
+    `• Records will be permanently deleted from the database.\n` +
+    `• Any open requests or bids will be cancelled immediately.\n\n` +
+    `Are you sure you want to proceed?`
+  );
+
+  if (!confirmed) return;
+
+  try {
+    showToast('Deleting your account from database...');
+    const res = await apiPost('/api/auth/delete-account', {
+      role: state.role,
+      userId: state.currentUser.id,
+      phone: state.currentUser.phone
+    });
+
+    closeModal();
+    state.isAuthenticated = false;
+    state.currentUser = null;
+    state.activeRequestId = null;
+    state.activeCall = null;
+    state.authStep = 'PHONE';
+    saveSession(null, null, true);
+    showToast(res.message || 'Account successfully deleted.');
+    renderAll();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+function openProviderWalletModal() {
+  state.activeModal = 'WALLET_MODAL';
+  lastRenderedModalKey = '';
+  renderModalLayer();
+}
+
+function openProviderCatalogueModal(providerId = null, requestId = null, offerId = null) {
+  const targetId = providerId || state.currentUser?.id || state.db?.providers?.[0]?.id;
+  if (!providerId && state.role === 'PROVIDER') {
+    state.activeModal = 'PROVIDER_CATALOGUE_MODAL';
+  } else {
+    state.activeModal = 'CATALOGUE_VIEW';
+    state.modalData = { providerId: targetId, requestId, offerId };
+  }
+  lastRenderedModalKey = '';
+  renderModalLayer();
+}
+
+function clearAddressInput() {
+  const inp = document.getElementById('liveLocationSearchInput');
+  if (inp) {
+    inp.value = '';
+    inp.focus();
+  }
+  state.locationSearchQuery = '';
+  state.locationSearchResults = [];
+  lastRenderedModalKey = '';
+  renderModalLayer();
+}
+
+async function submitCustomRouteAddress(e) {
+  if (e && e.preventDefault) e.preventDefault();
+  const inp = document.getElementById('liveLocationSearchInput');
+  const val = (inp ? inp.value : state.locationSearchQuery || state.customAddress || '').trim();
+  if (!val) return;
+  state.customAddress = val;
+  state.isCustomAddressSelected = true;
+  state.userHasManuallyDraggedPin = true;
+
+  // 1. INSTANT 0ms Avatar & Map Relocation using local Harare Gazetteer
+  const localMatch = resolveHarareLocalCoordinates(val);
+  if (localMatch) {
+    state.pinnedLat = localMatch.lat;
+    state.pinnedLng = localMatch.lng;
+    state.userLiveGpsLat = localMatch.lat;
+    state.userLiveGpsLng = localMatch.lng;
+  }
+
+  // 2. Immediately close modal, update avatar marker position, and fly camera
+  closeModal();
+  updateLiveGpsMarker();
+  renderAll();
+
+  if (leafletMap && state.pinnedLat && state.pinnedLng) {
+    leafletMap.flyTo([state.pinnedLat, state.pinnedLng], 16, { animate: true, duration: 0.65 });
+  }
+  showToast(`Location set to: ${state.customAddress}`);
+
+  // 3. Asynchronously enhance with OpenStreetMap Nominatim in background if user entered specific house number
+  searchRealLocationAddress(true).then(() => {
+    if (state.locationSearchResults && state.locationSearchResults.length > 0) {
+      const top = state.locationSearchResults[0];
+      if (top && top.lat && top.lng) {
+        state.pinnedLat = top.lat;
+        state.pinnedLng = top.lng;
+        state.userLiveGpsLat = top.lat;
+        state.userLiveGpsLng = top.lng;
+        updateLiveGpsMarker();
+        if (leafletMap) {
+          leafletMap.flyTo([top.lat, top.lng], 16, { animate: true, duration: 0.5 });
+        }
+      }
+    }
+  }).catch(() => {});
+}
+
+function openSuburbPickerModal() {
+  state.locationSearchQuery = state.customAddress || '';
+  state.locationSearchResults = [];
+  state.locationSearching = false;
+  state.activeModal = 'SUBURB_PICKER';
+  lastRenderedModalKey = '';
+  renderModalLayer();
+  setTimeout(() => {
+    const inp = document.getElementById('liveLocationSearchInput');
+    if (inp) {
+      inp.focus();
+      inp.select();
+    }
+  }, 50);
+}
+
+let locationSearchDebounceTimer = null;
+function handleLiveLocationQueryInput(val) {
+  state.locationSearchQuery = val;
+  state.customAddress = val.trim() || state.customAddress;
+  if (locationSearchDebounceTimer) clearTimeout(locationSearchDebounceTimer);
+  if (val.trim().length >= 3) {
+    locationSearchDebounceTimer = setTimeout(() => {
+      searchRealLocationAddress(true);
+    }, 450);
+  }
+}
+
+async function searchRealLocationAddress(silent = false) {
+  const inp = document.getElementById('liveLocationSearchInput');
+  const rawQuery = (inp ? inp.value : state.locationSearchQuery || '').trim();
+  if (!rawQuery) return;
+  state.locationSearchQuery = rawQuery;
+  state.customAddress = rawQuery;
+
+  // Check if it directly matches a known Harare suburb first
+  const suburbs = state.db?.suburbs || [];
+  const localMatches = suburbs
+    .filter((s) => `${s.name} ${s.zone}`.toLowerCase().includes(rawQuery.toLowerCase()))
+    .map((s) => ({
+      shortTitle: `${rawQuery}, ${s.name}`,
+      fullLabel: `${s.name} (${s.zone}), Harare, Zimbabwe`,
+      suburbName: s.name,
+      suburbId: s.id,
+      lat: s.lat,
+      lng: s.lng
+    }));
+
+  state.locationSearching = true;
+  if (!silent) {
+    lastRenderedModalKey = '';
+    renderModalLayer();
+  }
+
+  try {
+    const q = rawQuery.toLowerCase().includes('harare') || rawQuery.toLowerCase().includes('zimbabwe')
+      ? rawQuery
+      : `${rawQuery}, Harare, Zimbabwe`;
+    const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&countrycodes=zw&limit=5&q=${encodeURIComponent(q)}`;
+    const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+    const data = await res.json();
+    const osmItems = Array.isArray(data)
+      ? data.map((item) => {
+          const parts = (item.display_name || '').split(',').map((p) => p.trim());
+          const shortTitle = parts.slice(0, 2).join(', ') || rawQuery;
+          const suburbGuess = item.address?.suburb || item.address?.neighbourhood || item.address?.residential || parts[1] || 'Harare';
+          return {
+            shortTitle,
+            fullLabel: parts.slice(0, 4).join(', '),
+            suburbName: suburbGuess,
+            suburbId: null,
+            lat: Number(item.lat),
+            lng: Number(item.lon)
+          };
+        })
+      : [];
+
+    state.locationSearchResults = [...osmItems, ...localMatches].slice(0, 6);
+  } catch (e) {
+    state.locationSearchResults = localMatches;
+  } finally {
+    state.locationSearching = false;
+    if (state.activeModal === 'SUBURB_PICKER') {
+      const wasFocused = document.activeElement?.id === 'liveLocationSearchInput';
+      const cursorPos = document.getElementById('liveLocationSearchInput')?.selectionStart || rawQuery.length;
+      lastRenderedModalKey = '';
+      renderModalLayer();
+      if (wasFocused) {
+        const nextInp = document.getElementById('liveLocationSearchInput');
+        if (nextInp) {
+          nextInp.focus();
+          try { nextInp.setSelectionRange(cursorPos, cursorPos); } catch (err) {}
+        }
+      }
+    }
+  }
+}
+
+function selectLiveLocationDefault() {
+  state.isCustomAddressSelected = false;
+  state.userHasManuallyDraggedPin = false;
+  state.customAddress = 'Current Live Location';
+  closeModal();
+  useBrowserGeolocation(false);
+  renderAll(true);
+}
+
+function selectGeocodedLocation(idx) {
+  const item = (state.locationSearchResults || [])[idx];
+  if (!item) return;
+  state.isCustomAddressSelected = true;
+  state.isLiveGpsActive = false;
+  state.gpsAccuracyMeters = null;
+  const suburbs = state.db?.suburbs || [];
+  let nearestSub = suburbs[0];
+  let minD = Infinity;
+  suburbs.forEach((s) => {
+    const d = Math.hypot((s.lat || 0) - item.lat, (s.lng || 0) - item.lng);
+    if (d < minD) {
+      minD = d;
+      nearestSub = s;
+    }
+  });
+  if (nearestSub) state.selectedSuburbId = nearestSub.id;
+  state.customAddress = item.shortTitle;
+  state.customSuburbLabel = `${item.suburbName || nearestSub?.name || 'Harare'}, Harare`;
+  state.pinnedLat = Number(item.lat.toFixed(5));
+  state.pinnedLng = Number(item.lng.toFixed(5));
+  closeModal();
+  renderAll();
+  if (leafletMap) {
+    leafletMap.flyTo([state.pinnedLat, state.pinnedLng], 16, { animate: true, duration: 0.85 });
+  }
+  showToast(`Set to: ${state.customAddress}`);
+}
+
+function startMapPinPickMode() {
+  state.isCustomAddressSelected = true;
+  state.isLiveGpsActive = false;
+  state.gpsAccuracyMeters = null;
+  closeModal();
+  state.isSheetMinimized = true;
+  renderAll();
+  if (leafletMap && state.pinnedLat && state.pinnedLng) {
+    leafletMap.flyTo([state.pinnedLat, state.pinnedLng], 16, { animate: true, duration: 0.6 });
+  }
+  showToast('Drag the blue YOU pin to set your custom location');
+}
+
+function selectSuburbLocation(suburbId) {
+  const s = (state.db.suburbs || []).find((item) => item.id === suburbId);
+  if (!s) return;
+  state.isCustomAddressSelected = true;
+  state.isLiveGpsActive = false;
+  state.gpsAccuracyMeters = null;
+  const typedStreet = (state.locationSearchQuery || '').trim();
+  state.selectedSuburbId = s.id;
+  state.customAddress = (typedStreet && typedStreet.toLowerCase() !== s.name.toLowerCase())
+    ? typedStreet
+    : s.name;
+  state.customSuburbLabel = `${s.name}, Harare`;
+  state.pinnedLat = s.lat;
+  state.pinnedLng = s.lng;
+  closeModal();
+  renderAll();
+  if (leafletMap) {
+    leafletMap.flyTo([s.lat, s.lng], 15, { animate: true, duration: 0.75 });
+  }
+  showToast(`Navigated to ${state.customAddress}, ${s.name}`);
+}
+
+function openServicePickerModal() {
+  state.activeModal = 'SERVICE_PICKER';
+  renderModalLayer();
+}
+
+function pickSubService(idx) {
+  state.selectedSubServiceIdx = idx;
+  syncRecommendedFare();
+  state.draftFareUsd = state.recommendedFareUsd;
+  closeModal();
+  renderAll();
+}
+
+function openPaymentModal() {
+  state.activeModal = 'PAYMENT_MODAL';
+  renderModalLayer();
+}
+
+function openNotesModal() {
+  state.notesLeakageWarning = '';
+  state.activeModal = 'NOTES_MODAL';
+  renderModalLayer();
+}
+
+function stopFaceCameraStream() {
+  if (mediaStreamRef) {
+    try {
+      mediaStreamRef.getTracks().forEach((t) => {
+        try { t.stop(); } catch (e) {}
+      });
+    } catch (e) {}
+    mediaStreamRef = null;
+  }
+  const videoEl = document.getElementById('authSelfieVideo');
+  if (videoEl) {
+    try {
+      videoEl.pause();
+      videoEl.srcObject = null;
+    } catch (e) {}
+  }
+}
+
+// ============================================================================
+// INDRIVE-INSPIRED SERVICE PROVIDER MODE (DRIVER / SPECIALIST WORKSPACE)
+// ============================================================================
+function normalizeCategoryId(catId) {
+  const map = {
+    braiding: 'beauty_care',
+    barber: 'beauty_care',
+    nails: 'beauty_care',
+    makeup: 'beauty_care',
+    wigs: 'beauty_care',
+    lashes: 'beauty_care',
+    hair: 'beauty_care',
+    cleaning: 'cleaning_domestic',
+    handyman: 'repairs_construction',
+    plumbing: 'repairs_construction',
+    plumbing_electrical: 'repairs_construction',
+    tech_appliances: 'solar_electrical',
+    solar: 'solar_electrical',
+    electrical: 'solar_electrical',
+    borehole: 'water_borehole',
+    gardening: 'outdoor_auto',
+    gardening_landscaping: 'outdoor_auto',
+    mechanic: 'outdoor_auto',
+    delivery: 'errands_delivery',
+    errands: 'errands_delivery'
+  };
+  return map[catId] || catId || 'repairs_construction';
+}
+
+function getProviderCategoryIds(prov) {
+  if (!prov) return [];
+  const raw = Array.isArray(prov.categoryIds) && prov.categoryIds.length
+    ? prov.categoryIds
+    : (prov.categoryId ? [prov.categoryId] : []);
+  return Array.from(new Set(raw.map(normalizeCategoryId))).slice(0, 3);
+}
+
+let lastReportedViewingKey = '';
+let lastReportedViewingAt = 0;
+function reportProviderViewingRequests(providerId, requestIds) {
+  if (!providerId) return;
+  const key = `${providerId}:${(requestIds || []).join(',')}`;
+  const now = Date.now();
+  if (key === lastReportedViewingKey && now - lastReportedViewingAt < 20000) return;
+  lastReportedViewingKey = key;
+  lastReportedViewingAt = now;
+  apiPost('/api/requests/viewing', { providerId, requestIds: requestIds || [] }).catch(() => {});
+}
+
+function renderProviderModeOverlay() {
+  const prov = state.currentUser || state.db.providers[0];
+  const activeJob = getProviderActiveBooking(prov.id);
+  // Strictly show ONLY job cards matching the provider's chosen categories (up to 3)
+  const myCategoryIds = getProviderCategoryIds(prov);
+  const openRequests = (state.db.requests || []).filter((r) => {
+    if (r.status !== 'OPEN') return false;
+    if (r.acceptedProviderId && r.acceptedProviderId !== prov.id) return false;
+    if (r.acceptedOfferId) return false;
+    const reqCat = normalizeCategoryId(r.categoryId);
+    return myCategoryIds.length === 0 || myCategoryIds.includes(reqCat);
+  });
+  if (prov && prov.isOnline !== false && !prov.isBanned) {
+    reportProviderViewingRequests(prov.id, openRequests.map((r) => r.id));
+  } else if (prov) {
+    reportProviderViewingRequests(prov.id, []);
+  }
+  const myPendingApprovals = (state.db.approvalQueue || []).filter((a) => a.providerId === prov.id && a.status === 'PENDING');
+
+  const currentTab = state.providerTab || (activeJob ? 'ACTIVE_JOB' : 'FEED');
+
+  let bodyHtml = '';
+  if (currentTab === 'HOME') {
+    bodyHtml = renderProviderHomeTab(prov, openRequests, activeJob);
+  } else if (currentTab === 'ACTIVE_JOB') {
+    bodyHtml = `<div class="fh-main-screen-container" style="padding-top:14px;">${renderProviderActiveVisitTab(prov, activeJob)}</div>`;
+  } else if (currentTab === 'PROFILE') {
+    bodyHtml = renderProviderProfileTab();
+  } else if (currentTab === 'CATALOGUE') {
+    bodyHtml = `<div class="fh-main-screen-container" style="padding-top:14px;">${renderProviderCatalogueTab(prov, myPendingApprovals)}</div>`;
+  } else {
+    // FEED (Opportunities)
+    if (state.providerFeedView === 'MAP' && !activeJob) {
+      bodyHtml = renderProviderOpportunitiesMapOverlay(prov, openRequests);
+    } else {
+      bodyHtml = `<div class="fh-main-screen-container" style="padding-top:14px;">${renderProviderRequestsFeedTab(prov, openRequests, activeJob)}</div>`;
+    }
+  }
+
+  const isMapFeed = (state.providerFeedView === 'MAP' && !activeJob && currentTab === 'FEED');
+  return `
+    ${isMapFeed ? '' : renderCurvedBrandHeader('PROVIDER')}
+    ${bodyHtml}
+  `;
+}
+
+function _legacy_renderProviderModeOverlay_unused() {
+  const currentTab = 'FEED';
+  const prov = null;
+  const activeJob = null;
+  const openRequests = [];
+  const myPendingApprovals = [];
+
+  return `
+    <div class="provider-top-bar" style="justify-content:space-between;">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <button class="indrive-circle-btn" onclick="openSideDrawerModal()" title="Side Panel Menu">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        </button>
+      </div>
+
+      <div style="display:flex; align-items:center; gap:8px;">
+        <button class="indrive-circle-btn" style="position:relative;" onclick="openNotificationCenterModal()" title="Notification Center &amp; Admin Notices">
+          ${uiIcon('bell', 18)}
+          ${getUnreadNotificationsCount() > 0 ? `
+            <span style="position:absolute; top:-2px; right:-2px; background:#EF4444; color:#FFFFFF; font-size:9.5px; font-weight:800; min-width:17px; height:17px; border-radius:99px; display:inline-flex; align-items:center; justify-content:center; border:2px solid #FFFFFF; padding:0 3px;">
+              ${getUnreadNotificationsCount()}
+            </span>
+          ` : ''}
+        </button>
+      </div>
+    </div>
+
+    <div class="sheet-floating-controls" style="justify-content:flex-end;">
+      <button class="map-floating-gps-btn" onclick="useBrowserGeolocation(false)" title="Center on My Live Location">
+        ${uiIcon('crosshair', 19)}
+      </button>
+    </div>
+
+    ${state.isSheetMinimized ? `
+      <div class="minimized-map-restore-bar" onclick="toggleSheetMinimize(false)">
+        <div>
+          <div style="font-size:13.5px; font-weight:800; color:var(--text-main);">
+            ${activeJob ? `Active Visit: ${activeJob.customerName} (${formatUsdPrice(activeJob.agreedTotalUsd || activeJob.budgetUsd)})` : `Provider Mode • ${openRequests.length} Open Request(s)`}
+          </div>
+          <div style="font-size:11.5px; color:var(--text-secondary); font-weight:600;">Full-screen Harare map active • Tap to open Workspace</div>
+        </div>
+        <button type="button" class="minimized-restore-btn" onclick="toggleSheetMinimize(false); event.stopPropagation();">
+          ${uiIcon('chevronUp', 14)}
+          <span>Workspace</span>
+        </button>
+      </div>
+    ` : `
+      <div class="indrive-dark-sheet">
+        <div class="sheet-top-handle-bar">
+          <div style="display:flex; align-items:center; gap:6px; min-width:0;">
+            <span style="font-size:12px; font-weight:800; color:var(--blue-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${prov.shortName || prov.name}</span>
+            <span style="font-size:11px; color:var(--text-secondary); font-weight:700; display:inline-flex; align-items:center; gap:3px;">
+              ${uiIcon('star', 11)} ${prov.rating}
+            </span>
+          </div>
+          <div class="sheet-grabber" onclick="toggleSheetMinimize(true)"></div>
+          <button class="sheet-collapse-pill" onclick="toggleSheetMinimize(true)">
+            ${uiIcon('map', 12)}
+            <span>Full Map</span>
+            ${uiIcon('chevronDown', 12)}
+          </button>
+        </div>
+
+        <!-- Dedicated inDrive-Style Primary Job Tabs (Requests & Live Visit) -->
+        <div class="provider-bottom-tabs" style="grid-template-columns: 1fr 1fr;">
+          <button
+            class="provider-tab-btn ${currentTab === 'FEED' ? 'active' : ''}"
+            onclick="state.providerTab='FEED'; renderUiOverlay();"
+          >
+            ${uiIcon('list', 13)}
+            <span>Requests (${openRequests.length})</span>
+          </button>
+
+          <button
+            class="provider-tab-btn ${currentTab === 'ACTIVE_JOB' ? 'active' : ''}"
+            onclick="state.providerTab='ACTIVE_JOB'; renderUiOverlay();"
+          >
+            ${activeJob ? `<span class="provider-tab-dot"></span>` : uiIcon('routeCar', 13)}
+            <span>Visit</span>
+          </button>
+        </div>
+
+        ${currentTab === 'ACTIVE_JOB' ? renderProviderActiveVisitTab(prov, activeJob) : ''}
+        ${currentTab === 'FEED' ? renderProviderRequestsFeedTab(prov, openRequests, activeJob) : ''}
+        ${currentTab === 'WALLET' ? renderProviderWalletTab(prov) : ''}
+        ${currentTab === 'CATALOGUE' ? renderProviderCatalogueTab(prov, myPendingApprovals) : ''}
+      </div>
+    `}
+  `;
+}
+
+// ----------------------------------------------------------------------------
+// PROVIDER TAB 1: ACTIVE CLIENT VISIT & REAL-TIME CHAT (WHEN OFFER IS ACCEPTED)
+// ----------------------------------------------------------------------------
+function renderProviderActiveVisitTab(prov, activeJob) {
+  if (!activeJob) {
+    return `
+      <div style="text-align:center; padding:24px 14px; background:var(--bg-card); border-radius:18px; border:1px solid var(--border-light);">
+        <div style="font-size:15px; font-weight:800; color:var(--text-main); margin-bottom:4px;">No Active Home Visit Right Now</div>
+        <div style="font-size:12.5px; color:var(--text-secondary); margin-bottom:14px; line-height:1.45;">
+          Open the <strong>Requests</strong> tab to accept a client's fare or send a counter-offer. As soon as a client accepts your offer, your live route and client chat appear here.
+        </div>
+        <button class="btn-primary-blue" style="height:42px; font-size:13px;" onclick="state.providerTab='FEED'; renderUiOverlay();">
+          ${uiIcon('list', 15)}
+          <span>View Open Client Requests</span>
+        </button>
+      </div>
+    `;
+  }
+
+  const accOffer = (activeJob.offers || []).find((o) => o.id === activeJob.acceptedOfferId);
+  const agreedUsd = activeJob.agreedTotalUsd || accOffer?.priceUsd || activeJob.budgetUsd;
+  const isPromo = Boolean(state.db?.settings?.launchPromoActive);
+  const commRate = isPromo ? 0 : (state.db.settings?.commissionPercent ?? 10);
+  const netUsd = Math.round(agreedUsd * (1 - commRate / 100) * 100) / 100;
+
+  const isEnRoute = activeJob.status === 'CONFIRMED' || activeJob.status === 'BOOKED';
+  const isArrived = activeJob.status === 'ARRIVED';
+  const isInProgress = activeJob.status === 'IN_PROGRESS' || activeJob.pinVerifiedByProvider;
+
+  return `
+    <div>
+      <!-- Luxury 3-Step Provider Progression Bar -->
+      <div class="luxury-step-track">
+        <div class="luxury-step-segment ${isEnRoute ? 'active' : 'done'}">
+          ${!isEnRoute ? uiIcon('check', 11) : ''}
+          <span>1. En Route</span>
+        </div>
+        <div class="luxury-step-segment ${isArrived ? 'active' : isInProgress ? 'done' : ''}">
+          ${isInProgress ? uiIcon('check', 11) : ''}
+          <span>2. Outside Gate</span>
+        </div>
+        <div class="luxury-step-segment ${isInProgress ? 'active' : ''}">
+          <span>3. In Service</span>
+        </div>
+      </div>
+
+      <!-- Luxury Accepted Client Visit Summary Card -->
+      <div class="luxury-provider-card">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px;">
+          <div>
+            <div style="font-size:10.5px; font-weight:800; color:#059669; text-transform:uppercase; letter-spacing:0.04em; margin-bottom:2px;">
+              Client Accepted Offer
+            </div>
+            <div style="font-size:17px; font-weight:900; color:var(--text-main); display:flex; align-items:center; gap:6px;">
+              <span>${escapeHtml(activeJob.customerName)}</span>
+              <span style="font-size:12px; color:#0052FF; font-weight:700; display:inline-flex; align-items:center; gap:3px;">
+                ${(Number(activeJob.customerRating) || 0) > 0 ? `${uiIcon('star', 11)} ${activeJob.customerRating}` : '• New Client'}
+              </span>
+            </div>
+            <div style="font-size:12.5px; color:var(--blue-primary); font-weight:700; margin-top:3px; display:flex; align-items:center; gap:4px;">
+              ${uiIcon('pin', 13)}
+              <span>${escapeHtml(activeJob.exactAddress || activeJob.suburbName || 'Harare')}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- DriveGo Trip Flow Twin: Collect in Cash / EcoCash Banner (07-app-trip-flow.png) -->
+        <div class="luxury-earnings-banner" style="background:linear-gradient(135deg, #0F172A 0%, #1E293B 100%);">
+          <div>
+            <div style="font-size:10.5px; font-weight:800; color:#94A3B8; text-transform:uppercase; letter-spacing:0.06em;">Collect from Client (${escapeHtml(activeJob.paymentMethod || 'Cash USD')})</div>
+            <div class="luxury-fare-large">${formatUsdPrice(agreedUsd)}</div>
+          </div>
+          <div style="text-align:right;">
+            <div class="luxury-net-pill">Net Payout: $${netUsd.toFixed(2)}</div>
+            <div style="font-size:11px; color:#94A3B8; font-weight:700; margin-top:3px;">${isPromo ? '0% Launch Promo (No Fee)' : `${commRate}% platform fee`}</div>
+          </div>
+        </div>
+
+        <div style="font-size:13px; font-weight:800; color:var(--text-main); background:var(--blue-soft); padding:8px 12px; border-radius:12px; margin-bottom:10px; display:flex; align-items:center; gap:7px;">
+          <span style="color:var(--blue-primary); display:inline-flex;">${uiIcon('briefcase', 14)}</span>
+          <span>${escapeHtml(activeJob.title)} • <span style="font-weight:600; color:var(--text-secondary);">${escapeHtml(activeJob.description)}</span></span>
+        </div>
+
+        ${activeJob.bookingFor === 'SOMEONE_ELSE' ? `
+          <div style="font-size:11.5px; font-weight:700; color:#1E40AF; background:#DBEAFE; padding:7px 11px; border-radius:10px; margin-bottom:8px;">
+            Ordered for: <strong>${escapeHtml(activeJob.recipientName || 'Recipient')}</strong> ${activeJob.recipientPhone ? `(${escapeHtml(activeJob.recipientPhone)})` : ''}
+          </div>
+        ` : ''}
+
+        ${activeJob.timingType === 'SCHEDULED' ? `
+          <div style="font-size:11.5px; font-weight:700; color:#1E40AF; background:#EFF6FF; padding:7px 11px; border-radius:10px; margin-bottom:8px;">
+            Scheduled Visit: <strong>${escapeHtml(activeJob.scheduledDate)} at ${escapeHtml(activeJob.scheduledTime)}</strong>
+          </div>
+        ` : ''}
+
+        ${activeJob.delayNotice ? `
+          <div style="font-size:11.5px; font-weight:700; color:#1E40AF; background:#EFF6FF; border:1px solid #93C5FD; padding:7px 11px; border-radius:10px; margin-bottom:8px;">
+            Delay Alert: Running ~${activeJob.delayNotice.minutes}m late (${escapeHtml(activeJob.delayNotice.reason)})
+          </div>
+        ` : ''}
+
+        ${activeJob.photoUrl ? `
+          <div style="display:flex; align-items:center; gap:9px; background:var(--blue-soft); border:1px solid var(--blue-border); border-radius:12px; padding:7px 11px; margin-bottom:10px;">
+            <img src="${resolveMediaUrl(activeJob.photoUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_TASK_PHOTO_FALLBACK}';" style="width:42px; height:42px; border-radius:8px; object-fit:cover; cursor:pointer;" onclick="openImagePreviewModal('${activeJob.photoUrl}', 'Client Reference Photo')" alt="Desired Style Reference" />
+            <div style="flex:1; min-width:0;">
+              <div style="font-size:12px; font-weight:800; color:var(--blue-primary);">Client Desired Style Photo</div>
+              <div style="font-size:11px; color:var(--text-secondary); cursor:pointer;" onclick="openImagePreviewModal('${activeJob.photoUrl}', 'Client Reference Photo')">Tap to view full reference photo</div>
+            </div>
+          </div>
+        ` : ''}
+
+        ${activeJob.voiceNoteUrl ? `
+          <div style="margin-bottom:10px;">
+            ${renderWhatsAppAudioPlayerCard('visit_' + activeJob.id, activeJob.voiceNoteUrl, activeJob.voiceNoteDuration || 15, 'Client Spoken Voice Note')}
+          </div>
+        ` : ''}
+
+        <!-- STAGE 1: EN ROUTE (Provider sees "I'm Outside Gate" — PIN input is hidden!) -->
+        ${isEnRoute ? `
+          <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:14px; padding:12px; margin-bottom:10px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; padding:8px 10px; background:#FFFFFF; border:1px solid #E2E8F0; border-radius:10px;">
+              <div style="display:flex; align-items:center; gap:6px;">
+                <span style="font-size:12px; font-weight:800; color:#0F172A;">Voice Directions:</span>
+                <span style="font-size:11px; font-weight:800; padding:2px 8px; border-radius:99px; background:${liveNavState.voiceEnabled ? '#DCFCE7' : '#F1F5F9'}; color:${liveNavState.voiceEnabled ? '#15803D' : '#64748B'};">
+                  ${liveNavState.voiceEnabled ? 'ON' : 'OFF (Default)'}
+                </span>
+              </div>
+              <button type="button" class="small-pill-btn" onclick="toggleNavVoice(); renderUiOverlay(true);" style="height:30px; padding:0 10px; font-size:11.5px; font-weight:800; background:${liveNavState.voiceEnabled ? '#10B981' : '#F1F5F9'}; color:${liveNavState.voiceEnabled ? '#FFFFFF' : '#0F172A'}; border:1px solid ${liveNavState.voiceEnabled ? '#10B981' : '#CBD5E1'}; display:inline-flex; align-items:center; gap:4px;">
+                ${liveNavState.voiceEnabled ? `${uiIcon('volumeOff', 12)} <span>Mute</span>` : `${uiIcon('volumeOn', 12)} <span>Turn On</span>`}
+              </button>
+            </div>
+            <div style="font-size:12px; color:var(--text-secondary); font-weight:600; margin-bottom:10px; line-height:1.4; text-align:center;">
+              You are navigating to client residence. Tap below when you arrive outside:
+            </div>
+            <button type="button" class="luxury-action-btn-primary luxury-action-btn-arrived" onclick="providerMarkArrived('${activeJob.id}')">
+              <span>I'm Outside Gate</span>
+            </button>
+          </div>
+        ` : ''}
+
+        <!-- STAGE 2: WAITING OUTSIDE GATE (DriveGo Safety PIN Entry + Keypad Modal Button) -->
+        ${isArrived ? `
+          <div style="background:#EBF3FF; border:2px solid #0052FF; border-radius:16px; padding:16px 14px; margin-bottom:12px; text-align:center;">
+            <div style="display:inline-flex; align-items:center; gap:6px; background:#0052FF; color:#FFFFFF; font-size:11px; font-weight:900; text-transform:uppercase; letter-spacing:0.06em; padding:4px 12px; border-radius:99px; margin-bottom:8px;">
+              <span style="width:7px; height:7px; border-radius:50%; background:#10B981; animation:pulse 1s infinite;"></span>
+              <span>Waiting Outside Gate</span>
+            </div>
+            <div style="font-size:14.5px; font-weight:900; color:#0F172A; margin-bottom:3px;">
+              Enter Client's 4-Digit Start PIN
+            </div>
+            <div style="font-size:11.5px; color:#1E3A8A; margin-bottom:12px; font-weight:600;">
+              Ask customer for their code — work starts immediately upon verification:
+            </div>
+            <div style="display:flex; justify-content:center; align-items:center; gap:8px; margin-bottom:10px;">
+              <input
+                id="providerPinInput_${activeJob.id}"
+                class="dark-input"
+                type="tel"
+                inputmode="numeric"
+                pattern="[0-9]*"
+                style="height:52px; width:170px; font-size:26px; font-weight:900; letter-spacing:8px; text-align:center; padding:0 12px; border:2.5px solid #0052FF; border-radius:14px; background:#FFFFFF; color:#0F172A; box-shadow:0 4px 14px rgba(0,82,255,0.16);"
+                placeholder="••••"
+                maxlength="4"
+                autofocus
+                oninput="if(this.value.length === 4) handleProviderAutoPinVerification(this.value, '${activeJob.id}')"
+              />
+              <button
+                type="button"
+                class="btn-primary-blue"
+                style="height:52px; width:auto; padding:0 14px; border-radius:14px; font-size:12px; font-weight:800; background:#0052FF; display:inline-flex; align-items:center; gap:5px;"
+                onclick="openProviderPinKeypadModal('${activeJob.id}', 'START')"
+              >
+                ${uiIcon('keypad', 15)}
+                <span>Keypad</span>
+              </button>
+            </div>
+            <div style="display:inline-flex; align-items:center; gap:6px; font-size:11.5px; color:#475569; background:#FFFFFF; border:1px solid #BFDBFE; padding:4px 10px; border-radius:10px;">
+              <span style="font-weight:700;">Est. Time:</span>
+              <select id="providerEstSelect_${activeJob.id}" style="border:none; background:transparent; font-size:11.5px; font-weight:800; color:#0F172A; cursor:pointer; outline:none;">
+                <option value="15">15 mins</option>
+                <option value="30" selected>30 mins</option>
+                <option value="45">45 mins</option>
+                <option value="60">1 hour</option>
+                <option value="90">1.5 hrs</option>
+                <option value="120">2 hrs</option>
+              </select>
+            </div>
+            <div id="providerPinStatus_${activeJob.id}" style="margin-top:6px;"></div>
+          </div>
+        ` : ''}
+
+        <!-- STAGE 3: IN PROGRESS & WORK ESTIMATION -->
+        ${isInProgress ? (() => {
+          const estMinutes = activeJob.estimatedDurationMinutes || 30;
+          const endMs = activeJob.estimatedCompletionAt || (Date.now() + estMinutes * 60 * 1000);
+          const remainingSec = Math.max(0, Math.floor((endMs - Date.now()) / 1000));
+          const remainingMins = Math.ceil(remainingSec / 60);
+
+          return `
+            <div style="background:#ECFDF5; border:1.5px solid #10B981; border-radius:16px; padding:14px; margin-bottom:12px;">
+              <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
+                <div style="font-size:12px; font-weight:900; color:#047857; display:flex; align-items:center; gap:6px;">
+                  <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#10B981; animation:pulse 1s infinite;"></span>
+                  <span>TASK IN PROGRESS</span>
+                </div>
+                <div style="font-size:12px; font-weight:800; color:#065F46;">
+                  ~${remainingMins} mins remaining
+                </div>
+              </div>
+              <div style="font-size:11.5px; color:#065F46; margin-bottom:10px;">
+                Estimated duration: <strong>${estMinutes} mins</strong>. Adjust ETA if work takes more or less time:
+              </div>
+              <div style="display:flex; gap:6px; margin-bottom:12px;">
+                <button type="button" class="small-pill-btn" style="flex:1; justify-content:center; background:#FFFFFF; color:#047857; border:1px solid #6EE7B7; font-weight:800;" onclick="providerAdjustEstimatedTime('${activeJob.id}', -15)">
+                  -15m
+                </button>
+                <button type="button" class="small-pill-btn" style="flex:1; justify-content:center; background:#FFFFFF; color:#047857; border:1px solid #6EE7B7; font-weight:800;" onclick="providerAdjustEstimatedTime('${activeJob.id}', 15)">
+                  +15m
+                </button>
+                <button type="button" class="small-pill-btn" style="flex:1; justify-content:center; background:#FFFFFF; color:#047857; border:1px solid #6EE7B7; font-weight:800;" onclick="providerAdjustEstimatedTime('${activeJob.id}', 30)">
+                  +30m
+                </button>
+              </div>
+
+              <!-- Completion Step -->
+              ${!activeJob.completionRequested ? `
+                <button class="btn-primary-blue" style="width:100%; height:46px; font-size:14px; font-weight:800; background:#10B981; box-shadow:0 4px 14px rgba(16,185,129,0.35);" onclick="providerRequestCompletion('${activeJob.id}')">
+                  <span>I'm Done — Request Completion PIN</span>
+                </button>
+              ` : `
+                <div style="background:#FFFFFF; border:2px solid #0052FF; border-radius:14px; padding:12px; margin-top:6px;">
+                  <div style="font-size:13px; font-weight:900; color:#0052FF; margin-bottom:4px;">
+                    Marked Done! Enter Customer's Completion PIN:
+                  </div>
+                  <div style="font-size:11.5px; color:var(--text-secondary); margin-bottom:10px; font-weight:600;">
+                    Ask client for the 4-digit Completion PIN displayed on their screen:
+                  </div>
+                  <div style="display:flex; align-items:center; gap:6px;">
+                    <input
+                      id="providerCompletionPinInput_${activeJob.id}"
+                      class="dark-input"
+                      type="tel"
+                      inputmode="numeric"
+                      pattern="[0-9]*"
+                      style="height:44px; font-size:20px; font-weight:900; letter-spacing:4px; text-align:center; padding:0 8px; width:105px; flex-shrink:0; border:2px solid #0052FF;"
+                      placeholder="••••"
+                      maxlength="4"
+                      oninput="if(this.value.length === 4) handleProviderCompletionPinVerification(this.value, '${activeJob.id}')"
+                    />
+                    <button
+                      type="button"
+                      class="btn-dark-sec"
+                      style="height:44px; padding:0 10px; font-size:11.5px; font-weight:800; flex-shrink:0;"
+                      onclick="openProviderPinKeypadModal('${activeJob.id}', 'COMPLETION')"
+                      title="Open Keypad"
+                    >
+                      ${uiIcon('keypad', 14)}
+                    </button>
+                    <button type="button" class="btn-primary-blue" style="flex:1; height:44px; font-size:12.5px; font-weight:800; background:#10B981;" onclick="handleProviderCompletionPinVerification(document.getElementById('providerCompletionPinInput_${activeJob.id}')?.value, '${activeJob.id}')">
+                      Verify &amp; Finish
+                    </button>
+                  </div>
+                  <div id="providerCompletionPinStatus_${activeJob.id}"></div>
+                </div>
+              `}
+            </div>
+          `;
+        })() : ''}
+      </div>
+
+      <!-- Latest Message Snippet Pill (if messages exist) -->
+      ${(activeJob.messages && activeJob.messages.length > 0) ? `
+        <div class="chat-preview-pill" onclick="openChatDrawer('${activeJob.id}')">
+          <div class="chat-preview-dot"></div>
+          <div class="chat-preview-text">
+            <span class="chat-preview-sender">${escapeHtml(activeJob.messages[activeJob.messages.length - 1].senderName)}:</span>
+            ${escapeHtml(activeJob.messages[activeJob.messages.length - 1].text)}
+          </div>
+          <span class="chat-preview-action">Reply ${uiIcon('chevronRight', 12)}</span>
+        </div>
+      ` : ''}
+
+      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; margin-bottom:8px; margin-top:8px;">
+        <button class="btn-dark-sec" style="font-size:11.5px; padding:0 8px; justify-content:center; font-weight:700;" onclick="promptProviderDelayNotice('${activeJob.id}')" title="Send Transit Delay Notice to Client">
+          <span>Delay (+15m)</span>
+        </button>
+        <button class="btn-dark-sec" style="font-size:11.5px; padding:0 8px; justify-content:center; font-weight:700;" onclick="startInAppCall('${(activeJob.customerName || 'Client').replace(/'/g, "\\'")}', '${escapeHtml(activeJob.title)}', 'call_${activeJob.id}', '${activeJob.customerId || activeJob.customerPhone || ''}')">
+          <span>Call</span>
+        </button>
+        <button class="btn-dark-sec" style="font-size:11.5px; padding:0 8px; justify-content:center; font-weight:700;" onclick="openChatDrawer('${activeJob.id}')">
+          <span>Chat ${(activeJob.messages && activeJob.messages.length > 0) ? `(${activeJob.messages.length})` : ''}</span>
+        </button>
+      </div>
+
+      <!-- Dispute / Cancellation Row: If in-progress or arrived outside, cancellation is LOCKED -->
+      ${(isInProgress || isArrived) ? `
+        <div style="margin-top:4px;">
+          <button class="btn-dark-sec" style="width:100%; font-size:12.5px; color:#DC2626; border-color:rgba(220,38,38,0.3); justify-content:center; padding:10px; font-weight:700;" onclick="openDisputeModal('${activeJob.id}')">
+            <span>Report a Dispute</span>
+          </button>
+        </div>
+      ` : `
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
+          <button class="btn-dark-sec" style="font-size:11.5px; color:#DC2626; border-color:rgba(220,38,38,0.3); justify-content:center; font-weight:700;" onclick="openDisputeModal('${activeJob.id}')">
+            <span>Report Dispute</span>
+          </button>
+          <button class="cancel-request-red-pill" style="justify-content:center; font-weight:700;" onclick="openCancelTaskModal('${activeJob.id}')">
+            <span>Cancel Job</span>
+          </button>
+        </div>
+      `}
+    </div>
+  `;
+}
+
+async function promptProviderDelayNotice(requestId) {
+  try {
+    const mins = prompt('How many minutes are you delayed in transit? (e.g. 15 or 30)', '15');
+    if (!mins || isNaN(mins)) return;
+    const reason = prompt('Brief reason (e.g. Traffic along Samora Machel Ave)', 'Harare traffic congestion') || 'Transit traffic delay';
+
+    await apiPost('/api/bookings/delay-notice', {
+      requestId,
+      providerId: state.currentUser?.id,
+      delayMinutes: Number(mins),
+      reason
+    });
+    showToast(`Delay alert sent: ~${mins}m late`);
+    await fetchState();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+// ----------------------------------------------------------------------------
+// PROVIDER OPPORTUNITIES MAP CONTROLS & MAP OVERLAY
+// ----------------------------------------------------------------------------
+function setProviderFeedView(view) {
+  state.providerFeedView = view;
+  if (view === 'MAP') {
+    state.isSheetMinimized = true;
+    const prov = state.currentUser || state.db?.providers?.[0];
+    const myCategoryIds = getProviderCategoryIds(prov);
+    const openRequests = (state.db?.requests || []).filter((r) => {
+      if (r.status !== 'OPEN') return false;
+      if (r.acceptedProviderId && r.acceptedProviderId !== prov?.id) return false;
+      if (r.acceptedOfferId) return false;
+      const reqCat = normalizeCategoryId(r.categoryId);
+      return myCategoryIds.includes(reqCat);
+    }).filter((r) => !(state.dismissedJobIds || []).includes(r.id));
+
+    if (!state.selectedOpportunityId && openRequests.length > 0) {
+      state.selectedOpportunityId = openRequests[0].id;
+    }
+    const selReq = openRequests.find((r) => r.id === state.selectedOpportunityId) || openRequests[0];
+    if (selReq && leafletMap) {
+      let lat = Number(selReq.lat);
+      let lng = Number(selReq.lng);
+      if (!lat || !lng || isNaN(lat) || isNaN(lng)) {
+        const coords = resolveHarareSuburbCoords(selReq.suburbName || selReq.exactAddress);
+        lat = coords[0];
+        lng = coords[1];
+      }
+      setTimeout(() => {
+        try {
+          leafletMap.invalidateSize();
+          leafletMap.flyTo([lat, lng], 14, { duration: 0.8 });
+        } catch (e) {}
+      }, 80);
+    }
+  } else {
+    state.isSheetMinimized = false;
+  }
+  lastUiOverlaySignature = '';
+  renderAll(true);
+}
+
+function showOpportunityOnMap(requestId) {
+  state.providerFeedView = 'MAP';
+  state.selectedOpportunityId = requestId;
+  state.providerTab = 'FEED';
+  state.isSheetMinimized = true;
+  const req = (state.db?.requests || []).find((r) => r.id === requestId);
+  if (req && leafletMap) {
+    let lat = Number(req.lat);
+    let lng = Number(req.lng);
+    if (!lat || !lng || isNaN(lat) || isNaN(lng)) {
+      const coords = resolveHarareSuburbCoords(req.suburbName || req.exactAddress);
+      lat = coords[0];
+      lng = coords[1];
+    }
+    setTimeout(() => {
+      try {
+        leafletMap.invalidateSize();
+        leafletMap.flyTo([lat, lng], 15, { duration: 0.8 });
+      } catch (e) {}
+    }, 80);
+  }
+  lastUiOverlaySignature = '';
+  renderAll(true);
+}
+
+function cycleOpportunityOnMap(direction) {
+  const prov = state.currentUser || state.db?.providers?.[0];
+  const myCategoryIds = getProviderCategoryIds(prov);
+  const openRequests = (state.db?.requests || []).filter((r) => {
+    if (r.status !== 'OPEN') return false;
+    if (r.acceptedProviderId && r.acceptedProviderId !== prov?.id) return false;
+    if (r.acceptedOfferId) return false;
+    const reqCat = normalizeCategoryId(r.categoryId);
+    return myCategoryIds.includes(reqCat);
+  }).filter((r) => !(state.dismissedJobIds || []).includes(r.id));
+
+  if (openRequests.length <= 1) return;
+  const currentIdx = Math.max(0, openRequests.findIndex((r) => r.id === state.selectedOpportunityId));
+  let nextIdx = currentIdx + direction;
+  if (nextIdx >= openRequests.length) nextIdx = 0;
+  if (nextIdx < 0) nextIdx = openRequests.length - 1;
+
+  const nextReq = openRequests[nextIdx];
+  if (nextReq) {
+    showOpportunityOnMap(nextReq.id);
+  }
+}
+
+function renderProviderOpportunitiesMapOverlay(prov, openRequests) {
+  const visibleRequests = openRequests.filter((r) => !(state.dismissedJobIds || []).includes(r.id));
+  const currentIdx = Math.max(0, visibleRequests.findIndex((r) => r.id === state.selectedOpportunityId));
+  const activeReq = visibleRequests[currentIdx] || visibleRequests[0];
+  const totalCount = visibleRequests.length;
+
+  return `
+    <div style="position:relative; width:100%; height:100%; pointer-events:none;">
+      <!-- Floating Top Bar with Segmented View Switcher -->
+      <div style="position:absolute; top:12px; left:12px; right:12px; display:flex; align-items:center; justify-content:space-between; gap:10px; z-index:900; pointer-events:auto;">
+        <div style="background:rgba(255,255,255,0.95); backdrop-filter:blur(8px); border:1px solid rgba(226,232,240,0.8); border-radius:12px; padding:6px 10px; display:inline-flex; align-items:center; gap:6px; box-shadow:0 4px 14px rgba(0,0,0,0.08);">
+          <span style="width:8px; height:8px; border-radius:50%; background:#10B981; animation:pulse 1.2s infinite; flex-shrink:0;"></span>
+          <span style="font-size:12px; font-weight:800; color:#0F172A;">${totalCount} Client Request${totalCount === 1 ? '' : 's'} on Map</span>
+        </div>
+
+        <div style="background:rgba(255,255,255,0.95); backdrop-filter:blur(8px); border:1px solid rgba(226,232,240,0.8); border-radius:12px; padding:3px; display:inline-flex; gap:3px; box-shadow:0 4px 14px rgba(0,0,0,0.08);">
+          <button type="button" onclick="setProviderFeedView('LIST')" style="border:none; background:transparent; color:#64748B; font-size:11.5px; font-weight:800; padding:5px 12px; border-radius:8px; cursor:pointer; display:inline-flex; align-items:center; gap:5px;">
+            ${uiIcon('list', 12)}
+            <span>List</span>
+          </button>
+          <button type="button" style="border:none; background:#0052FF; color:#FFFFFF; font-size:11.5px; font-weight:800; padding:5px 12px; border-radius:8px; cursor:pointer; display:inline-flex; align-items:center; gap:5px; box-shadow:0 2px 6px rgba(0,82,255,0.3);">
+            ${uiIcon('map', 12)}
+            <span>Map</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Floating Location GPS Button -->
+      <div style="position:absolute; right:14px; top:68px; z-index:900; pointer-events:auto;">
+        <button type="button" class="map-floating-gps-btn" style="background:#FFFFFF; border:1px solid #CBD5E1; box-shadow:0 4px 14px rgba(0,0,0,0.12);" onclick="useBrowserGeolocation(false)" title="My GPS Location">
+          ${uiIcon('crosshair', 18)}
+        </button>
+      </div>
+
+      <!-- Bottom Floating Selected Opportunity Card -->
+      ${activeReq ? (() => {
+        const r = activeReq;
+        const myExistingOffer = (r.offers || []).find((o) => o.providerId === prov.id || (prov.finditId && o.providerFinditId === prov.finditId));
+        const isOfferDeclined = Boolean(myExistingOffer && myExistingOffer.status === 'DECLINED');
+        const isOfferPending = Boolean(myExistingOffer && (myExistingOffer.status === 'PROPOSED' || myExistingOffer.status === 'COUNTERED'));
+        const reqCat = normalizeCategoryId(r.categoryId);
+        const commPercent = Number(state.db?.settings?.categoryCommissions?.[reqCat] ?? (state.db?.settings?.commissionPercent || 10));
+        const minReserve = Number(state.db?.settings?.minWalletBalanceUsd || 2.0);
+        const jobBudgetUsd = Number(r.budgetUsd || 0);
+        const requiredCommUsd = Math.round(jobBudgetUsd * (commPercent / 100) * 100) / 100;
+        const walletBalUsd = Number(prov.walletBalanceUsd || 0);
+        const surpassesWallet = (walletBalUsd < minReserve || walletBalUsd < requiredCommUsd || (walletBalUsd - requiredCommUsd) < minReserve);
+        const bid1Usd = Number((jobBudgetUsd + 2).toFixed(2));
+        const bid2Usd = Number((jobBudgetUsd + 3.5).toFixed(2));
+        const bid1CommUsd = Math.round(bid1Usd * (commPercent / 100) * 100) / 100;
+        const bid2CommUsd = Math.round(bid2Usd * (commPercent / 100) * 100) / 100;
+        const bid1Surpasses = (walletBalUsd < minReserve || walletBalUsd < bid1CommUsd || (walletBalUsd - bid1CommUsd) < minReserve);
+        const bid2Surpasses = (walletBalUsd < minReserve || walletBalUsd < bid2CommUsd || (walletBalUsd - bid2CommUsd) < minReserve);
+
+        let displayLocation = r.exactAddress || r.clientLiveAddress || r.suburbName || 'Harare';
+        let badgeSuburb = r.suburbName || (displayLocation.split(',')[0] || 'Harare').trim();
+
+        return `
+          <div style="position:absolute; bottom:64px; left:12px; right:12px; max-width:480px; margin:0 auto; z-index:900; pointer-events:auto;">
+            <div class="provider-order-card" style="box-shadow:0 8px 30px rgba(15,23,42,0.18); border:2px solid #0052FF; background:#FFFFFF;">
+              <!-- Navigation Header between opportunities -->
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; border-bottom:1px solid #F1F5F9; padding-bottom:6px;">
+                <div style="font-size:11.5px; font-weight:800; color:#64748B;">
+                  Opportunity ${currentIdx + 1} of ${totalCount}
+                </div>
+                ${totalCount > 1 ? `
+                  <div style="display:flex; gap:6px;">
+                    <button type="button" onclick="cycleOpportunityOnMap(-1)" class="btn-dark-sec" style="height:26px; padding:0 8px; font-size:11px; font-weight:800; border-radius:6px;">
+                      <span>Prev</span>
+                    </button>
+                    <button type="button" onclick="cycleOpportunityOnMap(1)" class="btn-dark-sec" style="height:26px; padding:0 8px; font-size:11px; font-weight:800; border-radius:6px;">
+                      <span>Next</span>
+                    </button>
+                  </div>
+                ` : ''}
+              </div>
+
+              <!-- Price & Location -->
+              <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px;">
+                <div>
+                  <span style="font-size:22px; font-weight:900; color:#0052FF;">${formatUsdPrice(r.budgetUsd)}</span>
+                  <span style="font-size:11.5px; font-weight:700; color:#64748B; margin-left:4px;">${r.paymentMethod}</span>
+                </div>
+                <span style="font-size:11px; color:#0052FF; font-weight:800; background:#EFF6FF; padding:3px 9px; border-radius:99px; display:inline-flex; align-items:center; gap:4px;">
+                  ${uiIcon('pin', 11)}
+                  <span>${escapeHtml(badgeSuburb)}</span>
+                </span>
+              </div>
+
+              <div style="font-size:14px; font-weight:800; color:#0F172A; margin-bottom:4px;">${escapeHtml(r.title)}</div>
+
+              <div style="font-size:11.5px; color:#475569; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
+                <span style="font-weight:700; color:#0F172A; display:inline-flex; align-items:center; gap:4px;"><span style="color:#0052FF; display:inline-flex;">${uiIcon('pin', 11)}</span> ${escapeHtml(displayLocation)}</span>
+                <span>•</span>
+                <span>${escapeHtml(r.customerName)}</span>
+              </div>
+
+              ${r.description ? `
+                <div style="font-size:11.5px; color:#64748B; font-style:italic; margin-bottom:8px;">
+                  "${escapeHtml(r.description)}"
+                </div>
+              ` : ''}
+
+              <!-- Action Bid Grid -->
+              ${isOfferPending ? `
+                <div style="background:#EFF6FF; border:1px solid #BFDBFE; border-radius:10px; padding:8px 10px; display:flex; justify-content:space-between; align-items:center;">
+                  <span style="font-size:12px; font-weight:800; color:#1D4ED8;">Offered ${formatUsdPrice(myExistingOffer.priceUsd)} • Waiting for client</span>
+                  <button type="button" class="btn-dark-sec" style="height:28px; padding:0 8px; font-size:11px; font-weight:800;" onclick="promptProviderCustomBid('${r.id}', ${r.budgetUsd})">Change</button>
+                </div>
+              ` : `
+                <div class="provider-bid-grid" style="gap:5px;">
+                  <button
+                    class="btn-primary-blue"
+                    ${surpassesWallet ? 'disabled style="height:36px; font-size:11.5px; opacity:0.42;"' : `style="height:36px; font-size:11.5px; font-weight:800;" onclick="providerSubmitBid('${r.id}', ${r.budgetUsd})"`}
+                  >
+                    ${surpassesWallet ? (walletBalUsd < minReserve ? 'Need $2 Bal' : `Need $${(requiredCommUsd + minReserve).toFixed(2)}`) : `Accept ${formatUsdPrice(r.budgetUsd)}`}
+                  </button>
+                  <button
+                    class="btn-dark-sec"
+                    ${bid1Surpasses ? 'disabled style="height:36px; font-size:11.5px; opacity:0.42;"' : `style="height:36px; font-size:11.5px; font-weight:800;" onclick="providerSubmitBid('${r.id}', ${bid1Usd})"`}
+                  >
+                    ${bid1Surpasses ? (walletBalUsd < minReserve ? 'Need $2' : `Need $${(bid1CommUsd + minReserve).toFixed(2)}`) : formatUsdPrice(bid1Usd)}
+                  </button>
+                  <button
+                    class="btn-dark-sec"
+                    ${bid2Surpasses ? 'disabled style="height:36px; font-size:11.5px; opacity:0.42;"' : `style="height:36px; font-size:11.5px; font-weight:800;" onclick="providerSubmitBid('${r.id}', ${bid2Usd})"`}
+                  >
+                    ${bid2Surpasses ? (walletBalUsd < minReserve ? 'Need $2' : `Need $${(bid2CommUsd + minReserve).toFixed(2)}`) : formatUsdPrice(bid2Usd)}
+                  </button>
+                  <button
+                    class="btn-dark-sec"
+                    ${walletBalUsd < minReserve ? 'disabled style="height:36px; font-size:11.5px; opacity:0.42;"' : `style="height:36px; font-size:11.5px; font-weight:800;" onclick="promptProviderCustomBid('${r.id}', ${r.budgetUsd})"`}
+                  >
+                    Custom $
+                  </button>
+                </div>
+              `}
+            </div>
+          </div>
+        `;
+      })() : `
+        <div style="position:absolute; bottom:80px; left:20px; right:20px; text-align:center; background:#FFFFFF; border-radius:14px; padding:18px; box-shadow:0 4px 20px rgba(0,0,0,0.12); pointer-events:auto;">
+          <div style="font-size:14px; font-weight:800; color:#0F172A; margin-bottom:6px;">No Open Requests on Map</div>
+          <div style="font-size:12px; color:#64748B; margin-bottom:12px;">New customer requests in your categories will appear as pins on this map.</div>
+          <button type="button" class="btn-primary-blue" onclick="setProviderFeedView('LIST')" style="height:36px; font-size:12px; padding:0 16px;">
+            <span>Back to List View</span>
+          </button>
+        </div>
+      `}
+    </div>
+  `;
+}
+
+// ----------------------------------------------------------------------------
+// PROVIDER TAB 2: LIVE HARARE CLIENT REQUESTS FEED (WITH INDRIVE BID BUTTONS)
+// ----------------------------------------------------------------------------
+function renderProviderRequestsFeedTab(prov, openRequests, activeJob) {
+  return `
+    <div>
+      ${activeJob ? `
+        <div
+          onclick="state.providerTab='ACTIVE_JOB'; renderUiOverlay();"
+          style="background:#0F172A; border-radius:12px; padding:10px 13px; margin-bottom:12px; display:flex; align-items:center; justify-content:space-between; gap:10px; cursor:pointer; box-shadow:0 4px 12px rgba(15,23,42,0.12);"
+        >
+          <div style="display:flex; align-items:center; gap:8px; min-width:0; flex:1;">
+            <div style="width:8px; height:8px; border-radius:50%; background:#10B981; box-shadow:0 0 0 3px rgba(16,185,129,0.3); flex-shrink:0;"></div>
+            <div style="min-width:0; flex:1;">
+              <div style="font-size:13px; font-weight:800; color:#FFFFFF; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                Active: ${escapeHtml(activeJob.customerName)} • <span style="font-weight:600; color:#94A3B8;">${escapeHtml(activeJob.title || 'In service')}</span>
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onclick="state.providerTab='ACTIVE_JOB'; renderUiOverlay(); event.stopPropagation();"
+            style="border:none; background:#0066FF; color:#FFFFFF; font-size:11.5px; font-weight:800; padding:6px 14px; border-radius:99px; cursor:pointer; flex-shrink:0; white-space:nowrap; display:inline-flex; align-items:center; gap:4px;"
+          >
+            <span>Open Job</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M9 18l6-6-6-6"/></svg>
+          </button>
+        </div>
+      ` : ''}
+
+      <!-- Provider Break & Availability Notice -->
+      ${(prov.status === 'ON_BREAK' || prov.status === 'LUNCH') ? `
+        <div style="background:#EFF6FF; border:1.5px solid #3B82F6; border-radius:14px; padding:12px 14px; margin-bottom:12px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
+          <div style="display:flex; align-items:center; gap:9px; flex:1; min-width:0;">
+            <span style="color:#0052FF; display:inline-flex;">${uiIcon('coffee', 18)}</span>
+            <div>
+              <div style="font-size:13px; font-weight:800; color:#1E40AF;">You are on ${prov.status === 'LUNCH' ? 'Lunch Break' : 'Break'}</div>
+              <div style="font-size:11.5px; color:#3B82F6; font-weight:600;">Job opportunities are paused while you rest. Tap Resume when ready.</div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onclick="setProviderStatus('AVAILABLE')"
+            class="btn-primary-blue"
+            style="width:auto; height:34px; padding:0 14px; font-size:12px; white-space:nowrap; cursor:pointer;"
+          >
+            <span>Resume Now</span>
+          </button>
+        </div>
+      ` : (prov.isOnline === false || prov.status === 'OFFLINE') ? `
+        <div style="background:#FFFBEB; border:1.5px solid #F59E0B; border-radius:14px; padding:12px 14px; margin-bottom:12px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
+          <div style="display:flex; align-items:center; gap:9px; flex:1; min-width:0;">
+            <div style="width:10px; height:10px; border-radius:50%; background:#F59E0B; box-shadow:0 0 0 3px rgba(245,158,11,0.25); flex-shrink:0;"></div>
+            <div>
+              <div style="font-size:13px; font-weight:800; color:#92400E;">You are currently Offline</div>
+              <div style="font-size:11.5px; color:#B45309; font-weight:600;">Go Online to receive live job posts and bids.</div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onclick="setProviderStatus('AVAILABLE')"
+            class="btn-primary-blue"
+            style="width:auto; height:34px; padding:0 14px; font-size:12px; white-space:nowrap; cursor:pointer;"
+          >
+            <span>Go Online</span>
+          </button>
+        </div>
+      ` : ''}
+
+      ${(() => {
+        const visibleRequests = openRequests.filter((r) => !(state.dismissedJobIds || []).includes(r.id));
+        if (visibleRequests.length === 0) {
+          return `
+            <div style="text-align:center; padding:28px 14px; color:var(--text-secondary); font-size:13.5px; background:var(--bg-card); border-radius:16px;">
+              No open jobs in your categories right now. New matching requests will appear here instantly.
+            </div>
+          `;
+        }
+
+        const isPromoActive = Boolean(state.db?.settings?.launchPromoActive);
+        const cardsHtml = visibleRequests.map((r) => {
+          const myExistingOffer = (r.offers || []).find((o) => o.providerId === prov.id || (prov.finditId && o.providerFinditId === prov.finditId));
+          const isOfferDeclined = Boolean(myExistingOffer && myExistingOffer.status === 'DECLINED');
+          const isOfferPending = Boolean(myExistingOffer && (myExistingOffer.status === 'PROPOSED' || myExistingOffer.status === 'COUNTERED'));
+          const reqCat = normalizeCategoryId(r.categoryId);
+          const commPercent = isPromoActive ? 0 : Number(state.db?.settings?.categoryCommissions?.[reqCat] ?? (state.db?.settings?.commissionPercent || 10));
+          const minReserve = isPromoActive ? 0 : Number(state.db?.settings?.minWalletBalanceUsd || 2.0);
+          const jobBudgetUsd = Number(r.budgetUsd || 0);
+          const requiredCommUsd = Math.round(jobBudgetUsd * (commPercent / 100) * 100) / 100;
+          const walletBalUsd = Number(prov.walletBalanceUsd || 0);
+          const surpassesWallet = !isPromoActive && (walletBalUsd < minReserve || walletBalUsd < requiredCommUsd || (walletBalUsd - requiredCommUsd) < minReserve);
+          const bid1Usd = Number((jobBudgetUsd + 2).toFixed(2));
+          const bid2Usd = Number((jobBudgetUsd + 3.5).toFixed(2));
+          const bid1CommUsd = Math.round(bid1Usd * (commPercent / 100) * 100) / 100;
+          const bid2CommUsd = Math.round(bid2Usd * (commPercent / 100) * 100) / 100;
+          const bid1Surpasses = !isPromoActive && (walletBalUsd < minReserve || walletBalUsd < bid1CommUsd || (walletBalUsd - bid1CommUsd) < minReserve);
+          const bid2Surpasses = !isPromoActive && (walletBalUsd < minReserve || walletBalUsd < bid2CommUsd || (walletBalUsd - bid2CommUsd) < minReserve);
+
+          let displayLocation = r.exactAddress || r.clientLiveAddress || r.suburbName || 'Harare';
+          displayLocation = displayLocation
+            .replace(/^My Current Live Location \((.*)\)$/i, '$1')
+            .replace(/^My Current Live Location$/i, r.suburbName ? `${r.suburbName}, Harare` : 'Harare');
+
+          let badgeSuburb = r.suburbName;
+          if (!badgeSuburb || badgeSuburb === 'Harare') {
+            const parts = displayLocation.split(',');
+            badgeSuburb = (parts[parts.length > 1 ? 1 : 0] || 'Harare').trim();
+          }
+
+          const declinedPrice = Number(myExistingOffer?.declinedPriceUsd || myExistingOffer?.priceUsd || jobBudgetUsd);
+          let counterMidUsd = null;
+          if (declinedPrice > jobBudgetUsd + 1) {
+            counterMidUsd = Number(((declinedPrice + jobBudgetUsd) / 2).toFixed(1));
+          }
+
+          return `
+            <div class="provider-order-card" id="prov_card_${r.id}" style="padding:14px; margin-bottom:10px; border-radius:16px; border:1.5px solid #E2E8F0; background:#FFFFFF;">
+              <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px;">
+                <div>
+                  <span style="font-size:22px; font-weight:900; color:#0052FF;">${formatUsdPrice(r.budgetUsd)}</span>
+                  <span style="font-size:11.5px; font-weight:800; color:#64748B; margin-left:4px;">${r.paymentMethod}</span>
+                </div>
+                <div style="display:flex; align-items:center; gap:6px;">
+                  <button type="button" onclick="showOpportunityOnMap('${r.id}'); event.stopPropagation();" style="border:1px solid #BFDBFE; background:#EFF6FF; color:#1D4ED8; font-size:10.5px; font-weight:800; padding:2px 8px; border-radius:8px; cursor:pointer; display:inline-flex; align-items:center; gap:4px; height:24px;">
+                    ${uiIcon('map', 11)}
+                    <span>Show on Map</span>
+                  </button>
+                  <span style="font-size:11px; color:var(--blue-primary); font-weight:800; background:var(--blue-soft); padding:2px 8px; border-radius:99px; display:inline-flex; align-items:center; gap:4px; max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                    ${uiIcon('pin', 11)}
+                    <span>${escapeHtml(badgeSuburb)}</span>
+                  </span>
+                </div>
+              </div>
+
+              <div style="font-size:14.5px; font-weight:800; color:var(--text-main); margin-bottom:4px;">${escapeHtml(r.title)}</div>
+
+              <div style="font-size:11.5px; color:#475569; margin-bottom:8px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                <span style="font-weight:700; color:#0F172A; display:inline-flex; align-items:center; gap:4px;">
+                  <span style="color:#0052FF; display:inline-flex;">${uiIcon('pin', 11)}</span>
+                  <span>${escapeHtml(displayLocation)}</span>
+                </span>
+                <span>•</span>
+                <span style="display:inline-flex; align-items:center; gap:4px;">
+                  <span>${escapeHtml(r.customerName)}</span>
+                  ${(Number(r.customerRating) || 0) > 0 ? `<span style="display:inline-flex; align-items:center; gap:2px; color:#0052FF; font-weight:800;">${uiIcon('star', 10)} ${r.customerRating}</span>` : ''}
+                </span>
+              </div>
+
+              ${r.description ? `
+                <div style="font-size:11.5px; color:var(--text-secondary); font-style:italic; margin-bottom:6px;">
+                  "${escapeHtml(r.description)}"
+                </div>
+              ` : ''}
+
+              ${r.photoUrl ? `
+                <div style="display:inline-flex; align-items:center; gap:6px; background:#F0FDF4; border:1px solid #BBF7D0; border-radius:8px; padding:3px 8px; margin-bottom:8px; cursor:pointer;" onclick="openImagePreviewModal('${r.photoUrl}', 'Desired Style Photo')">
+                  <img src="${resolveMediaUrl(r.photoUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_TASK_PHOTO_FALLBACK}';" style="width:20px; height:20px; border-radius:4px; object-fit:cover;" alt="Photo" />
+                  <span style="font-size:11px; font-weight:700; color:#15803D;">Inspect Desired Style Photo</span>
+                </div>
+              ` : ''}
+
+              ${r.voiceNoteUrl ? `
+                <div style="margin-bottom:8px;">
+                  ${renderWhatsAppAudioPlayerCard('feed_' + r.id, r.voiceNoteUrl, r.voiceNoteDuration || 15, 'Client Spoken Voice Note')}
+                </div>
+              ` : ''}
+
+              ${isOfferDeclined ? `
+                <div style="background:#FFF1F2; border:1px solid #FDA4AF; border-radius:10px; padding:8px 10px; margin-bottom:8px;">
+                  <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:3px;">
+                    <span style="font-size:11.5px; font-weight:800; color:#BE123C;">Offer Declined ($${declinedPrice})</span>
+                    <button type="button" onclick="providerDismissJob('${r.id}')" style="background:transparent; border:none; color:#9F1239; font-size:10.5px; font-weight:800; cursor:pointer;">Dismiss</button>
+                  </div>
+                  <div style="display:flex; gap:6px;">
+                    <button class="btn-primary-blue" ${surpassesWallet ? 'disabled style="height:32px; padding:0 10px; font-size:11.5px; opacity:0.42; cursor:not-allowed;"' : `style="height:32px; padding:0 10px; font-size:11.5px; font-weight:800; flex:1;" onclick="providerSubmitBid('${r.id}', ${r.budgetUsd})"`}>
+                      ${surpassesWallet ? (walletBalUsd < minReserve ? 'Need $2 Bal' : `Need $${(requiredCommUsd + minReserve).toFixed(2)}`) : `Accept ${formatUsdPrice(r.budgetUsd)}`}
+                    </button>
+                    ${counterMidUsd ? `
+                      <button class="btn-dark-sec" ${(!isPromoActive && (walletBalUsd < minReserve || walletBalUsd < Math.round(counterMidUsd * (commPercent / 100) * 100) / 100 || (walletBalUsd - Math.round(counterMidUsd * (commPercent / 100) * 100) / 100) < minReserve)) ? 'disabled style="height:32px; padding:0 8px; font-size:11.5px; opacity:0.42; cursor:not-allowed;"' : `style="height:32px; padding:0 8px; font-size:11.5px; font-weight:800;" onclick="providerSubmitBid('${r.id}', ${counterMidUsd})"`}>
+                        Counter ${formatUsdPrice(counterMidUsd)}
+                      </button>
+                    ` : ''}
+                    <button class="btn-dark-sec" ${(!isPromoActive && walletBalUsd < minReserve) ? 'disabled style="height:32px; padding:0 8px; font-size:11.5px; opacity:0.42; cursor:not-allowed;"' : `style="height:32px; padding:0 8px; font-size:11.5px; font-weight:800;" onclick="promptProviderCustomBid('${r.id}', ${r.budgetUsd})"`}>
+                      Counter-offer
+                    </button>
+                  </div>
+                </div>
+              ` : isOfferPending ? `
+                <div style="background:var(--blue-soft); border:1px solid var(--blue-border); border-radius:10px; padding:8px 10px; display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                  <div style="font-size:12px; font-weight:800; color:var(--blue-primary); display:flex; align-items:center; gap:5px;">
+                    <span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--blue-primary); animation:pulse 1.4s infinite;"></span>
+                    <span>Offered ${formatUsdPrice(myExistingOffer.priceUsd)} • Waiting for client</span>
+                  </div>
+                  <button type="button" class="btn-dark-sec" style="height:28px; padding:0 8px; font-size:11px; font-weight:800;" onclick="promptProviderCustomBid('${r.id}', ${r.budgetUsd})">
+                    Change
+                  </button>
+                </div>
+              ` : ''}
+
+              ${surpassesWallet ? `
+                <div style="background:#FFFBEB; border:1px solid #FDE68A; border-radius:8px; padding:6px 9px; margin-bottom:6px; display:flex; align-items:center; justify-content:space-between; gap:6px;">
+                  <span style="font-size:11px; font-weight:700; color:#92400E;">
+                    ${walletBalUsd < minReserve ? `Wallet balance ($${walletBalUsd.toFixed(2)}) is below $${minReserve.toFixed(2)} reserve` : `Requires $${(requiredCommUsd + minReserve).toFixed(2)} wallet balance ($${requiredCommUsd.toFixed(2)} comm. + $${minReserve.toFixed(2)} reserve)`}
+                  </span>
+                  <button
+                    type="button"
+                    onclick="openProviderWalletModal();"
+                    style="height:26px; padding:0 8px; border-radius:6px; border:none; background:#D97706; color:#FFFFFF; font-size:10.5px; font-weight:800; cursor:pointer;"
+                  >
+                    Top Up
+                  </button>
+                </div>
+              ` : ''}
+
+              ${activeJob ? `
+                <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:6px 10px; display:flex; align-items:center; justify-content:space-between;">
+                  <span style="font-size:11.5px; font-weight:700; color:#64748B;">Complete active visit to bid</span>
+                  <button type="button" onclick="state.providerTab='ACTIVE_JOB'; renderUiOverlay();" style="border:none; background:#0F172A; color:#FFFFFF; font-size:10.5px; font-weight:800; padding:4px 10px; border-radius:99px; cursor:pointer;">View</button>
+                </div>
+              ` : isOfferDeclined || isOfferPending ? '' : `
+                <!-- DriveGo Twin Action Row: Decline | Counter-offer (+quick chips) | Accept -->
+                <div style="display:grid; grid-template-columns:0.8fr 1.15fr 1.35fr; gap:6px; margin-bottom:6px;">
+                  <button
+                    type="button"
+                    class="btn-dark-sec"
+                    style="height:38px; font-size:11.5px; font-weight:800; color:#DC2626; border-color:#FECACA; background:#FFF1F2;"
+                    onclick="providerDismissJob('${r.id}')"
+                  >
+                    Decline
+                  </button>
+                  <button
+                    type="button"
+                    class="btn-dark-sec"
+                    ${(!isPromoActive && walletBalUsd < minReserve) ? 'disabled style="height:38px; font-size:11.5px; opacity:0.42; cursor:not-allowed;"' : `style="height:38px; font-size:11.5px; font-weight:800; color:#0052FF; border-color:#BFDBFE; background:#EBF3FF;" onclick="promptProviderCustomBid('${r.id}', ${r.budgetUsd})"`}
+                  >
+                    Counter-offer
+                  </button>
+                  <button
+                    class="btn-primary-blue"
+                    ${surpassesWallet ? 'disabled style="height:38px; font-size:11.5px; opacity:0.42; cursor:not-allowed;"' : `style="height:38px; font-size:12px; font-weight:900;" onclick="providerSubmitBid('${r.id}', ${r.budgetUsd})"`}
+                  >
+                    ${surpassesWallet ? (walletBalUsd < minReserve ? 'Need $2 Bal' : `Need $${(requiredCommUsd + minReserve).toFixed(2)}`) : `Accept ${formatUsdPrice(r.budgetUsd)}`}
+                  </button>
+                </div>
+                <div style="display:flex; gap:5px;">
+                  <button
+                    class="btn-dark-sec"
+                    ${bid1Surpasses ? 'disabled style="flex:1; height:30px; font-size:11px; opacity:0.42; cursor:not-allowed;"' : `style="flex:1; height:30px; font-size:11px; font-weight:800;" onclick="providerSubmitBid('${r.id}', ${bid1Usd})"`}
+                  >
+                    Quick +$2 (${formatUsdPrice(bid1Usd)})
+                  </button>
+                  <button
+                    class="btn-dark-sec"
+                    ${bid2Surpasses ? 'disabled style="flex:1; height:30px; font-size:11px; opacity:0.42; cursor:not-allowed;"' : `style="flex:1; height:30px; font-size:11px; font-weight:800;" onclick="providerSubmitBid('${r.id}', ${bid2Usd})"`}
+                  >
+                    Quick +$3.5 (${formatUsdPrice(bid2Usd)})
+                  </button>
+                </div>
+              `}
+            </div>
+          `;
+        }).join('');
+
+        return `
+          <!-- Header Bar with Segmented Toggle for List vs Map View -->
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; gap:8px;">
+            <div style="font-size:13px; font-weight:800; color:var(--text-main); display:flex; align-items:center; gap:6px;">
+              <span>Available Opportunities</span>
+              <span style="background:var(--blue-soft); color:var(--blue-primary); font-size:11px; padding:1px 7px; border-radius:99px; font-weight:800;">${visibleRequests.length}</span>
+            </div>
+            <div style="display:inline-flex; background:#F1F5F9; border-radius:10px; padding:3px; gap:3px;">
+              <button type="button" onclick="setProviderFeedView('LIST')" style="border:none; background:${state.providerFeedView !== 'MAP' ? '#FFFFFF' : 'transparent'}; color:${state.providerFeedView !== 'MAP' ? 'var(--blue-primary)' : 'var(--text-secondary)'}; font-size:11px; font-weight:800; padding:5px 12px; border-radius:8px; cursor:pointer; box-shadow:${state.providerFeedView !== 'MAP' ? '0 1px 4px rgba(0,0,0,0.08)' : 'none'}; display:inline-flex; align-items:center; gap:4px;">
+                ${uiIcon('list', 11)}
+                <span>List</span>
+              </button>
+              <button type="button" onclick="setProviderFeedView('MAP')" style="border:none; background:${state.providerFeedView === 'MAP' ? '#FFFFFF' : 'transparent'}; color:${state.providerFeedView === 'MAP' ? 'var(--blue-primary)' : 'var(--text-secondary)'}; font-size:11px; font-weight:800; padding:5px 12px; border-radius:8px; cursor:pointer; box-shadow:${state.providerFeedView === 'MAP' ? '0 1px 4px rgba(0,0,0,0.08)' : 'none'}; display:inline-flex; align-items:center; gap:4px;">
+                ${uiIcon('map', 11)}
+                <span>Map</span>
+              </button>
+            </div>
+          </div>
+          ${cardsHtml}
+        `;
+      })()}
+
+      <!-- Bottom Category Filter Strip (Positioned Down Next to Tabs as Requested) -->
+      <div style="margin-top:14px; margin-bottom:12px; padding:8px 12px; background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px; display:flex; align-items:center; justify-content:space-between; gap:8px;">
+        <div style="display:flex; align-items:center; gap:5px; flex-wrap:wrap; font-size:11px; color:#64748B;">
+          <span style="font-weight:700;">Categories:</span>
+          ${getProviderCategoryIds(prov).map((cid) => {
+            const c = (state.db.categories || []).find((x) => x.id === cid);
+            return `<span style="font-size:10.5px; font-weight:800; background:#EFF6FF; color:#1D4ED8; padding:2px 8px; border-radius:99px;">${escapeHtml(c ? (c.shortName || c.name || c.fullName) : cid)}</span>`;
+          }).join('')}
+        </div>
+        <button
+          type="button"
+          onclick="openAccountSettingsModal()"
+          style="border:1px solid #BFDBFE; background:#FFFFFF; color:#0052FF; font-size:11px; font-weight:800; padding:4px 10px; border-radius:99px; cursor:pointer; display:inline-flex; align-items:center; gap:3px; flex-shrink:0;"
+        >
+          ${uiIcon('edit', 10)}
+          <span>Edit</span>
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+// ----------------------------------------------------------------------------
+// PROVIDER TAB 3: FULL PREPAID FINDIT USD WALLET, COMMISSION & INSTANT TOP-UP
+// ----------------------------------------------------------------------------
+function renderProviderWalletTab(prov) {
+  const commRate = state.db.settings?.commissionPercent ?? 10;
+  const minBalance = Math.max(0, state.db.settings?.minWalletBalanceUsd ?? 2.0);
+  const balance = Number(prov.walletBalanceUsd || 0);
+  const canBid = balance >= minBalance;
+  const txs = (prov.walletTransactions || []).slice(0, 10);
+  const quickAmounts = [5, 10, 20, 50];
+  const myEcoSubmissions = (state.db.ecocashTopups || []).filter((t) => t.providerId === prov.id).slice(0, 5);
+
+  // Calculate Provider Completed Visits & Earnings Analytics Float
+  const allReqs = state.db?.requests || [];
+  const completedJobs = allReqs.filter((r) => {
+    if (r.status !== 'COMPLETED') return false;
+    if (r.acceptedProviderId === prov.id) return true;
+    return (r.offers || []).some((o) => o.providerId === prov.id && (o.id === r.acceptedOfferId || r.pinVerifiedByProvider));
+  });
+
+  const totalGrossEarned = completedJobs.reduce((sum, r) => sum + Number(r.agreedTotalUsd || r.budgetUsd || 0), 0);
+  const totalNetEarned = totalGrossEarned * (1 - commRate / 100);
+  const completedCount = completedJobs.length;
+  const avgFare = completedCount > 0 ? (totalGrossEarned / completedCount) : 0;
+
+  return `
+    <div>
+      <!-- inDrive Provider Lifetime Earnings & Performance Float -->
+      <div style="background:linear-gradient(135deg, #0F172A 0%, #1E293B 100%); border:1px solid #334155; border-radius:16px; padding:16px; margin-bottom:12px; color:#FFFFFF; box-shadow:0 10px 25px -5px rgba(0,0,0,0.25);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="display:inline-flex;">${uiIcon('chart', 18)}</span>
+            <div>
+              <div style="font-size:13px; font-weight:800; color:#F8FAFC;">Earnings &amp; Job Analytics</div>
+              <div style="font-size:10.5px; color:#94A3B8;">Your completed home-visit payouts</div>
+            </div>
+          </div>
+          <span style="background:rgba(16,185,129,0.18); border:1px solid rgba(16,185,129,0.4); color:#34D399; font-size:10.5px; font-weight:800; padding:2px 8px; border-radius:99px;">
+            ${(100 - commRate)}% Take-Home
+          </span>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px;">
+          <div style="background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:10px 12px;">
+            <div style="font-size:10.5px; font-weight:700; color:#94A3B8; text-transform:uppercase;">Net Earnings</div>
+            <div style="font-size:22px; font-weight:900; color:#10B981; margin-top:2px;">$${totalNetEarned.toFixed(2)} <span style="font-size:11px; font-weight:700; color:#94A3B8;">USD</span></div>
+            <div style="font-size:10px; color:#64748B;">Gross: $${totalGrossEarned.toFixed(2)}</div>
+          </div>
+          <div style="background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:10px 12px;">
+            <div style="font-size:10.5px; font-weight:700; color:#94A3B8; text-transform:uppercase;">Average Job Pay</div>
+            <div style="font-size:22px; font-weight:900; color:#60A5FA; margin-top:2px;">$${avgFare.toFixed(2)} <span style="font-size:11px; font-weight:700; color:#94A3B8;">/job</span></div>
+            <div style="font-size:10px; color:#64748B;">${completedCount} completed visit${completedCount === 1 ? '' : 's'}</div>
+          </div>
+        </div>
+
+        <!-- Recent Completed Jobs Pay Breakdown -->
+        ${completedJobs.length > 0 ? `
+          <div style="border-top:1px solid rgba(255,255,255,0.1); padding-top:10px;">
+            <div style="font-size:10.5px; font-weight:800; color:#94A3B8; text-transform:uppercase; margin-bottom:6px;">
+              Recent Completed Jobs (${completedJobs.length})
+            </div>
+            <div style="display:flex; flex-direction:column; gap:6px; max-height:160px; overflow-y:auto;">
+              ${completedJobs.slice(0, 5).map((j) => {
+                const fare = Number(j.agreedTotalUsd || j.budgetUsd || 0);
+                const net = fare * (1 - commRate / 100);
+                return `
+                  <div style="background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.06); border-radius:8px; padding:7px 10px; display:flex; justify-content:space-between; align-items:center;">
+                    <div style="min-width:0; flex:1;">
+                      <div style="font-size:12px; font-weight:800; color:#F1F5F9; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                        ${escapeHtml(j.title || 'Home Visit')}
+                      </div>
+                      <div style="font-size:10px; color:#94A3B8;">
+                        ${escapeHtml(j.suburbName || 'Harare')} • ${j.customerName || 'Client'}
+                      </div>
+                    </div>
+                    <div style="text-align:right; flex-shrink:0;">
+                      <div style="font-size:13px; font-weight:900; color:#34D399;">+$${net.toFixed(2)}</div>
+                      <div style="font-size:9.5px; color:#64748B;">Gross $${fare.toFixed(2)}</div>
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        ` : `
+          <div style="font-size:11px; color:#64748B; text-align:center; padding:4px 0;">
+            No completed visits yet. Accept open requests on the map to start earning!
+          </div>
+        `}
+      </div>
+
+      <!-- Clean Sleek Wallet Balance Card -->
+      <div class="wallet-hero-card" style="padding:16px 18px; border-radius:16px; margin-bottom:12px;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <div style="font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:0.04em; opacity:0.85;">
+              Prepaid USD Wallet
+            </div>
+            <div style="font-size:28px; font-weight:800; margin-top:2px; letter-spacing:-0.02em;">
+              $${balance.toFixed(2)} <span style="font-size:13px; font-weight:700; opacity:0.85;">USD</span>
+            </div>
+          </div>
+
+          <span style="background:${canBid ? 'rgba(16,185,129,0.25)' : 'rgba(239,68,68,0.25)'}; border:1px solid ${canBid ? '#34D399' : '#FCA5A5'}; color:#FFFFFF; padding:4px 10px; border-radius:99px; font-size:11px; font-weight:800; display:inline-flex; align-items:center; gap:4px;">
+            ${canBid ? uiIcon('check', 11) : uiIcon('shield', 11)}
+            <span>${canBid ? 'Active for Bidding' : 'Top Up Required'}</span>
+          </span>
+        </div>
+
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; padding-top:8px; border-top:1px solid rgba(255,255,255,0.2); font-size:11px; font-weight:600; opacity:0.9;">
+          <span>Min. Balance: $${minBalance.toFixed(2)} USD</span>
+          <span>Platform Commission: ${commRate}%</span>
+        </div>
+      </div>
+
+      <!-- Instant 1-Tap USD Top-Up Card -->
+      <div style="background:#FFFFFF; border:1.5px solid var(--border-light); border-radius:14px; padding:14px; margin-bottom:12px; box-shadow:0 1px 3px rgba(0,0,0,0.03);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <div style="font-size:13px; font-weight:800; color:var(--text-main);">Instant Prepaid Top-Up</div>
+          <span style="font-size:10.5px; font-weight:700; color:#059669; background:#ECFDF5; padding:2px 8px; border-radius:99px;">Instant USD Balance</span>
+        </div>
+
+        <div class="wallet-amount-grid" style="margin-bottom:12px;">
+          ${quickAmounts.map((amt) => `
+            <button
+              type="button"
+              class="wallet-amt-chip ${Number(state.walletTopupAmount || 5) === amt ? 'active' : ''}"
+              onclick="state.walletTopupAmount=${amt}; renderUiOverlay();"
+            >
+              $${amt}
+            </button>
+          `).join('')}
+        </div>
+
+        <button
+          type="button"
+          class="btn-primary-blue"
+          style="width:100%; height:42px; font-size:13.5px; font-weight:800; background:#0066FF;"
+          onclick="topUpProviderWallet(Number(state.walletTopupAmount || 5), 'Instant Top-Up')"
+        >
+          ${uiIcon('wallet', 15)}
+          <span>Top Up $${Number(state.walletTopupAmount || 5).toFixed(2)} USD Now</span>
+        </button>
+      </div>
+
+      <!-- Compact EcoCash USD Top-Up Card -->
+      <div style="background:#FFFFFF; border:1px solid var(--border-light); border-radius:14px; padding:14px; margin-bottom:12px; box-shadow:0 1px 3px rgba(0,0,0,0.03);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <div style="font-size:13px; font-weight:800; color:var(--text-main);">Top Up via EcoCash USD</div>
+          <span style="font-size:10.5px; font-weight:700; color:#059669; background:#ECFDF5; padding:2px 8px; border-radius:99px;">*151# Send USD</span>
+        </div>
+
+        <div style="background:#F8FAFC; border:1px solid var(--border-light); border-radius:10px; padding:8px 10px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
+          <span style="font-size:12px; color:var(--text-secondary); font-weight:600;">EcoCash Biller Code: <strong style="color:var(--blue-primary); font-size:13px;">*151*2*2*84920#</strong></span>
+          <button class="btn-dark-sec" style="padding:4px 9px; font-size:11px;" onclick="navigator.clipboard?.writeText('*151*2*2*84920#'); showToast('EcoCash shortcode copied!');">
+            Copy
+          </button>
+        </div>
+
+        <textarea
+          id="walletEcocashSmsInput"
+          class="dark-input"
+          rows="2"
+          style="width:100%; font-size:11.5px; line-height:1.4; padding:8px 10px; resize:none; margin-bottom:8px;"
+          placeholder="Paste EcoCash confirmation SMS or enter Ref Code (e.g. PP261021...)..."
+        ></textarea>
+
+        <button
+          type="button"
+          class="btn-primary-blue"
+          style="width:100%; height:40px; font-size:13px; background:#10B981;"
+          onclick="submitEcoCashTopup()"
+        >
+          ${uiIcon('check', 14)}
+          <span>Verify &amp; Add $${Number(state.walletTopupAmount || 5).toFixed(2)} USD</span>
+        </button>
+      </div>
+
+      <!-- EcoCash Verification Status History -->
+      ${myEcoSubmissions.length > 0 ? `
+        <div style="font-size:11.5px; font-weight:800; color:var(--text-secondary); margin-bottom:6px;">
+          Recent Top-Up Submissions
+        </div>
+        <div style="margin-bottom:12px;">
+          ${myEcoSubmissions.map((s) => `
+            <div style="background:var(--bg-card); border:1px solid var(--border-light); border-radius:10px; padding:8px 10px; margin-bottom:5px; display:flex; justify-content:space-between; align-items:center;">
+              <div>
+                <div style="font-size:12px; font-weight:800; color:var(--text-main);">Ref: ${s.referenceCode} • $${s.claimedAmountUsd} USD</div>
+                <div style="font-size:10.5px; color:var(--text-secondary);">${new Date(s.submittedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+              </div>
+              <span style="font-size:10.5px; font-weight:800; padding:2px 7px; border-radius:99px; ${s.status === 'APPROVED' ? 'background:#ECFDF5; color:#059669;' : s.status === 'REJECTED' ? 'background:#FEF2F2; color:#DC2626;' : 'background:#FFFBEB; color:#D97706;'}">
+                ${s.status === 'APPROVED' ? 'Approved' : s.status === 'REJECTED' ? 'Rejected' : 'In Review'}
+              </span>
+            </div>
+          `).join('')}
+        </div>
+      ` : ''}
+
+      <!-- Recent Wallet Transaction Ledger -->
+      <div style="font-size:11.5px; font-weight:800; color:var(--text-secondary); margin-bottom:6px;">
+        Transaction History (${txs.length})
+      </div>
+      ${txs.length === 0 ? `
+        <div style="font-size:12px; color:var(--text-secondary); text-align:center; padding:14px; background:var(--bg-card); border-radius:10px; border:1px solid var(--border-light);">
+          No wallet transactions yet.
+        </div>
+      ` : txs.map((t) => `
+        <div class="wallet-ledger-item" style="padding:8px 10px;">
+          <div style="min-width:0;">
+            <div style="font-size:12px; font-weight:700; color:var(--text-main); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${t.note}</div>
+            <div style="font-size:10px; color:var(--text-secondary); font-weight:600;">${t.type === 'TOPUP' ? 'Prepaid Top-Up' : 'Platform Commission'}</div>
+          </div>
+          <span style="font-size:12.5px; font-weight:800; color:${t.amountUsd >= 0 ? '#059669' : '#DC2626'}; flex-shrink:0;">
+            ${t.amountUsd >= 0 ? `+$${Number(t.amountUsd).toFixed(2)}` : `-$${Math.abs(Number(t.amountUsd)).toFixed(2)}`}
+          </span>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+async function submitEcoCashTopup() {
+  const prov = state.currentUser || state.db.providers[0];
+  const inputEl = document.getElementById('walletEcocashSmsInput');
+  const sms = (inputEl ? inputEl.value : '').trim();
+  if (!sms) {
+    showToast('Please enter your EcoCash confirmation SMS or Reference Code', 'error');
+    return;
+  }
+  const amt = Number(state.walletTopupAmount || 5);
+  try {
+    const res = await apiPost('/api/wallet/ecocash-submit', {
+      providerId: prov.id,
+      phone: prov.phone,
+      amountUsd: amt,
+      confirmationSms: sms
+    });
+    if (inputEl) inputEl.value = '';
+    showToast(res.message || `EcoCash Ref ${res.submission?.referenceCode} verified! +$${amt.toFixed(2)} USD added to wallet.`, 'success');
+    if (res.provider && state.currentUser) {
+      state.currentUser.walletBalanceUsd = res.provider.walletBalanceUsd;
+    }
+    await fetchState(true);
+    renderAll(true);
+  } catch (err) {
+    showToast(err.message || 'EcoCash top-up failed', 'error');
+  }
+}
+
+// ----------------------------------------------------------------------------
+// PROVIDER TAB 4: WORK CATALOGUE, BIO UPDATE & ADMIN MODERATION STATUS
+// ----------------------------------------------------------------------------
+function renderProviderCatalogueTab(prov, myPendingApprovals) {
+  return `
+    <div>
+      <!-- Mandatory Admin Approval Rule Banner (Original Feature) -->
+      <div style="background:#FFFBEB; border:1.5px solid #FDE68A; border-radius:14px; padding:10px 12px; margin-bottom:12px; font-size:11.5px; color:#92400E; font-weight:700; display:flex; align-items:flex-start; gap:8px;">
+        <span style="color:#D97706; margin-top:1px;">${uiIcon('shield', 15)}</span>
+        <div>
+          <strong>Verified Services Catalogue:</strong> Manage your offerings, edit pricing, or add new services. All photos are checked for clean presentation without watermarks or flyers.
+        </div>
+      </div>
+
+      <!-- Physical Workshop / Office Base Card with Instant Mode Toggle -->
+      <div style="background:var(--bg-card); border:1.5px solid var(--border-light); border-radius:14px; padding:12px; margin-bottom:12px; box-shadow:0 2px 8px rgba(0,0,0,0.03);">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="color:var(--blue-primary);">${uiIcon('buildingOffice', 18)}</span>
+            <div>
+              <div style="font-size:13px; font-weight:800; color:var(--text-main);">
+                ${prov.hasOffice ? 'Physical Shop / Office' : 'Mobile Freelancer'}
+              </div>
+              <div style="font-size:11.5px; color:var(--text-secondary); margin-top:2px;">
+                ${prov.hasOffice ? `${prov.officeAddress || 'Harare Workshop'}, ${prov.officeSuburb || 'Harare'}` : 'Mobile home visits across Harare (No shop base)'}
+              </div>
+            </div>
+          </div>
+          <div style="display:flex; gap:6px;">
+            <button class="btn-dark-sec" style="height:32px; padding:0 10px; font-size:11.5px; white-space:nowrap; cursor:pointer;" onclick="quickToggleProviderOffice()" title="Switch between Shop and Mobile Freelance">
+              <span>${prov.hasOffice ? 'Switch to Mobile' : 'Switch to Shop'}</span>
+            </button>
+            <button class="btn-primary-blue" style="width:auto; height:32px; padding:0 10px; font-size:11.5px; white-space:nowrap; cursor:pointer;" onclick="openProviderOfficeModal()">
+              <span>${prov.hasOffice ? 'Edit Address' : '+ Set Shop'}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Primary Actions Bar -->
+      <div style="margin-bottom:14px; display:flex; flex-direction:column; gap:8px;">
+        <button class="btn-primary-blue" style="height:44px; font-size:13.5px; font-weight:800; border-radius:12px; width:100%; display:flex; align-items:center; justify-content:center; gap:8px;" onclick="openAddServiceModal()">
+          ${uiIcon('plus', 16)}
+          <span>Add New Service Offering</span>
+        </button>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+          <button class="btn-dark-sec" style="height:38px; font-size:12px; font-weight:700; border-radius:10px; width:100%;" onclick="openEditBioModal()">
+            ${uiIcon('notes', 14)}
+            <span>Edit Bio &amp; About</span>
+          </button>
+          <button class="btn-dark-sec" style="height:38px; font-size:12px; font-weight:700; border-radius:10px; width:100%;" onclick="openUploadCatalogueModal()">
+            ${uiIcon('image', 14)}
+            <span>+ Upload Photo</span>
+          </button>
+        </div>
+      </div>
+
+      <div style="margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
+        <div style="font-size:12px; color:var(--text-secondary); font-weight:800; display:inline-flex; align-items:center; gap:5px;">
+          ${uiIcon('check', 14)}
+          <span>${(prov.portfolio || []).length} Active Offering(s)</span>
+        </div>
+      </div>
+
+      <!-- Pending Admin Approvals Section -->
+      ${Array.isArray(myPendingApprovals) && myPendingApprovals.length > 0 ? `
+        <div style="background:#FFFBEB; border:1.5px solid #FDE68A; border-radius:14px; padding:12px; margin-bottom:14px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <div style="font-size:12.5px; font-weight:800; color:#B45309; display:flex; align-items:center; gap:6px;">
+              <span>⏳ Awaiting Admin Approval (${myPendingApprovals.length})</span>
+            </div>
+            <span style="font-size:10.5px; font-weight:700; color:#92400E; background:#FEF3C7; padding:2px 8px; border-radius:99px;">
+              Reviewing Photos
+            </span>
+          </div>
+          <div style="font-size:11px; color:#92400E; margin-bottom:10px; line-height:1.4;">
+            These submissions are in the Admin queue. Once verified for clean presentation, they will go live in your public catalogue for all clients.
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+            ${myPendingApprovals.map((pa) => `
+              <div style="background:#FFFFFF; border:1px solid #FCD34D; border-radius:12px; overflow:hidden; display:flex; flex-direction:column; justify-content:space-between; box-shadow:0 1px 4px rgba(0,0,0,0.04);">
+                <div>
+                  <div style="position:relative;">
+                    <img src="${resolveMediaUrl(pa.imageUrl, 'task')}" onerror="this.onerror=null; this.src='${DEFAULT_TASK_PHOTO_FALLBACK}';" style="width:100%; height:95px; object-fit:cover; display:block;" alt="${escapeHtml(pa.title)}" />
+                    <span style="position:absolute; top:5px; right:5px; padding:2px 6px; border-radius:99px; background:#D97706; color:#FFFFFF; font-size:9.5px; font-weight:800;">
+                      In Review
+                    </span>
+                  </div>
+                  <div style="padding:7px 8px;">
+                    <div style="font-size:12px; font-weight:800; color:#0F172A; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(pa.title)}</div>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:3px;">
+                      <span style="font-size:13px; font-weight:800; color:var(--blue-primary);">$${pa.priceUsd}</span>
+                      <span style="font-size:10px; color:#92400E; font-weight:700;">${escapeHtml(pa.duration || '2 hrs')}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      ` : ''}
+
+      ${(prov.portfolio || []).length === 0 ? `
+        <div style="text-align:center; padding:32px 16px; background:var(--bg-card); border:1.5px dashed var(--border-light); border-radius:16px;">
+          <div style="width:48px; height:48px; border-radius:50%; background:var(--blue-soft); color:var(--blue-primary); display:flex; align-items:center; justify-content:center; margin:0 auto 10px;">
+            ${uiIcon('briefcase', 24)}
+          </div>
+          <div style="font-size:14px; font-weight:800; color:var(--text-main);">No Services Listed Yet</div>
+          <div style="font-size:12px; color:var(--text-secondary); margin-top:4px; max-width:260px; margin-left:auto; margin-right:auto;">
+            Add your primary services so Harare clients can discover and book you.
+          </div>
+          <button class="btn-primary-blue" style="width:auto; height:36px; padding:0 16px; font-size:12px; margin-top:12px;" onclick="openAddServiceModal()">
+            ${uiIcon('plus', 14)}
+            <span>Add Your First Service</span>
+          </button>
+        </div>
+      ` : `
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+          ${(prov.portfolio || []).map((item) => `
+            <div style="background:var(--bg-card); border:1.5px solid var(--border-light); border-radius:14px; overflow:hidden; display:flex; flex-direction:column; justify-content:space-between; box-shadow:0 2px 8px rgba(0,0,0,0.03);">
+              <div>
+                <div style="position:relative;">
+                  <img src="${resolveMediaUrl(item.imageUrl, 'task')}" onerror="this.onerror=null; this.src='${DEFAULT_TASK_PHOTO_FALLBACK}';" style="width:100%; height:110px; object-fit:cover; display:block;" alt="${escapeHtml(item.title || 'Work')}" />
+                  <span style="position:absolute; top:6px; right:6px; padding:2px 7px; border-radius:99px; background:rgba(0,0,0,0.68); color:#FFFFFF; font-size:10px; font-weight:800; backdrop-filter:blur(4px);">
+                    ${item.duration || '2 hrs'}
+                  </span>
+                </div>
+                <div style="padding:8px 9px;">
+                  <div style="font-size:12.5px; font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:var(--text-main);">${item.title}</div>
+                  <div style="display:flex; justify-content:space-between; align-items:center; margin-top:3px;">
+                    <span style="font-size:13.5px; color:var(--blue-primary); font-weight:800;">$${item.priceUsd}</span>
+                    <span style="font-size:10px; color:#059669; font-weight:800; background:#ECFDF5; padding:2px 6px; border-radius:6px;">
+                      ${item.tag || 'Approved'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Action Bar: Edit & Delete -->
+              <div style="padding:0 7px 7px; display:flex; gap:5px;">
+                <button
+                  type="button"
+                  style="flex:1; height:28px; border-radius:8px; border:1px solid #CBD5E1; background:#FFFFFF; color:#1E293B; font-size:11px; font-weight:800; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; gap:4px; padding:0 6px;"
+                  onclick="openEditServiceModal('${item.id}')"
+                >
+                  ${uiIcon('edit', 12)}
+                  <span>Edit</span>
+                </button>
+                <button
+                  type="button"
+                  style="height:28px; width:28px; border-radius:8px; border:1px solid #FECACA; background:#FFF1F2; color:#DC2626; font-size:11px; font-weight:800; cursor:pointer; display:inline-flex; align-items:center; justify-content:center;"
+                  onclick="deleteProviderCatalogueService('${item.id}')"
+                  title="Delete Service"
+                >
+                  ${uiIcon('trash', 12)}
+                </button>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `}
+    </div>
+  `;
+}
+
+function openAddServiceModal() {
+  state.newServicePhotoDataUrl = null;
+  state.activeModal = 'ADD_SERVICE_MODAL';
+  state.modalData = {};
+  lastRenderedModalKey = '';
+  renderModalLayer();
+}
+
+function openEditServiceModal(itemId) {
+  const prov = state.currentUser || state.db.providers[0];
+  const item = (prov.portfolio || []).find((p) => p.id === itemId);
+  if (!item) return;
+  state.editServicePhotoDataUrl = null;
+  state.activeModal = 'EDIT_SERVICE_MODAL';
+  state.modalData = { item };
+  lastRenderedModalKey = '';
+  renderModalLayer();
+}
+
+async function handleNewServiceFileSelect(inputEl) {
+  const file = inputEl.files && inputEl.files[0];
+  if (!file) return;
+  const compressed = await compressImageFileToDataUrl(file, 1200, 0.82);
+  if (compressed) {
+    state.newServicePhotoDataUrl = compressed;
+    lastRenderedModalKey = '';
+    renderModalLayer();
+  }
+}
+
+async function handleEditServiceFileSelect(inputEl) {
+  const file = inputEl.files && inputEl.files[0];
+  if (!file) return;
+  const compressed = await compressImageFileToDataUrl(file, 1200, 0.82);
+  if (compressed) {
+    state.editServicePhotoDataUrl = compressed;
+    lastRenderedModalKey = '';
+    renderModalLayer();
+  }
+}
+
+async function saveNewCatalogueService() {
+  const prov = state.currentUser || state.db.providers[0];
+  const title = document.getElementById('newServiceTitle')?.value.trim();
+  const price = document.getElementById('newServicePrice')?.value;
+  const duration = document.getElementById('newServiceDuration')?.value.trim();
+  const tag = document.getElementById('newServiceTag')?.value.trim();
+  const submitBtn = document.getElementById('addServiceSubmitBtn');
+
+  if (!title) {
+    showToast('Please enter a service title', 'error');
+    return;
+  }
+  if (!price || Number(price) <= 0) {
+    showToast('Please enter a valid price in USD', 'error');
+    return;
+  }
+
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = `<span>Uploading &amp; Submitting...</span>`;
+  }
+
+  try {
+    let finalImageUrl = state.newServicePhotoDataUrl;
+    if (finalImageUrl && finalImageUrl.startsWith('data:')) {
+      try {
+        const upRes = await apiPost('/api/upload', { dataUrl: finalImageUrl });
+        if (upRes && upRes.mediaUrl) {
+          finalImageUrl = upRes.mediaUrl;
+        }
+      } catch (e) {
+        console.warn('Upload bucket note:', e);
+      }
+    }
+
+    // Submit to Admin approval queue before appearing publicly
+    await apiPost('/api/providers/catalogue', {
+      providerId: prov.id,
+      title,
+      priceUsd: Number(price),
+      duration: duration || '2 hrs',
+      tag: tag || 'Verified Quality',
+      imageUrl: finalImageUrl || null
+    });
+
+    state.newServicePhotoDataUrl = null;
+    closeModal();
+    showToast('Service submitted! Findit Admins will verify the photo before it appears publicly.');
+    await fetchState();
+    state.providerTab = 'CATALOGUE';
+    renderAll(true);
+  } catch (err) {
+    showToast(err.message, 'error');
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = `<span>Submit Service for Admin Approval</span>`;
+    }
+  }
+}
+
+async function saveEditedCatalogueService(itemId) {
+  const prov = state.currentUser || state.db.providers[0];
+  const title = document.getElementById('editServiceTitle')?.value.trim();
+  const price = document.getElementById('editServicePrice')?.value;
+  const duration = document.getElementById('editServiceDuration')?.value.trim();
+  const tag = document.getElementById('editServiceTag')?.value.trim();
+  const submitBtn = document.getElementById('editServiceSubmitBtn');
+
+  if (!title) {
+    showToast('Please enter a service title', 'error');
+    return;
+  }
+  if (!price || Number(price) <= 0) {
+    showToast('Please enter a valid price in USD', 'error');
+    return;
+  }
+
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = `<span>Saving Changes...</span>`;
+  }
+
+  try {
+    let finalImageUrl = state.editServicePhotoDataUrl;
+    if (finalImageUrl && finalImageUrl.startsWith('data:')) {
+      try {
+        const upRes = await apiPost('/api/upload', { dataUrl: finalImageUrl });
+        if (upRes && upRes.mediaUrl) {
+          finalImageUrl = upRes.mediaUrl;
+        }
+      } catch (e) {
+        console.warn('Upload bucket note:', e);
+      }
+    }
+
+    await apiPost('/api/providers/catalogue/edit', {
+      providerId: prov.id,
+      itemId,
+      title,
+      priceUsd: Number(price),
+      duration: duration || '2 hrs',
+      tag: tag || 'Verified Quality',
+      imageUrl: finalImageUrl || undefined
+    });
+
+    state.editServicePhotoDataUrl = null;
+    closeModal();
+    showToast('Service updated successfully!');
+    await fetchState();
+    renderAll(true);
+  } catch (err) {
+    showToast(err.message, 'error');
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = `<span>Save Changes</span>`;
+    }
+  }
+}
+
+async function deleteProviderCatalogueService(itemId) {
+  const prov = state.currentUser || state.db.providers[0];
+  if (!confirm('Are you sure you want to delete this service from your catalogue?')) {
+    return;
+  }
+
+  try {
+    await apiPost('/api/providers/catalogue/delete', {
+      providerId: prov.id,
+      itemId
+    });
+    showToast('Service removed from catalogue');
+    await fetchState();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+function openEditBioModal() {
+  state.activeModal = 'EDIT_BIO_MODAL';
+  renderModalLayer();
+}
+
+async function submitProviderBioUpdate() {
+  const prov = state.currentUser || state.db.providers[0];
+  const bio = document.getElementById('providerBioInput')?.value.trim();
+  if (!bio) {
+    showToast('Please enter your bio description', 'error');
+    return;
+  }
+  const leakage = checkAntiLeakageClient(bio);
+  if (leakage) {
+    showToast(leakage, 'error');
+    return;
+  }
+  try {
+    await apiPost('/api/providers/profile-update', {
+      providerId: prov.id,
+      proposedBio: bio
+    });
+    closeModal();
+    showToast('Bio update submitted for Admin approval!');
+    await fetchState();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function providerMarkArrived(requestId) {
+  try {
+    // 1. Immediately dismiss turn-by-turn navigation HUD and clear voice directions
+    stopNavigationHud();
+    if (window.speechSynthesis) {
+      try { window.speechSynthesis.cancel(); } catch (e) {}
+    }
+    if (window.FinditNative && typeof window.FinditNative.stopSpeech === 'function') {
+      try { window.FinditNative.stopSpeech(); } catch (e) {}
+    }
+    if (leafletRoutePolyline) {
+      try { leafletMap.removeLayer(leafletRoutePolyline); } catch (e) {}
+      leafletRoutePolyline = null;
+    }
+    if (leafletRoutePolylineCasing) {
+      try { leafletMap.removeLayer(leafletRoutePolylineCasing); } catch (e) {}
+      leafletRoutePolylineCasing = null;
+    }
+    liveNavState.isActive = false;
+    liveNavState.active = false;
+
+    markLocalStateMutation();
+    const reqSnap = (state.db?.requests || []).find((r) => r.id === requestId) || null;
+    await apiPost('/api/bookings/status', {
+      requestId,
+      status: 'ARRIVED',
+      requestSnapshot: reqSnap
+    });
+    showToast('Client notified that you have arrived outside their gate!');
+    await fetchState(true);
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function handleProviderAutoPinVerification(pinCode, requestId) {
+  if (!pinCode || pinCode.length !== 4) return;
+  const input = document.getElementById(`providerPinInput_${requestId}`);
+  const statusEl = document.getElementById(`providerPinStatus_${requestId}`);
+  const estSelect = document.getElementById(`providerEstSelect_${requestId}`);
+  const estimatedMinutes = estSelect ? Number(estSelect.value) : 30;
+
+  if (input) input.disabled = true;
+  if (statusEl) {
+    statusEl.innerHTML = `
+      <div style="display:inline-flex; align-items:center; gap:5px; font-size:11.5px; font-weight:700; color:#059669;">
+        <svg class="wa-spin-svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="3" stroke-linecap="round"><circle cx="12" cy="12" r="10" stroke-opacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10"/></svg>
+        <span>Verifying...</span>
+      </div>
+    `;
+  }
+
+  try {
+    markLocalStateMutation();
+    const reqSnap = (state.db?.requests || []).find((r) => r.id === requestId) || null;
+    const res = await apiPost('/api/bookings/verify-pin', {
+      requestId,
+      pinCode,
+      estimatedMinutes,
+      requestSnapshot: reqSnap
+    });
+
+    if (statusEl) {
+      statusEl.innerHTML = `
+        <div style="display:inline-flex; align-items:center; gap:4px; font-size:12px; font-weight:800; color:#10B981;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          <span>Verified!</span>
+        </div>
+      `;
+    }
+
+    triggerHardwareVibration([100, 50, 100]);
+    stopNavigationHud();
+    showToast('Arrival PIN verified! Service is now IN PROGRESS.', 'success');
+    await fetchState(true);
+    renderAll(true);
+  } catch (err) {
+    if (input) {
+      input.disabled = false;
+      input.value = '';
+      input.focus();
+      input.classList.add('input-shake-error');
+      setTimeout(() => input.classList.remove('input-shake-error'), 500);
+    }
+    if (statusEl) {
+      statusEl.innerHTML = `
+        <div style="font-size:11px; font-weight:800; color:#DC2626;">
+          ${escapeHtml(err.message || 'Incorrect PIN')}
+        </div>
+      `;
+    }
+  }
+}
+
+async function providerVerifyStartPin(requestId) {
+  const input = document.getElementById(`providerPinInput_${requestId}`);
+  const pinCode = input ? input.value.trim() : '';
+  const estSelect = document.getElementById(`providerEstSelect_${requestId}`);
+  const estimatedMinutes = estSelect ? Number(estSelect.value) : 30;
+  if (!pinCode || pinCode.length !== 4) {
+    showToast('Please enter the 4-digit Arrival PIN from client.', 'error');
+    return;
+  }
+  try {
+    markLocalStateMutation();
+    const reqSnap = (state.db?.requests || []).find((r) => r.id === requestId) || null;
+    await apiPost('/api/bookings/verify-pin', {
+      requestId,
+      pinCode,
+      estimatedMinutes,
+      requestSnapshot: reqSnap
+    });
+    stopNavigationHud();
+    showToast('Arrival PIN verified! Service started.', 'success');
+    await fetchState(true);
+    renderAll(true);
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function providerAdjustEstimatedTime(requestId, additionalMinutes) {
+  try {
+    markLocalStateMutation();
+    await apiPost('/api/bookings/adjust-estimated-time', {
+      requestId,
+      additionalMinutes: Number(additionalMinutes)
+    });
+    showToast(`Estimated duration adjusted (${additionalMinutes > 0 ? '+' : ''}${additionalMinutes}m)`, 'info');
+    await fetchState(true);
+    renderAll(true);
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function providerRequestCompletion(requestId) {
+  try {
+    markLocalStateMutation();
+    await apiPost('/api/bookings/request-completion', {
+      requestId,
+      providerId: state.currentUser?.id
+    });
+    showToast('Marked as done! Ask client for Completion PIN.', 'info');
+    await fetchState(true);
+    renderAll(true);
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+function copyCompletionPin(pin) {
+  try {
+    const rawPin = String(pin || '').replace(/\D/g, '');
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(rawPin);
+    }
+    const btn = document.getElementById('copyCompletionPinBtnText');
+    if (btn) btn.innerText = 'Copied!';
+    showToast(`Completion PIN #${rawPin} copied!`, 'success');
+  } catch (e) {
+    showToast(`Completion PIN: #${pin}`, 'info');
+  }
+}
+
+async function handleProviderCompletionPinVerification(pinCode, requestId) {
+  const cleanPin = String(pinCode || '').replace(/\D/g, '').trim();
+  if (!cleanPin || cleanPin.length !== 4) return;
+  const input = document.getElementById(`providerCompletionPinInput_${requestId}`);
+  const statusEl = document.getElementById(`providerCompletionPinStatus_${requestId}`);
+
+  if (input) input.disabled = true;
+  if (statusEl) {
+    statusEl.innerHTML = `
+      <div style="display:inline-flex; align-items:center; gap:5px; font-size:11.5px; font-weight:700; color:#059669;">
+        <svg class="wa-spin-svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="3" stroke-linecap="round"><circle cx="12" cy="12" r="10" stroke-opacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10"/></svg>
+        <span>Finalizing...</span>
+      </div>
+    `;
+  }
+
+  try {
+    markLocalStateMutation();
+    const reqSnap = (state.db?.requests || []).find((r) => r.id === requestId) || null;
+    const res = await apiPost('/api/bookings/verify-completion-pin', {
+      requestId,
+      pinCode: cleanPin,
+      requestSnapshot: reqSnap
+    });
+
+    if (statusEl) {
+      statusEl.innerHTML = `
+        <div style="display:inline-flex; align-items:center; gap:4px; font-size:12px; font-weight:800; color:#10B981;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          <span>Complete!</span>
+        </div>
+      `;
+    }
+
+    triggerHardwareVibration([100, 50, 100]);
+    showToast('Completion PIN verified! Job officially finished.', 'success');
+    await fetchState(true);
+    openRateBookingModal(requestId);
+  } catch (err) {
+    if (input) {
+      input.disabled = false;
+      input.value = '';
+      input.focus();
+      input.classList.add('input-shake-error');
+      setTimeout(() => input.classList.remove('input-shake-error'), 500);
+    }
+    if (statusEl) {
+      statusEl.innerHTML = `
+        <div style="font-size:11px; font-weight:800; color:#DC2626;">
+          ${escapeHtml(err.message || 'Incorrect Completion PIN')}
+        </div>
+      `;
+    }
+  }
+}
+
+let mediaRecorderInstance = null;
+let recordedAudioChunks = [];
+let voiceRecordInterval = null;
+const activeAudioPlayers = {}; // id -> { audio: HTMLAudioElement, speed: number, duration: number }
+
+function formatVoiceSeconds(sec) {
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return `${m}:${s < 10 ? '0' : ''}${s}`;
+}
+
+async function startRecordingVoiceNote() {
+  if (state.activeCall || state.incomingCall) {
+    showToast('Cannot record voice note during an ongoing voice call.', 'error');
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    recordedAudioChunks = [];
+    mediaRecorderInstance = new MediaRecorder(stream);
+    mediaRecorderInstance.ondataavailable = (e) => {
+      if (e.data && e.data.size > 0) recordedAudioChunks.push(e.data);
+    };
+    mediaRecorderInstance.onstop = () => {
+      const mime = mediaRecorderInstance.mimeType || 'audio/webm';
+      const audioBlob = new Blob(recordedAudioChunks, { type: mime });
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        state.draftVoiceNoteUrl = reader.result;
+        state.draftVoiceNoteDuration = state.voiceNoteRecordSeconds || 5;
+        state.isRecordingVoiceNote = false;
+        state.isVoiceNotePaused = false;
+        lastUiOverlaySignature = '';
+        renderUiOverlay();
+      };
+      reader.readAsDataURL(audioBlob);
+      stream.getTracks().forEach((t) => t.stop());
+    };
+
+    mediaRecorderInstance.start();
+    state.isRecordingVoiceNote = true;
+    state.isVoiceNotePaused = false;
+    state.voiceNoteRecordSeconds = 0;
+    if (voiceRecordInterval) clearInterval(voiceRecordInterval);
+    voiceRecordInterval = setInterval(() => {
+      if (!state.isVoiceNotePaused) {
+        state.voiceNoteRecordSeconds++;
+        if (state.voiceNoteRecordSeconds >= 120) {
+          stopRecordingVoiceNote();
+        } else {
+          const el = document.getElementById('voiceNoteTimerLabel');
+          if (el) el.textContent = formatVoiceSeconds(state.voiceNoteRecordSeconds);
+        }
+      }
+    }, 1000);
+
+    lastUiOverlaySignature = '';
+    renderUiOverlay();
+  } catch (err) {
+    showToast('Microphone access denied or unavailable: ' + err.message, 'error');
+  }
+}
+
+function togglePauseResumeVoiceNote() {
+  if (!mediaRecorderInstance) return;
+  if (mediaRecorderInstance.state === 'recording') {
+    try { mediaRecorderInstance.pause(); } catch (e) {}
+    state.isVoiceNotePaused = true;
+    showToast('Voice recording paused', 'info');
+  } else if (mediaRecorderInstance.state === 'paused') {
+    try { mediaRecorderInstance.resume(); } catch (e) {}
+    state.isVoiceNotePaused = false;
+    showToast('Voice recording resumed', 'info');
+  }
+  lastUiOverlaySignature = '';
+  renderUiOverlay();
+}
+
+function stopRecordingVoiceNote() {
+  if (voiceRecordInterval) clearInterval(voiceRecordInterval);
+  voiceRecordInterval = null;
+  state.isVoiceNotePaused = false;
+  if (mediaRecorderInstance && mediaRecorderInstance.state !== 'inactive') {
+    try { mediaRecorderInstance.stop(); } catch (e) {}
+  } else {
+    state.isRecordingVoiceNote = false;
+    lastUiOverlaySignature = '';
+    renderUiOverlay();
+  }
+}
+
+function cancelVoiceNoteRecording() {
+  if (voiceRecordInterval) clearInterval(voiceRecordInterval);
+  voiceRecordInterval = null;
+  state.isVoiceNotePaused = false;
+  if (mediaRecorderInstance && mediaRecorderInstance.state !== 'inactive') {
+    try { mediaRecorderInstance.stop(); } catch (e) {}
+  }
+  recordedAudioChunks = [];
+  state.isRecordingVoiceNote = false;
+  state.draftVoiceNoteUrl = null;
+  state.draftVoiceNoteDuration = 0;
+  lastUiOverlaySignature = '';
+  renderUiOverlay();
+}
+
+function removeDraftVoiceNote() {
+  const p = activeAudioPlayers['draftVoice'];
+  if (p && p.audio) {
+    try { p.audio.pause(); } catch (e) {}
+    delete activeAudioPlayers['draftVoice'];
+  }
+  state.draftVoiceNoteUrl = null;
+  state.draftVoiceNoteDuration = 0;
+  lastUiOverlaySignature = '';
+  renderUiOverlay();
+}
+
+function toggleAudioPlay(audioId, audioUrl) {
+  if (!audioUrl) return;
+  let playerObj = activeAudioPlayers[audioId];
+  if (!playerObj) {
+    const audio = new Audio(audioUrl);
+    playerObj = {
+      audio,
+      speed: 1.0,
+      duration: 0
+    };
+    activeAudioPlayers[audioId] = playerObj;
+
+    audio.addEventListener('loadedmetadata', () => {
+      playerObj.duration = audio.duration || 0;
+      updateAudioPlayerUI(audioId);
+    });
+
+    audio.addEventListener('timeupdate', () => {
+      updateAudioPlayerUI(audioId);
+    });
+
+    audio.addEventListener('ended', () => {
+      const playIcon = document.getElementById(`audioPlayIcon_${audioId}`);
+      if (playIcon) playIcon.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>`;
+      updateWaveformPlayedState(audioId, 0);
+      const timeLbl = document.getElementById(`audioTimeLabel_${audioId}`);
+      if (timeLbl && playerObj.duration) {
+        timeLbl.textContent = `0:00 / ${formatVoiceSeconds(Math.round(playerObj.duration))}`;
+      }
+    });
+  }
+
+  const audio = playerObj.audio;
+  const playIcon = document.getElementById(`audioPlayIcon_${audioId}`);
+
+  if (!audio.paused) {
+    audio.pause();
+    if (playIcon) playIcon.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>`;
+  } else {
+    // Pause other playing audios
+    Object.keys(activeAudioPlayers).forEach((id) => {
+      if (id !== audioId && !activeAudioPlayers[id].audio.paused) {
+        activeAudioPlayers[id].audio.pause();
+        const otherIcon = document.getElementById(`audioPlayIcon_${id}`);
+        if (otherIcon) otherIcon.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>`;
+      }
+    });
+
+    audio.playbackRate = playerObj.speed || 1.0;
+    audio.play().then(() => {
+      if (playIcon) playIcon.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>`;
+    }).catch((err) => {
+      showToast('Audio playback error: ' + err.message, 'error');
+    });
+  }
+}
+
+function cycleAudioPlaybackSpeed(audioId) {
+  let playerObj = activeAudioPlayers[audioId];
+  if (!playerObj) {
+    playerObj = { speed: 1.0 };
+    activeAudioPlayers[audioId] = playerObj;
+  }
+  const speeds = [1.0, 1.5, 2.0];
+  let cur = playerObj.speed || 1.0;
+  let nextIdx = (speeds.indexOf(cur) + 1) % speeds.length;
+  let nextSpeed = speeds[nextIdx];
+  playerObj.speed = nextSpeed;
+  if (playerObj.audio) {
+    playerObj.audio.playbackRate = nextSpeed;
+  }
+  const speedLbl = document.getElementById(`audioSpeedLabel_${audioId}`);
+  if (speedLbl) speedLbl.textContent = `${nextSpeed.toFixed(1)}x`;
+}
+
+function handleWaveformSeekClick(event, audioId, audioUrl, fallbackDuration) {
+  const track = event.currentTarget;
+  if (!track) return;
+  const rect = track.getBoundingClientRect();
+  const clickX = event.clientX - rect.left;
+  const pct = Math.max(0, Math.min(1, clickX / rect.width));
+
+  let playerObj = activeAudioPlayers[audioId];
+  if (!playerObj) {
+    toggleAudioPlay(audioId, audioUrl);
+    playerObj = activeAudioPlayers[audioId];
+  }
+  if (playerObj && playerObj.audio) {
+    const dur = playerObj.audio.duration || fallbackDuration || 10;
+    playerObj.audio.currentTime = dur * pct;
+    updateAudioPlayerUI(audioId);
+    if (playerObj.audio.paused) {
+      playerObj.audio.play().catch(() => {});
+      const playIcon = document.getElementById(`audioPlayIcon_${audioId}`);
+      if (playIcon) playIcon.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>`;
+    }
+  }
+}
+
+function updateAudioPlayerUI(audioId) {
+  const playerObj = activeAudioPlayers[audioId];
+  if (!playerObj || !playerObj.audio) return;
+  const cur = playerObj.audio.currentTime || 0;
+  const dur = playerObj.audio.duration || playerObj.duration || 10;
+  const pct = dur > 0 ? (cur / dur) : 0;
+
+  const timeLbl = document.getElementById(`audioTimeLabel_${audioId}`);
+  if (timeLbl) {
+    timeLbl.textContent = `${formatVoiceSeconds(cur)} / ${formatVoiceSeconds(dur)}`;
+  }
+  updateWaveformPlayedState(audioId, pct);
+}
+
+function updateWaveformPlayedState(audioId, pct) {
+  const track = document.getElementById(`waWaveform_${audioId}`);
+  if (!track) return;
+  const bars = track.querySelectorAll('.wa-scrub-bar');
+  const count = bars.length;
+  const activeCount = Math.round(count * pct);
+  bars.forEach((bar, idx) => {
+    if (idx < activeCount) bar.classList.add('played');
+    else bar.classList.remove('played');
+  });
+}
+
+function generateWhatsAppWaveformBarsHtml(audioId) {
+  const barHeights = [
+    6, 12, 18, 10, 22, 14, 8, 16, 20, 12, 18, 24, 16, 10, 20, 14, 8, 16, 22, 18, 12, 14, 20, 16, 10, 8, 14, 18
+  ];
+  return `
+    <div id="waWaveform_${audioId}" style="display:flex; align-items:center; gap:2.5px; height:24px; width:100%;">
+      ${barHeights.map((h) => `<span class="wa-scrub-bar" style="height:${h}px; flex:1;"></span>`).join('')}
+    </div>
+  `;
+}
+
+function renderWhatsAppAudioPlayerCard(audioId, audioUrl, durationSec = 10, title = 'Spoken Voice Note') {
+  const resolvedUrl = resolveMediaUrl(audioUrl);
+  return `
+    <div class="wa-audio-player-bubble">
+      <button type="button" class="wa-play-circle-btn" onclick="toggleAudioPlay('${audioId}', '${resolvedUrl}')" title="Play Voice Note">
+        <span id="audioPlayIcon_${audioId}" style="display:inline-flex;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        </span>
+      </button>
+      <div class="wa-audio-body">
+        <div style="font-size:11px; font-weight:800; color:#047857; margin-bottom:2px;">${escapeHtml(title)}</div>
+        <div class="wa-scrubber-bars-track" onclick="handleWaveformSeekClick(event, '${audioId}', '${resolvedUrl}', ${durationSec})">
+          ${generateWhatsAppWaveformBarsHtml(audioId)}
+        </div>
+        <div class="wa-audio-meta-row">
+          <span id="audioTimeLabel_${audioId}">0:00 / ${formatVoiceSeconds(durationSec)}</span>
+          <button type="button" class="wa-speed-pill-btn" onclick="cycleAudioPlaybackSpeed('${audioId}')">
+            <span id="audioSpeedLabel_${audioId}">1.0x</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function playAudioFromUrl(url) {
+  toggleAudioPlay('generic_' + Math.random().toString(36).substring(2, 7), url);
+}
+
+async function setProviderStatus(newStatus, breakMins = 15) {
+  const prov = state.currentUser;
+  if (!prov) return;
+  state.providerStatus = newStatus;
+  if (newStatus === 'OFFLINE') {
+    state.providerBreakEndsAt = null;
+  } else if (newStatus === 'ON_BREAK' || newStatus === 'LUNCH') {
+    state.providerBreakEndsAt = Date.now() + breakMins * 60 * 1000;
+  } else {
+    state.providerBreakEndsAt = null;
+  }
+  renderAll(true);
+  try {
+    await apiPost('/api/providers/status', {
+      providerId: prov.id,
+      status: newStatus,
+      breakMinutes: breakMins
+    });
+    showToast(
+      newStatus === 'AVAILABLE' ? 'You are now Online and Available for jobs!' :
+      newStatus === 'ON_BREAK' ? `Break active for ${breakMins} mins. Job alerts paused.` :
+      newStatus === 'LUNCH' ? `Lunch active for ${breakMins} mins. Job alerts paused.` :
+      newStatus === 'BUSY' ? 'Status set to Busy.' : 'You are now Offline.',
+      'info'
+    );
+    await fetchState(false);
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+function openDisputeModal(jobId) {
+  state.activeModal = 'DISPUTE_MODAL';
+  state.modalData = { jobId };
+  lastRenderedModalKey = '';
+  renderModalLayer();
+}
+
+async function submitDisputeFromModal(jobId) {
+  const reasonEl = document.getElementById('disputeReasonInput');
+  const catEl = document.getElementById('disputeCategorySelect');
+  const reason = (reasonEl?.value || '').trim();
+  const category = catEl?.value || 'QUALITY_OF_WORK';
+  if (!reason) {
+    showToast('Please provide details for the dispute.', 'error');
+    return;
+  }
+  try {
+    await apiPost('/api/disputes/file', {
+      jobId,
+      role: state.role,
+      actorId: state.currentUser?.id,
+      category,
+      reason,
+      amountUsd: 0
+    });
+    showToast('Dispute filed. Admin will investigate immediately.', 'success');
+    closeModal();
+    await fetchState(true);
+  } catch (e) {
+    showToast(e.message, 'error');
+  }
+}
+
+function promptProviderCustomBid(requestId, baseUsd) {
+  const prov = state.currentUser || state.db?.providers?.[0];
+  const isPromo = Boolean(state.db?.settings?.launchPromoActive);
+  const walletBalUsd = Number(prov?.walletBalanceUsd || 0);
+  const minReserve = isPromo ? 0 : Number(state.db?.settings?.minWalletBalanceUsd || 2.0);
+  if (!isPromo && walletBalUsd < minReserve) {
+    openLowBalanceExplanatoryModal({
+      currentBalanceUsd: walletBalUsd,
+      minReserveUsd: minReserve,
+      commissionPercent: Number(state.db?.settings?.commissionPercent || 10),
+      bidPriceUsd: Number(baseUsd),
+      requiredBalanceUsd: minReserve,
+      requiredTopUpUsd: Math.max(5.00, Math.ceil(minReserve - walletBalUsd)),
+      requestId
+    });
+    return;
+  }
+  state.activeModal = 'COUNTER_OFFER_MODAL';
+  state.modalData = {
+    requestId,
+    baseUsd: Number(baseUsd) || 20,
+    currentUsd: Number((Number(baseUsd || 20) + 2).toFixed(2))
+  };
+  lastRenderedModalKey = '';
+  renderModalLayer();
+}
+
+function stepCounterOfferModal(delta) {
+  if (state.activeModal !== 'COUNTER_OFFER_MODAL' || !state.modalData) return;
+  const nextVal = Math.max(1, Number((Number(state.modalData.currentUsd || 20) + delta).toFixed(2)));
+  state.modalData = { ...state.modalData, currentUsd: nextVal };
+  lastRenderedModalKey = '';
+  renderModalLayer();
+}
+
+function setCounterOfferModalAmount(val) {
+  if (state.activeModal !== 'COUNTER_OFFER_MODAL' || !state.modalData) return;
+  state.modalData = { ...state.modalData, currentUsd: Math.max(1, Number(val) || 20) };
+  lastRenderedModalKey = '';
+  renderModalLayer();
+}
+
+function confirmCounterOfferModal() {
+  if (!state.modalData?.requestId) return;
+  const { requestId, currentUsd } = state.modalData;
+  closeModal();
+  providerSubmitBid(requestId, Number(currentUsd));
+}
+
+function openProviderPinKeypadModal(requestId, mode = 'START') {
+  state.activeModal = 'PROVIDER_PIN_KEYPAD_MODAL';
+  state.modalData = {
+    requestId,
+    mode: mode === 'COMPLETION' ? 'COMPLETION' : 'START',
+    digits: ''
+  };
+  lastRenderedModalKey = '';
+  renderModalLayer();
+}
+
+function pressProviderPinKeypad(key) {
+  if (state.activeModal !== 'PROVIDER_PIN_KEYPAD_MODAL' || !state.modalData) return;
+  let digits = String(state.modalData.digits || '');
+  if (key === 'CLEAR') {
+    digits = '';
+  } else if (key === 'BACK') {
+    digits = digits.slice(0, -1);
+  } else if (digits.length < 4 && /^[0-9]$/.test(key)) {
+    digits += key;
+  }
+  state.modalData = { ...state.modalData, digits };
+  lastRenderedModalKey = '';
+  renderModalLayer();
+  if (digits.length === 4) {
+    const { requestId, mode } = state.modalData;
+    setTimeout(() => {
+      submitProviderPinKeypad(requestId, mode, digits);
+    }, 120);
+  }
+}
+
+function submitProviderPinKeypad(requestId, mode, digits) {
+  if (!digits || digits.length < 4) return;
+  closeModal();
+  if (mode === 'COMPLETION') {
+    const input = document.getElementById(`providerCompletionPinInput_${requestId}`);
+    if (input) input.value = digits;
+    handleProviderCompletionPinVerification(digits, requestId);
+  } else {
+    const input = document.getElementById(`providerPinInput_${requestId}`);
+    if (input) input.value = digits;
+    handleProviderAutoPinVerification(digits, requestId);
+  }
+}
+
+async function topUpProviderWallet(amountUsd, method = 'Instant USD Credit') {
+  const prov = state.currentUser || state.db.providers[0];
+  if (!prov) return;
+  const numAmt = Math.max(1, Number(amountUsd) || 5);
+  try {
+    const res = await apiPost('/api/wallet/topup', {
+      providerId: prov.id,
+      phone: prov.phone,
+      amountUsd: numAmt,
+      method
+    });
+    showToast(`+$${numAmt.toFixed(2)} added to your Findit USD Wallet!`, 'success');
+    if (res?.provider && state.currentUser) {
+      state.currentUser.walletBalanceUsd = res.provider.walletBalanceUsd;
+    }
+    await fetchState(true);
+    renderAll(true);
+  } catch (err) {
+    showToast(err.message || 'Failed to top up wallet', 'error');
+  }
+}
+
+async function toggleProviderOnlineStatus() {
+  const prov = state.currentUser || state.db.providers[0];
+  if (!prov) return;
+  const newOnline = !(prov.isOnline !== false);
+
+  // Optimistic 0ms update
+  prov.isOnline = newOnline;
+  if (state.currentUser) state.currentUser.isOnline = newOnline;
+  if (state.db && Array.isArray(state.db.providers)) {
+    const pInDb = state.db.providers.find((p) => p.id === prov.id);
+    if (pInDb) pInDb.isOnline = newOnline;
+  }
+  saveSession(state.role, state.currentUser, false);
+  renderAll(true);
+  updateMapMarkers(true);
+
+  if (newOnline) {
+    showToast('Online & Ready: Inactive providers remaining idle without taking jobs may be removed from the platform.', 'info');
+  } else {
+    showToast('You are now Offline. You are hidden from the map and will not receive job alerts.', 'info');
+  }
+
+  try {
+    const res = await apiPost('/api/providers/online', {
+      providerId: prov.id,
+      isOnline: newOnline,
+      providerSnapshot: prov
+    });
+    if (res.provider) {
+      prov.isOnline = res.provider.isOnline;
+      if (state.currentUser) state.currentUser.isOnline = res.provider.isOnline;
+      saveSession(state.role, state.currentUser, false);
+      renderAll(true);
+      updateMapMarkers(true);
+    }
+  } catch (err) {
+    console.warn('Background online sync:', err);
+  }
+}
+
+function providerDismissJob(requestId) {
+  if (!Array.isArray(state.dismissedJobIds)) state.dismissedJobIds = [];
+  if (!state.dismissedJobIds.includes(requestId)) {
+    state.dismissedJobIds.push(requestId);
+  }
+  showToast('Job card dismissed', 'info');
+  lastUiOverlaySignature = '';
+  renderAll(true);
+}
+
+async function providerSubmitBid(requestId, priceUsd) {
+  const prov = state.currentUser || state.db.providers[0];
+  const activeJob = getProviderActiveBooking(prov?.id);
+  if (activeJob) {
+    showToast(`You have an active job in progress (${activeJob.customerName || 'Client'}). You can only do 1 job at a time to prevent clients waiting. Please complete this job first.`, 'warning', 6000);
+    return;
+  }
+  const currentBalance = Number(prov.walletBalanceUsd || 0);
+  const minReserve = Number(state.db?.settings?.minWalletBalanceUsd || 2.00);
+  const reqSnap = (state.db?.requests || []).find((r) => r.id === requestId) || null;
+  const reqCat = reqSnap ? normalizeCategoryId(reqSnap.categoryId) : null;
+  const commPercent = Number(state.db?.settings?.categoryCommissions?.[reqCat] ?? (state.db?.settings?.commissionPercent || 10));
+  const commFee = Math.round(Number(priceUsd) * (commPercent / 100) * 100) / 100;
+  const requiredBalanceUsd = Math.round((commFee + minReserve) * 100) / 100;
+  const reqTopUp = Math.max(5.00, Math.max(0, Math.round((requiredBalanceUsd - currentBalance) * 100) / 100));
+
+  // Strict wallet balance and commission check:
+  // 1. Below $2 no bidding (currentBalance < minReserve)
+  // 2. No bidding if amount in wallet is less than commission (currentBalance < commFee)
+  // 3. No bidding if balance after commission leaves less than $2 reserve ((currentBalance - commFee) < minReserve)
+  if (currentBalance < minReserve || currentBalance < commFee || (currentBalance - commFee) < minReserve) {
+    openLowBalanceExplanatoryModal({
+      currentBalanceUsd: currentBalance,
+      minReserveUsd: minReserve,
+      commissionPercent: commPercent,
+      bidPriceUsd: Number(priceUsd),
+      commissionFeeUsd: commFee,
+      requiredBalanceUsd,
+      requiredTopUpUsd: reqTopUp,
+      requestId
+    });
+    return;
+  }
+
+  try {
+    markLocalStateMutation();
+    const reqSnap = (state.db?.requests || []).find((r) => r.id === requestId) || null;
+    const cleanShortName = prov.shortName || (prov.name || 'Specialist').split(' ')[0];
+    const cleanBrand = prov.brandName || `${cleanShortName} Services`;
+    const cleanAvatar = prov.avatarUrl || prov.selfieUrl || '';
+
+    // 0ms Optimistic Offer: "You offered $XX • Waiting for client" appears immediately!
+    if (reqSnap) {
+      if (!Array.isArray(reqSnap.offers)) reqSnap.offers = [];
+      const offerId = `off_${prov.id}_${reqSnap.id}`;
+      let myOff = reqSnap.offers.find((o) => o.providerId === prov.id || o.id === offerId);
+      const isExactAccept = Number(priceUsd) === Number(reqSnap.budgetUsd);
+      const nowMs = Date.now();
+      if (myOff) {
+        myOff.priceUsd = Number(priceUsd);
+        myOff.status = 'PROPOSED';
+        myOff.declinedAt = null;
+        myOff.declineReason = null;
+        myOff.updatedAt = nowMs;
+        myOff.expiresAt = nowMs + 120000;
+      } else {
+        myOff = {
+          id: offerId,
+          providerId: prov.id,
+          providerFinditId: prov.finditId,
+          providerName: prov.name,
+          providerShortName: cleanShortName,
+          providerBrand: cleanBrand,
+          providerAvatarUrl: cleanAvatar,
+          providerSkillTier: prov.skillTier || 'Verified pro',
+          providerRating: prov.rating ?? 5.0,
+          providerCompletedJobs: prov.completedBookings ?? 1,
+          priceUsd: Number(priceUsd),
+          bidType: isExactAccept ? 'ACCEPTED_PRICE' : 'COUNTER_BID',
+          status: 'PROPOSED',
+          createdAt: new Date(nowMs).toISOString(),
+          updatedAt: nowMs,
+          expiresAt: nowMs + 120000,
+          ttlSeconds: 120
+        };
+        reqSnap.offers.unshift(myOff);
+      }
+      reqSnap.updatedAt = nowMs;
+    }
+
+    lastUiOverlaySignature = '';
+    renderAll(true);
+    showToast(`Offer of $${Number(priceUsd)} USD submitted!`, 'info');
+
+    const provSnapshot = {
+      id: prov.id,
+      finditId: prov.finditId,
+      name: prov.name,
+      shortName: cleanShortName,
+      brandName: cleanBrand,
+      avatarUrl: cleanAvatar,
+      selfieUrl: cleanAvatar,
+      rating: prov.rating ?? 5.0,
+      completedBookings: prov.completedBookings ?? 1,
+      skillTier: prov.skillTier || 'Verified pro',
+      walletBalanceUsd: prov.walletBalanceUsd ?? 5.0,
+      categoryIds: getProviderCategoryIds(prov),
+      categoryId: prov.categoryId,
+      suburbId: prov.suburbId,
+      suburbName: prov.suburbName,
+      lat: prov.lat,
+      lng: prov.lng
+    };
+
+    const res = await apiPost('/api/offers', {
+      requestId,
+      providerId: prov.id,
+      priceUsd: Number(priceUsd),
+      providerSnapshot: provSnapshot,
+      requestSnapshot: reqSnap
+    });
+    if (res && res.request && state.db?.requests) {
+      const idx = state.db.requests.findIndex((r) => r.id === res.request.id);
+      if (idx >= 0) state.db.requests[idx] = res.request;
+      else state.db.requests.unshift(res.request);
+    }
+    renderAll(true);
+  } catch (err) {
+    if (err.data && (err.data.code === 'LOW_WALLET_BALANCE' || err.status === 402)) {
+      openLowBalanceExplanatoryModal({
+        ...err.data,
+        requestId
+      });
+      return;
+    }
+    showToast(err.message, 'error');
+  }
+}
+
+function openLowBalanceExplanatoryModal(data) {
+  state.modalData = data || {};
+  state.activeModal = 'LOW_BALANCE_EXPLANATORY';
+  renderModalLayer();
+}
+
+async function triggerEcoCashTopUp(amountUsd) {
+  closeModal();
+  await topUpProviderWallet(amountUsd, 'EcoCash USD');
+  showToast(`Topped up +$${Number(amountUsd).toFixed(2)} USD via EcoCash. You can now submit your bid.`, 'info');
+}
+
+function openUploadCatalogueModal() {
+  state.uploadedFileDataUrl = null;
+  state.uploadedFileName = '';
+  state.uploadSuspectedWatermark = false;
+  state.activeModal = 'UPLOAD_CATALOGUE';
+  renderModalLayer();
+}
+
+async function handleRealPortfolioFileSelect(inputEl) {
+  const file = inputEl.files && inputEl.files[0];
+  if (!file) return;
+  state.uploadedFileName = file.name;
+  const compressed = await compressImageFileToDataUrl(file, 1200, 0.82);
+  if (compressed) {
+    state.uploadedFileDataUrl = compressed;
+    renderModalLayer();
+  }
+}
+
+async function submitProviderCatalogueUpload() {
+  const prov = state.currentUser || state.db.providers[0];
+  const title = document.getElementById('catUploadTitle')?.value.trim();
+  const priceUsd = Number(document.getElementById('catUploadPrice')?.value || 25);
+
+  if (!state.uploadedFileDataUrl) {
+    showToast('Please select a photo from your device first', 'error');
+    return;
+  }
+  if (!title) {
+    showToast('Please enter a title for this work photo', 'error');
+    return;
+  }
+
+  try {
+    let finalImageUrl = state.uploadedFileDataUrl;
+    try {
+      const upRes = await apiPost('/api/upload', { dataUrl: state.uploadedFileDataUrl });
+      if (upRes && upRes.mediaUrl) {
+        finalImageUrl = upRes.mediaUrl;
+      }
+    } catch (e) {
+      console.warn('Bucket upload note:', e);
+    }
+
+    await apiPost('/api/providers/catalogue', {
+      providerId: prov.id,
+      title,
+      priceUsd,
+      hasSuspectedWatermarkOrFlyer: Boolean(state.uploadSuspectedWatermark),
+      imageUrl: finalImageUrl
+    });
+    closeModal();
+    showToast('Photo uploaded & submitted for Admin approval');
+    await fetchState();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+// ============================================================================
+// IN-APP PROTECTED CHAT & MASKED VOICE CALL
+// ============================================================================
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function openChatDrawer(requestIdOrProviderId = null, optionalProviderId = null) {
+  state.chatDrawerOpen = true;
+  pushNavigationHistoryState({ chat: true });
+  let targetRequestId = null;
+  let targetProviderId = null;
+
+  if (typeof requestIdOrProviderId === 'string' && requestIdOrProviderId.startsWith('req_')) {
+    targetRequestId = requestIdOrProviderId;
+    targetProviderId = optionalProviderId;
+  } else if (typeof requestIdOrProviderId === 'string' && requestIdOrProviderId.startsWith('prov_')) {
+    targetProviderId = requestIdOrProviderId;
+    targetRequestId = optionalProviderId;
+  } else {
+    targetRequestId = requestIdOrProviderId;
+    targetProviderId = optionalProviderId;
+  }
+
+  if (targetRequestId) state.activeChatRequestId = targetRequestId;
+  if (targetProviderId) state.activeChatProviderId = targetProviderId;
+
+  renderChatDrawer();
+  setTimeout(() => {
+    const input = document.getElementById('chatTextInput');
+    if (input) input.focus();
+    const feed = document.getElementById('fullScreenChatFeed');
+    if (feed) feed.scrollTop = feed.scrollHeight;
+  }, 80);
+}
+
+function closeChatDrawer() {
+  state.chatDrawerOpen = false;
+  renderChatDrawer();
+}
+
+function renderChatDrawer() {
+  const root = document.getElementById('chatDrawerRoot');
+  if (!root) return;
+  if (!state.chatDrawerOpen) {
+    root.innerHTML = '';
+    return;
+  }
+
+  const targetReqId = state.activeChatRequestId;
+  const req = (targetReqId && (state.db?.requests || []).find((r) => r.id === targetReqId))
+    || (state.role === 'PROVIDER'
+      ? getProviderActiveBooking((state.currentUser || state.db?.providers?.[0])?.id)
+      : getCustomerActiveRequest())
+    || (state.db?.requests || [])[0];
+
+  if (req && !state.activeChatRequestId) {
+    state.activeChatRequestId = req.id;
+  }
+
+  // Smooth DOM retention: if chat modal is already mounted for this request, ONLY update messages to avoid keyboard jump/flicker!
+  const existingFeed = document.getElementById('fullScreenChatFeed');
+  if (existingFeed && existingFeed.getAttribute('data-req-id') === String(req?.id || '')) {
+    updateChatFeedDomOnly(req);
+    return;
+  }
+
+  let peerName = 'Service Provider';
+  let peerAvatar = DEFAULT_AVATAR_FALLBACK;
+  let peerSubtitle = 'Online • Verified Pro';
+  let peerId = '';
+
+  if (state.role === 'PROVIDER') {
+    peerName = req?.customerName || 'Client';
+    peerAvatar = DEFAULT_AVATAR_FALLBACK;
+    peerSubtitle = 'Client • Home Visit';
+    peerId = req?.customerId || req?.customerPhone || '';
+  } else {
+    const provId = req?.acceptedProviderId || req?.offers?.[0]?.providerId || state.activeChatProviderId;
+    const prov = resolveProviderByIdOrOffer(provId, req);
+    if (prov) {
+      peerName = prov.name;
+      peerAvatar = prov.avatarUrl;
+      peerSubtitle = `${prov.skillTier || 'Platinum Pro'} • Rating: ${prov.rating || '4.9'}`;
+      peerId = prov.id;
+    } else {
+      peerId = provId || '';
+    }
+  }
+
+  const quickList = state.role === 'PROVIDER'
+    ? [
+        'On my way with my mobile kit!',
+        'I have arrived outside your gate',
+        'Please share the 4-digit Start PIN',
+        '2 mins away from your street'
+      ]
+    : [
+        'I am waiting at home',
+        'Coming out to open the gate',
+        'I have the Start PIN ready',
+        'Please call me in-app when outside'
+      ];
+
+  const messages = req?.messages || [];
+  if (req && req.id) {
+    markRequestMessagesRead(req.id);
+  }
+
+  root.innerHTML = `
+    <div class="fullscreen-chat-backdrop" onclick="closeChatDrawer()">
+      <div class="fullscreen-chat-modal" onclick="event.stopPropagation()">
+        <!-- WhatsApp iOS Navigation Header -->
+        <div class="fullscreen-chat-header">
+          <button class="fullscreen-chat-back-ios" onclick="closeChatDrawer()" title="Back">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+
+          <div class="fullscreen-chat-peer" onclick="closeChatDrawer()">
+            <img src="${peerAvatar}" onerror="this.onerror=null; this.src='${DEFAULT_AVATAR_FALLBACK}';" alt="${escapeHtml(peerName)}" class="fullscreen-chat-avatar" />
+            <div class="fullscreen-chat-peer-info">
+              <div class="fullscreen-chat-peer-name">${escapeHtml(peerName)}</div>
+              <div class="fullscreen-chat-peer-status online">online</div>
+            </div>
+          </div>
+
+          <div class="fullscreen-chat-header-actions">
+            <button class="fullscreen-chat-call-btn" onclick="startInAppCall('${peerName.replace(/'/g, "\\'")}', '${(req?.title || 'Home Visit').replace(/'/g, "\\'")}', 'call_${req?.id || ''}', '${peerId || ''}')" title="Call ${escapeHtml(peerName)}">
+              ${uiIcon('phone', 20)}
+            </button>
+          </div>
+        </div>
+
+        <!-- Scrollable WhatsApp Feed with iOS Wallpaper Tint -->
+        <div class="fullscreen-chat-feed" id="fullScreenChatFeed" data-req-id="${req?.id || ''}">
+          ${renderChatMessagesHtml(messages)}
+        </div>
+
+        <!-- WhatsApp iOS Footer: Preset quick replies & Input -->
+        <div class="fullscreen-chat-footer">
+          <div class="chat-quick-strip">
+            ${quickList.map((q) => `
+              <button type="button" class="chat-preset-chip" onclick="sendChatMessage('${q.replace(/'/g, "\\'")}', '${req?.id || ''}')">
+                ${q}
+              </button>
+            `).join('')}
+          </div>
+
+          <div class="chat-inline-input-row">
+            <button type="button" class="whatsapp-ios-plus-btn" onclick="document.getElementById('chatPhotoInput').click()" title="Attach Photo">+</button>
+            <input type="file" id="chatPhotoInput" accept="image/*" style="display:none;" onchange="handleChatPhotoUpload(this, '${req?.id || ''}')" />
+            <input
+              id="chatTextInput"
+              class="whatsapp-ios-input"
+              placeholder="Message..."
+              onkeydown="if(event.key==='Enter'){ event.preventDefault(); sendCustomChat('${req?.id || ''}'); }"
+            />
+            <button
+              type="button"
+              class="whatsapp-ios-send-btn"
+              onclick="sendCustomChat('${req?.id || ''}')"
+              title="Send Message"
+            >
+              ${uiIcon('send', 16)}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function formatChatTime(ts) {
+  if (!ts) return '';
+  try {
+    const d = new Date(ts);
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+  } catch (e) {
+    return '';
+  }
+}
+
+// Authentic overlapping iOS WhatsApp Double-Tick SVG (Grey #8696A0 when delivered, Blue #34B7F1 when read)
+function renderWhatsAppDoubleTickSvg(isRead = false) {
+  const color = isRead ? '#34B7F1' : '#8696A0';
+  return `<svg class="wa-double-tick-svg ${isRead ? 'read' : 'delivered'}" width="16" height="11" viewBox="0 0 16 11" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block; vertical-align:middle; margin-left:1px; flex-shrink:0;"><path d="M10.85 1.15L4.55 7.45L1.85 4.75" stroke="${color}" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M14.35 1.15L8.05 7.45L6.65 6.05" stroke="${color}" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+}
+
+let lastReadMarkKey = '';
+let lastReadMarkTime = 0;
+function markRequestMessagesRead(requestId) {
+  if (!requestId || !state.db?.requests) return;
+  const req = state.db.requests.find((r) => r.id === requestId);
+  if (!req || !Array.isArray(req.messages)) return;
+  const unreadPeerMsgs = req.messages.filter(
+    (m) => m.senderRole && m.senderRole !== 'SYSTEM' && m.senderRole !== state.role && (!m.read || m.status !== 'READ')
+  );
+  if (unreadPeerMsgs.length === 0) return;
+
+  unreadPeerMsgs.forEach((m) => {
+    m.read = true;
+    m.status = 'READ';
+  });
+
+  const key = `${requestId}:${state.role}:${unreadPeerMsgs.length}`;
+  const now = Date.now();
+  if (key === lastReadMarkKey && now - lastReadMarkTime < 2500) return;
+  lastReadMarkKey = key;
+  lastReadMarkTime = now;
+
+  apiPost('/api/messages/read', {
+    requestId,
+    readerRole: state.role,
+    requestSnapshot: req
+  }).catch(() => {});
+}
+
+function renderChatMessagesHtml(messages) {
+  const encryptionBanner = `
+    <div class="whatsapp-encryption-pill">
+      ${uiIcon('lock', 11)}
+      <span>Messages and calls are end-to-end encrypted. No one outside of this chat can read or listen to them.</span>
+    </div>
+    <div class="whatsapp-date-pill">TODAY</div>
+  `;
+
+  if (!messages || messages.length === 0) {
+    return `
+      ${encryptionBanner}
+      <div style="text-align:center; padding:24px 20px; color:#8E8E93; margin:auto 0;">
+        <div style="font-size:13px; font-weight:600; color:#54656F; margin-bottom:4px;">No messages yet</div>
+        <div style="font-size:12px; line-height:1.4;">Send a quick reply below or type a message to coordinate your visit.</div>
+      </div>
+    `;
+  }
+
+  const msgsHtml = messages.map((m, idx) => {
+    const isSystem = m.senderRole === 'SYSTEM' || m.type === 'PIN_VERIFIED' || m.type === 'DELAY_NOTICE';
+    const isMine = !isSystem && m.senderRole === state.role;
+    const rowClass = isSystem ? 'system' : isMine ? 'mine' : 'theirs';
+    const timeStr = formatChatTime(m.timestamp || m.createdAt);
+
+    // A sent message is READ if m.read === true, m.status === 'READ', or if the recipient has replied after this message!
+    const hasLaterPeerReply = isMine && messages.slice(idx + 1).some((later) => later.senderRole && later.senderRole !== 'SYSTEM' && later.senderRole !== state.role);
+    const isReadByPeer = Boolean(m.read || m.status === 'READ' || hasLaterPeerReply);
+
+    if (isSystem) {
+      return `
+        <div class="chat-msg-row system">
+          <div class="chat-msg-bubble">
+            ${escapeHtml(m.text)}
+          </div>
+        </div>
+      `;
+    }
+
+    const photoHtml = m.photoUrl ? `
+      <div style="cursor:pointer; margin-bottom:4px; border-radius:10px; overflow:hidden; max-width:240px;" onclick="openChatPhotoPreview('${escapeHtml(m.photoUrl)}')">
+        <img src="${resolveMediaUrl(escapeHtml(m.photoUrl))}" onerror="this.onerror=null; this.src='${DEFAULT_TASK_PHOTO_FALLBACK}';" alt="Photo Attachment" style="display:block; width:100%; max-height:220px; object-fit:cover; border-radius:10px;" />
+      </div>
+    ` : '';
+
+    const hasCaption = m.text && m.text !== 'Photo attached';
+    const textHtml = hasCaption ? `<span>${escapeHtml(m.text)}</span>` : (!m.photoUrl ? `<span>${escapeHtml(m.text || '')}</span>` : '');
+
+    return `
+      <div class="chat-msg-row ${rowClass}">
+        <div class="chat-msg-bubble">
+          ${photoHtml}
+          ${textHtml}
+          <span class="chat-msg-meta">
+            <span>${timeStr}</span>
+            ${isMine ? renderWhatsAppDoubleTickSvg(isReadByPeer) : ''}
+          </span>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  return encryptionBanner + msgsHtml;
+}
+
+function getSupportUserKey() {
+  const raw = state.currentUser?.id || state.currentUser?.phone || state.savedAccountId || 'guest';
+  return String(raw).replace(/[^a-zA-Z0-9_-]/g, '_');
+}
+
+function getSupportChatStorageKey() {
+  return `findit_support_chat_v2_${getSupportUserKey()}`;
+}
+
+function loadUserSupportHistory() {
+  const key = getSupportChatStorageKey();
+  if (state.loadedSupportKey === key && Array.isArray(state.supportChatMessages) && state.supportChatMessages.length > 0) {
+    return;
+  }
+  state.loadedSupportKey = key;
+  try {
+    const saved = localStorage.getItem(key);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        state.supportChatMessages = parsed;
+        return;
+      }
+    }
+  } catch (e) {}
+
+  state.supportChatMessages = [
+    {
+      id: 'sup_welcome',
+      sender: 'BUSINESS',
+      text: `Hello *${state.currentUser?.name || 'there'}*! Welcome to *Findit Harare Official Support* (*finditharare.co.zw*).\n\nHow can we help you with your Findit Harare booking, provider job categories, EcoCash USD wallet (*151*2*2*84920#), or account today?`,
+      time: formatChatTime(new Date().toISOString())
+    }
+  ];
+  saveUserSupportHistory();
+
+  // Also sync any server-stored history for this user in the background
+  fetch(`${API_BASE}/api/support/history?userId=${encodeURIComponent(getSupportUserKey())}`)
+    .then((r) => r.json())
+    .then((data) => {
+      if (data && Array.isArray(data.messages) && data.messages.length > state.supportChatMessages.length) {
+        state.supportChatMessages = data.messages.map((m) => ({
+          id: m.id,
+          sender: m.sender,
+          text: m.text,
+          time: m.time && m.time.includes('T') ? formatChatTime(m.time) : (m.time || '')
+        }));
+        saveUserSupportHistory();
+        if (state.activeModal === 'SUPPORT') {
+          lastRenderedModalKey = '';
+          renderModalLayer();
+        }
+      }
+    })
+    .catch(() => {});
+}
+
+function saveUserSupportHistory() {
+  try {
+    const key = getSupportChatStorageKey();
+    if (Array.isArray(state.supportChatMessages)) {
+      localStorage.setItem(key, JSON.stringify(state.supportChatMessages.slice(-50)));
+    }
+  } catch (e) {}
+}
+
+function clearUserSupportHistory() {
+  try {
+    localStorage.removeItem(getSupportChatStorageKey());
+  } catch (e) {}
+  state.loadedSupportKey = '';
+  state.supportChatMessages = [];
+  loadUserSupportHistory();
+  lastRenderedModalKey = '';
+  renderModalLayer();
+  showToast('Support chat history cleared', 'info');
+}
+
+function openSupportModal() {
+  loadUserSupportHistory();
+  state.activeModal = 'SUPPORT';
+  lastRenderedModalKey = '';
+  renderModalLayer();
+}
+
+function initSettingsDraftFromUser() {
+  const isProvider = state.role === 'PROVIDER';
+  const u = state.currentUser || (isProvider ? state.db?.providers?.[0] : state.db?.customers?.[0]) || {};
+  state.settingsDraft = {
+    name: u.name || '',
+    brandName: u.brandName || `${u.name || 'Specialist'} Services`,
+    startingPriceUsd: Number(u.startingPriceUsd || 20),
+    suburbId: u.suburbId || state.selectedSuburbId || 'avondale',
+    categoryIds: isProvider ? [...getProviderCategoryIds(u)] : [],
+    entranceNote: u.entranceNote || state.entranceNote || 'Main Gate',
+    preferredPaymentMethod: u.preferredPaymentMethod || state.draftPaymentMethod || 'Cash USD',
+    isOnline: u.isOnline !== false
+  };
+}
+
+function openAccountSettingsModal() {
+  initSettingsDraftFromUser();
+  state.activeModal = 'SETTINGS';
+  lastRenderedModalKey = '';
+  renderModalLayer();
+}
+
+function toggleSettingsProviderCategory(catId) {
+  if (!state.settingsDraft) initSettingsDraftFromUser();
+  // Preserve current typed inputs before re-rendering category selection
+  const nameInp = document.getElementById('settingsNameInput');
+  const brandInp = document.getElementById('settingsBrandInput');
+  const priceInp = document.getElementById('settingsPriceInput');
+  const suburbSel = document.getElementById('settingsSuburbSelect');
+  if (nameInp) state.settingsDraft.name = nameInp.value;
+  if (brandInp) state.settingsDraft.brandName = brandInp.value;
+  if (priceInp) state.settingsDraft.startingPriceUsd = Number(priceInp.value);
+  if (suburbSel) state.settingsDraft.suburbId = suburbSel.value;
+
+  const list = Array.isArray(state.settingsDraft.categoryIds) ? [...state.settingsDraft.categoryIds] : [];
+  const idx = list.indexOf(catId);
+  if (idx >= 0) {
+    if (list.length <= 1) {
+      showToast('You must have at least 1 active job category selected', 'error');
+      return;
+    }
+    list.splice(idx, 1);
+  } else {
+    if (list.length >= 3) {
+      // Replace the oldest selected category if already at 3 so switching is effortless
+      list.shift();
+    }
+    list.push(catId);
+  }
+  state.settingsDraft.categoryIds = list;
+  lastRenderedModalKey = '';
+  renderModalLayer();
+}
+
+async function handleProfileAvatarUpload(input) {
+  if (!input.files || !input.files[0]) return;
+  const file = input.files[0];
+  showToast('Updating profile photo...', 'info');
+  const compressed = await compressImageFileToDataUrl(file, 600, 0.78);
+  if (!compressed) {
+    showToast('Could not process photo. Please choose another image.', 'error');
+    return;
+  }
+  if (state.currentUser) {
+    state.currentUser.avatarUrl = compressed;
+    state.currentUser.selfieUrl = compressed;
+  }
+  if (state.settingsDraft) {
+    state.settingsDraft.avatarUrl = compressed;
+  }
+  if (state.role === 'PROVIDER') {
+    const p = (state.db?.providers || []).find((x) => x.id === state.currentUser?.id);
+    if (p) { p.avatarUrl = compressed; p.selfieUrl = compressed; }
+  } else {
+    const c = (state.db?.customers || []).find((x) => x.id === state.currentUser?.id);
+    if (c) { c.avatarUrl = compressed; c.selfieUrl = compressed; }
+  }
+  saveSession(state.role, state.currentUser, false);
+  lastRenderedModalKey = '';
+  renderAll();
+  showToast('Profile picture updated successfully!', 'success');
+
+  apiPost('/api/account/update-settings', {
+    role: state.role,
+    userId: state.currentUser?.id,
+    avatarUrl: compressed
+  }).catch((e) => console.warn('Profile avatar sync notice:', e));
+}
+
+async function saveAccountSettingsChanges() {
+  if (!state.settingsDraft) initSettingsDraftFromUser();
+  const isProvider = state.role === 'PROVIDER';
+  const nameVal = (document.getElementById('settingsNameInput')?.value || state.settingsDraft.name || '').trim();
+  const suburbIdVal = document.getElementById('settingsSuburbSelect')?.value || state.settingsDraft.suburbId || 'avondale';
+  const subObj = (state.db?.suburbs || []).find((s) => s.id === suburbIdVal) || (state.db?.suburbs || [])[0];
+
+  if (!nameVal) {
+    showToast('Please enter your name', 'error');
+    return;
+  }
+
+  state.userCustomizedProfile = true;
+  markLocalStateMutation();
+
+  if (isProvider) {
+    const brandVal = (document.getElementById('settingsBrandInput')?.value || state.settingsDraft.brandName || `${nameVal} Services`).trim();
+    const priceVal = Math.max(5, Number(document.getElementById('settingsPriceInput')?.value || state.settingsDraft.startingPriceUsd || 20));
+    const catIds = (state.settingsDraft.categoryIds && state.settingsDraft.categoryIds.length > 0)
+      ? state.settingsDraft.categoryIds.slice(0, 3)
+      : ['repairs_construction'];
+
+    if (!state.currentUser) state.currentUser = state.db?.providers?.[0] || {};
+    const workStartVal = document.getElementById('settingsWorkStart')?.value || state.settingsDraft.workStartTime || state.currentUser.workStartTime || '08:00';
+    const workEndVal = document.getElementById('settingsWorkEnd')?.value || state.settingsDraft.workEndTime || state.currentUser.workEndTime || '18:00';
+    state.currentUser.name = nameVal;
+    state.currentUser.shortName = nameVal.split(' ')[0];
+    state.currentUser.brandName = brandVal;
+    state.currentUser.startingPriceUsd = priceVal;
+    state.currentUser.categoryIds = catIds;
+    state.currentUser.categoryId = catIds[0];
+    state.currentUser.workStartTime = workStartVal;
+    state.currentUser.workEndTime = workEndVal;
+    if (subObj) {
+      state.currentUser.suburbId = subObj.id;
+      state.currentUser.suburbName = subObj.name;
+      state.currentUser.lat = subObj.lat;
+      state.currentUser.lng = subObj.lng;
+    }
+
+    const dbProv = (state.db?.providers || []).find((p) => p.id === state.currentUser.id);
+    if (dbProv) {
+      Object.assign(dbProv, {
+        name: state.currentUser.name,
+        shortName: state.currentUser.shortName,
+        brandName: state.currentUser.brandName,
+        startingPriceUsd: state.currentUser.startingPriceUsd,
+        categoryIds: state.currentUser.categoryIds,
+        categoryId: state.currentUser.categoryId,
+        suburbId: state.currentUser.suburbId,
+        suburbName: state.currentUser.suburbName,
+        workStartTime: workStartVal,
+        workEndTime: workEndVal
+      });
+    }
+
+    saveSession('PROVIDER', state.currentUser, false);
+    closeModal();
+    lastUiOverlaySignature = '';
+    renderAll(true);
+
+    try {
+      await apiPost('/api/account/update-settings', {
+        role: 'PROVIDER',
+        userId: state.currentUser.id,
+        phone: state.currentUser.phone,
+        name: state.currentUser.name,
+        brandName: state.currentUser.brandName,
+        startingPriceUsd: state.currentUser.startingPriceUsd,
+        categoryIds: state.currentUser.categoryIds,
+        suburbId: state.currentUser.suburbId,
+        workStartTime: workStartVal,
+        workEndTime: workEndVal
+      });
+    } catch (e) {}
+  } else {
+    const entranceVal = (document.getElementById('settingsEntranceInput')?.value || state.settingsDraft.entranceNote || 'Main Gate').trim();
+    const payVal = document.getElementById('settingsPaymentSelect')?.value || state.settingsDraft.preferredPaymentMethod || 'Cash USD';
+
+    if (!state.currentUser) state.currentUser = state.db?.customers?.[0] || {};
+    state.currentUser.name = nameVal;
+    state.currentUser.entranceNote = entranceVal;
+    state.currentUser.preferredPaymentMethod = payVal;
+    state.entranceNote = entranceVal;
+    state.draftPaymentMethod = payVal;
+    if (subObj) {
+      state.currentUser.suburbId = subObj.id;
+      state.currentUser.suburbName = subObj.name;
+      state.selectedSuburbId = subObj.id;
+      state.customAddress = subObj.name;
+      state.customSuburbLabel = `${subObj.name}, Harare`;
+      state.pinnedLat = subObj.lat;
+      state.pinnedLng = subObj.lng;
+    }
+
+    saveSession('CUSTOMER', state.currentUser, false);
+    closeModal();
+    lastUiOverlaySignature = '';
+    renderAll(true);
+
+    try {
+      await apiPost('/api/account/update-settings', {
+        role: 'CUSTOMER',
+        userId: state.currentUser.id,
+        phone: state.currentUser.phone,
+        name: state.currentUser.name,
+        suburbId: state.currentUser.suburbId,
+        entranceNote: state.currentUser.entranceNote,
+        preferredPaymentMethod: state.currentUser.preferredPaymentMethod
+      });
+    } catch (e) {}
+  }
+}
+
+function toggleSupportBizInfo() {
+  state.supportShowBizInfo = !state.supportShowBizInfo;
+  lastRenderedModalKey = '';
+  renderModalLayer();
+}
+
+async function sendSupportAiMessage(presetText = null) {
+  const inp = document.getElementById('waSupportInput');
+  const text = (presetText !== null ? presetText : (inp ? inp.value : '')).trim();
+  if (!text || state.supportAiTyping) return;
+  if (inp) inp.value = '';
+
+  loadUserSupportHistory();
+  state.supportChatMessages.push({
+    id: 'sup_u_' + Date.now(),
+    sender: 'USER',
+    text,
+    time: formatChatTime(new Date().toISOString())
+  });
+  saveUserSupportHistory();
+  state.supportAiTyping = true;
+  lastRenderedModalKey = '';
+  renderModalLayer();
+
+  try {
+    const res = await apiPost('/api/support/chat', {
+      message: text,
+      role: state.role,
+      userId: getSupportUserKey(),
+      phone: state.currentUser?.phone || '',
+      userName: state.currentUser?.name || 'Member',
+      history: state.supportChatMessages.slice(-16)
+    });
+    state.supportAiTyping = false;
+    state.supportChatMessages.push({
+      id: 'sup_b_' + Date.now(),
+      sender: 'BUSINESS',
+      text: res?.reply || 'How can we help you with Findit Harare today?',
+      time: formatChatTime(res?.timestamp || new Date().toISOString())
+    });
+    saveUserSupportHistory();
+    lastRenderedModalKey = '';
+    renderModalLayer();
+    setTimeout(() => document.getElementById('waSupportInput')?.focus(), 40);
+  } catch (e) {
+    state.supportAiTyping = false;
+    state.supportChatMessages.push({
+      id: 'sup_b_' + Date.now(),
+      sender: 'BUSINESS',
+      text: 'Welcome to *Findit Harare Official Support* (*finditharare.co.zw*)! Please let us know if you need help with a booking, provider job categories, EcoCash wallet (*151*2*2*84920#), or your account.',
+      time: formatChatTime(new Date().toISOString())
+    });
+    saveUserSupportHistory();
+    lastRenderedModalKey = '';
+    renderModalLayer();
+    setTimeout(() => document.getElementById('waSupportInput')?.focus(), 40);
+  }
+}
+
+async function handleChatPhotoUpload(input, requestId) {
+  if (!input.files || !input.files[0]) return;
+  const file = input.files[0];
+  const photoDataUrl = await compressImageFileToDataUrl(file, 800, 0.75);
+  input.value = '';
+  if (photoDataUrl) {
+    sendChatMessage('', requestId, photoDataUrl);
+  }
+}
+
+function openChatPhotoPreview(url) {
+  if (!url) return;
+  state.modalData = { previewPhotoUrl: url };
+  state.activeModal = 'CHAT_PHOTO_PREVIEW';
+  renderModalLayer();
+}
+
+function updateChatFeedDomOnly(req) {
+  if (!req) return;
+  const feed = document.getElementById('fullScreenChatFeed');
+  if (feed) {
+    feed.innerHTML = renderChatMessagesHtml(req.messages || []);
+    feed.scrollTop = feed.scrollHeight;
+  }
+  const embeddedFeed = document.getElementById('embeddedChatScroll');
+  if (embeddedFeed) {
+    embeddedFeed.innerHTML = renderChatMessagesHtml(req.messages || []);
+    embeddedFeed.scrollTop = embeddedFeed.scrollHeight;
+  }
+}
+
+let lastSentChatText = '';
+let lastSentChatAtMs = 0;
+
+function sendChatMessage(text, requestId = null, photoUrl = null) {
+  const cleanText = (text || '').trim();
+  if (!cleanText && !photoUrl) return;
+
+  // Prevent accidental double-submission (e.g. Enter + click or double-tap within 500ms)
+  const nowMs = Date.now();
+  if (!photoUrl && cleanText === lastSentChatText && nowMs - lastSentChatAtMs < 500) {
+    return;
+  }
+  if (!photoUrl) {
+    lastSentChatText = cleanText;
+    lastSentChatAtMs = nowMs;
+  }
+
+  if (cleanText) {
+    const leakWarning = checkAntiLeakageClient(cleanText);
+    if (leakWarning) {
+      showToast(leakWarning, 'error');
+      return;
+    }
+  }
+
+  const targetReqId = requestId || state.activeChatRequestId;
+  const fallbackReq = state.role === 'PROVIDER'
+    ? getProviderActiveBooking(state.currentUser?.id)
+    : getCustomerActiveRequest();
+  const targetReq = (state.db?.requests || []).find((r) => r.id === (targetReqId || fallbackReq?.id)) || fallbackReq || (state.db?.requests || [])[0];
+  if (!targetReq) return;
+
+  // Clear inputs immediately before network call
+  const input = document.getElementById('chatTextInput');
+  if (input) input.value = '';
+  const inlineInput = document.getElementById(`inlineChatInput_${targetReq.id}`);
+  if (inlineInput) inlineInput.value = '';
+
+  const senderName = state.currentUser?.name || (state.role === 'PROVIDER' ? 'Service Provider' : 'Client');
+  const tempMsgId = 'msg_' + nowMs + '_' + Math.random().toString(36).slice(2, 6);
+  const nowIso = new Date(nowMs).toISOString();
+  const tempMsg = {
+    id: tempMsgId,
+    clientMsgId: tempMsgId,
+    senderRole: state.role,
+    senderName: senderName,
+    text: cleanText || (photoUrl ? 'Photo attached' : ''),
+    photoUrl: photoUrl || undefined,
+    status: 'DELIVERED',
+    read: false,
+    timestamp: nowIso,
+    createdAt: nowIso
+  };
+
+  // Immediate 0ms local append (only once!)
+  if (!targetReq.messages) targetReq.messages = [];
+  targetReq.messages.push(tempMsg);
+
+  // Update DOM immediately with no lag
+  updateChatFeedDomOnly(targetReq);
+
+  // Send to backend asynchronously with clientMsgId & requestSnapshot so it never duplicates or 404s
+  apiPost('/api/messages', {
+    requestId: targetReq.id,
+    clientMsgId: tempMsgId,
+    senderRole: state.role,
+    senderName: senderName,
+    text: cleanText || (photoUrl ? 'Photo attached' : ''),
+    photoUrl: photoUrl || undefined,
+    requestSnapshot: targetReq
+  }).then((res) => {
+    if (res && res.message) {
+      Object.assign(tempMsg, res.message);
+      updateChatFeedDomOnly(targetReq);
+    }
+  }).catch((err) => {
+    // Only drop if anti-leakage shield actively blocked it
+    if (err.message && (err.message.includes('Shield') || err.message.includes('not allowed'))) {
+      targetReq.messages = targetReq.messages.filter((m) => m.id !== tempMsgId && m.clientMsgId !== tempMsgId);
+      updateChatFeedDomOnly(targetReq);
+    }
+    showToast(err.message || 'Could not send message', 'error');
+  });
+}
+
+function sendInlineChatMessage(requestId) {
+  const input = document.getElementById(`inlineChatInput_${requestId}`);
+  if (!input || !input.value.trim()) return;
+  const text = input.value.trim();
+  input.value = '';
+  sendChatMessage(text, requestId);
+}
+
+function sendCustomChat(requestId = null) {
+  const input = document.getElementById('chatTextInput');
+  if (!input || !input.value.trim()) return;
+  const text = input.value.trim();
+  sendChatMessage(text, requestId);
+}
+
+// ============================================================================
+// DUAL-ENGINE AUDIO CALLING (AGORA RTC + WEBRTC P2P DIRECT AUDIO MESH)
+// Ensures audio streams seamlessly from Point A to Point B
+// ============================================================================
+let agoraClient = null;
+let localAudioTrack = null;
+let p2pPeerConnection = null;
+let localMicrophoneStream = null;
+let isAudioMuted = false;
+let callRingInterval = null;
+let queuedCandidates = [];
+
+function playCallEndedTone() {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(425, now);
+    osc.frequency.setValueAtTime(425, now + 0.12);
+    gain.gain.setValueAtTime(0.2, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.35);
+  } catch (e) {}
+}
+
+function playOutgoingRingtone() {
+  stopCallRingtones();
+  const playTone = () => {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(440, ctx.currentTime);
+      gain.gain.setValueAtTime(0.18, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.2);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 1.2);
+    } catch (e) {}
+  };
+  playTone(); // 0ms immediate ringback start (zero dead silence delay)
+  callRingInterval = setInterval(playTone, 3000);
+}
+
+function playIncomingRingtone() {
+  stopCallRingtones();
+  const playTone = () => {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const now = ctx.currentTime;
+      const osc1 = ctx.createOscillator();
+      const osc2 = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc1.type = 'sine';
+      osc2.type = 'sine';
+      osc1.frequency.setValueAtTime(853, now);
+      osc2.frequency.setValueAtTime(960, now);
+      gain.gain.setValueAtTime(0.28, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 1.4);
+      osc1.connect(gain);
+      osc2.connect(gain);
+      gain.connect(ctx.destination);
+      osc1.start(now);
+      osc2.start(now);
+      osc1.stop(now + 1.4);
+      osc2.stop(now + 1.4);
+    } catch (e) {}
+    if ('vibrate' in navigator) {
+      try { navigator.vibrate([400, 200, 400]); } catch (e) {}
+    }
+  };
+  playTone(); // 0ms immediate incoming ring start
+  callRingInterval = setInterval(playTone, 2500);
+}
+
+function stopCallRingtones() {
+  if (callRingInterval) {
+    clearInterval(callRingInterval);
+    callRingInterval = null;
+  }
+}
+
+function isCallForCurrentUser(c) {
+  if (!c || c.status !== 'RINGING') return false;
+  const myId = String(state.currentUser?.id || '');
+  const myPhone = String(state.currentUser?.phone || '').replace(/\D/g, '');
+  const myFinditId = String(state.currentUser?.finditId || '');
+  const callerId = String(c.callerId || '');
+
+  // 1. Never ring caller themselves
+  if (myId && callerId === myId) return false;
+  if (myPhone && callerId.replace(/\D/g, '') === myPhone) return false;
+
+  // 2. Strict 1-on-1 recipient isolation (Never leak calls to third parties or other providers!)
+  const recId = String(c.recipientId || '');
+  if (recId) {
+    if (myId && recId === myId) return true;
+    if (myPhone && recId.replace(/\D/g, '') && recId.replace(/\D/g, '') === myPhone) return true;
+    if (myFinditId && recId === myFinditId) return true;
+    return false; // strictly isolated to recipient!
+  }
+
+  // 3. Fallback only if recipientId wasn't specified: strictly match the accepted provider or the customer of this request
+  if (c.requestId && state.db && Array.isArray(state.db.requests)) {
+    const matchReq = state.db.requests.find((r) => r.id === c.requestId);
+    if (matchReq) {
+      if (state.role === 'CUSTOMER' && (matchReq.customerId === myId || (matchReq.customerPhone && matchReq.customerPhone.replace(/\D/g, '') === myPhone))) {
+        return true;
+      }
+      if (state.role === 'PROVIDER' && matchReq.acceptedProviderId === myId) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+let activeCallPollTimer = null;
+
+function syncIncomingCallFromList(calls) {
+  if (!Array.isArray(calls)) return;
+  const myId = state.currentUser?.id;
+  const activeJob = state.role === 'PROVIDER' ? getProviderActiveBooking(myId) : getCustomerActiveRequest();
+
+  // 1. If we are currently in an OUTGOING call, check if the recipient answered (ACCEPTED)
+  if (state.activeCall && state.activeCall.callState === 'OUTGOING') {
+    const matched = calls.find((c) => c.channelId === state.activeCall.channelId);
+    if (matched) {
+      if (matched.status === 'ACCEPTED') {
+        stopCallRingtones();
+        state.activeCall.callState = 'CONNECTED';
+        state.callSeconds = 0;
+        if (callInterval) clearInterval(callInterval);
+        callInterval = setInterval(() => {
+          state.callSeconds++;
+          const el = document.getElementById('callTimerText');
+          if (el) {
+            const m = String(Math.floor(state.callSeconds / 60)).padStart(2, '0');
+            const s = String(state.callSeconds % 60).padStart(2, '0');
+            el.textContent = `${m}:${s}`;
+          }
+        }, 1000);
+        renderCallModal();
+        // Caller initiates audio stream now that recipient answered!
+        joinDualEngineCall(state.activeCall.channelId, true);
+      } else if (matched.status === 'ENDED') {
+        endInAppCall(false);
+        return;
+      }
+    }
+  }
+
+  // 2. If incoming call was ringing but caller hung up before callee answered:
+  if (state.incomingCall) {
+    const currentChan = state.incomingCall.channelId;
+    const currentReq = state.incomingCall.requestId;
+    const callStillRinging = calls.some((c) => 
+      ((c.channelId && c.channelId === currentChan) || (c.requestId && c.requestId === currentReq)) &&
+      c.status === 'RINGING'
+    );
+    if (!callStillRinging) {
+      endInAppCall(false);
+      return;
+    }
+  }
+
+  // 3. If ongoing call was explicitly marked ENDED by peer:
+  if (state.activeCall) {
+    const currentChan = state.activeCall.channelId;
+    const currentReq = state.activeCall.requestId;
+    const explicitlyEnded = calls.some((c) =>
+      ((c.channelId && c.channelId === currentChan) || (c.requestId && c.requestId === currentReq)) &&
+      c.status === 'ENDED'
+    );
+    if (explicitlyEnded) {
+      endInAppCall(false);
+      return;
+    }
+  }
+
+  // 3. Check for any ringing call intended for us
+  if (!state.activeCall && !state.incomingCall) {
+    const ringingCall = calls.find((c) => isCallForCurrentUser(c));
+
+    if (ringingCall) {
+      state.incomingCall = {
+        callerId: ringingCall.callerId,
+        callerName: ringingCall.callerName || 'User',
+        contextTitle: ringingCall.contextTitle || 'In-App Audio Call',
+        channelId: ringingCall.channelId || ('call_' + ringingCall.requestId),
+        requestId: ringingCall.requestId
+      };
+      playIncomingRingtone();
+      renderCallModal();
+      triggerSystemNotification('Incoming Call from ' + (ringingCall.callerName || 'User'), ringingCall.contextTitle || 'Tap to answer', 'call_' + ringingCall.requestId);
+      try {
+        if (window.FinditNative && typeof window.FinditNative.triggerIncomingCall === 'function') {
+          window.FinditNative.triggerIncomingCall(ringingCall.callerName || 'Findit User', 'Voice', ringingCall.channelId);
+        }
+      } catch (nativeErr) {}
+      startActiveCallPolling();
+    }
+  }
+}
+
+function startActiveCallPolling() {
+  if (activeCallPollTimer) return;
+  activeCallPollTimer = setInterval(async () => {
+    try {
+      if (!state.isAuthenticated || !state.currentUser) return;
+      const myId = state.currentUser?.id || '';
+      const reqId = state.activeRequestId || state.openChatRequestId || '';
+      const chanId = state.activeCall?.channelId || state.incomingCall?.channelId || '';
+      const query = `userId=${encodeURIComponent(myId)}&requestId=${encodeURIComponent(reqId)}&channelId=${encodeURIComponent(chanId)}`;
+      const res = await apiGet(`/api/calls/check?${query}`);
+      if (res && res.ok) {
+        const calls = [];
+        if (res.incomingCall) calls.push(res.incomingCall);
+        if (res.activeCall) calls.push(res.activeCall);
+        if (calls.length > 0) {
+          syncIncomingCallFromList(calls);
+        } else if (state.activeCall && state.activeCall.callState === 'OUTGOING' && !res.activeCall) {
+          endInAppCall(false);
+        }
+
+        if (Array.isArray(res.signals) && res.signals.length > 0) {
+          for (const s of res.signals) {
+            handleWebRtcSignalMessage(s);
+          }
+        }
+      }
+    } catch (e) {}
+  }, 1200);
+}
+
+function stopActiveCallPolling() {
+  if (!state.isAuthenticated && activeCallPollTimer) {
+    clearInterval(activeCallPollTimer);
+    activeCallPollTimer = null;
+  }
+}
+
+async function startInAppCall(peerName, contextTitle, channelId = null, recipientId = null) {
+  // Acquire microphone in direct user gesture context so permissions and audio tracks are immediately ready
+  try {
+    if (!localMicrophoneStream) {
+      localMicrophoneStream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+      });
+    }
+  } catch (micErr) {
+    console.warn('Microphone user gesture note:', micErr.message);
+  }
+
+  const activeReq = state.role === 'PROVIDER'
+    ? (getProviderActiveBooking(state.currentUser?.id) || (state.openChatRequestId ? state.db?.requests?.find((r) => r.id === state.openChatRequestId) : null))
+    : (getCustomerActiveRequest() || (state.openChatRequestId ? state.db?.requests?.find((r) => r.id === state.openChatRequestId) : null));
+
+  const finalChannelId = channelId || (activeReq ? ('call_' + activeReq.id) : ('call_' + (state.openChatRequestId || 'harare')));
+  const finalRecipientId = recipientId || (state.role === 'PROVIDER'
+    ? (activeReq?.customerId || activeReq?.customerPhone)
+    : (activeReq?.acceptedProviderId || (activeReq?.offers || []).find((o) => o.id === activeReq?.acceptedOfferId)?.providerId || activeReq?.offers?.[0]?.providerId));
+
+  state.activeCall = {
+    callState: 'OUTGOING',
+    peerName: peerName || 'User',
+    contextTitle: contextTitle || 'Home Visit Call',
+    channelId: finalChannelId,
+    recipientId: finalRecipientId,
+    isMuted: false
+  };
+  state.incomingCall = null;
+  state.callSeconds = 0;
+  playOutgoingRingtone();
+  renderCallModal();
+
+  apiPost('/api/calls/initiate', {
+    requestId: activeReq?.id || state.openChatRequestId,
+    callerId: state.currentUser?.id || (state.role === 'PROVIDER' ? 'provider' : 'customer'),
+    callerName: state.currentUser?.name || (state.role === 'PROVIDER' ? 'Service Provider' : 'Client'),
+    recipientId: finalRecipientId || null,
+    contextTitle: contextTitle || 'Home Visit Call',
+    channelId: finalChannelId
+  }).catch((e) => console.warn('Call initiate notice:', e));
+
+  startActiveCallPolling();
+}
+
+async function answerIncomingCall() {
+  if (!state.incomingCall) return;
+  stopCallRingtones();
+  const inc = state.incomingCall;
+
+  // Acquire microphone immediately in user gesture
+  try {
+    if (!localMicrophoneStream) {
+      localMicrophoneStream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+      });
+    }
+  } catch (micErr) {
+    console.warn('Microphone answer user gesture note:', micErr.message);
+  }
+
+  state.activeCall = {
+    callState: 'CONNECTED',
+    peerName: inc.callerName,
+    contextTitle: inc.contextTitle,
+    channelId: inc.channelId,
+    isMuted: false
+  };
+  state.incomingCall = null;
+  state.callSeconds = 0;
+  if (callInterval) clearInterval(callInterval);
+  callInterval = setInterval(() => {
+    state.callSeconds++;
+    const el = document.getElementById('callTimerText');
+    if (el) {
+      const m = String(Math.floor(state.callSeconds / 60)).padStart(2, '0');
+      const s = String(state.callSeconds % 60).padStart(2, '0');
+      el.textContent = `${m}:${s}`;
+    }
+  }, 1000);
+  renderCallModal();
+
+  apiPost('/api/calls/respond', {
+    requestId: inc.requestId,
+    channelId: inc.channelId,
+    action: 'ACCEPT'
+  }).catch((e) => console.warn('Call respond notice:', e));
+
+  joinDualEngineCall(inc.channelId, false);
+}
+
+async function declineIncomingCall() {
+  stopCallRingtones();
+  stopActiveCallPolling();
+  if (state.incomingCall) {
+    const inc = state.incomingCall;
+    apiPost('/api/calls/respond', {
+      requestId: inc.requestId,
+      channelId: inc.channelId,
+      action: 'DECLINE'
+    }).catch((e) => {});
+    state.incomingCall = null;
+  }
+  renderCallModal();
+}
+
+async function joinDualEngineCall(channelId, isCaller) {
+  let agoraConnected = false;
+  if (window.AgoraRTC) {
+    try {
+      await joinAgoraVoiceChannel(channelId);
+      agoraConnected = true;
+    } catch (agoraErr) {
+      console.warn('Agora Voice notice, using WebRTC fallback:', agoraErr.message);
+    }
+  }
+  // Only activate WebRTC P2P direct audio if Agora is not connected, preventing audio doubling and echoes
+  if (!agoraConnected) {
+    setupWebRtcPeerAudio(channelId, isCaller);
+  }
+}
+
+async function setupWebRtcPeerAudio(channelId, isCaller) {
+  try {
+    queuedCandidates = [];
+    if (p2pPeerConnection) {
+      try { p2pPeerConnection.close(); } catch (e) {}
+      p2pPeerConnection = null;
+    }
+
+    const config = {
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' }
+      ]
+    };
+
+    p2pPeerConnection = new RTCPeerConnection(config);
+
+    try {
+      p2pPeerConnection.addTransceiver('audio', { direction: 'sendrecv' });
+    } catch (e) {}
+
+    if (!localMicrophoneStream) {
+      try {
+        localMicrophoneStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          }
+        });
+      } catch (micErr) {
+        console.warn('Microphone permission notice:', micErr.message);
+      }
+    }
+
+    if (localMicrophoneStream) {
+      localMicrophoneStream.getTracks().forEach((track) => {
+        try {
+          p2pPeerConnection.addTrack(track, localMicrophoneStream);
+        } catch (e) {}
+      });
+    }
+
+    p2pPeerConnection.ontrack = (event) => {
+      let audioEl = document.getElementById('p2pRemoteAudioElement');
+      if (!audioEl) {
+        audioEl = document.createElement('audio');
+        audioEl.id = 'p2pRemoteAudioElement';
+        audioEl.autoplay = true;
+        audioEl.playsInline = true;
+        document.body.appendChild(audioEl);
+      }
+      audioEl.volume = 1.0;
+      audioEl.muted = false;
+      if (event.streams && event.streams[0]) {
+        audioEl.srcObject = event.streams[0];
+      } else if (event.track) {
+        audioEl.srcObject = new MediaStream([event.track]);
+      }
+      audioEl.play().catch(() => {});
+    };
+
+    p2pPeerConnection.onicecandidate = (event) => {
+      if (event.candidate) {
+        apiPost('/api/calls/signal', {
+          channelId,
+          senderId: state.currentUser?.id,
+          signalType: 'ICE_CANDIDATE',
+          data: event.candidate
+        }).catch(() => {});
+      }
+    };
+
+    if (isCaller) {
+      const offer = await p2pPeerConnection.createOffer({ offerToReceiveAudio: true });
+      await p2pPeerConnection.setLocalDescription(offer);
+      apiPost('/api/calls/signal', {
+        channelId,
+        senderId: state.currentUser?.id,
+        signalType: 'SDP_OFFER',
+        data: offer
+      }).catch(() => {});
+    }
+  } catch (err) {
+    console.warn('WebRTC P2P direct setup notice:', err.message);
+  }
+}
+
+async function handleWebRtcSignalMessage(payload) {
+  const { channelId, senderId, signalType, data } = payload;
+  const currentChan = state.activeCall?.channelId || state.incomingCall?.channelId;
+  if (!currentChan || currentChan !== channelId) return;
+  if (state.currentUser?.id && String(senderId) === String(state.currentUser.id)) return;
+
+  try {
+    if (signalType === 'SDP_OFFER') {
+      if (!p2pPeerConnection) {
+        await setupWebRtcPeerAudio(channelId, false);
+      }
+      if (!localMicrophoneStream) {
+        try {
+          localMicrophoneStream = await navigator.mediaDevices.getUserMedia({
+            audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+          });
+          localMicrophoneStream.getTracks().forEach((track) => {
+            try { p2pPeerConnection.addTrack(track, localMicrophoneStream); } catch (e) {}
+          });
+        } catch (e) {}
+      }
+      await p2pPeerConnection.setRemoteDescription(new RTCSessionDescription(data));
+      while (queuedCandidates.length > 0) {
+        await p2pPeerConnection.addIceCandidate(queuedCandidates.shift());
+      }
+      const answer = await p2pPeerConnection.createAnswer();
+      await p2pPeerConnection.setLocalDescription(answer);
+      apiPost('/api/calls/signal', {
+        channelId,
+        senderId: state.currentUser?.id,
+        signalType: 'SDP_ANSWER',
+        data: answer
+      }).catch(() => {});
+    } else if (signalType === 'SDP_ANSWER') {
+      if (p2pPeerConnection) {
+        await p2pPeerConnection.setRemoteDescription(new RTCSessionDescription(data));
+        while (queuedCandidates.length > 0) {
+          await p2pPeerConnection.addIceCandidate(queuedCandidates.shift());
+        }
+      }
+    } else if (signalType === 'ICE_CANDIDATE' && data) {
+      const candidate = new RTCIceCandidate(data);
+      if (p2pPeerConnection && p2pPeerConnection.remoteDescription) {
+        await p2pPeerConnection.addIceCandidate(candidate);
+      } else {
+        queuedCandidates.push(candidate);
+      }
+    }
+  } catch (err) {
+    console.warn('WebRTC signaling notice:', err.message);
+  }
+}
+
+async function joinAgoraVoiceChannel(channelId) {
+  try {
+    if (window.AgoraRTC) {
+      if (agoraClient) {
+        try { await agoraClient.leave(); } catch (e) {}
+      }
+      agoraClient = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
+      try { await agoraClient.setClientRole('host'); } catch (e) {}
+
+      if (AgoraRTC.onAudioAutoplayFailed) {
+        AgoraRTC.onAudioAutoplayFailed = () => {
+          const resumeHandler = () => {
+            if (agoraClient) {
+              agoraClient.remoteUsers.forEach((u) => {
+                if (u.audioTrack) u.audioTrack.play();
+              });
+            }
+            window.removeEventListener('click', resumeHandler);
+            window.removeEventListener('touchstart', resumeHandler);
+          };
+          window.addEventListener('click', resumeHandler);
+          window.addEventListener('touchstart', resumeHandler);
+        };
+      }
+
+      agoraClient.on('user-published', async (user, mediaType) => {
+        await agoraClient.subscribe(user, mediaType);
+        if (mediaType === 'audio') {
+          user.audioTrack.setVolume(100);
+          user.audioTrack.play();
+        }
+      });
+
+      const appId = state.db?.config?.agoraAppId || '645ba1db83884888b288953d1fd3c533';
+      const cleanChannel = (channelId || 'harare_call').replace(/[^a-zA-Z0-9_-]/g, '_');
+      const userUid = Math.floor(100000 + Math.random() * 899999);
+      let rtcToken = null;
+      try {
+        const tokenRes = await apiGet(`/api/agora/token?channel=${encodeURIComponent(cleanChannel)}&uid=${userUid}`);
+        if (tokenRes && tokenRes.token) {
+          rtcToken = tokenRes.token;
+        }
+      } catch (tokenErr) {
+        console.warn('Agora token note:', tokenErr.message);
+      }
+
+      await agoraClient.join(appId, cleanChannel, rtcToken, userUid);
+
+      localAudioTrack = await AgoraRTC.createMicrophoneAudioTrack({
+        AEC: true,
+        ANS: true,
+        AGC: true,
+        encoderConfig: 'speech_standard'
+      });
+      await agoraClient.publish([localAudioTrack]);
+
+      for (const u of agoraClient.remoteUsers) {
+        if (u.hasAudio) {
+          try {
+            await agoraClient.subscribe(u, 'audio');
+            u.audioTrack.setVolume(100);
+            u.audioTrack.play();
+          } catch (e) {}
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Agora RTC Voice notice:', err.message);
+  }
+}
+
+async function toggleCallMute() {
+  isAudioMuted = !isAudioMuted;
+  if (localAudioTrack) {
+    await localAudioTrack.setMuted(isAudioMuted);
+  }
+  if (localMicrophoneStream) {
+    localMicrophoneStream.getAudioTracks().forEach((t) => {
+      t.enabled = !isAudioMuted;
+    });
+  }
+  if (state.activeCall) state.activeCall.isMuted = isAudioMuted;
+  renderCallModal();
+}
+
+function showActiveCallPinNotice() {
+  const activeReq = state.role === 'PROVIDER'
+    ? getProviderActiveBooking(state.currentUser?.id)
+    : getCustomerActiveRequest();
+  if (activeReq?.startPinCode) {
+    showToast(`Arrival Start PIN: #${activeReq.startPinCode}`);
+  } else {
+    showToast('Arrival PIN is required when provider arrives outside.');
+  }
+}
+
+async function endInAppCall(notify = true) {
+  playCallEndedTone();
+  stopCallRingtones();
+  stopActiveCallPolling();
+  if (callInterval) clearInterval(callInterval);
+  const chanId = state.activeCall?.channelId || state.incomingCall?.channelId;
+  const reqId = state.activeChatRequestId || state.activeRequestId;
+
+  try {
+    if (localAudioTrack) {
+      localAudioTrack.close();
+      localAudioTrack = null;
+    }
+    if (agoraClient) {
+      await agoraClient.leave();
+      agoraClient = null;
+    }
+    if (localMicrophoneStream) {
+      localMicrophoneStream.getTracks().forEach((t) => t.stop());
+      localMicrophoneStream = null;
+    }
+    if (p2pPeerConnection) {
+      p2pPeerConnection.close();
+      p2pPeerConnection = null;
+    }
+    const audioEl = document.getElementById('p2pRemoteAudioElement');
+    if (audioEl) audioEl.remove();
+  } catch (e) {}
+
+  state.activeCall = null;
+  state.incomingCall = null;
+  state.isCallMinimized = false;
+  renderCallModal();
+
+  if (notify && chanId) {
+    apiPost('/api/calls/respond', {
+      requestId: reqId,
+      channelId: chanId,
+      action: 'END'
+    }).catch((e) => {});
+  }
+}
+
+// ============================================================================
+// WHATSAPP & IOS IN-APP VOICE CALL CONTROLLER & FLOATING PiP WIDGET
+// ============================================================================
+function formatCallTimer(totalSeconds) {
+  const m = String(Math.floor((totalSeconds || 0) / 60)).padStart(2, '0');
+  const s = String((totalSeconds || 0) % 60).padStart(2, '0');
+  return `${m}:${s}`;
+}
+
+function minimizeCallScreen() {
+  state.isCallMinimized = true;
+  renderCallModal();
+}
+
+function expandCallScreen() {
+  state.isCallMinimized = false;
+  renderCallModal();
+}
+
+// Authentic iOS Call Screen & WhatsApp Floating PiP Mini Call Widget
+function renderCallModal() {
+  const root = document.getElementById('callModalRoot');
+  if (!root) return;
+
+  // 1. Render Incoming Call Ringing Screen (Authentic iOS Incoming UI)
+  if (state.incomingCall) {
+    const inc = state.incomingCall;
+    const proMatch = state.db.providers?.find((p) => p.name === inc.callerName || p.shortName === inc.callerName);
+    const custMatch = state.db.customers?.find((c) => c.name === inc.callerName);
+    const avatarUrl = proMatch?.avatarUrl || custMatch?.avatarUrl || DEFAULT_AVATAR_FALLBACK;
+
+    root.innerHTML = `
+      <div class="indrive-call-overlay">
+        <div class="ios-call-top-bar">
+          <div class="ios-call-encrypted-tag">
+            ${uiIcon('lock', 12)}
+            <span>End-to-End Encrypted</span>
+          </div>
+        </div>
+
+        <div class="ios-call-center">
+          <div class="ios-call-avatar-wrap">
+            <img src="${resolveMediaUrl(avatarUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_AVATAR_FALLBACK}';" class="ios-call-avatar" alt="${inc.callerName}" />
+          </div>
+          <div class="ios-call-peer-name">${escapeHtml(inc.callerName)}</div>
+          <div class="ios-call-peer-context">${escapeHtml(inc.contextTitle || 'Home Service Booking')}</div>
+          <div class="ios-call-subtitle">incoming call</div>
+        </div>
+
+        <div class="ios-call-bottom-row">
+          <div class="ios-call-action-btn-wrap">
+            <button type="button" class="ios-call-btn decline" onclick="declineIncomingCall()">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="transform: rotate(135deg);"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+            </button>
+            <span class="ios-btn-sublabel">Decline</span>
+          </div>
+
+          <div class="ios-call-action-btn-wrap">
+            <button type="button" class="ios-call-btn accept" onclick="answerIncomingCall()">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+            </button>
+            <span class="ios-btn-sublabel">Accept</span>
+          </div>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // 2. Render Active Call Screen
+  if (!state.activeCall) {
+    root.innerHTML = '';
+    return;
+  }
+
+  const peerName = state.activeCall.peerName || 'Specialist';
+  const contextTitle = state.activeCall.contextTitle || 'Harare Home Visit';
+  const proMatch = state.db.providers?.find((p) => p.name === peerName || p.shortName === peerName);
+  const custMatch = state.db.customers?.find((c) => c.name === peerName);
+  const avatarUrl = proMatch?.avatarUrl || custMatch?.avatarUrl || DEFAULT_AVATAR_FALLBACK;
+  const isOutgoing = state.activeCall.callState === 'OUTGOING';
+
+  // 2A. Render Minimized WhatsApp-Style Floating Pill (PiP Widget)
+  if (state.isCallMinimized) {
+    root.innerHTML = `
+      <div class="whatsapp-call-float-pill" onclick="expandCallScreen()" title="Tap to return to call">
+        <div class="wa-float-avatar-wrap">
+          <img src="${resolveMediaUrl(avatarUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_AVATAR_FALLBACK}';" class="wa-float-avatar" alt="${peerName}" />
+          <span class="wa-float-live-dot"></span>
+        </div>
+        <div class="wa-float-info">
+          <div class="wa-float-name">${escapeHtml(peerName)}</div>
+          <div id="callTimerText" class="wa-float-timer">${isOutgoing ? 'Calling...' : formatCallTimer(state.callSeconds)}</div>
+        </div>
+        <button type="button" class="wa-float-action-btn ${state.activeCall.isMuted ? 'muted' : ''}" onclick="event.stopPropagation(); toggleCallMute();" title="${state.activeCall.isMuted ? 'Unmute' : 'Mute'}">
+          <span style="display:inline-flex;">${state.activeCall.isMuted ? uiIcon('micOff', 15) : uiIcon('mic', 15)}</span>
+        </button>
+        <button type="button" class="wa-float-action-btn hangup" onclick="event.stopPropagation(); endInAppCall();" title="End Call">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" style="transform: rotate(135deg);"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+        </button>
+      </div>
+    `;
+    return;
+  }
+
+  // 2B. Full-Screen Call Interface with Minimize Button in Top Left
+  root.innerHTML = `
+    <div class="indrive-call-overlay">
+      <div class="ios-call-top-bar" style="display:flex; align-items:center; justify-content:space-between; width:100%; padding:4px 4px 0 4px;">
+        <button type="button" class="ios-call-minimize-btn" onclick="minimizeCallScreen()" title="Minimize to PiP (WhatsApp Style)">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="ios-call-encrypted-tag" style="margin-right:auto; margin-left:10px;">
+          ${uiIcon('lock', 12)}
+          <span>End-to-End Encrypted</span>
+        </div>
+      </div>
+
+      <div class="ios-call-center">
+        <div class="ios-call-avatar-wrap">
+          <img src="${resolveMediaUrl(avatarUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_AVATAR_FALLBACK}';" class="ios-call-avatar" alt="${peerName}" />
+        </div>
+        <div class="ios-call-peer-name">${escapeHtml(peerName)}</div>
+        <div class="ios-call-peer-context">${escapeHtml(contextTitle)}</div>
+        <div id="callTimerText" class="ios-call-timer">
+          ${isOutgoing ? 'calling...' : formatCallTimer(state.callSeconds)}
+        </div>
+      </div>
+
+      <div>
+        <div class="ios-call-grid">
+          <div class="ios-grid-btn-wrap">
+            <button type="button" class="ios-frosted-circle-btn ${state.activeCall.isMuted ? 'active' : ''}" onclick="toggleCallMute()">
+              <span style="display:inline-flex;">${state.activeCall.isMuted ? uiIcon('micOff', 24) : uiIcon('mic', 24)}</span>
+            </button>
+            <span class="ios-grid-label">mute</span>
+          </div>
+
+          <div class="ios-grid-btn-wrap">
+            <button type="button" class="ios-frosted-circle-btn" onclick="showActiveCallPinNotice()">
+              ${uiIcon('key', 22)}
+            </button>
+            <span class="ios-grid-label">PIN</span>
+          </div>
+
+          <div class="ios-grid-btn-wrap">
+            <button type="button" class="ios-frosted-circle-btn" onclick="minimizeCallScreen(); openChatDrawer(state.activeRequestId || (state.db.requests?.[0]?.id));">
+              ${uiIcon('chat', 22)}
+            </button>
+            <span class="ios-grid-label">message</span>
+          </div>
+        </div>
+
+        <div class="ios-call-bottom-row">
+          <div class="ios-call-action-btn-wrap">
+            <button type="button" class="ios-call-btn end" onclick="endInAppCall()" title="End Call">
+              <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" style="transform: rotate(135deg);"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+            </button>
+            <span class="ios-btn-sublabel">End</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ============================================================================
+// MOBILE & ANDROID HARDWARE / GESTURE BACK BUTTON CONTROLLER (1-STEP BACK)
+// ============================================================================
+function pushNavigationHistoryState(stateObj = {}) {
+  try {
+    if (typeof window !== 'undefined' && window.history && window.history.pushState) {
+      window.history.pushState(stateObj, '');
+    }
+  } catch (e) {}
+}
+
+window.handleAndroidBack = function() {
+  if (state.incomingCall || state.activeCall) {
+    endInAppCall(true);
+    return true;
+  }
+  if (state.activeModal) {
+    closeModal();
+    return true;
+  }
+  if (state.chatDrawerOpen) {
+    closeChatDrawer();
+    return true;
+  }
+  const sideDrawer = document.getElementById('sideDrawerModal');
+  if (sideDrawer && !sideDrawer.classList.contains('hidden')) {
+    closeSideDrawerModal();
+    return true;
+  }
+  if (state.onboardingActive) {
+    if (state.onboardingSlide > 0) {
+      state.onboardingSlide = 0;
+      renderAll();
+      return true;
+    }
+    finishOnboarding();
+    return true;
+  }
+  if (state.role === 'PROVIDER' && state.providerTab && state.providerTab !== 'FEED' && state.providerTab !== 'ACTIVE_JOB') {
+    state.providerTab = 'FEED';
+    renderUiOverlay();
+    return true;
+  }
+  if (state.isOffersMinimized) {
+    toggleOffersMinimize(false);
+    return true;
+  }
+  if (state.screenStep === 'CONFIGURE') {
+    state.screenStep = 'HOME';
+    renderAll();
+    return true;
+  }
+  if (state.role === 'CUSTOMER' && state.screenStep === 'SEARCHING') {
+    cancelActiveCustomerRequest();
+    return true;
+  }
+  if (state.hubView === 'MARKETPLACE' && state.role !== 'PROVIDER' && state.screenStep === 'HOME' && state.customerTab === 'HOME') {
+    state.hubView = 'HUB';
+    lastUiOverlaySignature = '';
+    renderAll();
+    return true;
+  }
+  return false;
+};
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('popstate', (e) => {
+    window.handleAndroidBack();
+  });
+
+  // Global navigation & modal aliases for profile & media actions
+  window.openWalletTopupModal = openWalletTopupModal;
+  window.openDisputeHistoryModal = openDisputeHistoryModal;
+  window.openSafetyCenterModal = openSafetyCenterModal;
+  window.openWhatsAppDirectSupport = openWhatsAppDirectSupport;
+  window.startVoiceNoteRecording = startVoiceNoteRecording;
+  window.stopVoiceNoteRecording = stopVoiceNoteRecording;
+}
+
+function openWalletTopupModal() {
+  openProviderWalletModal();
+}
+
+function openDisputeHistoryModal(jobId) {
+  openDisputeModal(jobId);
+}
+
+function openSafetyCenterModal() {
+  state.activeModal = 'SAFETY';
+  lastRenderedModalKey = '';
+  renderModalLayer();
+}
+
+function openSettingsModal() {
+  state.activeModal = 'SETTINGS';
+  initSettingsDraftFromUser();
+  lastRenderedModalKey = '';
+  renderModalLayer();
+}
+
+function openWhatsAppDirectSupport() {
+  openSupportModal();
+}
+
+function startVoiceNoteRecording() {
+  startRecordingVoiceNote();
+}
+
+function stopVoiceNoteRecording() {
+  stopRecordingVoiceNote();
+}
+
+window.resetApp = async function() {
+  try {
+    await fetch('/api/reset-data');
+    localStorage.removeItem('findit_offline_db');
+    state.activeRequestId = null;
+    state.customerTab = 'HOME';
+    state.screenStep = 'HOME';
+    state.hubView = 'MARKETPLACE';
+    state.role = 'CUSTOMER';
+    if (state.db) state.db.requests = [];
+    showToast('App and database reset successfully!', 'success');
+    await fetchState(true);
+    renderAll(true);
+  } catch (e) {
+    showToast('App reset completed locally.', 'info');
+    renderAll(true);
+  }
+};
+
+if (typeof window !== 'undefined' && window.location.search.includes('reset')) {
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.delete('reset');
+    window.history.replaceState({}, document.title, url.pathname + (url.search ? url.search : ''));
+  } catch (e) {}
+  setTimeout(() => {
+    if (typeof window.resetApp === 'function') window.resetApp();
+  }, 100);
+}

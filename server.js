@@ -139,7 +139,10 @@ async function verifyPassword(plainText, storedHash) {
 }
 
 function normalizeCategoryId(catId) {
+  if (!catId) return 'repairs_construction';
+  const raw = String(catId).trim();
   const map = {
+    hair: 'beauty_care',
     braiding: 'beauty_care',
     barber: 'beauty_care',
     nails: 'beauty_care',
@@ -148,9 +151,19 @@ function normalizeCategoryId(catId) {
     lashes: 'beauty_care',
     cleaning: 'cleaning_domestic',
     handyman: 'repairs_construction',
-    plumbing: 'repairs_construction'
+    plumbing: 'repairs_construction',
+    plumbing_electrical: 'repairs_construction',
+    tech_appliances: 'repairs_construction',
+    solar: 'solar_power_water',
+    electrical: 'solar_power_water',
+    borehole: 'solar_power_water',
+    gardening: 'gardening_outdoor',
+    gardening_landscaping: 'gardening_outdoor',
+    mechanic: 'automotive',
+    delivery: 'general_labour',
+    errands: 'general_labour'
   };
-  return map[catId] || catId || 'repairs_construction';
+  return map[raw] || raw || 'repairs_construction';
 }
 
 // Admin Security: Argon2id / bcrypt / PBKDF2 Password Hashing
@@ -643,6 +656,13 @@ function getInitialDatabase() {
         'EcoCash USD'
       ],
       categoryCommissions: {
+        repairs_construction: 10,
+        beauty_care: 10,
+        cleaning_domestic: 10,
+        automotive: 10,
+        solar_power_water: 10,
+        gardening_outdoor: 10,
+        general_labour: 10,
         braiding: 10,
         nails: 10,
         makeup: 12,
@@ -851,6 +871,17 @@ function getInitialDatabase() {
 function normalizeDatabase(parsed) {
   const init = getInitialDatabase();
   if (!Array.isArray(parsed.hubServices)) parsed.hubServices = init.hubServices;
+  parsed.hubServices = (parsed.hubServices || []).map((svc) => {
+    const next = { ...svc };
+    if (next.id === 'job_marketplace' && (!next.imageUrl || String(next.imageUrl).includes('unsplash.com'))) {
+      next.imageUrl = '/assets/hub/marketplace.jpg';
+    } else if (next.id === 'online_shopping' && (!next.imageUrl || String(next.imageUrl).includes('unsplash.com'))) {
+      next.imageUrl = '/assets/hub/shopping.jpg';
+    } else if (next.id === 'transport_carriers' && (!next.imageUrl || String(next.imageUrl).includes('unsplash.com'))) {
+      next.imageUrl = '/assets/hub/transport.jpg';
+    }
+    return next;
+  });
   if (!parsed.ecocashTopups) parsed.ecocashTopups = init.ecocashTopups;
   if (!parsed.disciplineLogs) parsed.disciplineLogs = [];
   if (!parsed.pendingVerifications) parsed.pendingVerifications = [];
@@ -864,6 +895,16 @@ function normalizeDatabase(parsed) {
   parsed.settings.ecocashMerchantNumber = '*151*2*2*84920#';
   if (!parsed.settings.ecocashMerchantName) parsed.settings.ecocashMerchantName = 'FINDIT HARARE OFFICIAL';
   if (!parsed.settings.ecocashUssdShortcode) parsed.settings.ecocashUssdShortcode = '*151*2*2*84920#';
+  parsed.settings.categoryCommissions = {
+    repairs_construction: 10,
+    beauty_care: 10,
+    cleaning_domestic: 10,
+    automotive: 10,
+    solar_power_water: 10,
+    gardening_outdoor: 10,
+    general_labour: 10,
+    ...(parsed.settings.categoryCommissions || {})
+  };
 
   (parsed.requests || []).forEach((r) => {
     if (!r.messages) r.messages = [];
@@ -947,19 +988,41 @@ function deductBookingCommissionIfNeeded(reqItem, triggerSource = 'PIN_VERIFIED'
 
   const totalAgreedUsd = Number(reqItem.agreedTotalUsd || reqItem.budgetUsd || 20);
   const categoryRate = Number(reqItem.configuredCommissionPercent ?? db.settings?.categoryCommissions?.[reqItem.categoryId] ?? db.settings?.commissionPercent ?? 10);
-  const promoApplied = typeof reqItem.promoApplied === 'boolean'
-    ? reqItem.promoApplied
-    : Boolean(db.settings?.launchPromoActive);
-  const feeUsd = promoApplied
-    ? 0
-    : (reqItem.commissionFeeUsd !== undefined && reqItem.commissionFeeUsd !== null
-      ? Number(reqItem.commissionFeeUsd)
-      : Math.max(1, Math.round(totalAgreedUsd * (categoryRate / 100) * 100) / 100));
+  const standardFeeUsd = Math.max(1, Math.round(totalAgreedUsd * (categoryRate / 100) * 100) / 100);
+  const promoApplied = Boolean(db.settings?.launchPromoActive || reqItem.promoApplied);
+  const feeUsd = promoApplied ? 0 : standardFeeUsd;
 
   reqItem.commissionDeducted = true;
   reqItem.commissionDeductedSource = triggerSource;
+  reqItem.standardCommissionFeeUsd = standardFeeUsd;
   reqItem.commissionFeeUsd = feeUsd;
   reqItem.promoApplied = promoApplied;
+
+  if (!Array.isArray(db.revenueLedger)) db.revenueLedger = [];
+  const existingLedger = db.revenueLedger.find((e) => e.requestId === reqItem.id);
+  if (existingLedger) {
+    existingLedger.bookingAmountUsd = totalAgreedUsd;
+    existingLedger.configuredCommissionPercent = categoryRate;
+    existingLedger.standardFeeUsd = standardFeeUsd;
+    existingLedger.promoApplied = promoApplied;
+    existingLedger.actualFeeCollectedUsd = feeUsd;
+    existingLedger.timestamp = new Date().toISOString();
+  } else {
+    db.revenueLedger.unshift({
+      id: 'rev_' + Date.now(),
+      timestamp: new Date().toISOString(),
+      requestId: reqItem.id,
+      providerName: provider.name || reqItem.acceptedProviderName || 'Service Provider',
+      customerName: reqItem.customerName || 'Client',
+      categoryName: reqItem.categoryName || reqItem.categoryId,
+      bookingAmountUsd: totalAgreedUsd,
+      configuredCommissionPercent: categoryRate,
+      standardFeeUsd,
+      promoApplied,
+      actualFeeCollectedUsd: feeUsd,
+      paymentMethod: reqItem.paymentMethod || 'Cash USD'
+    });
+  }
 
   if (feeUsd > 0) {
     provider.walletBalanceUsd = Math.round((Number(provider.walletBalanceUsd || 0) - feeUsd) * 100) / 100;
@@ -1110,7 +1173,14 @@ function computeRealOperationalMetrics(targetDb) {
   }, 0);
 
   const totalCompletedGmvUsd = jobsCompleted.reduce((sum, r) => {
-    const val = Number(r.priceUsd || r.acceptedPriceUsd || (r.offers && r.offers.find(o => o.id === r.acceptedOfferId)?.priceUsd) || 0);
+    const val = Number(
+      r.agreedTotalUsd ||
+      r.priceUsd ||
+      r.acceptedPriceUsd ||
+      (r.offers && r.offers.find(o => o.id === r.acceptedOfferId)?.priceUsd) ||
+      r.budgetUsd ||
+      0
+    );
     return sum + val;
   }, 0);
 
@@ -1196,61 +1266,61 @@ async function migratePasswordsToArgon2(targetDb) {
 
 function heuristicClassifyTask(description = '', currentCategoryId = 'repairs_construction') {
   const text = (description || '').toLowerCase();
-  let matchedCategoryId = currentCategoryId || 'repairs_construction';
+  let matchedCategoryId = normalizeCategoryId(currentCategoryId || 'repairs_construction');
   let suggestedTitle = 'Verified Home Service';
   let recommendedFareUsd = 25;
   let skills = ['Verified Mobile Pro'];
 
   if (/(braid|knotless|cornrow|wig|weave|hair|dread|loc|twist|salon)/i.test(text)) {
-    matchedCategoryId = 'hair';
+    matchedCategoryId = 'beauty_care';
     suggestedTitle = 'Mobile Hair & Braiding Specialist';
     recommendedFareUsd = 30;
     skills = ['Knotless Braids', 'Wig Styling', 'Home Salon'];
   } else if (/(fade|barber|haircut|beard|shave|trim|chiskop)/i.test(text)) {
-    matchedCategoryId = 'barber';
+    matchedCategoryId = 'beauty_care';
     suggestedTitle = 'VIP Mobile Barber Visit';
     recommendedFareUsd = 15;
     skills = ['Skin Fade', 'Beard Trim', 'Cordless Clippers'];
   } else if (/(nail|manicure|pedicure|acrylic|gel|lash|makeup|facial)/i.test(text)) {
-    matchedCategoryId = 'nails';
+    matchedCategoryId = 'beauty_care';
     suggestedTitle = 'Mobile Nails & Beauty Tech';
     recommendedFareUsd = 20;
     skills = ['Acrylics & Gel', 'Pedicure', 'Lashes & Makeup'];
-  } else if (/(plumb|pipe|leak|geyser|toilet|sink|tap|drain|water|borehole|tank)/i.test(text)) {
-    matchedCategoryId = 'plumbing_electrical';
+  } else if (/(borehole|pump|solar|inverter|battery|wiring|socket|power|zoli|zesa|electric|db\s*box|breaker|geyser|generator)/i.test(text)) {
+    matchedCategoryId = 'solar_power_water';
+    suggestedTitle = 'Solar, Electrical Power & Borehole Specialist';
+    recommendedFareUsd = 35;
+    skills = ['Solar & Inverter', 'Borehole & Geyser', 'Wiring & Breakers'];
+  } else if (/(plumb|pipe|leak|toilet|sink|tap|drain|water|tank)/i.test(text)) {
+    matchedCategoryId = 'repairs_construction';
     suggestedTitle = 'Plumbing & Water System Repair';
     recommendedFareUsd = 30;
-    skills = ['Burst Pipe / Leak', 'Geyser & Tank', 'Emergency Plumber'];
-  } else if (/(solar|inverter|battery|wiring|socket|power|zoli|zesa|electric|db\s*box|breaker)/i.test(text)) {
-    matchedCategoryId = 'plumbing_electrical';
-    suggestedTitle = 'Electrical & Solar Technician';
-    recommendedFareUsd = 35;
-    skills = ['Solar Inverter', 'Fault Finding', 'Wiring & Breakers'];
-  } else if (/(clean|maid|carpet|sofa|laundry|ironing|housekeep|window)/i.test(text)) {
-    matchedCategoryId = 'cleaning';
+    skills = ['Burst Pipe / Leak', 'Tap & Drain Fix', 'Emergency Plumber'];
+  } else if (/(clean|maid|carpet|sofa|couch|laundry|ironing|housekeep|window)/i.test(text)) {
+    matchedCategoryId = 'cleaning_domestic';
     suggestedTitle = 'Home Deep Cleaning & Housekeeping';
     recommendedFareUsd = 20;
     skills = ['Deep Cleaning', 'Upholstery & Carpets', 'Laundry'];
-  } else if (/(car|battery|jumpstart|mechanic|tyre|tire|brake|engine|wash|valet)/i.test(text)) {
+  } else if (/(car|battery|jumpstart|mechanic|tyre|tire|brake|engine|wash|valet|alternator)/i.test(text)) {
     matchedCategoryId = 'automotive';
     suggestedTitle = 'Mobile Mechanic & Car Care';
     recommendedFareUsd = 25;
     skills = ['Roadside Diagnostics', 'Battery & Brakes', 'Mobile Valet'];
-  } else if (/(garden|lawn|grass|tree|hedge|landscap|pool)/i.test(text)) {
-    matchedCategoryId = 'gardening_landscaping';
-    suggestedTitle = 'Gardening, Lawn & Pool Care';
+  } else if (/(garden|lawn|grass|tree|hedge|landscap|pool|rubble|paving)/i.test(text)) {
+    matchedCategoryId = 'gardening_outdoor';
+    suggestedTitle = 'Gardening, Lawn & Outdoor Care';
     recommendedFareUsd = 18;
     skills = ['Lawn Mowing', 'Tree Trimming', 'Yard Clean-Up'];
-  } else if (/(fridge|freezer|washing\s*machine|stove|tv|laptop|wifi|dstv|starlink)/i.test(text)) {
-    matchedCategoryId = 'tech_appliances';
-    suggestedTitle = 'Appliance, Fridge & Tech Repair';
-    recommendedFareUsd = 30;
-    skills = ['Fridge Regas & Repair', 'Starlink / DStv', 'Appliance Diagnostics'];
-  } else if (/(paint|tiling|tile|ceiling|roof|carpenter|door|lock|weld|brick|wall|durawall)/i.test(text)) {
+  } else if (/(fridge|freezer|washing\s*machine|stove|tv|laptop|wifi|dstv|starlink|paint|tiling|tile|ceiling|roof|carpenter|door|lock|weld|brick|wall|durawall)/i.test(text)) {
     matchedCategoryId = 'repairs_construction';
     suggestedTitle = 'Home Repairs, Carpentry & Construction';
     recommendedFareUsd = 35;
-    skills = ['Tiling & Painting', 'Roof & Ceiling', 'Welding & Locks'];
+    skills = ['Tiling & Painting', 'Roof & Carpentry', 'Appliance & Repairs'];
+  } else if (/(load|offload|furniture|move|errand|grocery|gazebo|tent|heavy|labour)/i.test(text)) {
+    matchedCategoryId = 'general_labour';
+    suggestedTitle = 'General Labour, Loading & Errands';
+    recommendedFareUsd = 20;
+    skills = ['Heavy Loading', 'Handyman Assist', 'Urgent Errands'];
   }
 
   return { matchedCategoryId, suggestedTitle, recommendedFareUsd, skills };
@@ -1286,7 +1356,7 @@ Return ONLY a JSON object with keys:
       detectedSkills: heur.skills
     };
 
-    const targetCatId = aiData.matchedCategoryId || reqItem.categoryId;
+    const targetCatId = normalizeCategoryId(aiData.matchedCategoryId || reqItem.categoryId);
     const matchedProviders = (db.providers || [])
       .filter((p) => !p.isBanned && p.isOnline !== false && (!p.status || p.status === 'AVAILABLE' || p.status === 'ONLINE'))
       .filter((p) => {
@@ -1783,13 +1853,19 @@ function mergeCloudIntoLocalDb(localDb, cloudDb) {
     });
   }
 
+  const localSettingsTs = Number(localDb.settings?.updatedAt || localDb.updatedAt || 0);
+  const cloudSettingsTs = Number(cloudDb.settings?.updatedAt || cloudDb.updatedAt || 0);
+  const mergedSettings = cloudSettingsTs > localSettingsTs
+    ? { ...(localDb.settings || {}), ...(cloudDb.settings || {}) }
+    : { ...(cloudDb.settings || {}), ...(localDb.settings || {}) };
+
   const merged = {
     ...localDb,
     ...cloudDb,
     resetAt,
     deletedAccountIds,
     deletedChangelogIds,
-    settings: { ...(localDb.settings || {}), ...(cloudDb.settings || {}) },
+    settings: mergedSettings,
     requests: mergedRequests,
     providers: mergeByIdList(localDb.providers || [], cloudDb.providers || [], deletedAccountIds),
     customers: mergeByIdList(localDb.customers || [], cloudDb.customers || [], deletedAccountIds),
@@ -1939,12 +2015,11 @@ async function syncFromCloudKvStore(force = false) {
       ]);
       lastCloudPullMs = Date.now();
       let changed = false;
-      if (kvData && Array.isArray(kvData.requests)) {
-        db = mergeCloudIntoLocalDb(db, kvData);
-        changed = true;
-      }
-      if (r2Data && Array.isArray(r2Data.requests)) {
-        db = mergeCloudIntoLocalDb(db, r2Data);
+      const validSnapshots = [kvData, r2Data]
+        .filter((snap) => snap && Array.isArray(snap.requests))
+        .sort((a, b) => Number(a.settings?.updatedAt || a.updatedAt || 0) - Number(b.settings?.updatedAt || b.updatedAt || 0));
+      for (const snap of validSnapshots) {
+        db = mergeCloudIntoLocalDb(db, snap);
         changed = true;
       }
       if (changed) {
@@ -2924,7 +2999,7 @@ const server = http.createServer(async (req, res) => {
       db.adminNotifications.unshift({
         id: 'notif_disp_' + Date.now(),
         type: 'DISPUTE_FILED',
-        title: `⚠️ New Dispute Filed: ${category}`,
+        title: `New Dispute Filed: ${category}`,
         body: `${raisedBy === 'CUSTOMER' ? newDispute.customer.name : newDispute.provider.name} reported job #${jobId || 'N/A'}: "${reason.slice(0, 90)}"`,
         createdAt: new Date().toISOString(),
         isRead: false
@@ -2984,7 +3059,7 @@ const server = http.createServer(async (req, res) => {
       db.adminNotifications.unshift({
         id: 'notif_app_' + Date.now(),
         type: 'APPEAL_SUBMITTED',
-        title: `⚖️ Suspension Appeal: ${account.name}`,
+        title: `Suspension Appeal: ${account.name}`,
         body: `${account.name} (${account.finditId}) filed appeal: "${appealReason.slice(0, 80)}..."`,
         createdAt: new Date().toISOString(),
         isRead: false
@@ -3045,10 +3120,10 @@ const server = http.createServer(async (req, res) => {
         `Your Findit Harare verification code is: ${otpCode}. Valid for 10 minutes.`
       )}`;
       const adminAlertText =
-        `🔔 *Findit Harare Verification Request*\n\n` +
-        `👤 Role: ${roleStr}\n` +
-        `📱 User Phone: ${rawPhone}\n` +
-        `🔑 Code: *${otpCode}*\n\n` +
+        `*Findit Harare Verification Request*\n\n` +
+        `Role: ${roleStr}\n` +
+        `User Phone: ${rawPhone}\n` +
+        `Code: *${otpCode}*\n\n` +
         `Tap below to send this code to user on WhatsApp:\n${userWaLink}`;
 
       sendWhatsAppDirectText(ADMIN_WHATSAPP_PHONE, adminAlertText).catch((e) =>
@@ -4485,8 +4560,8 @@ Return ONLY JSON with keys:
           providerSkillTier: provider.skillTier || 'Verified pro',
           providerExpYears: provider.experienceYears || 3,
           providerRating: provider.rating ?? 5.0,
-          providerReviewCount: provider.reviewCount || 15,
-          providerCompletedJobs: provider.completedBookings ?? 1,
+          providerReviewCount: provider.reviewCount ?? 0,
+          providerCompletedJobs: provider.completedBookings ?? 0,
           providerBadges: provider.badges || ['ID Verified', 'Home Visit Ready'],
           distanceKm: distKm,
           etaMinutes: Math.max(4, Math.round(distKm * 3.2)),
@@ -4599,21 +4674,6 @@ Return ONLY JSON with keys:
           reqItem.lng
         );
       }
-
-      db.revenueLedger.unshift({
-        id: 'rev_' + Date.now(),
-        timestamp: new Date().toISOString(),
-        requestId: reqItem.id,
-        providerName: offer.providerName,
-        customerName: reqItem.customerName,
-        categoryName: reqItem.categoryName,
-        bookingAmountUsd: totalAgreedUsd,
-        configuredCommissionPercent: categoryRate,
-        standardFeeUsd,
-        promoApplied: isPromo,
-        actualFeeCollectedUsd: chargedFeeUsd,
-        paymentMethod: reqItem.paymentMethod
-      });
 
       reqItem.messages.push({
         id: 'msg_' + Date.now(),
@@ -4780,12 +4840,15 @@ Return ONLY JSON with keys:
       // Platform commission deducted strictly upon Completion PIN verification
       deductBookingCommissionIfNeeded(reqItem, '4-Digit Completion PIN Verified');
 
-      // Update provider and customer completed stats
-      const offer = (reqItem.offers || []).find((o) => o.id === reqItem.acceptedOfferId);
-      const prov = (db.providers || []).find((p) => p.id === (reqItem.acceptedProviderId || offer?.providerId));
-      if (prov) prov.completedBookings = (prov.completedBookings || 0) + 1;
-      const cust = (db.customers || []).find((c) => c.id === reqItem.customerId);
-      if (cust) cust.completedBookings = (cust.completedBookings || 0) + 1;
+      // Update provider and customer completed stats (once per booking)
+      if (!reqItem.completionCounted) {
+        reqItem.completionCounted = true;
+        const offer = (reqItem.offers || []).find((o) => o.id === reqItem.acceptedOfferId);
+        const prov = (db.providers || []).find((p) => p.id === (reqItem.acceptedProviderId || offer?.providerId));
+        if (prov) prov.completedBookings = (prov.completedBookings || 0) + 1;
+        const cust = (db.customers || []).find((c) => c.id === reqItem.customerId);
+        if (cust) cust.completedBookings = (cust.completedBookings || 0) + 1;
+      }
 
       if (!Array.isArray(reqItem.messages)) reqItem.messages = [];
       reqItem.messages.push({
@@ -5063,6 +5126,16 @@ Return ONLY JSON with keys:
       const reqItem = ensureRequestInDb(body.requestId, body.requestSnapshot);
       if (!reqItem) return sendJson(res, 404, { error: 'Booking not found' });
 
+      const previousStatus = reqItem.status;
+      const alreadyCompleted = previousStatus === 'COMPLETED';
+      if (body.status === 'COMPLETED') {
+        const isClient = body.ratedByRole === 'CUSTOMER' || body.ratedByRole === 'CLIENT';
+        // Require Start PIN verification if provider is marking completed and it wasn't already completed/autoStarted
+        if (!alreadyCompleted && !isClient && !reqItem.pinVerifiedByProvider && !body.pinCode && !reqItem.autoStarted) {
+          return sendJson(res, 400, { error: 'Start PIN must be entered and verified before service can be marked as completed.' });
+        }
+      }
+
       reqItem.status = body.status;
       reqItem.updatedAt = Date.now();
       if (body.status === 'ARRIVED') {
@@ -5109,12 +5182,6 @@ Return ONLY JSON with keys:
       }
 
       if (body.status === 'COMPLETED') {
-        const isClient = body.ratedByRole === 'CUSTOMER' || body.ratedByRole === 'CLIENT';
-        const alreadyCompleted = reqItem.status === 'COMPLETED';
-        // Only require PIN verification if provider is marking completed and it wasn't already completed/autoStarted
-        if (!alreadyCompleted && !isClient && !reqItem.pinVerifiedByProvider && !body.pinCode && !reqItem.autoStarted) {
-          return sendJson(res, 400, { error: 'Start PIN must be entered and verified before service can be marked as completed.' });
-        }
         deductBookingCommissionIfNeeded(reqItem, 'Job Marked Completed');
         const ratedByRole = body.ratedByRole || 'CUSTOMER'; // 'CUSTOMER' | 'PROVIDER'
         const newRating = Math.max(1, Math.min(5, Number(body.rating || 5)));
@@ -5132,12 +5199,17 @@ Return ONLY JSON with keys:
           : (db.providers || []).find((p) => p.id === reqItem.acceptedProviderId);
         const customer = (db.customers || []).find((c) => c.id === reqItem.customerId) || (db.customers ? db.customers[0] : null);
 
+        if (!reqItem.completionCounted) {
+          reqItem.completionCounted = true;
+          if (provider) provider.completedBookings = (provider.completedBookings || 0) + 1;
+          if (customer) customer.completedBookings = (customer.completedBookings || 0) + 1;
+        }
+
         if (ratedByRole === 'PROVIDER') {
           // Service Provider is rating the Client (User) to ensure fair treatment!
           reqItem.clientRatedByProvider = { rating: newRating, tags, comment, date: new Date().toISOString() };
           if (customer) {
             if (!Array.isArray(customer.reviews)) customer.reviews = [];
-            customer.completedBookings = (customer.completedBookings || 0) + 1;
             customer.reviewCount = (customer.reviewCount || 0) + 1;
             customer.rating = Math.round(((customer.rating * (customer.reviewCount - 1) + newRating) / customer.reviewCount) * 100) / 100;
             customer.reviews.unshift({
@@ -5148,15 +5220,11 @@ Return ONLY JSON with keys:
               date: 'Just now'
             });
           }
-          if (provider) {
-            provider.completedBookings = (provider.completedBookings || 0) + 1;
-          }
         } else {
           // Client is rating the Service Provider
           reqItem.providerRatedByClient = { rating: newRating, tags, comment, date: new Date().toISOString() };
           if (provider) {
             if (!Array.isArray(provider.reviews)) provider.reviews = [];
-            provider.completedBookings = (provider.completedBookings || 0) + 1;
             provider.reviewCount = (provider.reviewCount || 0) + 1;
             provider.rating = Math.round(((provider.rating * (provider.reviewCount - 1) + newRating) / provider.reviewCount) * 100) / 100;
             provider.reviews.unshift({
@@ -5166,9 +5234,6 @@ Return ONLY JSON with keys:
               date: 'Just now',
               comment
             });
-          }
-          if (customer) {
-            customer.completedBookings = (customer.completedBookings || 0) + 1;
           }
         }
 
@@ -5310,7 +5375,7 @@ Return ONLY JSON with keys:
       let text = (body.text || '').trim();
       const photoUrl = body.photoUrl ? offloadDataUriToR2Url(body.photoUrl) : null;
       if (!text && !photoUrl) return sendJson(res, 400, { error: 'Empty message' });
-      if (!text && photoUrl) text = '📷 Photo attached';
+      if (!text && photoUrl) text = '[Photo attached]';
 
       // Both clients and providers can attach photos in chat (e.g. site photos, parts needed, proof of work)
       // Anti-leakage shield below ensures no off-platform phone numbers or external links are exchanged
@@ -5589,7 +5654,7 @@ Return ONLY JSON with keys: "matchedCategoryId" (string), "taskSummary" (string)
       } else if (/(website|site|url|web\s*page|link|domain|finditharare\.co\.zw|online)/i.test(lower)) {
         fallbackReply = `*Findit Harare Official Website & Contacts:*\n\n• *Official Website:* *https://finditharare.co.zw* (*finditharare.co.zw*)\n• *Official Support:* In-App Live Support Chat (24/7)\n• *EcoCash Biller Code:* *151*2*2*84920#\n• *Instagram:* *@findithahare*\n• *Facebook:* *Findit Harare Official*\n\nLet me know if you need help with a booking or your account!`;
       } else if (/(categor|change\s*job|edit\s*job|switch\s*service|add\s*service|my\s*services|what\s*jobs|choose\s*categor|settings|profile)/i.test(lower)) {
-        fallbackReply = `*How to View or Change Your Job Categories & Account Settings:*\n\n1. Open the left side menu (☰) and tap *Account Settings* (or tap the *Categories / Settings* button in Provider Mode).\n2. Under *My Service Categories (Up to 3)*, you can see your active job categories and tap any category to add or switch your specialties (e.g., *Home Repairs & Construction*, *Beauty & Personal Care*, *Cleaning & Domestic*, *Automotive*, *Solar, Electrical Power & Water*, *Gardening & Outdoor*, *General Labour*).\n3. Tap *Save Account & Categories*—your job feed will immediately update to show only requests matching your chosen categories!`;
+        fallbackReply = `*How to View or Change Your Job Categories & Account Settings:*\n\n1. Open the left side menu and tap *Account Settings* (or tap the *Categories / Settings* button in Provider Mode).\n2. Under *My Service Categories (Up to 3)*, you can see your active job categories and tap any category to add or switch your specialties (e.g., *Home Repairs & Construction*, *Beauty & Personal Care*, *Cleaning & Domestic*, *Automotive*, *Solar, Electrical Power & Water*, *Gardening & Outdoor*, *General Labour*).\n3. Tap *Save Account & Categories*—your job feed will immediately update to show only requests matching your chosen categories!`;
       } else if (/(top\s*up|ecocash|wallet|balance|low\s*account|5\s*dollar|\$5|\$2|commission|fee|deduct)/i.test(lower)) {
         fallbackReply = `*Findit Harare Wallet & Commission Guide:*\n\n1. *$5 Welcome Bonus:* Every verified Service Provider receives *$5.00* free starter credit upon joining.\n2. *Commission & $2 Minimum Floor:* ${commissionPolicy}. Your wallet must retain at least *$2.00* to place bids.\n3. *How Much to Top Up When Bidding:* The app shows the commission and any required top-up before you submit a bid. During the 0% launch promotion, only the minimum wallet reserve applies.\n4. *EcoCash USD Top-Up:* Dial *151*2*2*84920# (*FINDIT HARARE OFFICIAL*), then paste your EcoCash SMS in the *Wallet* tab for instant verification!`;
       } else if (/(pin|start\s*pin|4-digit|arrive|verify|code|outside|gate)/i.test(lower)) {
@@ -5619,7 +5684,7 @@ Official Business Identity & Links:
 Complete Findit Harare Platform Knowledge (Understand any user phrasing, indirect questions, or local Harare context):
 1. Booking & Real Location Navigation: Clients can drag the blue "YOU" pin anywhere on the Harare map OR tap "Your Home Visit Location" to search any real Harare street, landmark, or suburb and navigate the map there. When a client selects a category tile, the "Most Used Services" list updates to match that category's services. Clients can book for "Now (Immediate)" or "Schedule for Later", attach a style/task reference photo, set their USD offer fare, and see in real time the exact count of pros viewing their request.
 2. Service Categories & Catalogue: ${categoriesSummary}
-3. Provider Job Categories & Account Settings: Service Providers can view, edit, or change their chosen job categories (up to 3 categories) anytime in "Account Settings" (from the side menu ☰ or provider header). Providers only see open job request cards that match their chosen categories. They can also update their Brand Name, Starting Price (USD), Suburb, Physical Workshop/Office address, and Work Catalogue photos in the app.
+3. Provider Job Categories & Account Settings: Service Providers can view, edit, or change their chosen job categories (up to 3 categories) anytime in "Account Settings" (from the side menu or provider header). Providers only see open job request cards that match their chosen categories. They can also update their Brand Name, Starting Price (USD), Suburb, Physical Workshop/Office address, and Work Catalogue photos in the app.
 4. Provider Wallet, $5 Welcome Bonus & Commission: Every new Service Provider gets $5.00 free starter credit. ${commissionPolicy}. A provider's wallet balance cannot drop below $2.00 to bid. The app shows any required top-up based on the configured commission and promotion status. Top up via EcoCash USD *151*2*2*84920# and paste the confirmation SMS in the Wallet tab.
 5. Arrival Start PIN & Safety: When a provider arrives within 20m of the client, the client shares their 4-digit Start PIN so the provider can verify arrival and begin work. (If the provider is at the pin within 20m for 3 minutes, auto-pair verifies the start.) Phone numbers, instagram.com, facebook.com, and external links are blocked in chat, and providers cannot upload images/flyers in chat.
 6. Multi-Service Hub: Includes the active Job Marketplace plus upcoming Online Shopping and Transport & Carriers hubs.
@@ -5914,6 +5979,7 @@ Return ONLY valid JSON with key: "reply" (string).`;
           ...body.categoryCommissions
         };
       }
+      db.settings.updatedAt = Date.now();
       saveDb(db);
       broadcastUpdate('SETTINGS_UPDATED', { settings: db.settings });
       return sendJson(res, 200, { settings: db.settings });
@@ -6137,8 +6203,8 @@ Return ONLY valid JSON with key: "reply" (string).`;
         id,
         name,
         fullName: body.fullName || name,
-        mapIcon: body.icon || '🛠️',
-        icon: body.icon || '🛠️',
+        mapIcon: body.icon || 'hammer',
+        icon: body.icon || 'hammer',
         tagline: body.tagline || `Verified mobile ${name} specialists visiting Harare homes`,
         status: requestedStatus,
         suggestedMinUsd: Number(body.suggestedMinUsd || 15),
