@@ -311,6 +311,422 @@
       justify-content: center;
       padding: 16px;
     }
+
+    :root {
+      --blue-primary: #0052FF;
+      --blue-dark: #0046D5;
+      --blue-soft: #EEF4FF;
+      --bg-page: #F7F8FC;
+      --bg-sidebar: #FFFFFF;
+      --bg-card: #FFFFFF;
+      --border: #E7EBF2;
+      --text: #17243A;
+      --muted: #748096;
+    }
+
+    body {
+      min-width: 320px;
+      background: var(--bg-page);
+    }
+
+    .sidebar {
+      width: 258px;
+      padding: 20px 14px;
+      background: var(--bg-sidebar);
+      color: var(--text);
+      border-right: 1px solid var(--border);
+      box-shadow: 4px 0 18px rgba(16, 24, 40, 0.025);
+    }
+
+    .brand {
+      padding: 0 7px 16px;
+      border-bottom: 1px solid #EEF1F6;
+    }
+
+    .brand > div:last-child > div:first-child {
+      color: #17243A;
+    }
+
+    .brand > div:last-child > div:last-child {
+      color: #8490A3 !important;
+    }
+
+    .brand > div:last-child span {
+      color: var(--blue-primary) !important;
+    }
+
+    .sidebar .nav-item {
+      min-height: 40px;
+      padding: 9px 11px;
+      border: 1px solid transparent !important;
+      border-radius: 12px;
+      color: #667085;
+      font-size: 12.5px;
+    }
+
+    .sidebar .nav-item:not(.active) {
+      background: transparent !important;
+    }
+
+    .sidebar .nav-item:hover:not(.active) {
+      background: #F7F9FC !important;
+      color: #17243A;
+    }
+
+    .sidebar .nav-item.active {
+      background: #EEF4FF !important;
+      color: var(--blue-primary) !important;
+      box-shadow: none;
+    }
+
+    .sidebar > div:last-child {
+      border-color: #EEF1F6 !important;
+    }
+
+    .main-area {
+      min-width: 0;
+      padding: 26px 30px 36px;
+      background: var(--bg-page);
+    }
+
+    .top-header {
+      padding: 18px 20px;
+      margin-bottom: 18px;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      background: #FFFFFF;
+      box-shadow: 0 4px 16px rgba(16, 24, 40, 0.035);
+    }
+
+    .admin-toolbar {
+      position: sticky;
+      top: -26px;
+      z-index: 50;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-height: 48px;
+      margin: -26px -30px 18px;
+      padding: 8px 30px;
+      border-bottom: 1px solid #E7EBF2;
+      background: rgba(247, 248, 252, 0.96);
+      backdrop-filter: blur(14px);
+    }
+
+    .admin-toolbar-search {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      width: min(100%, 360px);
+      height: 34px;
+      padding: 0 10px;
+      border: 1px solid #E3E8F0;
+      border-radius: 10px;
+      background: #FFFFFF;
+      color: #748096;
+    }
+
+    .admin-toolbar-search input {
+      min-width: 0;
+      flex: 1;
+      border: 0;
+      outline: 0;
+      background: transparent;
+      color: #17243A;
+      font: inherit;
+      font-size: 11.5px;
+    }
+
+    .admin-toolbar-search input::placeholder {
+      color: #98A2B3;
+    }
+
+    .admin-toolbar-search kbd {
+      padding: 2px 5px;
+      border: 1px solid #E7EBF2;
+      border-radius: 5px;
+      background: #F7F9FC;
+      color: #7A8497;
+      font: 10px 'Plus Jakarta Sans', sans-serif;
+    }
+
+    .admin-toolbar-meta {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      color: #748096;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .admin-toolbar-live {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 9px;
+      border: 1px solid #D7F0E3;
+      border-radius: 99px;
+      background: #F0FBF5;
+      color: #16835D;
+      white-space: nowrap;
+    }
+
+    .admin-toolbar-live .pulse-dot {
+      width: 6px;
+      height: 6px;
+      animation: none;
+    }
+
+    .top-header h1 {
+      color: #17243A;
+      line-height: 1.3;
+    }
+
+    .kpi-grid {
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+
+    .kpi-card,
+    .card {
+      border-color: var(--border);
+      border-radius: 19px;
+      box-shadow: 0 4px 16px rgba(16, 24, 40, 0.04);
+    }
+
+    .kpi-card {
+      padding: 17px;
+    }
+
+    .kpi-card:hover {
+      border-color: #D7E3F8;
+      box-shadow: 0 8px 22px rgba(16, 24, 40, 0.07);
+    }
+
+    .card {
+      padding: 20px;
+    }
+
+    .btn-blue,
+    .btn-green,
+    .btn-outline {
+      min-height: 38px;
+      border-radius: 12px;
+    }
+
+    .btn-blue {
+      background: var(--blue-primary);
+    }
+
+    .btn-outline {
+      background: #F7F9FC;
+      border-color: var(--border);
+    }
+
+    th {
+      background: #F7F9FC;
+    }
+
+    .admin-map-container {
+      border-radius: 18px;
+      box-shadow: none;
+    }
+
+    @media (max-width: 1024px) {
+      .sidebar {
+        width: 230px;
+      }
+
+      .main-area {
+        padding: 20px 18px 30px;
+      }
+
+      .admin-toolbar {
+        top: -20px;
+        margin: -20px -18px 14px;
+        padding: 8px 18px;
+      }
+
+      .kpi-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 760px) {
+      body {
+        display: block;
+      }
+
+      .sidebar {
+        position: sticky;
+        top: 0;
+        z-index: 1000;
+        width: 100%;
+        height: auto;
+        max-height: none;
+        padding: 10px 12px 8px;
+        gap: 8px;
+        overflow: hidden;
+        border-right: 0;
+        border-bottom: 1px solid var(--border);
+        box-shadow: 0 6px 18px rgba(16, 24, 40, 0.07);
+      }
+
+      .brand {
+        margin-bottom: 8px;
+        padding: 0 4px 8px;
+      }
+
+      #adminNav {
+        display: flex;
+        gap: 5px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        padding-bottom: 4px;
+        scrollbar-width: thin;
+        -webkit-overflow-scrolling: touch;
+      }
+
+      #adminNav .nav-item {
+        flex: 0 0 auto;
+        min-height: 36px;
+        margin-bottom: 0;
+        white-space: nowrap;
+      }
+
+      .sidebar > div:last-child {
+        justify-content: flex-end;
+        gap: 7px !important;
+        padding: 7px 0 0 !important;
+        border-top: 1px solid #EEF1F6 !important;
+      }
+
+      .sidebar > div:last-child button {
+        width: auto !important;
+        min-width: 116px;
+        padding: 0 10px;
+      }
+
+      .main-area {
+        width: 100%;
+        max-height: none;
+        padding: 14px 12px 30px;
+        overflow: visible;
+      }
+
+      .admin-toolbar {
+        top: -14px;
+        margin: -14px -12px 12px;
+        padding: 8px 12px;
+      }
+
+      .top-header {
+        align-items: flex-start;
+        padding: 16px;
+      }
+
+      .top-header h1 {
+        font-size: 19px !important;
+      }
+
+      .admin-map-container {
+        height: 320px;
+      }
+    }
+
+    @media (max-width: 520px) {
+      .kpi-grid {
+        grid-template-columns: 1fr;
+        gap: 9px;
+      }
+
+      .kpi-card {
+        padding: 14px 15px;
+      }
+
+      .kpi-val {
+        font-size: 21px;
+      }
+
+      .card {
+        padding: 15px;
+      }
+
+      .top-header {
+        gap: 10px;
+      }
+
+      .top-header > div:last-child {
+        width: 100%;
+        flex-wrap: wrap;
+      }
+
+      .admin-map-container {
+        height: 280px;
+      }
+
+      .admin-modal-overlay > div {
+        max-height: 92vh;
+        overflow-y: auto;
+      }
+
+      #adminIdModal > div > div:nth-of-type(2) {
+        grid-template-columns: 1fr !important;
+      }
+
+      table {
+        display: block;
+        max-width: 100%;
+        overflow-x: auto;
+        white-space: nowrap;
+      }
+    }
+
+    #adminAuthLockScreen {
+      background: rgba(247, 248, 252, 0.96) !important;
+      backdrop-filter: blur(8px);
+    }
+
+    #adminAuthLockScreen > div {
+      border: 1px solid #E7EBF2 !important;
+      background: #FFFFFF !important;
+      box-shadow: 0 20px 60px rgba(16, 24, 40, 0.14) !important;
+    }
+
+    #adminAuthLockScreen h2 {
+      color: #17243A !important;
+    }
+
+    #adminAuthLockScreen p {
+      color: #748096 !important;
+    }
+
+    #adminAuthLockScreen input {
+      border-color: #E1E7F0 !important;
+      background: #F7F9FC !important;
+      color: #17243A !important;
+    }
+
+    #adminAuthLockScreen input:focus {
+      border-color: #83AFFF !important;
+      box-shadow: 0 0 0 3px rgba(0, 82, 255, 0.08);
+    }
+
+    #adminAuthLockScreen #adminLoginBtn {
+      background: var(--blue-primary) !important;
+      box-shadow: 0 6px 16px rgba(0, 82, 255, 0.22) !important;
+    }
+
+    @media (max-width: 520px) {
+      .admin-toolbar-meta > span:first-child {
+        display: none;
+      }
+
+      .admin-toolbar-search {
+        width: min(100%, 270px);
+      }
+    }
   </style>
 </head>
 <body>
@@ -542,8 +958,8 @@
       const completed = (database.requests || []).filter(r => r.status === 'COMPLETED');
       const gmv = completed.reduce((a, r) => a + Number(r.agreedTotalUsd || r.budgetUsd || 0), 0);
       const feeEarned = (database.revenueLedger || []).reduce((a, r) => a + Number(r.actualFeeCollectedUsd || 0), 0);
-      const commRate = database.settings?.commissionPercent || 11;
-      const providerDisbursed = gmv * (1 - commRate / 100);
+      const commRate = Number(database.settings?.commissionPercent ?? 10);
+      const providerDirectCash = gmv;
       const ecocashApproved = (database.ecocashTopups || []).filter(t => t.status === 'APPROVED').reduce((a, t) => a + Number(t.claimedAmountUsd || 0), 0);
 
       const q = query.toLowerCase();
@@ -556,9 +972,14 @@
       } else if (q.includes('ecocash') || q.includes('liquidity') || q.includes('top-up')) {
         reply = `<strong>EcoCash Settlement Audit:</strong> Total reconciled EcoCash top-ups amount to <strong>$${ecocashApproved.toFixed(2)} USD</strong>. Provider wallet balances have sufficient liquidity for ongoing bidding, with less than 2% of providers hitting minimum wallet pause.`;
       } else if (q.includes('forecast') || q.includes('executive') || q.includes('future')) {
-        reply = `<strong>Executive Forecast:</strong> Based on current weekly booking velocity, projected monthly GMV is estimated at <strong>$4,250 – $6,800 USD</strong>. With 0% launch promo transitioning to standard 11% fee, net monthly platform revenue is projected at <strong>$467 – $748 USD</strong>. Recommendation: Maintain 0% launch fee for another 3 weeks to capture additional verified tradesmen before activating full automated wallet deductions.`;
+        const forecastLow = 4250 * commRate / 100;
+        const forecastHigh = 6800 * commRate / 100;
+        const feeForecast = database.settings?.launchPromoActive
+          ? `Fees remain waived while the 0% launch promotion is active; at the configured ${commRate}% standard rate afterward, projected monthly fees are <strong>$${forecastLow.toFixed(2)} – $${forecastHigh.toFixed(2)} USD</strong>.`
+          : `At the configured ${commRate}% standard rate, projected monthly fees are <strong>$${forecastLow.toFixed(2)} – $${forecastHigh.toFixed(2)} USD</strong>.`;
+        reply = `<strong>Executive Forecast:</strong> Based on current weekly booking velocity, projected monthly GMV is estimated at <strong>$4,250 – $6,800 USD</strong>. ${feeForecast} Recommendation: Review provider growth and promotion performance before changing fees.`;
       } else {
-        reply = `<strong>AI Financial Insight:</strong> For "<em>${escapeHtml(query)}</em>", our live data indicates total platform volume of <strong>$${gmv.toFixed(2)} USD</strong> with <strong>$${providerDisbursed.toFixed(2)} USD</strong> (90%) paid directly to verified Harare specialists. EcoCash reconciliation is fully balanced at $${ecocashApproved.toFixed(2)} USD.`;
+        reply = `<strong>AI Financial Insight:</strong> For "<em>${escapeHtml(query)}</em>", our live data indicates total platform volume of <strong>$${gmv.toFixed(2)} USD</strong>. The full booking value of <strong>$${providerDirectCash.toFixed(2)} USD</strong> is paid directly by clients to verified specialists; platform commission is collected separately from provider wallets. EcoCash reconciliation is fully balanced at $${ecocashApproved.toFixed(2)} USD.`;
       }
 
       aiFinancialChatHistory.push({
@@ -831,6 +1252,22 @@
         setTimeout(initAdminMap, 60);
       }
     }
+
+    function filterAdminNavigation(query) {
+      const value = String(query || '').trim().toLowerCase();
+      document.querySelectorAll('#adminNav .nav-item').forEach((item) => {
+        item.style.display = !value || item.textContent.toLowerCase().includes(value) ? 'flex' : 'none';
+      });
+    }
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key !== '/') return;
+      if (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable="true"]')) return;
+      const search = document.querySelector('.admin-toolbar-search input');
+      if (!search) return;
+      event.preventDefault();
+      search.focus();
+    });
 
     // Operational Analytics Calculation Helper (100% Real Records, Zero-Mock)
     function getOperationalMetrics(d) {
@@ -1731,11 +2168,16 @@
     async function enforceAiCommission(requestId) {
       try {
         const res = await api('/api/admin/ai-enforce-commission', 'POST', { requestId });
-        if (res && res.success) {
-          showAdminToast('11% Platform Commission deducted & protected!', 'success');
+        if (res && res.ok) {
+          const message = res.protection
+            ? 'Commission enforcement completed.'
+            : res.request?.promoApplied
+              ? 'Commission waived by the active promotion.'
+              : 'Commission was already collected or is not applicable.';
+          showAdminToast(message, res.protection ? 'success' : 'warn');
           await loadAdminData(true);
         } else {
-          showAdminToast(res?.error || 'Commission already deducted', 'warn');
+          showAdminToast(res?.error || 'Commission enforcement did not complete.', 'error');
         }
       } catch (e) {
         showAdminToast(e.message, 'error');
@@ -1941,6 +2383,20 @@
 
       // KPI Header
       const kpiHtml = `
+        <div class="admin-toolbar">
+          <label class="admin-toolbar-search">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <circle cx="11" cy="11" r="7"></circle>
+              <path d="m20 20-4-4"></path>
+            </svg>
+            <input type="search" aria-label="Search admin sections" placeholder="Search admin sections..." oninput="filterAdminNavigation(this.value)" />
+            <kbd>/</kbd>
+          </label>
+          <div class="admin-toolbar-meta">
+            <span>Harare · Admin</span>
+            <span class="admin-toolbar-live"><span class="pulse-dot"></span>Live</span>
+          </div>
+        </div>
         <div class="top-header">
           <div>
             <div style="display:flex; align-items:center; gap:10px;">
@@ -1951,13 +2407,13 @@
               </div>
             </div>
             <div style="font-size:12.5px; color:var(--muted); font-weight:500; margin-top:3px;">
-              Live GPS radar, EcoCash USD approvals, in-app voice calls, chat anti-leakage, and 11% commission enforcement
+              Live GPS radar, EcoCash USD approvals, in-app voice calls, chat anti-leakage, and ${s.commissionPercent ?? 10}% commission enforcement
             </div>
           </div>
           <div style="display:flex; align-items:center; gap:8px;">
             <button class="btn-outline" onclick="loadAdminData(true)">🔄 Sync Now</button>
             <span style="padding:6px 12px; border-radius:99px; background:var(--blue-soft); color:var(--blue-primary); font-size:12px; font-weight:800;">
-              ${s.launchPromoActive ? `🎁 0% Promo ON (${s.launchPromoDaysRemaining || 60}d left)` : `💰 Collecting ${s.commissionPercent || 11}% Commission`}
+              ${s.launchPromoActive ? `🎁 0% Promo ON (${s.launchPromoDaysRemaining || 60}d left)` : `💰 Collecting ${s.commissionPercent ?? 10}% Commission`}
             </span>
           </div>
         </div>
@@ -2182,7 +2638,7 @@
               <div style="background:var(--blue-soft); padding:14px; border-radius:12px; display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
                 <div>
                   <div style="font-weight:800; font-size:13.5px;">First 2 Months 0% Launch Promo</div>
-                  <div style="font-size:11.5px; color:var(--muted);">Current Fee: ${s.launchPromoActive ? '0% (Promo Active)' : (s.commissionPercent || 11) + '% Collected'}</div>
+                  <div style="font-size:11.5px; color:var(--muted);">Current Fee: ${s.launchPromoActive ? '0% (Promo Active)' : (s.commissionPercent ?? 10) + '% Collected'}</div>
                 </div>
                 <button class="${s.launchPromoActive ? 'btn-green' : 'btn-blue'}" onclick="togglePromo(${!s.launchPromoActive})">
                   ${s.launchPromoActive ? 'Promo is ON' : 'Turn Promo ON'}
@@ -2191,13 +2647,13 @@
 
               <div style="margin-bottom:16px;">
                 <label style="font-size:12px; font-weight:800; color:var(--muted); display:block; margin-bottom:6px;">
-                  GLOBAL COMMISSION RATE: <strong style="color:var(--blue-primary); font-size:15px;" id="sliderLabel">${s.commissionPercent || 11}%</strong>
+                  GLOBAL COMMISSION RATE: <strong style="color:var(--blue-primary); font-size:15px;" id="sliderLabel">${s.commissionPercent ?? 10}%</strong>
                 </label>
                 <input
                   type="range"
                   min="3"
                   max="25"
-                  value="${s.commissionPercent || 11}"
+                  value="${s.commissionPercent ?? 10}"
                   style="width:100%; accent-color:#0066FF;"
                   oninput="document.getElementById('sliderLabel').innerText = this.value + '%'"
                   onchange="updateGlobalCommission(this.value)"
@@ -2207,7 +2663,7 @@
               <div style="font-size:12px; font-weight:800; color:var(--muted); margin-bottom:8px;">CATEGORY COMMISSION OVERRIDES (%):</div>
               <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
                 ${(db.categories || []).filter(c => c.status === 'ACTIVE').map(c => {
-                  const rate = (s.categoryCommissions && s.categoryCommissions[c.id]) ?? (s.commissionPercent || 11);
+                  const rate = (s.categoryCommissions && s.categoryCommissions[c.id]) ?? (s.commissionPercent ?? 10);
                   return `
                     <div style="background:#F8FAFC; border:1px solid var(--border); padding:8px 10px; border-radius:8px; display:flex; justify-content:space-between; align-items:center;">
                       <span style="font-size:12px; font-weight:700;">${c.icon} ${escapeHtml(c.name)}</span>
@@ -2501,11 +2957,11 @@
         const ledger = db.revenueLedger || [];
         const allReqs = db.requests || [];
         const completed = allReqs.filter(r => r.status === 'COMPLETED');
-        const commRate = db.settings?.commissionPercent || 11;
+        const commRate = Number(db.settings?.commissionPercent ?? 10);
 
         const gmv = completed.reduce((a, r) => a + Number(r.agreedTotalUsd || r.budgetUsd || 0), 0);
         const feeEarned = ledger.reduce((a, r) => a + Number(r.actualFeeCollectedUsd || 0), 0);
-        const providerDisbursed = gmv * (1 - commRate / 100);
+        const providerDirectCash = gmv;
         const ecocashApproved = (db.ecocashTopups || []).filter(t => t.status === 'APPROVED').reduce((a, t) => a + Number(t.claimedAmountUsd || 0), 0);
         const avgJobFare = completed.length > 0 ? (gmv / completed.length) : 0;
 
@@ -2550,9 +3006,9 @@
               <div style="font-size:11.5px; color:#2563EB; font-weight:700;">${commRate}% Standard Take-Rate</div>
             </div>
             <div class="card" style="border-left:4px solid #6366F1; padding:16px;">
-              <div style="font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase;">Provider Disbursed (90%)</div>
-              <div style="font-size:24px; font-weight:900; color:#6366F1; margin:4px 0;">$${providerDisbursed.toFixed(2)} <span style="font-size:12px; font-weight:700; color:var(--muted);">USD</span></div>
-              <div style="font-size:11.5px; color:#4F46E5; font-weight:700;">Delivered to Harare specialists</div>
+              <div style="font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase;">Provider Direct Cash (100%)</div>
+              <div style="font-size:24px; font-weight:900; color:#6366F1; margin:4px 0;">$${providerDirectCash.toFixed(2)} <span style="font-size:12px; font-weight:700; color:var(--muted);">USD</span></div>
+              <div style="font-size:11.5px; color:#4F46E5; font-weight:700;">Paid directly by clients; commission collected separately</div>
             </div>
             <div class="card" style="border-left:4px solid #F59E0B; padding:16px;">
               <div style="font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase;">EcoCash USD Settled</div>
@@ -2663,7 +3119,7 @@
                   </div>
                   <div style="font-size:12px; color:#CBD5E1; line-height:1.45;">
                     • <strong>Commission Capture:</strong> 100% of completed jobs accounted for.<br />
-                    • <strong>Provider Disbursal:</strong> Payout efficiency is optimal at $${providerDisbursed.toFixed(2)} USD distributed.<br />
+                    • <strong>Provider Direct Cash:</strong> Clients paid $${providerDirectCash.toFixed(2)} USD directly to specialists; wallet commission is accounted separately.<br />
                     • <strong>Top Earning Sector:</strong> ${topCats[0] ? topCats[0][0] : 'Solar & Inverters'} leading in booking ticket sizes.
                   </div>
                 </div>
@@ -3244,7 +3700,7 @@
                   <span style="background:rgba(96,165,250,0.2); color:#93C5FD; font-size:11px; font-weight:700; padding:3px 10px; border-radius:99px;">Gemini 3.1 Flash AI</span>
                 </div>
                 <div style="font-size:19px; font-weight:800;">Findit Harare — Smart AI Command Center</div>
-                <div style="font-size:12.5px; color:#94A3B8; margin-top:4px;">Real-time strategy, bug detection, 11% commission enforcement, and anti-leakage protection</div>
+                <div style="font-size:12.5px; color:#94A3B8; margin-top:4px;">Real-time strategy, bug detection, configured commission enforcement, and anti-leakage protection</div>
               </div>
               <button id="runAiAuditBtn" class="btn-blue" style="background:#0066FF; height:40px;" onclick="runLiveGeminiAudit()">⚡ Run Live Gemini AI Audit Now</button>
             </div>
@@ -3252,7 +3708,7 @@
             <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(190px, 1fr)); gap:10px; margin-top:18px;">
               ${[
                 { id: 'STRATEGY', label: '1. Strategy & QA', title: '📈 Strategy & Bugs', sub: `Health Score: ${report.healthScore || 96}/100` },
-                { id: 'COMMISSION_GUARD', label: '2. Revenue Guard', title: '🛡️ 11% Commission Guard', sub: `${protectedJobsCount} Protected` },
+                { id: 'COMMISSION_GUARD', label: '2. Revenue Guard', title: '🛡️ Commission Guard', sub: `${protectedJobsCount} Protected` },
                 { id: 'ECOCASH_AI', label: '3. EcoCash AI', title: '💵 SMS Verifier', sub: `${pendingEco.length} Pending Checks` },
                 { id: 'MATCHMAKING', label: '4. Matchmaking', title: '🎯 Smart Matchmaking', sub: `${matches.length} Analyzed` }
               ].map(sub => `
@@ -3277,7 +3733,7 @@
                   <span style="background:#DCFCE7; color:#15803D; font-size:11.5px; font-weight:800; padding:4px 10px; border-radius:99px;">Score: ${report.healthScore || 96}/100</span>
                 </div>
                 <div style="font-size:13px; color:#334155; background:#F8FAFC; padding:12px 14px; border-radius:12px; border:1px solid #E2E8F0; margin-bottom:14px; line-height:1.55;">
-                  <strong>Summary:</strong> ${report.executiveSummary || 'AI Engine is monitoring Harare job matchmaking, chat anti-leakage, and 11% commission.'}
+                  <strong>Summary:</strong> ${report.executiveSummary || 'AI Engine is monitoring Harare job matchmaking, chat anti-leakage, and configured commission enforcement.'}
                 </div>
                 <div style="display:flex; flex-direction:column; gap:8px;">
                   ${(report.businessStrategies || [

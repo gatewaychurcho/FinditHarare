@@ -167,6 +167,8 @@ function uiIcon(name, size = 16) {
     chevronDown: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><polyline points="6 9 12 15 18 9"/></svg>`,
     chevronLeft: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><polyline points="15 18 9 12 15 6"/></svg>`,
     chevronRight: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><polyline points="9 18 15 12 9 6"/></svg>`,
+    arrowRight: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>`,
+    search: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>`,
     send: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>`,
     arrowLeft: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>`,
     briefcase: `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>`,
@@ -848,7 +850,7 @@ function resolveProviderByIdOrOffer(provId, req = null, offer = null) {
       name: matchedOffer?.providerName || found.name,
       shortName: matchedOffer?.providerShortName || found.shortName || (matchedOffer?.providerName || found.name || 'Pro').split(' ')[0],
       brandName: matchedOffer?.providerBrand || found.brandName || `${(matchedOffer?.providerName || found.name || 'Pro').split(' ')[0]} Services`,
-      avatarUrl: matchedOffer?.providerAvatarUrl || found.avatarUrl || found.selfieUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=240&q=80'
+      avatarUrl: matchedOffer?.providerAvatarUrl || found.avatarUrl || found.selfieUrl || DEFAULT_AVATAR_FALLBACK
     };
   }
 
@@ -863,7 +865,7 @@ function resolveProviderByIdOrOffer(provId, req = null, offer = null) {
     avatarUrl:
       matchedOffer?.providerAvatarUrl ||
       req?.acceptedProviderAvatarUrl ||
-      'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=240&q=80',
+      DEFAULT_AVATAR_FALLBACK,
     rating: matchedOffer?.providerRating ?? 0,
     completedBookings: matchedOffer?.providerCompletedJobs ?? 0,
     skillTier: matchedOffer?.providerSkillTier || 'Verified pro',
@@ -1275,6 +1277,41 @@ function playIncomingMessageSoundAndVibrate(message) {
 
 const playNewMessageChime = playIncomingMessageSoundAndVibrate;
 
+function getRealtimeRequestParty(request) {
+  if (!request || !state.currentUser) return false;
+  const myId = state.currentUser.id;
+  const myFinditId = state.currentUser.finditId;
+  const myPhone = (state.currentUser.phone || '').replace(/\D/g, '');
+
+  if (state.role === 'CUSTOMER') {
+    return Boolean(myId && request.customerId === myId) ||
+      Boolean(myFinditId && request.customerFinditId === myFinditId) ||
+      Boolean(myPhone && (request.customerPhone || '').replace(/\D/g, '') === myPhone);
+  }
+  if (state.role === 'PROVIDER') {
+    return Boolean(myId && request.acceptedProviderId === myId) ||
+      (request.offers || []).some((offer) =>
+        Boolean(myId && offer.providerId === myId) || Boolean(myFinditId && offer.providerFinditId === myFinditId)
+      );
+  }
+  return false;
+}
+
+function updateRealtimeRequest(requestId, request) {
+  const reqId = requestId || request?.id;
+  if (!state.db?.requests || !reqId) return null;
+  const idx = state.db.requests.findIndex((item) => item.id === reqId);
+  if (idx >= 0) {
+    if (request) state.db.requests[idx] = request;
+    return state.db.requests[idx];
+  }
+  if (request && getRealtimeRequestParty(request)) {
+    state.db.requests.unshift(request);
+    return request;
+  }
+  return null;
+}
+
 function handleIncomingRealtimeEvent(data) {
   if (!data || data.eventType === 'CONNECTED' || data.eventType === 'PING') return;
 
@@ -1448,8 +1485,7 @@ function handleIncomingRealtimeEvent(data) {
   if (data.eventType === 'OFFER_DECLINED' && data.payload) {
     const { requestId, offerId, providerId, declinedPriceUsd, request } = data.payload;
     if (request && state.db?.requests) {
-      const idx = state.db.requests.findIndex((r) => r.id === requestId);
-      if (idx >= 0) state.db.requests[idx] = request;
+      updateRealtimeRequest(requestId, request);
     } else if (state.db?.requests) {
       const r = state.db.requests.find((x) => x.id === requestId);
       const off = r && (r.offers || []).find((o) => o.id === offerId);
@@ -1458,8 +1494,6 @@ function handleIncomingRealtimeEvent(data) {
         off.declinedPriceUsd = off.priceUsd;
       }
     }
-    lastUiOverlaySignature = '';
-    lastOffersSignature = '';
     if (state.role === 'PROVIDER' && state.currentUser && state.currentUser.id === providerId) {
       showToast(`Client declined your $${declinedPriceUsd || ''} offer. You can edit your price and submit a revised bid!`, 'error');
       triggerSystemNotification(
@@ -1471,7 +1505,7 @@ function handleIncomingRealtimeEvent(data) {
         try { navigator.vibrate([100, 60, 100]); } catch (e) {}
       }
     }
-    renderAll(true);
+    renderAll(false);
     return;
   }
 
@@ -1483,7 +1517,6 @@ function handleIncomingRealtimeEvent(data) {
     const existingIdx = state.db.requests.findIndex((r) => r.id === req.id);
     if (existingIdx >= 0) state.db.requests[existingIdx] = req;
     else state.db.requests.unshift(req);
-    lastUiOverlaySignature = ''; // Invalidate signature cache so card appears without delay!
     const myCats = state.role === 'PROVIDER' ? getProviderCategoryIds(state.currentUser) : [];
     const reqCat = normalizeCategoryId(req.categoryId);
     const matchesMe = myCats.length === 0 || myCats.includes(reqCat);
@@ -1518,12 +1551,8 @@ function handleIncomingRealtimeEvent(data) {
   if (data.eventType === 'OFFER_SUBMITTED' && data.payload?.offer) {
     const { requestId, offer, request } = data.payload;
     if (request && state.db?.requests) {
-      const reqIdx = state.db.requests.findIndex((r) => r.id === requestId);
-      if (reqIdx >= 0) state.db.requests[reqIdx] = request;
-      else state.db.requests.unshift(request);
+      updateRealtimeRequest(requestId, request);
     }
-    lastUiOverlaySignature = ''; // Invalidate signature cache!
-    lastOffersSignature = ''; // Invalidate offers cache so card appears instantly!
     const currentActive = getCustomerActiveRequest();
     if (state.role === 'CUSTOMER' && currentActive && currentActive.id === requestId) {
       triggerSystemNotification(
@@ -1535,57 +1564,43 @@ function handleIncomingRealtimeEvent(data) {
         try { navigator.vibrate([150, 70, 150]); } catch (e) {}
       }
     }
-    renderAll();
+    renderAll(false);
     return;
   }
 
   // 4. BOOKING CONFIRMED (Accepted offer: disappears for other providers, locks in for accepted provider & client)
   if ((data.eventType === 'BOOKING_CONFIRMED' || data.eventType === 'OFFER_ACCEPTED') && data.payload) {
     const { requestId, acceptedProviderId, request } = data.payload;
-    if (state.db?.requests) {
-      const idx = state.db.requests.findIndex((r) => r.id === requestId);
-      if (idx >= 0) {
-        if (request) state.db.requests[idx] = request;
-        else {
-          state.db.requests[idx].status = 'CONFIRMED';
-          state.db.requests[idx].acceptedProviderId = acceptedProviderId;
-        }
-      }
+    const requestWithProvider = request
+      ? { ...request, acceptedProviderId: request.acceptedProviderId || acceptedProviderId }
+      : request;
+    const updatedRequest = updateRealtimeRequest(requestId, requestWithProvider);
+    if (updatedRequest && !request) {
+      updatedRequest.status = 'CONFIRMED';
+      updatedRequest.acceptedProviderId = acceptedProviderId;
     }
-    lastUiOverlaySignature = ''; // Invalidate signature cache so accepted request card vanishes for all other providers!
-    lastOffersSignature = '';
     if (state.role === 'PROVIDER') {
       if (state.currentUser?.id === acceptedProviderId) {
         state.providerTab = 'ACTIVE_JOB';
         triggerSystemNotification(
-          `Offer Accepted! ($${request?.agreedTotalUsd || request?.budgetUsd || ''} USD)`,
-          `${request?.customerName || 'Client'} accepted your offer for ${request?.title || 'Job'}.`,
+          `Offer Accepted! ($${requestWithProvider?.agreedTotalUsd || requestWithProvider?.budgetUsd || ''} USD)`,
+          `${requestWithProvider?.customerName || 'Client'} accepted your offer for ${requestWithProvider?.title || 'Job'}.`,
           `acc_${requestId}`
         );
         if ('vibrate' in navigator) {
           try { navigator.vibrate([200, 100, 200]); } catch (e) {}
         }
-      } else {
-        // Another provider took the job: silently purge from feed with zero pop-ups
-        state.providerTab = 'FEED';
       }
     }
-    if (state.role === 'CUSTOMER') {
-      state.screenStep = 'BOOKED';
-    }
-    renderAll(true);
+    renderAll(false);
     return;
   }
 
   // 5. PROVIDER ARRIVED OUTSIDE GATE (Triggers persistent vibration on client phone!)
   if (data.eventType === 'PROVIDER_ARRIVED' && data.payload?.request) {
     const { requestId, request } = data.payload;
-    if (state.db?.requests) {
-      const idx = state.db.requests.findIndex((r) => r.id === requestId);
-      if (idx >= 0) state.db.requests[idx] = request;
-    }
-    lastUiOverlaySignature = '';
-    if (state.role === 'CUSTOMER') {
+    const updatedRequest = updateRealtimeRequest(requestId, request);
+    if (state.role === 'CUSTOMER' && getRealtimeRequestParty(updatedRequest)) {
       startArrivalVibrationAlert(request);
       triggerSystemNotification(
         'Specialist Waiting Outside Gate!',
@@ -1594,20 +1609,18 @@ function handleIncomingRealtimeEvent(data) {
       );
       showToast(`Specialist is waiting outside! Please share your Start PIN #${request.startPinCode}.`, 'info');
     }
-    renderAll();
+    renderAll(false);
     return;
   }
 
   // 6. START PIN VERIFIED (Task Started - Stop vibration!)
   if (data.eventType === 'PIN_VERIFIED') {
-    stopArrivalVibrationAlert();
-    if (data.payload?.request && state.db?.requests) {
-      const idx = state.db.requests.findIndex((r) => r.id === data.payload.requestId);
-      if (idx >= 0) state.db.requests[idx] = data.payload.request;
+    const updatedRequest = updateRealtimeRequest(data.payload?.requestId, data.payload?.request);
+    if (getRealtimeRequestParty(updatedRequest)) {
+      stopArrivalVibrationAlert();
+      showToast(`Start PIN verified! Service is now in progress.`);
     }
-    lastUiOverlaySignature = '';
-    showToast(`Start PIN verified! Service is now in progress.`);
-    renderAll();
+    renderAll(false);
     return;
   }
 
@@ -1615,19 +1628,17 @@ function handleIncomingRealtimeEvent(data) {
   if (data.eventType === 'COMPLETION_REQUESTED') {
     const reqId = data.payload?.requestId || data.payload?.request?.id;
     const reqObj = data.payload?.request;
-    if (state.db?.requests && reqId) {
-      const idx = state.db.requests.findIndex((r) => r.id === reqId);
-      if (idx >= 0) {
-        if (reqObj) state.db.requests[idx] = reqObj;
-        state.db.requests[idx].completionRequested = true;
-        if (data.payload?.completionPinCode) {
-          state.db.requests[idx].completionPinCode = data.payload.completionPinCode;
-        }
+    const updatedRequest = updateRealtimeRequest(reqId, reqObj);
+    if (updatedRequest) {
+      updatedRequest.completionRequested = true;
+      if (data.payload?.completionPinCode) {
+        updatedRequest.completionPinCode = data.payload.completionPinCode;
       }
     }
-    lastUiOverlaySignature = '';
-    triggerHardwareVibration([200, 100, 200]);
-    if (state.role === 'CUSTOMER') {
+    if (getRealtimeRequestParty(updatedRequest)) {
+      triggerHardwareVibration([200, 100, 200]);
+    }
+    if (state.role === 'CUSTOMER' && getRealtimeRequestParty(updatedRequest)) {
       triggerSystemNotification(
         'Specialist Finished Service!',
         `Please inspect the work and give Completion PIN #${data.payload?.completionPinCode || ''} to complete.`,
@@ -1635,7 +1646,7 @@ function handleIncomingRealtimeEvent(data) {
       );
       showToast('Specialist finished work! Please share your Completion PIN.', 'success');
     }
-    renderAll(true);
+    renderAll(false);
     return;
   }
 
@@ -1644,34 +1655,15 @@ function handleIncomingRealtimeEvent(data) {
     const reqId = data.payload?.requestId || data.payload?.request?.id;
     const reqObj = data.payload?.request;
     const newStatus = data.payload?.status || reqObj?.status;
-    if (state.db?.requests && reqId) {
-      const idx = state.db.requests.findIndex((r) => r.id === reqId);
-      if (idx >= 0) {
-        if (reqObj) state.db.requests[idx] = reqObj;
-        else if (newStatus) state.db.requests[idx].status = newStatus;
-      }
+    const targetReq = updateRealtimeRequest(reqId, reqObj);
+    if (targetReq && !reqObj && newStatus) {
+      targetReq.status = newStatus;
     }
 
-    const myId = state.currentUser?.id;
-    const myFinditId = state.currentUser?.finditId;
-    const myPhone = (state.currentUser?.phone || '').replace(/\D/g, '');
-    const targetReq = (state.db?.requests || []).find((r) => r.id === reqId) || reqObj;
-
-    const isCustomerParty = state.role === 'CUSTOMER' && Boolean(targetReq && (
-      targetReq.customerId === myId ||
-      targetReq.customerFinditId === myFinditId ||
-      (myPhone && (targetReq.customerPhone || '').replace(/\D/g, '') === myPhone)
-    ));
-    const isProviderParty = state.role === 'PROVIDER' && Boolean(targetReq && (
-      targetReq.acceptedProviderId === myId ||
-      (targetReq.offers || []).some((o) => o.providerId === myId || (myFinditId && o.providerFinditId === myFinditId))
-    ));
-    const isDirectlyInvolved = isCustomerParty || isProviderParty;
+    const isDirectlyInvolved = getRealtimeRequestParty(targetReq);
 
     if (newStatus === 'COMPLETED' || newStatus === 'CANCELLED') {
       if (!isDirectlyInvolved) {
-        // Silently purge from feed/background cache without disrupting unrelated users
-        lastUiOverlaySignature = '';
         renderAll(false);
         return;
       }
@@ -1701,6 +1693,8 @@ function handleIncomingRealtimeEvent(data) {
           renderAll(true);
           return;
         }
+        renderAll(false);
+        return;
       }
       if (state.role === 'PROVIDER') {
         state.providerTab = 'FEED';
@@ -1722,35 +1716,18 @@ function handleIncomingRealtimeEvent(data) {
   if (data.eventType === 'TASK_CANCELLED') {
     const reqId = data.payload?.requestId || data.payload?.request?.id;
     const reqObj = data.payload?.request;
-    if (reqObj && state.db?.requests && reqId) {
-      const idx = state.db.requests.findIndex((r) => r.id === reqId);
-      if (idx >= 0) state.db.requests[idx] = reqObj;
-    } else if (state.db?.requests && reqId) {
+    let targetReq = updateRealtimeRequest(reqId, reqObj);
+    if (!reqObj && state.db?.requests && reqId) {
       const r = state.db.requests.find((x) => x.id === reqId);
       if (r) {
         r.status = 'CANCELLED';
         if (data.payload?.reason) r.cancelReason = data.payload.reason;
+        targetReq = r;
       }
     }
 
-    const myId = state.currentUser?.id;
-    const myFinditId = state.currentUser?.finditId;
-    const myPhone = (state.currentUser?.phone || '').replace(/\D/g, '');
-    const targetReq = (state.db?.requests || []).find((r) => r.id === reqId) || reqObj;
-
-    const isCustomerParty = state.role === 'CUSTOMER' && Boolean(targetReq && (
-      targetReq.customerId === myId ||
-      targetReq.customerFinditId === myFinditId ||
-      (myPhone && (targetReq.customerPhone || '').replace(/\D/g, '') === myPhone)
-    ));
-    const isProviderParty = state.role === 'PROVIDER' && Boolean(targetReq && (
-      targetReq.acceptedProviderId === myId ||
-      (targetReq.offers || []).some((o) => o.providerId === myId || (myFinditId && o.providerFinditId === myFinditId))
-    ));
-
     // STRICT PRIVACY: If not involved, NEVER display cancellation toast and NEVER disrupt their active screen!
-    if (!isCustomerParty && !isProviderParty) {
-      lastUiOverlaySignature = '';
+    if (!getRealtimeRequestParty(targetReq)) {
       renderAll(false);
       return;
     }
@@ -1789,8 +1766,6 @@ function handleIncomingRealtimeEvent(data) {
       const reasonTxt = data.payload?.reason ? `: ${data.payload.reason}` : '';
       showToast(`Booking cancelled${reasonTxt}`, 'info');
     }
-    lastUiOverlaySignature = '';
-    lastOffersSignature = '';
     renderAll(true);
     return;
   }
@@ -1881,17 +1856,13 @@ function handleIncomingRealtimeEvent(data) {
   // 11. Findit : PROVIDER TRANSIT DELAY NOTICE
   if (data.eventType === 'BOOKING_DELAYED' && data.payload?.request) {
     const { requestId, request, delayNotice } = data.payload;
-    if (state.db?.requests) {
-      const idx = state.db.requests.findIndex((r) => r.id === requestId);
-      if (idx >= 0) state.db.requests[idx] = request;
-    }
-    if (state.role === 'CUSTOMER' && state.activeRequestId === requestId) {
+    const updatedRequest = updateRealtimeRequest(requestId, request);
+    if (state.role === 'CUSTOMER' && getRealtimeRequestParty(updatedRequest) && state.activeRequestId === requestId) {
       showToast(`Transit Notice: Provider running ~${delayNotice.minutes}m late (${delayNotice.reason})`);
       if ('vibrate' in navigator) try { navigator.vibrate([200, 100, 200]); } catch (e) {}
     }
     updateChatFeedDomOnly(request);
-    lastUiOverlaySignature = '';
-    renderUiOverlay();
+    renderAll(false);
     return;
   }
 
@@ -4161,7 +4132,7 @@ function renderFloatingOffersOverlay(force = false) {
       const isPlatinum = Boolean(offer.isPlatinum || prov?.isPlatinum || (offer.providerSkillTier || '').toLowerCase().includes('platinum'));
       const fullName = offer.providerName || prov?.name || 'Verified Pro';
       const shortName = offer.providerShortName || fullName.split(' ')[0];
-      const avatarUrl = offer.providerAvatarUrl || prov?.avatarUrl || prov?.selfieUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=240&q=80';
+      const avatarUrl = offer.providerAvatarUrl || prov?.avatarUrl || prov?.selfieUrl || DEFAULT_AVATAR_FALLBACK;
       const brandLabel = offer.providerBrand || prov?.brandName || `${shortName} Services`;
       const approvedPhotosCount = prov && Array.isArray(prov.portfolio) ? prov.portfolio.filter((i) => i.approvalStatus === 'APPROVED').length : 0;
 
@@ -4272,11 +4243,41 @@ function renderUiOverlay(force = true) {
   }
 
   const activeReq = state.role === 'CUSTOMER' ? getCustomerActiveRequest() : null;
-  const provRequestsSig = state.role === 'PROVIDER'
-    ? (state.db?.requests || []).map((r) => `${r.id}:${r.status}:${r.acceptedProviderId || ''}:${(r.offers || []).length}`).join(';')
+  const activeReqOffersSig = state.role === 'CUSTOMER' && state.customerTab === 'OFFERS' && activeReq
+    ? JSON.stringify((activeReq.offers || []).map((offer) => [
+      offer.id, offer.status, offer.priceUsd, offer.etaMinutes, offer.providerName, offer.providerBrand, offer.providerRating
+    ]))
     : '';
   const provActiveJob = state.role === 'PROVIDER' ? getProviderActiveBooking(state.currentUser?.id) : null;
-  const provActiveJobSig = provActiveJob ? `${provActiveJob.id}:${provActiveJob.status}:${provActiveJob.pinVerifiedByProvider}:${(provActiveJob.messages || []).length}` : 'NO_JOB';
+  const providerTab = state.providerTab || (provActiveJob ? 'ACTIVE_JOB' : 'FEED');
+  const providerCategoryIds = state.role === 'PROVIDER' ? getProviderCategoryIds(state.currentUser) : [];
+  const provRequestsSig = state.role === 'PROVIDER' && (providerTab === 'FEED' || providerTab === 'HOME')
+    ? JSON.stringify((state.db?.requests || [])
+      .filter((r) => {
+        if (r.status !== 'OPEN' || r.acceptedOfferId) return false;
+        if (r.acceptedProviderId && r.acceptedProviderId !== state.currentUser?.id) return false;
+        const requestCategoryId = normalizeCategoryId(r.categoryId);
+        return providerCategoryIds.length === 0 || providerCategoryIds.includes(requestCategoryId);
+      })
+      .map((r) => {
+        const ownOffer = (r.offers || []).find((offer) =>
+          offer.providerId === state.currentUser?.id ||
+          (state.currentUser?.finditId && offer.providerFinditId === state.currentUser.finditId)
+        );
+        return [
+          r.id, r.status, r.categoryId, r.title, r.budgetUsd, r.paymentMethod, r.suburbName,
+          r.exactAddress, r.clientLiveAddress, r.customerName, r.description, r.notes,
+          ownOffer?.id, ownOffer?.status, ownOffer?.priceUsd, ownOffer?.etaMinutes
+        ];
+      }))
+    : '';
+  const provActiveJobSig = provActiveJob
+    ? JSON.stringify([
+      provActiveJob.id, provActiveJob.status, provActiveJob.pinVerifiedByProvider, provActiveJob.startPinCode,
+      provActiveJob.completionRequested, provActiveJob.completionPinCode, provActiveJob.delayNotice?.minutes,
+      provActiveJob.delayNotice?.reason, (provActiveJob.messages || []).length
+    ])
+    : 'NO_JOB';
 
   const overlaySig = [
     state.role,
@@ -4314,7 +4315,13 @@ function renderUiOverlay(force = true) {
     state.currentUser?.activeWarnings?.length || 0,
     (state.db?.changelogs || []).map((c) => `${c.id}:${c.title}:${c.version}`).join(','),
     getCatalogStateSignature(state.db),
-    activeReq ? `${activeReq.id}:${activeReq.status}:${activeReq.budgetUsd}:${activeReq.startPinVerified}:${(activeReq.activeViewerIds || []).length}:${(activeReq.offers || []).length}` : 'NO_REQ',
+    activeReq ? JSON.stringify([
+      activeReq.id, activeReq.status, activeReq.budgetUsd, activeReq.acceptedProviderId, activeReq.acceptedOfferId,
+      activeReq.acceptedProviderName, activeReq.agreedTotalUsd, activeReq.startPinVerified, activeReq.startPinCode,
+      activeReq.completionRequested, activeReq.completionPinCode, activeReq.delayNotice?.minutes,
+      activeReq.delayNotice?.reason
+    ]) : 'NO_REQ',
+    activeReqOffersSig,
     provRequestsSig,
     provActiveJobSig
   ].join('|');
@@ -4653,7 +4660,8 @@ function renderMainHubOverlay() {
       subtitle: 'Hire verified local trades & pros',
       status: 'ACTIVE',
       badge: '7 Categories',
-      imageUrl: 'https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=600&q=80'
+      imageUrl: '/assets/hub/marketplace.jpg',
+      legacyImageUrlPrefix: 'https://images.unsplash.com/photo-1581578731548-c64695cc6952'
     },
     {
       id: 'transport_carriers',
@@ -4661,7 +4669,8 @@ function renderMainHubOverlay() {
       subtitle: 'Bakkies, trucks, haulage & rides',
       status: 'COMING_SOON',
       badge: 'Coming Soon',
-      imageUrl: 'https://images.unsplash.com/photo-1519003722824-194d4455a60c?auto=format&fit=crop&w=600&q=80'
+      imageUrl: '/assets/hub/transport.jpg',
+      legacyImageUrlPrefix: 'https://images.unsplash.com/photo-1519003722824-194d4455a60c'
     },
     {
       id: 'online_shopping',
@@ -4669,13 +4678,20 @@ function renderMainHubOverlay() {
       subtitle: 'Harare shops, groceries & express delivery',
       status: 'ACTIVE',
       badge: 'Coming Soon',
-      imageUrl: 'https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=600&q=80'
+      imageUrl: '/assets/hub/shopping.jpg',
+      legacyImageUrlPrefix: 'https://images.unsplash.com/photo-1483985988355-763728e1935b'
     }
   ];
   const storedHubServices = state.db?.hubServices || [];
-  const hubServices = defaultHubServices.map((service) => {
+  const hubServices = defaultHubServices.map(({ legacyImageUrlPrefix, ...service }) => {
     const stored = storedHubServices.find((item) => item.id === service.id);
     const merged = stored ? { ...service, ...stored } : service;
+    if (
+      !stored?.imageUrl ||
+      (typeof stored.imageUrl === 'string' && stored.imageUrl.startsWith(legacyImageUrlPrefix))
+    ) {
+      merged.imageUrl = service.imageUrl;
+    }
     return {
       ...merged,
       badge: merged.status === 'ACTIVE'
@@ -4683,64 +4699,121 @@ function renderMainHubOverlay() {
         : 'Coming Soon'
     };
   });
+  const activeCategories = (state.db?.categories || []).filter((category) => category.status === 'ACTIVE');
+  const firstName = state.currentUser?.name?.trim().split(/\s+/)[0];
 
   return `
-    <div class="fh-hub-wrapper">
-      <!-- Top Navigation Row -->
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
-        <button class="indrive-circle-btn" onclick="openSideDrawerModal()" title="Menu">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+    <div class="fh-hub-wrapper fh-discovery-hub">
+      <div class="fh-discovery-topbar">
+        <button class="fh-discovery-icon-btn" onclick="openSideDrawerModal()" title="Open menu" aria-label="Open menu">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
         </button>
-
-        <div style="display:flex; align-items:center; gap:6px;">
-          <img src="/assets/logo-icon.svg" width="24" height="24" style="border-radius:6px;" alt="Logo" />
-          <span style="font-size:16px; font-weight:900; color:#0B1B3D;"><span style="color:#0066FF;">Findit</span> Harare</span>
+        <div class="fh-discovery-brand">
+          <img src="/assets/logo-icon.svg" width="28" height="28" style="border-radius:8px;" alt="" />
+          <span>Findit <strong>Harare</strong></span>
         </div>
-
         ${state.isAuthenticated ? `
-          <button class="indrive-circle-btn" onclick="openSideDrawerModal()" title="Profile" style="background:var(--blue-soft); color:var(--blue-primary); font-weight:800; font-size:12px;">
-            ${state.currentUser?.avatarInitials || (state.currentUser?.name ? state.currentUser.name.slice(0, 2).toUpperCase() : 'FH')}
+          <button class="fh-discovery-avatar" onclick="openSideDrawerModal()" title="Account">
+            ${escapeHtml(state.currentUser?.avatarInitials || (state.currentUser?.name ? state.currentUser.name.slice(0, 2).toUpperCase() : 'FH'))}
           </button>
         ` : `
-          <button class="indrive-circle-btn" onclick="switchCustomerTab('PROFILE')" title="Profile" style="background:var(--blue-soft); color:var(--blue-primary);">
+          <button class="fh-discovery-icon-btn" onclick="switchCustomerTab('PROFILE')" title="Sign in" aria-label="Sign in">
             ${uiIcon('user', 18)}
           </button>
         `}
       </div>
 
-      <!-- Main Welcome Header -->
-      <div class="fh-hub-header">
-        <div class="fh-hub-title">Welcome to Findit Harare</div>
-        <div class="fh-hub-subtitle">What do you need today?</div>
+      <div class="fh-discovery-location-row">
+        <div>
+          <div class="fh-discovery-eyebrow">YOUR LOCATION</div>
+          <button class="fh-discovery-location" onclick="openSuburbPickerModal()">
+            ${uiIcon('pin', 15)}
+            <span>${escapeHtml((state.customSuburbLabel || 'Harare').split(',')[0])}, Harare</span>
+            ${uiIcon('chevronDown', 13)}
+          </button>
+        </div>
+        <button class="fh-discovery-icon-btn fh-discovery-notifications" onclick="openNotificationCenterModal()" title="Notifications" aria-label="Notifications">
+          ${uiIcon('bell', 18)}
+          ${getUnreadNotificationsCount() > 0 ? `<span class="fh-header-badge-dot">${getUnreadNotificationsCount()}</span>` : ''}
+        </button>
       </div>
 
-      <!-- 3 Service Hub Grid (With High Quality Real Images) -->
-      <div class="fh-hub-grid">
-        ${hubServices.map((srv, idx) => {
-          const isMarketplace = srv.id === 'job_marketplace';
-          const isFullWidth = idx === 2;
-          return `
-            <div
-              class="fh-hub-card"
-              style="${isFullWidth ? 'grid-column: span 2;' : ''}"
-              onclick="selectHubService('${srv.id}')"
-            >
-              <div class="fh-hub-card-img-wrap" style="${isFullWidth ? 'height:130px;' : 'height:145px;'}">
-                <img class="fh-hub-card-img" src="${escapeHtml(srv.imageUrl || DEFAULT_TASK_PHOTO_FALLBACK)}" onerror="this.onerror=null; this.src='${DEFAULT_TASK_PHOTO_FALLBACK}';" alt="${escapeHtml(srv.title)}" />
-                <span class="fh-hub-card-badge ${srv.status === 'ACTIVE' ? 'active-pro' : ''}">
-                  ${srv.badge || (srv.status === 'ACTIVE' ? 'Active' : 'Coming Soon')}
-                </span>
-              </div>
-              <div class="fh-hub-card-label">
-                <div class="fh-hub-card-name">${escapeHtml(srv.title)}</div>
-                <div class="fh-hub-card-sub">${escapeHtml(srv.subtitle)}</div>
-              </div>
-            </div>
-          `;
-        }).join('')}
+      <div class="fh-discovery-welcome">
+        <div class="fh-discovery-title">${firstName ? `Good day, ${escapeHtml(firstName)}` : 'Welcome to Findit'}</div>
+        <div class="fh-discovery-subtitle">What can we help you get done?</div>
+      </div>
+
+      <button class="fh-discovery-search" onclick="openMarketplaceRequest()">
+        <span class="fh-discovery-search-icon">${uiIcon('search', 19)}</span>
+        <span>Search for a service</span>
+        <span class="fh-discovery-search-action">${uiIcon('arrowRight', 17)}</span>
+      </button>
+
+      <div class="fh-discovery-section-head">
+        <div>
+          <div class="fh-discovery-section-title">Browse services</div>
+          <div class="fh-discovery-section-subtitle">Trusted local providers, ready to help</div>
+        </div>
+        <button class="fh-discovery-text-action" onclick="selectHubService('job_marketplace')">See all</button>
+      </div>
+
+      <div class="fh-discovery-category-strip">
+        ${activeCategories.map((category) => `
+          <button class="fh-discovery-category" onclick="openHubCategoryRequest('${category.id}')">
+            <span class="fh-discovery-category-icon">${getCategoryVectorSvg(category.id, false)}</span>
+            <span>${escapeHtml(getCategoryDisplayTitle(category))}</span>
+          </button>
+        `).join('')}
+      </div>
+
+      ${(() => {
+        const marketplace = hubServices.find((service) => service.id === 'job_marketplace');
+        return marketplace ? `
+          <button class="fh-marketplace-feature" onclick="selectHubService('job_marketplace')" style="--fh-marketplace-image:url('${escapeHtml(marketplace.imageUrl || '')}')">
+            <span class="fh-marketplace-feature-shade"></span>
+            <span class="fh-marketplace-feature-content">
+              <span class="fh-marketplace-feature-kicker">${escapeHtml(marketplace.badge || 'Local services')}</span>
+              <span class="fh-marketplace-feature-title">Find your<br />local pro</span>
+              <span class="fh-marketplace-feature-subtitle">Choose a service, share your budget, compare offers.</span>
+              <span class="fh-marketplace-feature-cta">Explore services ${uiIcon('arrowRight', 16)}</span>
+            </span>
+          </button>
+        ` : '';
+      })()}
+
+      <div class="fh-discovery-section-head fh-discovery-secondary-head">
+        <div>
+          <div class="fh-discovery-section-title">More from Findit</div>
+          <div class="fh-discovery-section-subtitle">New ways to get things moving</div>
+        </div>
+      </div>
+      <div class="fh-discovery-other-services">
+        ${hubServices.filter((service) => service.id !== 'job_marketplace').map((service) => `
+          <button class="fh-discovery-service-row" onclick="selectHubService('${service.id}')">
+            <span class="fh-discovery-service-image">
+              <img src="${escapeHtml(service.imageUrl || DEFAULT_TASK_PHOTO_FALLBACK)}" onerror="this.onerror=null; this.src='${DEFAULT_TASK_PHOTO_FALLBACK}';" alt="" />
+            </span>
+            <span class="fh-discovery-service-copy">
+              <span class="fh-discovery-service-name">${escapeHtml(service.title)}</span>
+              <span class="fh-discovery-service-subtitle">${escapeHtml(service.subtitle)}</span>
+            </span>
+            <span class="fh-discovery-service-badge">${service.id === 'job_marketplace' ? escapeHtml(service.badge || 'Active') : 'Coming Soon'}</span>
+            ${uiIcon('chevronRight', 16)}
+          </button>
+        `).join('')}
       </div>
     </div>
   `;
+}
+
+function openHubCategoryRequest(categoryId) {
+  state.hubView = 'MARKETPLACE';
+  selectCategoryAndOpenRequest(categoryId);
+}
+
+function openMarketplaceRequest() {
+  state.hubView = 'MARKETPLACE';
+  openConfigureStep(0);
 }
 
 function selectHubService(serviceId) {
@@ -4879,16 +4952,19 @@ function openStatusPickerModal() {
   renderModalLayer();
 }
 
-function renderCurvedBrandHeader(role = 'CUSTOMER') {
+function renderCurvedBrandHeader(role = 'CUSTOMER', showSearch = true) {
   const isCust = role === 'CUSTOMER';
   const user = state.currentUser;
   const isAuth = Boolean(state.isAuthenticated && user && user.name);
   const userName = isAuth ? user.name.split(' ')[0] : 'Guest';
+  const avatarInitials = user?.avatarInitials || (user?.name ? user.name.slice(0, 2).toUpperCase() : 'FH');
   const unreadCount = getUnreadNotificationsCount();
+  const hour = new Date().getHours();
+  const timeGreeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
 
   if (isCust) {
     return `
-      <div class="fh-curved-brand-header">
+      <div class="fh-curved-brand-header fh-modern-header fh-modern-header-customer">
         <div class="fh-header-top-row">
           <div class="fh-header-logo-badge" onclick="switchCustomerTab('PROFILE')" title="Findit Harare">
             <img src="/assets/brand-logo-full.png" onerror="this.onerror=null; this.src='/assets/logo.png';" alt="Findit Logo" />
@@ -4904,20 +4980,19 @@ function renderCurvedBrandHeader(role = 'CUSTOMER') {
           <div class="fh-header-greeting">Hello, ${escapeHtml(userName)}!</div>
           <div class="fh-header-sub">Find the right service, fast.</div>
         </div>
-        <div class="fh-header-search-bar" onclick="focusSearchOrConfigure()">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#64748B" stroke-width="2.5" stroke-linecap="round">
-            <circle cx="11" cy="11" r="7"/>
-            <path d="M20 20l-3.5-3.5"/>
-          </svg>
-          <input
-            type="text"
-            class="fh-header-search-input"
-            id="homeSearchInput"
-            placeholder="What service do you need?"
-            onfocus="focusSearchOrConfigure()"
-            readonly
-          />
-        </div>
+        ${showSearch ? `
+          <div class="fh-header-search-bar" onclick="focusSearchOrConfigure()">
+            ${uiIcon('search', 18)}
+            <input
+              type="text"
+              class="fh-header-search-input"
+              id="homeSearchInput"
+              placeholder="What service do you need?"
+              onfocus="focusSearchOrConfigure()"
+              readonly
+            />
+          </div>
+        ` : ''}
       </div>
     `;
   } else {
@@ -4927,17 +5002,17 @@ function renderCurvedBrandHeader(role = 'CUSTOMER') {
     const statusLabel = status === 'AVAILABLE' ? 'Available' : status === 'BUSY' ? 'Busy' : status === 'ON_BREAK' ? 'On Break' : 'Offline';
 
     return `
-      <div class="fh-curved-brand-header">
+      <div class="fh-curved-brand-header fh-modern-header fh-modern-header-provider">
         <div class="fh-header-top-row">
           <div class="fh-header-user-info" onclick="switchProviderTab('PROFILE')">
             <div class="fh-header-avatar">
               ${user?.avatarUrl
                 ? `<img src="${resolveMediaUrl(user.avatarUrl)}" onerror="this.onerror=null; this.src='${DEFAULT_AVATAR_FALLBACK}';" alt="Avatar" />`
-                : `<span>${avatarInitials}</span>`
+                : `<span>${escapeHtml(avatarInitials)}</span>`
               }
             </div>
             <div class="fh-header-titles">
-              <div class="fh-header-greeting">Good morning, ${escapeHtml(userName)}!</div>
+              <div class="fh-header-greeting">${timeGreeting}, ${escapeHtml(userName)}!</div>
               <div class="fh-header-sub">New opportunities are waiting.</div>
             </div>
           </div>
@@ -5070,11 +5145,29 @@ function renderHomeDiscoveryOverlay() {
   const categories = state.db?.categories || [];
 
   return `
-    ${renderCurvedBrandHeader('CUSTOMER')}
+    ${renderCurvedBrandHeader('CUSTOMER', false)}
 
-    <div class="fh-main-screen-container">
-      <!-- 8 Real Photographic Category Cards Grid (3 Columns matching Mockup) -->
-      <div class="fh-category-grid">
+    <div class="fh-main-screen-container fh-marketplace-discovery">
+      <div class="fh-marketplace-welcome">
+        <div class="fh-marketplace-kicker">LOCAL SERVICES, MADE SIMPLE</div>
+        <div class="fh-marketplace-heading">What do you need<br />a hand with?</div>
+        <div class="fh-marketplace-description">Choose a service and compare offers from verified Harare providers.</div>
+      </div>
+
+      <button type="button" class="fh-marketplace-search" onclick="focusSearchOrConfigure()">
+        <span>${uiIcon('search', 19)}</span>
+        <span>Search home services</span>
+        <span class="fh-marketplace-search-shortcut">${uiIcon('arrowRight', 16)}</span>
+      </button>
+
+      <div class="fh-marketplace-section-head">
+        <div>
+          <div class="fh-marketplace-section-title">Explore categories</div>
+          <div class="fh-marketplace-section-subtitle">${categories.filter((category) => category.status === 'ACTIVE').length} services available in Harare</div>
+        </div>
+      </div>
+
+      <div class="fh-category-grid fh-category-grid-modern">
         ${categories.map((cat) => {
           const isSelected = cat.id === state.selectedCategoryId;
           const isActive = cat.status === 'ACTIVE';
@@ -5091,17 +5184,18 @@ function renderHomeDiscoveryOverlay() {
               </div>
               <div class="fh-category-card-info">
                 <div class="fh-category-card-title">${escapeHtml(getCategoryDisplayTitle(cat))}</div>
+                <span class="fh-category-card-arrow">${uiIcon('arrowRight', 14)}</span>
               </div>
             </div>
           `;
         }).join('')}
       </div>
 
-      <!-- Floating Bottom Vibrant Orange CTA Button Pinned at Bottom -->
       <div class="fh-floating-orange-cta-wrap">
         <button type="button" class="fh-orange-pill-cta" onclick="openConfigureStep(0)">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          <span>Post a Request</span>
+          ${uiIcon('briefcase', 18)}
+          <span>Post a service request</span>
+          ${uiIcon('arrowRight', 17)}
         </button>
       </div>
     </div>
@@ -5755,50 +5849,62 @@ function renderProviderProfileTab() {
 // PROVIDER HOME TAB
 // ----------------------------------------------------------------------------
 function renderProviderHomeTab(prov, openRequests, activeJob) {
-  const completedToday = 2;
+  const dayStart = new Date();
+  dayStart.setHours(0, 0, 0, 0);
+  const completedToday = (state.db?.requests || []).filter((request) =>
+    request.status === 'COMPLETED' &&
+    request.acceptedProviderId === prov?.id &&
+    new Date(request.completedAt || 0).getTime() >= dayStart.getTime()
+  ).length;
   const walletBal = Number(prov?.walletBalanceUsd || 0).toFixed(2);
 
   return `
-    <div class="fh-main-screen-container" style="padding-top:14px;">
-      <!-- Active Job Card if any -->
-      ${activeJob ? `
-        <div class="fh-request-form-card" style="border:2px solid #0052FF; cursor:pointer;" onclick="switchProviderTab('ACTIVE_JOB')">
-          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
-            <span style="background:#EFF6FF; color:#0052FF; font-size:11px; font-weight:800; padding:3px 10px; border-radius:99px;">Active Visit in Progress</span>
-            <span style="font-size:15px; font-weight:900; color:#0052FF;">$${activeJob.agreedTotalUsd || activeJob.budgetUsd}</span>
-          </div>
-          <div style="font-size:14px; font-weight:800; color:#0F172A; margin-bottom:2px;">${escapeHtml(activeJob.customerName)}</div>
-          <div style="font-size:12px; color:#64748B; margin-bottom:10px;">📍 ${escapeHtml(activeJob.suburbName || 'Harare')}</div>
-          <button type="button" class="fh-orange-pill-cta" style="height:38px; font-size:13px;" onclick="switchProviderTab('ACTIVE_JOB'); event.stopPropagation();">
-            Continue Visit
-          </button>
-        </div>
-      ` : ''}
-
-      <!-- Quick Stats Cards -->
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px;">
-        <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:16px; padding:12px 14px;">
-          <div style="font-size:11px; color:#64748B; font-weight:700; text-transform:uppercase;">Today's Jobs</div>
-          <div style="font-size:22px; font-weight:900; color:#0052FF; margin-top:2px;">${completedToday}</div>
-          <div style="font-size:11px; color:#10B981; font-weight:600; margin-top:2px;">Completed</div>
-        </div>
-        <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:16px; padding:12px 14px;">
-          <div style="font-size:11px; color:#64748B; font-weight:700; text-transform:uppercase;">Wallet Balance</div>
-          <div style="font-size:22px; font-weight:900; color:#0F172A; margin-top:2px;">$${walletBal}</div>
-          <div style="font-size:11px; color:#0052FF; font-weight:600; margin-top:2px; cursor:pointer;" onclick="openWalletTopupModal()">Top Up</div>
-        </div>
+    <div class="fh-main-screen-container fh-provider-dashboard">
+      <div class="fh-provider-welcome">
+        <div class="fh-provider-welcome-kicker">PROVIDER OVERVIEW</div>
+        <div class="fh-provider-welcome-title">Your work, at a glance</div>
+        <div class="fh-provider-welcome-subtitle">Manage the current job, new opportunities and your wallet.</div>
       </div>
 
-      <!-- Opportunities Banner -->
-      <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:18px; padding:16px; margin-bottom:14px;">
-        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
-          <div style="font-size:15px; font-weight:800; color:#0F172A;">Job Opportunities</div>
-          <span style="background:#FF7A00; color:#FFF; font-size:10px; font-weight:800; padding:2px 8px; border-radius:99px;">${openRequests.length} Available</span>
-        </div>
-        <div style="font-size:12.5px; color:#64748B; margin-bottom:14px;">Clients in Harare are currently requesting services in your categories.</div>
-        <button type="button" class="fh-orange-pill-cta" style="height:42px; font-size:14px;" onclick="switchProviderTab('FEED')">
-          Browse Opportunities (${openRequests.length})
+      ${activeJob ? `
+        <button type="button" class="fh-provider-active-card" onclick="switchProviderTab('ACTIVE_JOB')">
+          <span class="fh-provider-card-kicker"><span class="fh-provider-live-dot"></span> ACTIVE VISIT</span>
+          <span class="fh-provider-active-price">${formatUsdPrice(activeJob.agreedTotalUsd || activeJob.budgetUsd)}</span>
+          <span class="fh-provider-active-client">${escapeHtml(activeJob.customerName || 'Your client')}</span>
+          <span class="fh-provider-active-location">${uiIcon('pin', 14)} ${escapeHtml(activeJob.suburbName || 'Harare')}</span>
+          <span class="fh-provider-active-action">Continue visit ${uiIcon('arrowRight', 15)}</span>
         </button>
+      ` : ''}
+
+      <div class="fh-provider-metrics">
+        <div class="fh-provider-metric-card">
+          <span class="fh-provider-metric-icon">${uiIcon('briefcase', 17)}</span>
+          <span class="fh-provider-metric-label">Completed today</span>
+          <strong>${completedToday}</strong>
+          <span class="fh-provider-metric-note">${completedToday === 1 ? 'job completed' : 'jobs completed'}</span>
+        </div>
+        <button type="button" class="fh-provider-metric-card fh-provider-wallet-card" onclick="openWalletTopupModal()">
+          <span class="fh-provider-metric-icon">${uiIcon('wallet', 17)}</span>
+          <span class="fh-provider-metric-label">Provider wallet</span>
+          <strong>${formatUsdPrice(walletBal)}</strong>
+          <span class="fh-provider-metric-note">Manage balance ${uiIcon('arrowRight', 13)}</span>
+        </button>
+      </div>
+
+      <button type="button" class="fh-provider-opportunities-card" onclick="switchProviderTab('FEED')">
+        <span class="fh-provider-opportunities-topline">
+          <span class="fh-provider-opportunities-icon">${uiIcon('briefcase', 19)}</span>
+          <span class="fh-provider-opportunities-count">${openRequests.length} open</span>
+        </span>
+        <span class="fh-provider-opportunities-title">Opportunities for you</span>
+        <span class="fh-provider-opportunities-copy">New requests from clients in your service categories.</span>
+        <span class="fh-provider-opportunities-action">Browse opportunities ${uiIcon('arrowRight', 16)}</span>
+      </button>
+
+      <div class="fh-provider-dashboard-note">
+        <span>${uiIcon('shield', 17)}</span>
+        <span>Keep your profile and availability up to date to help clients find you.</span>
+        <button type="button" onclick="switchProviderTab('PROFILE')" aria-label="Open provider profile">${uiIcon('chevronRight', 15)}</button>
       </div>
     </div>
   `;
@@ -5996,7 +6102,7 @@ function renderBookedTrackingOverlay(req) {
   const acceptedOffer = (req.offers || []).find((o) => o.id === req.acceptedOfferId) || req.offers?.[0];
   const provId = req.acceptedProviderId || acceptedOffer?.providerId;
   const prov = resolveProviderByIdOrOffer(provId, req, acceptedOffer);
-  const avatarUrl = prov?.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=240&q=80';
+  const avatarUrl = prov?.avatarUrl || DEFAULT_AVATAR_FALLBACK;
   const agreedPrice = acceptedOffer?.priceUsd || req.agreedTotalUsd || req.budgetUsd;
   const isArrived = req.status === 'ARRIVED';
   const isInProgress = req.status === 'IN_PROGRESS' || Boolean(req.pinVerifiedByProvider);
@@ -7573,15 +7679,16 @@ function renderModalLayer() {
     return;
   }
 
-  // 2. EXPLANATORY LOW BALANCE MODAL (11% Commission & $2 Min Reserve & Top-Up Rule)
+  // 2. EXPLANATORY LOW BALANCE MODAL (Commission & $2 Min Reserve & Top-Up Rule)
   if (state.activeModal === 'LOW_BALANCE_EXPLANATORY') {
     const data = state.modalData || {};
     const currentBalance = Number(data.currentBalanceUsd || 0);
     const minReserve = Number(data.minReserveUsd || 2.00);
-    const commPercent = Number(data.commissionPercent || 11);
+    const commPercent = Number(data.commissionPercent ?? 10);
     const bidPrice = Number(data.bidPriceUsd || 0);
-    const commFee = Number(data.commissionFeeUsd || Math.round(bidPrice * (commPercent / 100) * 100) / 100);
+    const commFee = Number(data.commissionFeeUsd ?? Math.round(bidPrice * (commPercent / 100) * 100) / 100);
     const reqTopUp = Number(data.requiredTopUpUsd || Math.max(5.00, commFee));
+    const promoApplied = Boolean(data.promoApplied);
 
     root.innerHTML = `
       <div class="modal-backdrop" onclick="closeModal()">
@@ -7604,7 +7711,9 @@ function renderModalLayer() {
               Why is a top-up needed?
             </div>
             <div style="font-size:12px; color:#78350F; line-height:1.5;">
-              As you work, a <strong>${commPercent}% platform commission</strong> ($${commFee.toFixed(2)} USD) is deducted upon successful job completion. Your wallet reserve cannot fall below <strong>$${minReserve.toFixed(2)} USD</strong> (at least $${(commFee + minReserve).toFixed(2)} USD balance required to place this bid).
+              ${promoApplied
+                ? `The active launch promotion waives the commission on this bid. Your wallet still needs to retain the <strong>$${minReserve.toFixed(2)} USD</strong> minimum reserve.`
+                : `A <strong>${commPercent}% platform commission</strong> ($${commFee.toFixed(2)} USD) is deducted upon successful job completion. Your wallet reserve cannot fall below <strong>$${minReserve.toFixed(2)} USD</strong> (at least $${(commFee + minReserve).toFixed(2)} USD balance required to place this bid).`}
             </div>
           </div>
 
@@ -7622,7 +7731,7 @@ function renderModalLayer() {
               <span style="font-weight:700; color:#0066FF;">$${bidPrice.toFixed(2)} USD</span>
             </div>
             <div style="display:flex; justify-content:space-between; font-size:12.5px; border-top:1px dashed #CBD5E1; padding-top:8px;">
-              <span style="color:#64748B;">Platform Fee (${commPercent}%):</span>
+              <span style="color:#64748B;">${promoApplied ? `Platform Fee (${commPercent}% standard, waived):` : `Platform Fee (${commPercent}%):`}</span>
               <span style="font-weight:700; color:#0F172A;">$${commFee.toFixed(2)} USD</span>
             </div>
             <div style="display:flex; justify-content:space-between; font-size:13.5px; border-top:1px solid #CBD5E1; padding-top:8px;">
@@ -7632,7 +7741,9 @@ function renderModalLayer() {
           </div>
 
           <div style="font-size:11.5px; color:#64748B; line-height:1.45; margin-bottom:16px;">
-            <strong>Bidding Rule:</strong> Below $${minReserve.toFixed(2)} in your wallet, or a balance less than the commission ($${commFee.toFixed(2)}) + $${minReserve.toFixed(2)} reserve will disable bidding until you top up.
+            <strong>Bidding Rule:</strong> ${promoApplied
+              ? `Your wallet must retain at least $${minReserve.toFixed(2)} during the 0% launch promotion.`
+              : `A balance below $${minReserve.toFixed(2)}, or less than the commission ($${commFee.toFixed(2)}) plus the $${minReserve.toFixed(2)} reserve, disables bidding until you top up.`}
           </div>
 
           <button class="btn-primary-blue" style="height:48px; font-size:14.5px; font-weight:800; background:#10B981; margin-bottom:8px;" onclick="closeModal(); state.walletTopupAmount=${reqTopUp}; openProviderWalletModal();">
@@ -8497,23 +8608,24 @@ function renderModalLayer() {
               <div style="font-size:11.5px; color:var(--text-secondary); margin-bottom:10px; line-height:1.4;">
                 Choose up to <strong>3 service categories</strong>. Your Provider Job Feed will only show client requests from your selected categories.
               </div>
-              <div style="display:grid; grid-template-columns:1fr; gap:7px;">
+              <div class="fh-settings-category-list" style="display:grid; grid-template-columns:1fr; gap:7px;">
                 ${allCategories.map((cat) => {
                   const isSelected = selectedCats.includes(cat.id);
                   return `
                     <div
+                      class="fh-settings-category-row"
                       onclick="toggleSettingsProviderCategory('${cat.id}')"
                       style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 12px; border-radius:12px; cursor:pointer; transition:all 0.15s ease; border:1.5px solid ${isSelected ? '#0066FF' : '#E2E8F0'}; background:${isSelected ? '#EFF6FF' : '#F8FAFC'};"
                     >
-                      <div style="display:flex; align-items:center; gap:10px; min-width:0;">
+                      <div class="fh-settings-category-main" style="display:flex; align-items:center; gap:10px; min-width:0;">
                         <div style="width:34px; height:34px; border-radius:10px; background:${isSelected ? '#0066FF' : '#FFFFFF'}; display:flex; align-items:center; justify-content:center; flex-shrink:0; border:1px solid ${isSelected ? '#0066FF' : '#E2E8F0'};">
                           ${getCategoryVectorSvg(cat.id, isSelected)}
                         </div>
-                        <div style="min-width:0;">
-                          <div style="font-size:13px; font-weight:800; color:${isSelected ? '#0066FF' : '#0F172A'};">
+                        <div class="fh-settings-category-copy" style="min-width:0;">
+                          <div class="fh-settings-category-title" style="font-size:13px; font-weight:800; color:${isSelected ? '#0066FF' : '#0F172A'};">
                             ${escapeHtml(cat.fullName || cat.name)}
                           </div>
-                          <div style="font-size:11px; color:#64748B; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                          <div class="fh-settings-category-subtitle" style="font-size:11px; color:#64748B; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
                             ${escapeHtml(cat.tagline || '')}
                           </div>
                         </div>
@@ -8955,8 +9067,8 @@ function renderModalLayer() {
 
           <!-- Quick FAQ Chips (Light WhatsApp Style) -->
           <div style="background:#F0F2F5; padding:6px 10px 2px 10px; display:flex; gap:6px; overflow-x:auto; border-top:1px solid #D1D7DB; flex-shrink:0;">
-            <button type="button" class="chat-preset-chip" style="background:#FFFFFF; border:1px solid #D1D7DB; color:#008069; font-size:11.5px; white-space:nowrap;" onclick="sendSupportAiMessage('How does the $5 welcome bonus and 11% commission work?')">
-              $5 Bonus &amp; 11% Rule
+            <button type="button" class="chat-preset-chip" style="background:#FFFFFF; border:1px solid #D1D7DB; color:#008069; font-size:11.5px; white-space:nowrap;" onclick="sendSupportAiMessage('How does the $5 welcome bonus and commission work?')">
+              $5 Bonus &amp; Commission
             </button>
             <button type="button" class="chat-preset-chip" style="background:#FFFFFF; border:1px solid #D1D7DB; color:#008069; font-size:11.5px; white-space:nowrap;" onclick="sendSupportAiMessage('How do I top up my provider wallet with EcoCash USD?')">
               EcoCash Top-Up
@@ -13369,13 +13481,13 @@ function renderChatDrawer() {
   }
 
   let peerName = 'Service Provider';
-  let peerAvatar = 'https://images.unsplash.com/photo-1531123897727-8f129e1688ce?auto=format&fit=crop&w=240&q=80';
+  let peerAvatar = DEFAULT_AVATAR_FALLBACK;
   let peerSubtitle = 'Online • Verified Pro';
   let peerId = '';
 
   if (state.role === 'PROVIDER') {
     peerName = req?.customerName || 'Client';
-    peerAvatar = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=240&q=80';
+    peerAvatar = DEFAULT_AVATAR_FALLBACK;
     peerSubtitle = 'Client • Home Visit';
     peerId = req?.customerId || req?.customerPhone || '';
   } else {
@@ -14750,7 +14862,7 @@ function renderCallModal() {
     const inc = state.incomingCall;
     const proMatch = state.db.providers?.find((p) => p.name === inc.callerName || p.shortName === inc.callerName);
     const custMatch = state.db.customers?.find((c) => c.name === inc.callerName);
-    const avatarUrl = proMatch?.avatarUrl || custMatch?.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=240&q=80';
+    const avatarUrl = proMatch?.avatarUrl || custMatch?.avatarUrl || DEFAULT_AVATAR_FALLBACK;
 
     root.innerHTML = `
       <div class="indrive-call-overlay">
@@ -14800,7 +14912,7 @@ function renderCallModal() {
   const contextTitle = state.activeCall.contextTitle || 'Harare Home Visit';
   const proMatch = state.db.providers?.find((p) => p.name === peerName || p.shortName === peerName);
   const custMatch = state.db.customers?.find((c) => c.name === peerName);
-  const avatarUrl = proMatch?.avatarUrl || custMatch?.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=240&q=80';
+  const avatarUrl = proMatch?.avatarUrl || custMatch?.avatarUrl || DEFAULT_AVATAR_FALLBACK;
   const isOutgoing = state.activeCall.callState === 'OUTGOING';
 
   // 2A. Render Minimized WhatsApp-Style Floating Pill (PiP Widget)

@@ -19,9 +19,12 @@ import android.os.Looper;
 import android.os.Vibrator;
 import android.webkit.GeolocationPermissions;
 import android.webkit.JavascriptInterface;
+import android.webkit.MimeTypeMap;
 import android.webkit.PermissionRequest;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -33,6 +36,9 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -113,6 +119,12 @@ public class MainActivity extends Activity {
 
         webView.setWebViewClient(new WebViewClient() {
             @Override
+            public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                WebResourceResponse packagedAsset = interceptPackagedAsset(request.getUrl());
+                return packagedAsset != null ? packagedAsset : super.shouldInterceptRequest(view, request);
+            }
+
+            @Override
             public boolean shouldOverrideUrlLoading(WebView view, String url) {
                 if (url.startsWith("tel:") || url.startsWith("whatsapp:") || url.startsWith("mailto:")) {
                     try {
@@ -174,6 +186,42 @@ public class MainActivity extends Activity {
 
         webView.loadUrl(APP_URL);
         setupBackgroundPolling();
+    }
+
+    private WebResourceResponse interceptPackagedAsset(Uri uri) {
+        if (!"file".equals(uri.getScheme())) return null;
+
+        String path = uri.getPath();
+        if (path == null || path.startsWith("/android_asset/")) return null;
+
+        String assetPath = path.startsWith("/") ? path.substring(1) : path;
+        if (assetPath.isEmpty()) return null;
+        for (String segment : assetPath.split("/")) {
+            if ("..".equals(segment)) return null;
+        }
+
+        try {
+            InputStream stream = getAssets().open(assetPath);
+            String extension = MimeTypeMap.getFileExtensionFromUrl(assetPath).toLowerCase(Locale.US);
+            String mimeType = MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension);
+            if (mimeType == null) {
+                if ("js".equals(extension)) mimeType = "application/javascript";
+                else if ("css".equals(extension)) mimeType = "text/css";
+                else if ("svg".equals(extension)) mimeType = "image/svg+xml";
+                else if ("json".equals(extension)) mimeType = "application/json";
+                else mimeType = "application/octet-stream";
+            }
+
+            String encoding = mimeType.startsWith("text/") || mimeType.contains("javascript") || mimeType.contains("json")
+                ? "UTF-8"
+                : null;
+            return new WebResourceResponse(mimeType, encoding, stream);
+        } catch (FileNotFoundException e) {
+            return null;
+        } catch (IOException e) {
+            android.util.Log.e("FinditWebView", "Unable to open packaged asset: " + assetPath, e);
+            return null;
+        }
     }
 
     private void createNotificationChannel() {

@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
 
 console.log('=== Building Findit Harare Complete System Documentation & PDF ===');
 
@@ -251,7 +251,7 @@ const htmlContent = `<!DOCTYPE html>
   </p>
 
   <div class="key-callout">
-    <strong>Core Breakthrough:</strong> Unlike fixed-price or directory apps, Findit empowers the client to name their fair USD starting offer, lets nearby specialists bid or counter-offer in real time, locks safety with a 4-digit start PIN, guides artisans with turn-by-turn voice navigation featuring real Harare thoroughfares, and safeguards revenue through an automated 11% EcoCash USD commission engine and anti-leakage shield.
+    <strong>Core Breakthrough:</strong> Unlike fixed-price or directory apps, Findit empowers the client to name their fair USD starting offer, lets nearby specialists bid or counter-offer in real time, locks safety with a 4-digit start PIN, guides artisans with turn-by-turn voice navigation featuring real Harare thoroughfares, and safeguards revenue through an automated 10% standard EcoCash USD commission engine and anti-leakage shield.
   </div>
 
   <h2>System Architecture &amp; Technology Stack</h2>
@@ -425,8 +425,8 @@ const htmlContent = `<!DOCTYPE html>
         <td>Zero payment withholding; immediate liquidity for fuel, parts, and daily needs.</td>
       </tr>
       <tr>
-        <td><strong>11% Commission Deduction</strong></td>
-        <td>The platform automatically deducts an 11% fee from the provider's prepaid wallet balance.</td>
+        <td><strong>10% Standard Commission Deduction</strong></td>
+        <td>The platform automatically deducts the configured commission rate (10% by default) from the provider's prepaid wallet balance; an active launch promotion waives the fee.</td>
         <td>Fair, transparent pricing; no hidden monthly subscription fees.</td>
       </tr>
       <tr>
@@ -467,7 +467,7 @@ const htmlContent = `<!DOCTYPE html>
     <div class="feature-card highlight">
       <div class="card-title blue">Live Financial &amp; Revenue Ledger</div>
       <div class="card-desc">
-        Tracks Total Gross Marketplace Value (GMV), 11% platform commissions collected, artisan wallet balances, pending withdrawals, and EcoCash USD transaction logs with instant CSV/accounting export.
+        Tracks Total Gross Marketplace Value (GMV), platform commissions collected, artisan wallet balances, pending withdrawals, and EcoCash USD transaction logs with instant CSV/accounting export.
       </div>
     </div>
     <div class="feature-card highlight">
@@ -479,7 +479,7 @@ const htmlContent = `<!DOCTYPE html>
     <div class="feature-card highlight">
       <div class="card-title blue">Dynamic Commission Controller</div>
       <div class="card-desc">
-        Admins can adjust the platform commission rate (e.g. 11%, 10%, 12%) in real time using a live slider, instantly updating calculations across all new bids.
+        Admins can adjust the platform commission rate (10% by default) in real time using a live slider, updating calculations for new bookings.
       </div>
     </div>
   </div>
@@ -627,6 +627,7 @@ const htmlContent = `<!DOCTYPE html>
 </html>`;
 
 const htmlPath = path.join(__dirname, '../pdf_build/findit_overview.html');
+fs.mkdirSync(path.dirname(htmlPath), { recursive: true });
 fs.writeFileSync(htmlPath, htmlContent, 'utf8');
 console.log('1. Generated HTML presentation at:', htmlPath);
 
@@ -635,9 +636,17 @@ const publicPdfPath = path.join(__dirname, '../public/Findit_Harare_Complete_Ove
 
 console.log('2. Converting HTML to PDF via Headless Chrome...');
 try {
-  const chromePath = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
-  const chromeCmd = `"${chromePath}" --headless --disable-gpu --run-all-compositor-stages-before-draw --no-pdf-header-footer --print-to-pdf="${pdfOutputPath}" "${htmlPath}"`;
-  execSync(chromeCmd);
+  const chromePath = process.env.CHROME_PATH || (process.platform === 'win32'
+    ? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'
+    : '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome');
+  execFileSync(chromePath, [
+    '--headless',
+    '--disable-gpu',
+    '--run-all-compositor-stages-before-draw',
+    '--no-pdf-header-footer',
+    `--print-to-pdf=${pdfOutputPath}`,
+    htmlPath
+  ]);
   console.log('3. PDF successfully compiled at:', pdfOutputPath);
   fs.copyFileSync(pdfOutputPath, publicPdfPath);
   console.log('4. Copied PDF to public folder at:', publicPdfPath);
@@ -663,7 +672,7 @@ Unlike rigid fixed-price or classifieds directories, Findit Harare lets the clie
 propose a fair USD starting fare, enables verified nearby specialists to accept or
 counter-bid in real time, secures every transaction with a 4-digit arrival start PIN,
 guides artisans with turn-by-turn GPS voice navigation featuring real Harare thoroughfares,
-and operates an automated 11% EcoCash USD commission engine with integrated anti-leakage.
+and operates an automated 10% standard EcoCash USD commission engine with integrated anti-leakage.
 
 
 2. CORE ARCHITECTURE & TECHNOLOGY STACK
@@ -785,9 +794,9 @@ D. InDrive-Style Leaflet Geolocation & Vector Graphics:
    - When within 20 meters, arrival siren and haptic alert activate.
    - Provider enters the client's 4-digit Start PIN to begin service.
 
-7. Direct USD Cash Collection & 11% Platform Commission:
+7. Direct USD Cash Collection & 10% Standard Platform Commission:
    - Client pays 100% of the agreed USD cash directly to the artisan.
-   - Findit automatically deducts an 11% fee from the provider's prepaid wallet.
+   - Findit automatically deducts the configured commission (10% by default) from the provider's prepaid wallet; the active launch promotion waives the fee.
    - Newly verified artisans receive $5.00 USD welcome credit.
    - Artisans top up their wallet via EcoCash USD (Biller Code: *151*2*2*84920#).
 
@@ -799,7 +808,7 @@ D. InDrive-Style Leaflet Geolocation & Vector Graphics:
    - Color-coded pins show trades, active routes, and client locations.
 
 2. Live Financial & Revenue Ledger:
-   - Displays Total Gross Marketplace Value (GMV), 11% commission revenue collected,
+   - Displays Total Gross Marketplace Value (GMV), commission revenue collected,
      artisan wallet balances, and EcoCash USD transaction logs.
    - One-click CSV export for accounting and financial reporting.
 
@@ -813,7 +822,7 @@ D. InDrive-Style Leaflet Geolocation & Vector Graphics:
    - One-click Approve, Request Resubmission, or Reject.
 
 5. Dynamic Commission Rate Controller:
-   - Live slider allows adjusting the platform commission rate (e.g. 11%, 10%, 12%)
+   - Live slider allows adjusting the platform commission rate from its 10% default.
      in real time across the entire marketplace.
 
 6. System Broadcasts & Live Support Helpdesk:

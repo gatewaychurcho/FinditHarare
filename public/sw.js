@@ -1,5 +1,5 @@
 // Findit Harare — Service Worker (Offline Cache & Map Resiliency)
-const SHELL_CACHE = 'findit-shell-v5.0.0';
+const SHELL_CACHE = 'findit-shell-v5.5.0';
 const TILES_CACHE = 'findit-map-tiles-v4';
 const API_CACHE = 'findit-api-cache-v4';
 
@@ -14,6 +14,19 @@ const SHELL_ASSETS = [
   '/icons/icon-192.png',
   '/icons/icon-512.png',
   '/icons/apple-touch-icon.png',
+  '/assets/logo.png',
+  '/assets/logo-icon.svg',
+  '/assets/categories/cat_automotive.jpg',
+  '/assets/categories/cat_beauty.jpg',
+  '/assets/categories/cat_cleaning.jpg',
+  '/assets/categories/cat_electrical.jpg',
+  '/assets/categories/cat_gardening.jpg',
+  '/assets/categories/cat_labour.jpg',
+  '/assets/categories/cat_repairs.jpg',
+  '/assets/categories/cat_solar.jpg',
+  '/assets/hub/marketplace.jpg',
+  '/assets/hub/shopping.jpg',
+  '/assets/hub/transport.jpg',
   '/vendor/leaflet.css',
   '/vendor/leaflet.js',
   '/vendor/AgoraRTC_N-4.20.0.js',
