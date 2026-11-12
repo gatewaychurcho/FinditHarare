@@ -926,6 +926,11 @@
   <script src="/vendor/leaflet.js"></script>
 
   <script>
+    // Hybrid APK & Web Native API Base
+    const API_BASE = (typeof window !== 'undefined' && (window.location.protocol === 'file:' || !window.location.origin || window.location.origin === 'null'))
+      ? 'https://finditharare.vercel.app'
+      : '';
+
     // State variables
     let adminTab = 'OVERVIEW';
     let aiSubTab = 'STRATEGY';
@@ -937,6 +942,8 @@
     let providerSuburbFilter = 'ALL';
     let adminSearchQuery = '';
     let lastAdminFingerprint = '';
+    let isInitialSessionChecked = false;
+    let isSyncingAdminData = false;
     let selectedSupportUserKey = '';
     let openChatRequestId = null;
     let adminPollingInterval = null;
@@ -1063,14 +1070,16 @@
       if (errBox) errBox.style.display = 'none';
 
       try {
-        const res = await fetch('/api/admin/login', {
+        const res = await fetch(`${API_BASE}/api/admin/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          cache: 'no-store',
           body: JSON.stringify({ password })
         });
         const data = await res.json();
         if (res.ok && data.token) {
           setAdminToken(data.token);
+          isInitialSessionChecked = true;
           hideAdminLockScreen();
           await loadAdminData(true);
         } else {
@@ -1096,13 +1105,15 @@
       const token = getAdminToken();
       if (token) {
         try {
-          await fetch('/api/admin/logout', {
+          await fetch(`${API_BASE}/api/admin/logout`, {
             method: 'POST',
-            headers: { 'Authorization': `Bearer ${token}` }
+            headers: { 'Authorization': `Bearer ${token}` },
+            cache: 'no-store'
           });
         } catch (e) {}
       }
       setAdminToken(null);
+      isInitialSessionChecked = false;
       showAdminLockScreen();
     }
 
@@ -1113,9 +1124,22 @@
         headers['Authorization'] = `Bearer ${token}`;
         headers['x-admin-token'] = token;
       }
-      const opts = { method, headers };
+      const opts = { method, headers, cache: 'no-store' };
       if (body) opts.body = JSON.stringify(body);
-      const res = await fetch(path, opts);
+      const url = path.startsWith('http') ? path : `${API_BASE}${path}`;
+      let res;
+      try {
+        res = await fetch(url, opts);
+      } catch (networkErr) {
+        await new Promise((r) => setTimeout(r, 350));
+        try {
+          res = await fetch(url, opts);
+        } catch (retryErr) {
+          const err = new Error('Network connection interrupted. Retrying automatically...');
+          err.isNetworkError = true;
+          throw err;
+        }
+      }
       let data;
       try {
         data = await res.json();
@@ -1124,6 +1148,7 @@
       }
       if (res.status === 401) {
         setAdminToken(null);
+        isInitialSessionChecked = false;
         showAdminLockScreen();
       }
       if (!res.ok) {
@@ -1162,26 +1187,42 @@
         return;
       }
 
+      if (!db) {
+        try {
+          const cached = localStorage.getItem('findit_admin_db_cache');
+          if (cached) {
+            db = JSON.parse(cached);
+            hideAdminLockScreen();
+            renderAdmin();
+          }
+        } catch (e) {}
+      }
+
+      if (isSyncingAdminData && !forceRender) return;
+      isSyncingAdminData = true;
+
       try {
         const activeEl = document.activeElement;
         const isTyping = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT');
         if (isTyping && !forceRender) return;
 
-        const sessionCheck = await api('/api/admin/session');
-        if (!sessionCheck.authenticated) {
+        const [sessionCheck, nextDb, pendingRes] = await Promise.all([
+          !isInitialSessionChecked ? api('/api/admin/session').catch(() => null) : Promise.resolve({ authenticated: true }),
+          api('/api/state'),
+          api('/api/admin/pending-verifications').catch(() => (db?.pendingVerifications || []))
+        ]);
+        if (sessionCheck && sessionCheck.authenticated === false) {
           setAdminToken(null);
+          isInitialSessionChecked = false;
           showAdminLockScreen();
           return;
         }
-        const [nextDb, pendingRes] = await Promise.all([
-          api('/api/state'),
-          api('/api/admin/pending-verifications')
-        ]);
-        if (!nextDb || typeof nextDb !== 'object' || !Array.isArray(pendingRes)) {
-          throw new Error('The server returned incomplete admin data.');
+        if (!nextDb || typeof nextDb !== 'object' || nextDb.offline) {
+          return;
         }
 
-        nextDb.pendingVerifications = pendingRes;
+        isInitialSessionChecked = true;
+        nextDb.pendingVerifications = Array.isArray(pendingRes) ? pendingRes : (nextDb.pendingVerifications || []);
         hideAdminLockScreen();
 
         const fp = JSON.stringify({
@@ -1200,6 +1241,9 @@
         });
 
         db = nextDb;
+        try {
+          localStorage.setItem('findit_admin_db_cache', JSON.stringify(nextDb));
+        } catch (e) {}
 
         if (forceRender || fp !== lastAdminFingerprint) {
           lastAdminFingerprint = fp;
@@ -1207,13 +1251,16 @@
           if (openChatRequestId) renderJobChatModal();
         }
       } catch (err) {
-        console.error('Admin data sync failed:', err);
-        if (err && err.status === 401) {
+        console.warn('Admin data sync notice:', err);
+        if (err && (err.status === 401 || String(err).includes('401'))) {
           setAdminToken(null);
+          isInitialSessionChecked = false;
           showAdminLockScreen();
-        } else {
+        } else if (forceRender && !err?.isNetworkError) {
           showAdminToast(err.message || 'Unable to load admin data.', 'error');
         }
+      } finally {
+        isSyncingAdminData = false;
       }
     }
 
@@ -4478,12 +4525,17 @@
 
     // Initialize on page load
     document.addEventListener('DOMContentLoaded', () => {
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then((regs) => {
+          regs.forEach((reg) => reg.update().catch(() => {}));
+        }).catch(() => {});
+      }
       loadAdminData();
       if (adminPollingInterval) clearInterval(adminPollingInterval);
       adminPollingInterval = setInterval(() => loadAdminData(false), 4000);
 
       try {
-        const es = new EventSource('/api/stream');
+        const es = new EventSource(`${API_BASE}/api/stream`);
         es.onmessage = (evt) => {
           try {
             const msg = JSON.parse(evt.data);

@@ -1,5 +1,5 @@
 // Findit Harare — Service Worker (Offline Cache & Map Resiliency)
-const SHELL_CACHE = 'findit-shell-v5.5.0';
+const SHELL_CACHE = 'findit-shell-v5.5.1';
 const TILES_CACHE = 'findit-map-tiles-v4';
 const API_CACHE = 'findit-api-cache-v4';
 
@@ -98,6 +98,11 @@ self.addEventListener('fetch', (evt) => {
     return;
   }
 
+  // Never intercept or cache other API routes (e.g. /api/admin/*, /api/stream)
+  if (url.pathname.startsWith('/api/')) {
+    return;
+  }
+
   // 3. App Shell Code (HTML, JS, CSS): Network-First with Cache-Fallback for Instant Code Updates
   const isCodeAsset = url.pathname.endsWith('.js') || url.pathname.endsWith('.css') || url.pathname === '/' || url.pathname.endsWith('.html') || url.pathname.startsWith('/admin');
   if (req.method === 'GET' && isCodeAsset) {
@@ -112,9 +117,9 @@ self.addEventListener('fetch', (evt) => {
         const cached = await caches.match(req);
         if (cached) return cached;
         if (req.mode === 'navigate') {
-          return caches.match('/index.html');
+          return (await caches.match('/index.html')) || Response.error();
         }
-        return null;
+        return Response.error();
       })
     );
     return;
@@ -141,9 +146,9 @@ self.addEventListener('fetch', (evt) => {
           return netRes;
         }).catch(async () => {
           if (req.mode === 'navigate') {
-            return caches.match('/index.html');
+            return (await caches.match('/index.html')) || Response.error();
           }
-          return null;
+          return Response.error();
         });
       })
     );
