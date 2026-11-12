@@ -15,7 +15,7 @@ Unlike rigid fixed-price or classifieds directories, Findit Harare lets the clie
 propose a fair USD starting fare, enables verified nearby specialists to accept or
 counter-bid in real time, secures every transaction with a 4-digit arrival start PIN,
 guides artisans with turn-by-turn GPS voice navigation featuring real Harare thoroughfares,
-and operates an automated 11% EcoCash USD commission engine with integrated anti-leakage.
+and operates an automated 10% standard EcoCash USD commission engine with integrated anti-leakage.
 
 
 2. CORE ARCHITECTURE & TECHNOLOGY STACK
@@ -137,9 +137,9 @@ D. InDrive-Style Leaflet Geolocation & Vector Graphics:
    - When within 20 meters, arrival siren and haptic alert activate.
    - Provider enters the client's 4-digit Start PIN to begin service.
 
-7. Direct USD Cash Collection & 11% Platform Commission:
+7. Direct USD Cash Collection & 10% Standard Platform Commission:
    - Client pays 100% of the agreed USD cash directly to the artisan.
-   - Findit automatically deducts an 11% fee from the provider's prepaid wallet.
+   - Findit automatically deducts the configured commission (10% by default) from the provider's prepaid wallet; the active launch promotion waives the fee.
    - Newly verified artisans receive $5.00 USD welcome credit.
    - Artisans top up their wallet via EcoCash USD (Biller Code: *151*2*2*84920#).
 
@@ -151,7 +151,7 @@ D. InDrive-Style Leaflet Geolocation & Vector Graphics:
    - Color-coded pins show trades, active routes, and client locations.
 
 2. Live Financial & Revenue Ledger:
-   - Displays Total Gross Marketplace Value (GMV), 11% commission revenue collected,
+   - Displays Total Gross Marketplace Value (GMV), commission revenue collected,
      artisan wallet balances, and EcoCash USD transaction logs.
    - One-click CSV export for accounting and financial reporting.
 
@@ -165,7 +165,7 @@ D. InDrive-Style Leaflet Geolocation & Vector Graphics:
    - One-click Approve, Request Resubmission, or Reject.
 
 5. Dynamic Commission Rate Controller:
-   - Live slider allows adjusting the platform commission rate (e.g. 11%, 10%, 12%)
+   - Live slider allows adjusting the platform commission rate from its 10% default.
      in real time across the entire marketplace.
 
 6. System Broadcasts & Live Support Helpdesk:

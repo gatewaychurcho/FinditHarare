@@ -817,7 +817,7 @@ function getInitialDatabase() {
         subtitle: 'Hire verified local trades & pros',
         status: 'ACTIVE',
         badge: 'Active',
-        imageUrl: 'https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=800&q=80'
+        imageUrl: '/assets/hub/marketplace.jpg'
       },
       {
         id: 'online_shopping',
@@ -827,7 +827,7 @@ function getInitialDatabase() {
         subtitle: 'Harare shops & fast delivery',
         status: 'COMING_SOON',
         badge: 'Coming Soon',
-        imageUrl: 'https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=800&q=80'
+        imageUrl: '/assets/hub/shopping.jpg'
       },
       {
         id: 'transport_carriers',
@@ -837,7 +837,7 @@ function getInitialDatabase() {
         subtitle: 'Bakkies, trucks & haulage',
         status: 'COMING_SOON',
         badge: 'Coming Soon',
-        imageUrl: 'https://images.unsplash.com/photo-1519003722824-194d4455a60c?auto=format&fit=crop&w=800&q=80'
+        imageUrl: '/assets/hub/transport.jpg'
       }
     ]
   };
@@ -918,14 +918,14 @@ function ensureAiEngineStore(targetDb) {
         generatedAt: new Date().toISOString(),
         engine: 'Google Gemini 3.1 Flash (projects/943615439922)',
         healthScore: 96,
-        executiveSummary: 'Silent AI Engine is actively monitoring Harare job matchmaking, custom photo tasks, chat anti-leakage, and 11% commission protection.',
+        executiveSummary: 'Silent AI Engine is actively monitoring Harare job matchmaking, custom photo tasks, chat anti-leakage, and configured commission protection.',
         bugAndFrictionFindings: [
           'Biometric Face ID camera threshold optimized to prevent false blurry rejections on indoor mobile cameras.',
           'Client "For Someone Else" & "Schedule for Later" dispatch toggles verified for instant UI state transitions.'
         ],
         businessStrategies: [
           'Prioritize onboarding Mobile Hair, Plumbing & Electrical pros in Avondale, Borrowdale, and Mt Pleasant where immediate home-visit demand is highest.',
-          'Maintain strict $2.00 wallet floor and automatic 11% commission deduction on both PIN verification and AI-detected chat completions.',
+          'Maintain the $2.00 wallet floor and apply configured commissions only when the launch promotion does not waive them.',
           'Promote "Schedule for Later" bookings for weekend braiding, house cleaning, and landscaping tasks to increase average order value by 25%.'
         ],
         topDemandCategories: ['Repairs & Maintenance', 'Hair & Braiding', 'Barbers', 'Plumbing & Electrical']
@@ -946,27 +946,45 @@ function deductBookingCommissionIfNeeded(reqItem, triggerSource = 'PIN_VERIFIED'
   if (!provider) return null;
 
   const totalAgreedUsd = Number(reqItem.agreedTotalUsd || reqItem.budgetUsd || 20);
-  const categoryRate = db.settings?.categoryCommissions?.[reqItem.categoryId] ?? (db.settings?.commissionPercent || 11);
-  const feeUsd = Math.max(1, Math.round(totalAgreedUsd * (categoryRate / 100) * 100) / 100);
+  const categoryRate = Number(reqItem.configuredCommissionPercent ?? db.settings?.categoryCommissions?.[reqItem.categoryId] ?? db.settings?.commissionPercent ?? 10);
+  const promoApplied = typeof reqItem.promoApplied === 'boolean'
+    ? reqItem.promoApplied
+    : Boolean(db.settings?.launchPromoActive);
+  const feeUsd = promoApplied
+    ? 0
+    : (reqItem.commissionFeeUsd !== undefined && reqItem.commissionFeeUsd !== null
+      ? Number(reqItem.commissionFeeUsd)
+      : Math.max(1, Math.round(totalAgreedUsd * (categoryRate / 100) * 100) / 100));
 
   reqItem.commissionDeducted = true;
   reqItem.commissionDeductedSource = triggerSource;
   reqItem.commissionFeeUsd = feeUsd;
+  reqItem.promoApplied = promoApplied;
 
-  provider.walletBalanceUsd = Math.round((Number(provider.walletBalanceUsd || 0) - feeUsd) * 100) / 100;
-  if (!Array.isArray(provider.walletTransactions)) provider.walletTransactions = [];
-  provider.walletTransactions.unshift({
-    id: 'tx_' + Date.now(),
-    date: new Date().toISOString(),
-    type: 'COMMISSION_DEDUCTION',
-    method: `Findit Provider Wallet (${triggerSource})`,
-    amountUsd: -feeUsd,
-    previousBalanceUsd: Math.round((Number(provider.walletBalanceUsd) + feeUsd) * 100) / 100,
-    newBalanceUsd: provider.walletBalanceUsd,
-    note: `${categoryRate}% Commission (-$${feeUsd.toFixed(2)}) on $${totalAgreedUsd.toFixed(2)} job (${reqItem.title || 'Home Service'}) [${triggerSource}]`
-  });
+  if (feeUsd > 0) {
+    provider.walletBalanceUsd = Math.round((Number(provider.walletBalanceUsd || 0) - feeUsd) * 100) / 100;
+    if (!Array.isArray(provider.walletTransactions)) provider.walletTransactions = [];
+    provider.walletTransactions.unshift({
+      id: 'tx_' + Date.now(),
+      date: new Date().toISOString(),
+      type: 'COMMISSION_DEDUCTION',
+      method: `Findit Provider Wallet (${triggerSource})`,
+      amountUsd: -feeUsd,
+      previousBalanceUsd: Math.round((Number(provider.walletBalanceUsd) + feeUsd) * 100) / 100,
+      newBalanceUsd: provider.walletBalanceUsd,
+      note: `${categoryRate}% Commission (-$${feeUsd.toFixed(2)}) on $${totalAgreedUsd.toFixed(2)} job (${reqItem.title || 'Home Service'}) [${triggerSource}]`
+    });
+  }
 
   saveDb(db);
+  if (feeUsd === 0) {
+    broadcastUpdate('BOOKING_COMMISSION_WAIVED', {
+      requestId: reqItem.id,
+      providerId: provider.id,
+      promoApplied
+    });
+    return null;
+  }
   broadcastUpdate('PROVIDER_WALLET_UPDATED', {
     providerId: provider.id,
     walletBalanceUsd: provider.walletBalanceUsd,
@@ -985,6 +1003,7 @@ function deductBookingCommissionIfNeeded(reqItem, triggerSource = 'PIN_VERIFIED'
     customerName: reqItem.customerName,
     agreedUsd: totalAgreedUsd,
     commissionPercent: categoryRate,
+    promoApplied,
     commissionUsd: feeUsd,
     triggerSource,
     providerWalletAfterUsd: provider.walletBalanceUsd
@@ -1344,7 +1363,7 @@ ${recentTranscript}
 
 Return ONLY JSON with keys:
 - "jobCompletedOrStartedInReality": boolean (true if chat/cancellation shows the provider and client met or finished the job)
-- "feeAvoidanceAttempt": boolean (true if trying to cancel on app to avoid the 11% commission or deal off-app)
+- "feeAvoidanceAttempt": boolean (true if trying to cancel on app to avoid the configured commission or deal off-app)
 - "disguisedContactSharing": boolean (true if sharing hidden phone numbers, social handles, WhatsApp tricks)
 - "riskLevel": "LOW" | "MEDIUM" | "HIGH"
 - "reason": string (concise 1-sentence explanation for Admin)`;
@@ -1358,7 +1377,7 @@ Return ONLY JSON with keys:
       aiExplanation = aiRes.data.reason || '';
     }
 
-    // If AI detects the job was actually started/completed or they are cancelling after meeting to dodge the 11% fee, protect the commission automatically!
+    // If AI detects the job was actually started/completed or they are cancelling after meeting to dodge the fee, protect the commission automatically.
     if ((jobCompletedDetected || (feeAvoidanceDetected && reqItem.acceptedProviderId)) && !reqItem.commissionDeducted) {
       const prot = deductBookingCommissionIfNeeded(
         reqItem,
@@ -1375,7 +1394,7 @@ Return ONLY JSON with keys:
           severity: 'HIGH',
           category: 'COMMISSION_PROTECTED',
           attemptedText: latestText,
-          explanation: aiExplanation || `AI detected real-world service execution/completion and automatically protected the 11% commission ($${prot.commissionUsd.toFixed(2)}).`,
+          explanation: aiExplanation || `AI detected real-world service execution/completion and automatically protected the configured commission ($${prot.commissionUsd.toFixed(2)}).`,
           engine: engineUsed
         });
       }
@@ -1420,7 +1439,10 @@ async function generateLiveAiBusinessStrategy(currentDb) {
   });
   const recentCancels = (currentDb.cancellationLogs || []).slice(0, 5).map((c) => `${c.serviceTitle}: "${c.reason}" (${c.stageWhenCancelled})`);
 
-  const prompt = `You are the Chief AI Business Strategist & QA Monitor for Findit Harare (an on-demand home-services app in Harare, Zimbabwe where providers get $5 welcome credit, minimum wallet balance is $2, and platform commission is 11%).
+  const commissionPolicy = currentDb.settings?.launchPromoActive
+    ? 'the active launch promotion currently waives commission'
+    : `the configured standard commission is ${Number(currentDb.settings?.commissionPercent ?? 10)}%`;
+  const prompt = `You are the Chief AI Business Strategist & QA Monitor for Findit Harare (an on-demand home-services app in Harare, Zimbabwe where providers get $5 welcome credit, the minimum wallet balance is $2, and ${commissionPolicy}).
 Analyze our live platform telemetry and return a JSON strategy report:
 - Total Requests: ${totalRequests} (Completed: ${completedReqs}, Cancelled: ${cancelledReqs})
 - Anti-Leakage Blocks (Numbers/Social Handles): ${leakageCount}
@@ -4380,7 +4402,8 @@ Return ONLY JSON with keys:
       const priceUsd = Number(body.priceUsd);
       const minReserveUsd = Number(db.settings.minWalletBalanceUsd || 2.00);
       const categoryRate = db.settings?.categoryCommissions?.[reqCat] ?? Number(db.settings.commissionPercent || 10);
-      const commissionFeeUsd = Math.round(priceUsd * (categoryRate / 100) * 100) / 100;
+      const promoApplied = Boolean(db.settings?.launchPromoActive);
+      const commissionFeeUsd = promoApplied ? 0 : Math.round(priceUsd * (categoryRate / 100) * 100) / 100;
       const currentBalanceUsd = Number(provider.walletBalanceUsd || 0);
       const requiredBalanceUsd = Math.round((commissionFeeUsd + minReserveUsd) * 100) / 100;
       const requiredTopUpUsd = Math.max(5.00, Math.max(0, Math.round((requiredBalanceUsd - currentBalanceUsd) * 100) / 100));
@@ -4392,15 +4415,20 @@ Return ONLY JSON with keys:
       if (currentBalanceUsd < minReserveUsd || currentBalanceUsd < commissionFeeUsd || (currentBalanceUsd - commissionFeeUsd) < minReserveUsd) {
         return sendJson(res, 402, {
           code: 'LOW_WALLET_BALANCE',
-          error: `Insufficient wallet balance to bid on this $${priceUsd} job. You need at least $${requiredBalanceUsd.toFixed(2)} USD ($${commissionFeeUsd.toFixed(2)} commission + $${minReserveUsd.toFixed(2)} reserve). Your current balance is $${currentBalanceUsd.toFixed(2)} USD. Please top up your wallet.`,
+          error: promoApplied
+            ? `You need at least $${minReserveUsd.toFixed(2)} USD in your wallet to bid during the 0% launch promotion. Your current balance is $${currentBalanceUsd.toFixed(2)} USD. Please top up your wallet.`
+            : `Insufficient wallet balance to bid on this $${priceUsd} job. You need at least $${requiredBalanceUsd.toFixed(2)} USD ($${commissionFeeUsd.toFixed(2)} commission + $${minReserveUsd.toFixed(2)} reserve). Your current balance is $${currentBalanceUsd.toFixed(2)} USD. Please top up your wallet.`,
           currentBalanceUsd,
           minReserveUsd,
           commissionPercent: categoryRate,
+          promoApplied,
           bidPriceUsd: priceUsd,
           commissionFeeUsd,
           requiredBalanceUsd,
           requiredTopUpUsd,
-          explanation: `To place a bid on this $${priceUsd} job, your wallet must cover the $${commissionFeeUsd.toFixed(2)} USD (${categoryRate}%) commission while maintaining the $${minReserveUsd.toFixed(2)} USD minimum reserve (total $${requiredBalanceUsd.toFixed(2)} USD required). Your current balance is $${currentBalanceUsd.toFixed(2)} USD. Please top up your wallet to proceed.`
+          explanation: promoApplied
+            ? `The 0% launch promotion waives commission. Your wallet must retain the $${minReserveUsd.toFixed(2)} USD minimum reserve to place this bid.`
+            : `To place a bid on this $${priceUsd} job, your wallet must cover the $${commissionFeeUsd.toFixed(2)} USD (${categoryRate}%) commission while maintaining the $${minReserveUsd.toFixed(2)} USD minimum reserve (total $${requiredBalanceUsd.toFixed(2)} USD required). Your current balance is $${currentBalanceUsd.toFixed(2)} USD. Please top up your wallet to proceed.`
         });
       }
 
@@ -4537,7 +4565,7 @@ Return ONLY JSON with keys:
 
       const provider = db.providers.find((p) => p.id === offer.providerId);
       const totalAgreedUsd = Number(offer.priceUsd) + Number(offer.travelFeeUsd || 0);
-      const categoryRate = db.settings.categoryCommissions[reqItem.categoryId] ?? db.settings.commissionPercent;
+      const categoryRate = db.settings.categoryCommissions?.[reqItem.categoryId] ?? db.settings.commissionPercent ?? 10;
       const standardFeeUsd = Math.round(totalAgreedUsd * (categoryRate / 100) * 100) / 100;
       const isPromo = Boolean(db.settings.launchPromoActive);
       const chargedFeeUsd = isPromo ? 0 : standardFeeUsd;
@@ -4557,6 +4585,10 @@ Return ONLY JSON with keys:
       reqItem.acceptedProviderAvatarUrl = offer.providerAvatarUrl || provider?.avatarUrl || '';
       reqItem.agreedTotalUsd = totalAgreedUsd;
       reqItem.commissionDeducted = false;
+      reqItem.configuredCommissionPercent = categoryRate;
+      reqItem.promoApplied = isPromo;
+      reqItem.standardCommissionFeeUsd = standardFeeUsd;
+      reqItem.commissionFeeUsd = chargedFeeUsd;
       reqItem.updatedAt = Date.now();
 
       if (provider) {
@@ -5542,11 +5574,15 @@ Return ONLY JSON with keys: "matchedCategoryId" (string), "taskSummary" (string)
 
       // Comprehensive Findit Harare Fallback Knowledge Base (understands indirect/varied phrasing + off-topic guard)
       const lower = userMessage.toLowerCase();
+      const standardCommissionPercent = Number(db.settings?.commissionPercent ?? 10);
+      const commissionPolicy = db.settings?.launchPromoActive
+        ? `A 0% launch promotion is active; the standard rate after it ends is ${standardCommissionPercent}%`
+        : `The standard commission rate is ${standardCommissionPercent}%`;
       const isOffTopic =
         /(capital\s+of|president\s+of|who\s+won\s+the\s+world\s+cup|write\s+a\s+poem|solve\s+this\s+math|python\s+code|javascript\s+code|recipe\s+for|bitcoin\s+price|football\s+score|homework|biology|chemistry|physics|weather\s+in\s+london)/i.test(lower) &&
         !/(findit|harare|service|book|provider|client|ecocash|wallet|job|app|plumber|braid|barber|clean|solar|repair)/i.test(lower);
 
-      let fallbackReply = `Hello *${userName}*! Welcome to *Findit Harare Official Support* (*finditharare.co.zw*).\n\nI can help you with anything related to *Findit Harare*:\n• *Ordering a Home Service* (Move the blue *YOU* pin or search any Harare address, set your USD fare, or schedule for later)\n• *Service Provider Categories & Settings* (View or change up to 3 job categories in *Account Settings*)\n• *Wallet, $5 Welcome Bonus & 11% Commission Rules*\n• *EcoCash USD Top-Ups* (Biller Code: *151*2*2*84920#)\n• *4-Digit Arrival Start PIN & Safety*\n\nWhat can I help you with today?`;
+      let fallbackReply = `Hello *${userName}*! Welcome to *Findit Harare Official Support* (*finditharare.co.zw*).\n\nI can help you with anything related to *Findit Harare*:\n• *Ordering a Home Service* (Move the blue *YOU* pin or search any Harare address, set your USD fare, or schedule for later)\n• *Service Provider Categories & Settings* (View or change up to 3 job categories in *Account Settings*)\n      • *Wallet, $5 Welcome Bonus & Commission Rules (${standardCommissionPercent}% standard rate)*\n• *EcoCash USD Top-Ups* (Biller Code: *151*2*2*84920#)\n• *4-Digit Arrival Start PIN & Safety*\n\nWhat can I help you with today?`;
 
       if (isOffTopic) {
         fallbackReply = `I am the official *Findit Harare Support Assistant* (*finditharare.co.zw*). I can only assist with questions and support related to *Findit Harare*—such as booking home services, provider accounts & job categories, EcoCash USD top-ups (*151*2*2*84920#), pricing, or safety.\n\nHow can I help you with *Findit Harare* today?`;
@@ -5554,8 +5590,8 @@ Return ONLY JSON with keys: "matchedCategoryId" (string), "taskSummary" (string)
         fallbackReply = `*Findit Harare Official Website & Contacts:*\n\n• *Official Website:* *https://finditharare.co.zw* (*finditharare.co.zw*)\n• *Official Support:* In-App Live Support Chat (24/7)\n• *EcoCash Biller Code:* *151*2*2*84920#\n• *Instagram:* *@findithahare*\n• *Facebook:* *Findit Harare Official*\n\nLet me know if you need help with a booking or your account!`;
       } else if (/(categor|change\s*job|edit\s*job|switch\s*service|add\s*service|my\s*services|what\s*jobs|choose\s*categor|settings|profile)/i.test(lower)) {
         fallbackReply = `*How to View or Change Your Job Categories & Account Settings:*\n\n1. Open the left side menu (☰) and tap *Account Settings* (or tap the *Categories / Settings* button in Provider Mode).\n2. Under *My Service Categories (Up to 3)*, you can see your active job categories and tap any category to add or switch your specialties (e.g., *Home Repairs & Construction*, *Beauty & Personal Care*, *Cleaning & Domestic*, *Automotive*, *Solar, Electrical Power & Water*, *Gardening & Outdoor*, *General Labour*).\n3. Tap *Save Account & Categories*—your job feed will immediately update to show only requests matching your chosen categories!`;
-      } else if (/(top\s*up|ecocash|wallet|balance|low\s*account|5\s*dollar|\$5|\$2|commission|11%|pay|fee|deduct)/i.test(lower)) {
-        fallbackReply = `*Findit Harare Wallet & 11% Commission Guide:*\n\n1. *$5 Welcome Bonus:* Every verified Service Provider receives *$5.00* free starter credit upon joining.\n2. *11% Commission & $2 Minimum Floor:* A *11%* platform commission is deducted per confirmed job, and your wallet cannot drop below *$2.00*.\n3. *How Much to Top Up When Bidding:* Check *11%* of the bid amount—if 11% is below $5, top up at least *$5.00*. If 11% is above $5, top up that *11% amount*.\n4. *EcoCash USD Top-Up:* Dial *151*2*2*84920# (*FINDIT HARARE OFFICIAL*), then paste your EcoCash SMS in the *Wallet* tab for instant verification!`;
+      } else if (/(top\s*up|ecocash|wallet|balance|low\s*account|5\s*dollar|\$5|\$2|commission|fee|deduct)/i.test(lower)) {
+        fallbackReply = `*Findit Harare Wallet & Commission Guide:*\n\n1. *$5 Welcome Bonus:* Every verified Service Provider receives *$5.00* free starter credit upon joining.\n2. *Commission & $2 Minimum Floor:* ${commissionPolicy}. Your wallet must retain at least *$2.00* to place bids.\n3. *How Much to Top Up When Bidding:* The app shows the commission and any required top-up before you submit a bid. During the 0% launch promotion, only the minimum wallet reserve applies.\n4. *EcoCash USD Top-Up:* Dial *151*2*2*84920# (*FINDIT HARARE OFFICIAL*), then paste your EcoCash SMS in the *Wallet* tab for instant verification!`;
       } else if (/(pin|start\s*pin|4-digit|arrive|verify|code|outside|gate)/i.test(lower)) {
         fallbackReply = `*4-Digit Arrival Start PIN:*\n\nWhen your accepted Service Provider arrives at your location (within 20m), your phone alerts you with your *4-digit Start PIN*. Share this PIN with your provider at the gate so they can enter it to start the job. (If the provider waits within 20m for 3 minutes, the system also auto-verifies arrival to protect both parties.)`;
       } else if (/(schedule|later|book|order|map|location|navigate|address|how\s*does\s*it\s*work|hire|find\s*a\s*pro)/i.test(lower)) {
@@ -5584,7 +5620,7 @@ Complete Findit Harare Platform Knowledge (Understand any user phrasing, indirec
 1. Booking & Real Location Navigation: Clients can drag the blue "YOU" pin anywhere on the Harare map OR tap "Your Home Visit Location" to search any real Harare street, landmark, or suburb and navigate the map there. When a client selects a category tile, the "Most Used Services" list updates to match that category's services. Clients can book for "Now (Immediate)" or "Schedule for Later", attach a style/task reference photo, set their USD offer fare, and see in real time the exact count of pros viewing their request.
 2. Service Categories & Catalogue: ${categoriesSummary}
 3. Provider Job Categories & Account Settings: Service Providers can view, edit, or change their chosen job categories (up to 3 categories) anytime in "Account Settings" (from the side menu ☰ or provider header). Providers only see open job request cards that match their chosen categories. They can also update their Brand Name, Starting Price (USD), Suburb, Physical Workshop/Office address, and Work Catalogue photos in the app.
-4. Provider Wallet, $5 Welcome Bonus & 11% Commission: Every new Service Provider gets $5.00 free starter credit. Platform commission is 11% per job, and a provider's wallet balance cannot drop below $2.00. If a provider's balance is too low to bid on a job, they check 11% of the bid amount: if 11% is under $5, they must top up at least $5.00; if 11% is $5 or more, they top up at least that 11% amount via EcoCash USD *151*2*2*84920# and paste the confirmation SMS in the Wallet tab.
+4. Provider Wallet, $5 Welcome Bonus & Commission: Every new Service Provider gets $5.00 free starter credit. ${commissionPolicy}. A provider's wallet balance cannot drop below $2.00 to bid. The app shows any required top-up based on the configured commission and promotion status. Top up via EcoCash USD *151*2*2*84920# and paste the confirmation SMS in the Wallet tab.
 5. Arrival Start PIN & Safety: When a provider arrives within 20m of the client, the client shares their 4-digit Start PIN so the provider can verify arrival and begin work. (If the provider is at the pin within 20m for 3 minutes, auto-pair verifies the start.) Phone numbers, instagram.com, facebook.com, and external links are blocked in chat, and providers cannot upload images/flyers in chat.
 6. Multi-Service Hub: Includes the active Job Marketplace plus upcoming Online Shopping and Transport & Carriers hubs.
 
