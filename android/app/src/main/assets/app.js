@@ -1,10 +1,8 @@
-// ============================================================================
 // FINDIT HARARE — ELECTRIC BLUE & WHITE PRODUCTION ENGINE (100% VECTOR SVG UI)
-// ============================================================================
 
 const SESSION_KEY = 'findit_harare_session_v3';
 
-// Hybrid APK & Web Native API Base:
+// Hybrid APK & Web Native API Base
 const API_BASE = (typeof window !== 'undefined' && (window.location.protocol === 'file:' || !window.location.origin || window.location.origin === 'null'))
   ? 'https://finditharare.vercel.app'
   : '';
@@ -75,7 +73,7 @@ const state = {
   providerStatus: 'AVAILABLE', // 'AVAILABLE' | 'BUSY' | 'ON_BREAK' | 'LUNCH' | 'OFFLINE'
   providerBreakEndsAt: null,
 
-  // inDrive Style: Booking for Myself or Someone Else
+  // Live Style: Booking for Myself or Someone Else
   bookingFor: 'ME', // 'ME' | 'SOMEONE_ELSE'
   recipientName: '',
   recipientPhone: '',
@@ -120,7 +118,7 @@ const state = {
   uploadedFileName: '',
   uploadSuspectedWatermark: false,
 
-  // Full inDrive & Findit Style Multi-Hub & Biometrics State
+  // Full Live & Findit Style Multi-Hub & Biometrics State
   hubView: 'HUB', // 'HUB' | 'MARKETPLACE'
   onboardingSlide: 0, // 0 | 1
   onboardingActive: false,
@@ -161,9 +159,7 @@ function isBookedStatus(status) {
   return ACTIVE_BOOKED_STATUSES.includes(status);
 }
 
-// ============================================================================
-// UNIVERSAL VECTOR SVG ICON SYSTEM (ZERO EMOJIS ANYWHERE)
-// ============================================================================
+// UNIVERSAL VECTOR SVG ICON SYSTEM
 function uiIcon(name, size = 16) {
   const s = size;
   const icons = {
@@ -415,9 +411,7 @@ let geocodeDebounceTimer = null;
 const osrmRouteCache = new Map();
 const osrmStepsCache = new Map();
 
-// ============================================================================
 // CUSTOM ICONIFIED SERVICE ILLUSTRATIONS (MATCHING EACH SERVICE LABEL)
-// ============================================================================
 function getCategoryVectorSvg(catId, isSelected = false) {
   const strokeMain = isSelected ? '#FFFFFF' : '#0066FF';
   const strokeSub = isSelected ? '#BAE6FD' : '#0F172A';
@@ -537,9 +531,7 @@ function checkAntiLeakageClient(text) {
   return null;
 }
 
-// ============================================================================
 // INITIALIZATION, SESSION PERSISTENCE & REAL-TIME SSE STREAM
-// ============================================================================
 document.addEventListener('DOMContentLoaded', async () => {
   initSplashScreen();
   loadSavedSession();
@@ -1930,7 +1922,7 @@ function handleIncomingRealtimeEvent(data) {
     return;
   }
 
-  // Ignore ephemeral viewer heartbeat events so they never trigger full fetchState() re-render loops
+  // Ignore ephemeral viewer heartbeat events so they never trigger full fetchState re-render loops
   if (data.eventType === 'REQUEST_VIEWERS_UPDATED') {
     if (data.payload?.requestId && Array.isArray(data.payload?.viewerIds) && state.db?.requests) {
       const r = state.db.requests.find((x) => x.id === data.payload.requestId);
@@ -2052,9 +2044,7 @@ function connectRealtimeStream() {
   }
 }
 
-// ============================================================================
 // 1-SECOND COUNTDOWN LOOP FOR SEARCH BAR, GEOFENCE 50M ALERTS & 20M AUTO-PAIR
-// ============================================================================
 function compressImageFileToDataUrl(file, maxDimension = 800, quality = 0.72) {
   return new Promise((resolve) => {
     if (!file || !file.type || !file.type.startsWith('image/')) {
@@ -2337,9 +2327,7 @@ function showToast(msg, type = 'info') {
   setTimeout(() => el.remove(), 3200);
 }
 
-// ============================================================================
 // 100% WORKING OPENSTREETMAP (ZERO "API KEY REQUIRED") + REAL REVERSE GEOCODER
-// ============================================================================
 function initLeafletMap() {
   const mapEl = document.getElementById('leafletMap');
   if (!mapEl) return;
@@ -2494,9 +2482,7 @@ function reverseGeocodeHararePin(lat, lng) {
   }, 200);
 }
 
-// ============================================================================
 // HARARE LOCAL GAZETTEER FOR 0ms INSTANT ADDRESS RELOCATION & GPS STREET NAMES
-// ============================================================================
 const HARARE_GAZETTEER = {
   "herbert chitepo": { name: "Herbert Chitepo Avenue", lat: -17.8202, lng: 31.0450 },
   "chitepo": { name: "Herbert Chitepo Avenue", lat: -17.8202, lng: 31.0450 },
@@ -2647,9 +2633,7 @@ function resolveNearestHarareThoroughfare(lat, lng) {
   return closestName;
 }
 
-// ============================================================================
-// INDRIVE LIVE GPS NAVIGATION ENGINE & TURN-BY-TURN AUDIO DIRECTIONS
-// ============================================================================
+// Live LIVE GPS NAVIGATION ENGINE & TURN-BY-TURN AUDIO DIRECTIONS
 const liveNavState = {
   active: false,
   voiceEnabled: false, // Voice navigation is optional and turned OFF by default
@@ -2762,7 +2746,7 @@ function speakNavigationDirection(text) {
   // 1. Audible Nav Ding
   playNavTurnChime();
 
-  // 2. High Quality Speech Synthesis (Google Maps & inDrive Voice Guidance)
+  // 2. High Quality Speech Synthesis
   if ('speechSynthesis' in window) {
     try {
       if (window.speechSynthesis.paused) {
@@ -2949,7 +2933,7 @@ function advanceNavigationStep(curLat, curLng) {
 async function drawRoadRouteOnMap(lat1, lng1, lat2, lng2, color = '#0066FF', weight = 5, isNav = false, reqContext = null) {
   if (!leafletMap) return;
 
-  // inDrive rule: When looking for providers, never show route polylines; show only concentric radar pulse
+  // Live rule: When looking for providers, never show route polylines; show only concentric radar pulse
   const activeCustomerReq = getCustomerActiveRequest();
   if (state.role === 'CUSTOMER' && (state.screenStep === 'SEARCHING' || (activeCustomerReq && activeCustomerReq.status === 'OPEN'))) {
     if (leafletRoutePolyline) {
@@ -3043,7 +3027,7 @@ async function drawRoadRouteOnMap(lat1, lng1, lat2, lng2, color = '#0066FF', wei
     liveNavState.totalDurationSeconds = Math.max(60, Math.round((totalDist / 500) * 60));
   }
 
-  // inDrive Dual-Layer Route Polyline (Dark Casing + Glowing Blue Active Polyline)
+  // Live Dual-Layer Route Polyline (Dark Casing + Glowing Blue Active Polyline)
   if (leafletRoutePolyline && leafletRoutePolylineCasing && currentRouteCoordsKey === key) {
     // Already rendered for this exact route segment — keep existing layer without flicker
   } else if (leafletRoutePolyline && leafletRoutePolylineCasing) {
@@ -3438,7 +3422,7 @@ function updateLiveGpsMarker() {
   const lng = state.pinnedLng || state.userLiveGpsLng || 31.0365;
   if (!lat || !lng) return;
 
-  // Authentic inDrive passenger client icon: pure vector icon (exactly 1 on map, draggable to choose pickup/visit location)
+  // Authentic Live passenger client icon: pure vector icon (exactly 1 on map, draggable to choose pickup/visit location)
   const activeReq = getCustomerActiveRequest();
   const isSearching = Boolean((activeReq && (activeReq.status === 'OPEN' || activeReq.status === 'SEARCHING')) || state.screenStep === 'SEARCHING');
 
@@ -3446,7 +3430,7 @@ function updateLiveGpsMarker() {
     className: 'indrive-client-map-marker-wrap',
     html: `
       <div class="indrive-client-marker-root" title="Drag to choose location">
-        <!-- 1. "Where from" inDrive Bubble (Tapping opens Address Modal) -->
+        <!-- 1. "Where from" Live Bubble (Tapping opens Address Modal) -->
         <div class="indrive-where-from-bubble" onclick="openSuburbPickerModal()" title="Tap to enter route / address">
           <div class="where-from-sub">Where from</div>
           <div class="where-from-row">
@@ -3456,7 +3440,7 @@ function updateLiveGpsMarker() {
           <div class="where-from-tail"></div>
         </div>
 
-        <!-- 2. Hailing Badge with Pin Stem & Map Anchor (Exact match to inDrive screenshot) -->
+        <!-- 2. Hailing Badge with Pin Stem & Map Anchor -->
         <div class="indrive-waving-pin-box">
           <div class="hailing-badge">
             ${uiIcon('hailingPerson', 24)}
@@ -3935,9 +3919,7 @@ function buildCurvedPreviewPoints(lat1, lng1, lat2, lng2) {
   return pts;
 }
 
-// ============================================================================
 // MAP VISIBILITY & MULTI-HUB SYNC CONTROLLER
-// ============================================================================
 let lastMapDisplayState = '';
 
 function syncMapVisibility() {
@@ -3974,9 +3956,7 @@ function syncMapVisibility() {
   }
 }
 
-// ============================================================================
 // MAIN RENDER CONTROLLER
-// ============================================================================
 function renderAll(force = true) {
   if (!state.db) return;
 
@@ -4069,9 +4049,7 @@ function getProviderActiveBooking(providerId) {
   return directMatch || null;
 }
 
-// ============================================================================
 // "CHOOSE A PRO" INCOMING OFFER CARDS OVERLAY (WITH 120S SHRINKING ACCEPT FILL)
-// ============================================================================
 let lastOffersSignature = '';
 
 function renderFloatingOffersOverlay(force = false) {
@@ -4241,9 +4219,7 @@ function renderFloatingOffersOverlay(force = false) {
   }
 }
 
-// ============================================================================
 // MAIN UI OVERLAY
-// ============================================================================
 let lastUiOverlaySignature = '';
 
 function renderUiOverlay(force = true) {
@@ -4506,9 +4482,7 @@ async function acknowledgeAdminWarning(warningId) {
   }
 }
 
-// ----------------------------------------------------------------------------
 // PERSONALIZED TOP SERVICES & MOST USED SERVICES GENERATOR (NO RANDOM ADDRESSES)
-// ----------------------------------------------------------------------------
 function getPersonalizedAndTopServices() {
   const categories = (state.db.categories || []).filter((c) => c.status === 'ACTIVE');
   const selectedCat = categories.find((c) => c.id === state.selectedCategoryId) || categories[0];
@@ -4555,9 +4529,7 @@ function getPersonalizedAndTopServices() {
   return items.slice(0, 5);
 }
 
-// ----------------------------------------------------------------------------
 // FINDIT HARARE MULTI-SERVICE HUB & JOB MARKETPLACE OVERLAYS
-// ----------------------------------------------------------------------------
 function openJobMarketplaceView() {
   state.hubView = 'MARKETPLACE';
   state.screenStep = 'HOME';
@@ -4902,9 +4874,7 @@ function selectHubService(serviceId) {
   openComingSoonServiceModal(service?.name || title, service?.tagline || subtitle);
 }
 
-// ----------------------------------------------------------------------------
 // NEW FORM & DESIGN SYSTEM HELPERS (PHONE 1 & 2 MOCKUP TRANSFORMATION)
-// ----------------------------------------------------------------------------
 function getCategoryTileImageUrl(catId) {
   const norm = String(catId || '').toLowerCase();
   if (norm.includes('repair') || norm.includes('build') || norm.includes('handy') || norm.includes('plumb')) {
@@ -5193,9 +5163,7 @@ function renderGlobalBottomNavDock() {
   }
 }
 
-// ----------------------------------------------------------------------------
-// HOME DISCOVERY SCREEN (SCREENSHOT 1 LEFT: OVER LIVE MAP, CLEAN, UNCROWDED)
-// ----------------------------------------------------------------------------
+// HOME DISCOVERY SCREEN
 function selectQuickHarareSuburbChip(suburbId, suburbName, lat, lng) {
   state.selectedSuburbId = suburbId;
   state.customSuburbLabel = `${suburbName}, Harare`;
@@ -5258,7 +5226,7 @@ function renderHomeDiscoveryOverlay() {
 
   return `
     <div class="dg-screen-over-map">
-      <!-- Top Floating Bar over Live Harare Map (Screenshot 1 Left: Blank, Sweet, Smart & Simple) -->
+      <!-- Top Floating Bar over Live Harare Map -->
       <div class="dg-top-area">
         <div class="dg-search-top-row">
           <button type="button" class="dg-avatar-circle-btn" onclick="returnToMainHub()" title="Back to Hub">
@@ -5279,7 +5247,7 @@ function renderHomeDiscoveryOverlay() {
         </div>
       </div>
 
-      <!-- Half-Screen White Bottom Sheet over Live Map (Screenshot 1 Left) -->
+      <!-- Half-Screen White Bottom Sheet over Live Map -->
       <div class="dg-half-sheet">
         <div class="dg-sheet-handle" onclick="toggleSheetMinimize(true)"></div>
 
@@ -5350,9 +5318,7 @@ function selectTopServiceShortcut(catId, subIdx) {
   openConfigureStep(subIdx);
 }
 
-// ----------------------------------------------------------------------------
-// FIND OFFERS / CONFIGURE SCREEN (SCREENSHOT 1 CENTER: HALF-SCREEN OVER LIVE MAP)
-// ----------------------------------------------------------------------------
+// FIND OFFERS / CONFIGURE SCREEN
 function renderConfigureFareOverlay() {
   if (state.isSheetMinimized) {
     return `
@@ -5455,7 +5421,7 @@ function renderConfigureFareOverlay() {
           </div>
         </div>
 
-        <!-- Fare Stepper (- $20.00 +) matching Screenshot 1 Center -->
+        <!-- Fare Stepper (- $20.00 +) matching -->
         <div class="dg-fare-stepper-row">
           <button type="button" class="dg-fare-step-btn" onclick="adjustDraftFare(-1)">&minus;</button>
           <div class="dg-fare-center-display">
@@ -5511,7 +5477,7 @@ function renderConfigureFareOverlay() {
 
   return `
     <div class="dg-screen-over-map">
-      <!-- Top Floating Location & Route Card Over Map + Back Button (Screenshot 1 Center) -->
+      <!-- Top Floating Location & Route Card Over Map + Back Button -->
       <div class="dg-top-area">
         <div class="dg-route-top-card">
           <div class="dg-route-top-row" onclick="openSuburbPickerModal()" style="cursor:pointer;">
@@ -5537,7 +5503,7 @@ function renderConfigureFareOverlay() {
         </div>
       </div>
 
-      <!-- Half-Screen White Bottom Sheet over Live Harare Map (Screenshot 1 Center) -->
+      <!-- Half-Screen White Bottom Sheet over Live Harare Map -->
       <div class="dg-half-sheet">
         <div class="dg-sheet-handle" onclick="toggleSheetMinimize(true)"></div>
 
@@ -5564,7 +5530,7 @@ function renderConfigureFareOverlay() {
           ${tiers.map((t) => renderTierOption(t)).join('')}
         </div>
 
-        <!-- Primary Dark "Find offers" Button (Screenshot 1 Center) -->
+        <!-- Primary Dark "Find offers" Button -->
         <button type="button" class="dg-primary-dark-btn" onclick="submitServiceRequest()">
           <span>Find offers</span>
         </button>
@@ -5582,9 +5548,7 @@ function renderConfigureFareOverlay() {
   `;
 }
 
-// ----------------------------------------------------------------------------
-// OFFERS RECEIVED SCREEN (SCREENSHOT 2 CENTER: FLOATING OVER LIVE MAP)
-// ----------------------------------------------------------------------------
+// OFFERS RECEIVED SCREEN
 function renderCompareOffersOverlay(req) {
   if (!req) req = getCustomerActiveRequest();
 
@@ -5697,9 +5661,7 @@ function renderCompareOffersOverlay(req) {
   `;
 }
 
-// ----------------------------------------------------------------------------
 // CUSTOMER REQUESTS TAB
-// ----------------------------------------------------------------------------
 function renderCustomerRequestsTab() {
   const req = getCustomerActiveRequest();
   const pastRequests = (state.db?.requests || []).filter((r) => r.customerId === state.currentUser?.id && r.status === 'COMPLETED');
@@ -5748,9 +5710,7 @@ function renderCustomerRequestsTab() {
   `;
 }
 
-// ----------------------------------------------------------------------------
 // CUSTOMER PROFILE TAB (CLEAN, MODERN, UNCROWDED)
-// ----------------------------------------------------------------------------
 function renderCustomerProfileTab() {
   if (!state.isAuthenticated) {
     return `
@@ -5855,9 +5815,7 @@ function renderCustomerProfileTab() {
   `;
 }
 
-// ----------------------------------------------------------------------------
 // PROVIDER PROFILE TAB (CLEAN, MODERN, NO VERIFICATION BADGE, HIDDEN PAID BADGE HOOK)
-// ----------------------------------------------------------------------------
 async function purchaseProviderVerificationBadge() {
   const prov = state.currentUser || state.db?.providers?.[0];
   if (!prov) return;
@@ -5948,7 +5906,7 @@ function renderProviderProfileTab() {
         <span style="display:inline-flex;">${uiIcon('arrowRight', 18)}</span>
       </div>
 
-      <!-- Clean Preferences & Menu List (Screenshot 4 Right Inspired) -->
+      <!-- Clean Preferences & Menu List -->
       <div class="fh-profile-menu-list" style="border-radius:20px; overflow:hidden;">
         <div class="fh-profile-menu-row" onclick="openSettingsModal()">
           <div style="display:flex; align-items:center; gap:10px;">
@@ -5996,9 +5954,7 @@ function renderProviderProfileTab() {
   `;
 }
 
-// ----------------------------------------------------------------------------
-// PROVIDER HOME TAB (SCREENSHOT 4 LEFT: OVER LIVE MAP + 7-DAY MINI CHART + SLIDE TO CONNECT)
-// ----------------------------------------------------------------------------
+// PROVIDER HOME TAB
 function handleSlideConnectBarInteraction(event) {
   event.stopPropagation();
   toggleProviderOnlineStatus();
@@ -6012,7 +5968,7 @@ function renderProviderHomeTab(prov, openRequests, activeJob) {
   const completedTodayList = myCompleted.filter((r) => new Date(r.completedAt || r.updatedAt || 0).getTime() >= dayStart);
   const earningsTodayUsd = completedTodayList.reduce((sum, r) => sum + Number(r.agreedTotalUsd || r.budgetUsd || 0), 0);
 
-  // Compute 7-day M T W T F S S bars (Screenshot 4 Left)
+  // Compute 7-day M T W T F S S bars
   const dayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
   const currentDayIdx = (now.getDay() + 6) % 7; // Mon=0 .. Sun=6
   const weekTotals = [0, 0, 0, 0, 0, 0, 0];
@@ -6035,7 +5991,7 @@ function renderProviderHomeTab(prov, openRequests, activeJob) {
 
   return `
     <div class="dg-screen-over-map">
-      <!-- Top Floating Pills over Map (Screenshot 4 Left: Bell, Active Surge Pill, Rating Pill) -->
+      <!-- Top Floating Pills over Map -->
       <div class="dg-top-area">
         <div style="display:flex; justify-content:space-between; align-items:flex-start;">
           <div style="display:flex; flex-direction:column; gap:8px;">
@@ -6060,7 +6016,7 @@ function renderProviderHomeTab(prov, openRequests, activeJob) {
         </div>
       </div>
 
-      <!-- Bottom Half-Sheet over Live Harare Map (Screenshot 4 Left) -->
+      <!-- Bottom Half-Sheet over Live Harare Map -->
       <div class="dg-half-sheet">
         <div class="dg-sheet-handle"></div>
 
@@ -6074,7 +6030,7 @@ function renderProviderHomeTab(prov, openRequests, activeJob) {
           </div>
         ` : ''}
 
-        <!-- EARNINGS TODAY Card with 7-Day Mini Vertical Bar Chart (Screenshot 4 Left) -->
+        <!-- EARNINGS TODAY Card with 7-Day Mini Vertical Bar Chart -->
         <div class="dg-provider-earnings-card" onclick="switchProviderTab('EARNINGS')" style="cursor:pointer;">
           <div>
             <div style="font-size:10.5px; font-weight:800; color:#64748B; text-transform:uppercase; letter-spacing:0.06em;">EARNINGS TODAY</div>
@@ -6101,7 +6057,7 @@ function renderProviderHomeTab(prov, openRequests, activeJob) {
           </div>
         </div>
 
-        <!-- Status Strip: Looking for jobs near you + Suburb Pill (Screenshot 4 Left) -->
+        <!-- Status Strip: Looking for jobs near you + Suburb Pill -->
         <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
           <div style="flex:1; background:${isOnline ? '#EFF6FF' : '#F8FAFC'}; border:1px solid ${isOnline ? '#BFDBFE' : '#E2E8F0'}; border-radius:999px; padding:9px 14px; display:flex; align-items:center; gap:8px;">
             <span style="width:8px; height:8px; border-radius:50%; background:${isOnline ? '#0052FF' : '#94A3B8'};"></span>
@@ -6115,7 +6071,7 @@ function renderProviderHomeTab(prov, openRequests, activeJob) {
           </button>
         </div>
 
-        <!-- Interactive Slide to Connect / Slide to Disconnect Bar + Preferences Button (Screenshot 4 Left & Center) -->
+        <!-- Interactive Slide to Connect / Slide to Disconnect Bar + Preferences Button -->
         <div style="display:flex; align-items:center; gap:10px;">
           <div
             class="dg-slide-connect-wrap ${isOnline ? '' : 'is-offline'}"
@@ -6144,9 +6100,7 @@ function renderProviderHomeTab(prov, openRequests, activeJob) {
   `;
 }
 
-// ----------------------------------------------------------------------------
 // SEARCHING / RADAR SHEET ("6 pros are viewing your request" + -0.50 / +0.50 + Raise fare)
-// ----------------------------------------------------------------------------
 function renderSearchingRadarOverlay(req) {
   const viewerIdSet = new Set([
     ...(Array.isArray(req.activeViewerIds) ? req.activeViewerIds : []),
@@ -6253,9 +6207,7 @@ function renderSearchingRadarOverlay(req) {
   `;
 }
 
-// ----------------------------------------------------------------------------
 // EMBEDDED REAL-TIME CHAT COMPONENT (SHARED BY CLIENT & SERVICE PROVIDER)
-// ----------------------------------------------------------------------------
 function renderEmbeddedChatComponent(req, peerName) {
   const messages = req.messages || [];
   const quickChips = state.role === 'PROVIDER'
@@ -6329,9 +6281,7 @@ function renderEmbeddedChatComponent(req, peerName) {
   `;
 }
 
-// ----------------------------------------------------------------------------
-// CLIENT ACTIVE HOME-VISIT BOOKING OVERLAY (SCREENSHOT 3 CENTER TWIN OVER MAP)
-// ----------------------------------------------------------------------------
+// CLIENT ACTIVE HOME-VISIT BOOKING OVERLAY
 function openExternalMapsNavigation(lat, lng, label, app = 'google') {
   const safeLat = Number(lat) || -17.8252;
   const safeLng = Number(lng) || 31.0335;
@@ -6439,7 +6389,7 @@ function renderBookedTrackingOverlay(req) {
         </div>
       </div>
 
-      <!-- Bottom Half-Screen Sheet (Screenshot 3 Center) -->
+      <!-- Bottom Half-Screen Sheet -->
       <div class="dg-half-sheet">
         <div class="dg-sheet-handle" onclick="toggleSheetMinimize(true)"></div>
 
@@ -6535,9 +6485,7 @@ function renderBookedTrackingOverlay(req) {
   `;
 }
 
-// ============================================================================
-// FULL INDRIVE-STYLE SIGN-UP & VERIFICATION FLOW (CLIENT & SERVICE PROVIDER)
-// ============================================================================
+// FULL Live SIGN-UP & VERIFICATION FLOW (CLIENT & SERVICE PROVIDER)
 function openSignUpWizardModal() {
   state.authStep = 'PHONE';
   state.savedAccountId = null;
@@ -6557,9 +6505,7 @@ function renderNativeAuthScreen() {
 function renderSignUpWizardInnerHtml(isFullScreen = false) {
   const categories = state.db?.categories || [];
 
-  // ==========================================
   // A. CUSTOMER SIGN-UP (2-STEP: DETAILS + FACE ID)
-  // ==========================================
   if (state.authRole === 'CUSTOMER') {
     if (state.authStep === 'PHONE') {
       return `
@@ -6731,9 +6677,7 @@ function renderSignUpWizardInnerHtml(isFullScreen = false) {
     `;
   }
 
-  // ==========================================
   // B. PROVIDER SIGN-UP (4-STEP: DETAILS + ID + FACE MATCH + CATEGORIES)
-  // ==========================================
   // Provider Step 1: Details
   if (state.authStep === 'PHONE') {
     return `
@@ -7427,10 +7371,7 @@ async function finishNativeRegistration() {
   }
 }
 
-
-// ============================================================================
 // SLIDE-OUT LEFT DRAWER, CANCELLATION SHEET, WAITLIST, RATING & MODALS
-// ============================================================================
 let lastRenderedModalKey = '';
 
 function openSignInRoleChoiceModal(tab = 'LOGIN') {
@@ -7634,7 +7575,7 @@ function renderModalLayer() {
   }
   lastRenderedModalKey = modalKey;
 
-  // DRIVEGO COUNTER-OFFER STEPPER MODAL (03-app-counter-offer.png)
+  // App COUNTER-OFFER STEPPER MODAL
   if (state.activeModal === 'COUNTER_OFFER_MODAL') {
     const md = state.modalData || {};
     const requestId = md.requestId || '';
@@ -7661,7 +7602,7 @@ function renderModalLayer() {
             <button class="cancel-close-x" onclick="closeModal()">${uiIcon('close', 16)}</button>
           </div>
 
-          <!-- DriveGo Large Stepper Row (- $25.00 +) -->
+          <!-- App Large Stepper Row (- $25.00 +) -->
           <div style="background:#F8FAFC; border:1.5px solid #E2E8F0; border-radius:20px; padding:18px 16px; margin-bottom:14px; text-align:center;">
             <div style="display:flex; align-items:center; justify-content:space-between; gap:14px;">
               <button
@@ -7710,7 +7651,7 @@ function renderModalLayer() {
     return;
   }
 
-  // DRIVEGO 4-DIGIT PIN KEYPAD MODAL FOR PROVIDERS (05-app-safety.png)
+  // App 4-DIGIT PIN KEYPAD MODAL FOR PROVIDERS
   if (state.activeModal === 'PROVIDER_PIN_KEYPAD_MODAL') {
     const md = state.modalData || {};
     const requestId = md.requestId || '';
@@ -9199,9 +9140,7 @@ function renderModalLayer() {
     return;
   }
 
-  // ==========================================================================
   // IN-APP WHATSAPP BUSINESS CLONE SUPPORT CHAT (AUTHENTIC LIGHT THEME)
-  // ==========================================================================
   if (state.activeModal === 'SUPPORT') {
     loadUserSupportHistory();
     const formatWaBold = (str) => escapeHtml(str || '').replace(/\*([^*]+)\*/g, '<strong style="color:#111B21;">$1</strong>').replace(/\n/g, '<br/>');
@@ -9390,7 +9329,7 @@ function renderModalLayer() {
     return;
   }
 
-  // SUBURB & REAL LOCATION PICKER MODAL (inDrive-style Real Address Search matching Image 1)
+  // SUBURB & REAL LOCATION PICKER MODAL
   if (state.activeModal === 'SUBURB_PICKER') {
     const geoResults = Array.isArray(state.locationSearchResults) ? state.locationSearchResults : [];
 
@@ -9404,7 +9343,7 @@ function renderModalLayer() {
             <div class="cancel-sheet-title" style="flex:1; text-align:center; padding-right:28px;">Enter your route</div>
           </div>
 
-          <!-- inDrive Route Input Card (Exact reproduction of Image 1) -->
+          <!-- Live Route Input Card (Exact reproduction of Image 1) -->
           <form onsubmit="submitCustomRouteAddress(event); return false;" style="margin-bottom:8px;">
             <div style="background:#F1F5F9; border:1.5px solid #E2E8F0; border-radius:16px; padding:6px 12px; display:flex; align-items:center; gap:8px;">
               <span style="color:#64748B; display:inline-flex;">
@@ -10046,9 +9985,7 @@ function getCancelReasonSvg(type) {
   return map[type] || map.dots;
 }
 
-// ============================================================================
 // USER ACTIONS, WAITLIST, SPECIAL INSTRUCTIONS & FARE NEGOTIATION HANDLERS
-// ============================================================================
 function selectHomeCategory(catId) {
   const cat = (state.db?.categories || []).find((c) => c.id === catId);
   if (!cat) return;
@@ -10241,7 +10178,7 @@ async function submitServiceRequest() {
       if (parts[1]) state.customSuburbLabel = parts.slice(1).join(',').trim();
     }
 
-    // inDrive Live Location: Uses live GPS by default; only uses custom address if explicitly chosen
+    // Live Live Location: Uses live GPS by default; only uses custom address if explicitly chosen
     const isLive = !state.isCustomAddressSelected;
     const targetLat = isLive ? (state.userLiveGpsLat || state.pinnedLat) : state.pinnedLat;
     const targetLng = isLive ? (state.userLiveGpsLng || state.pinnedLng) : state.pinnedLng;
@@ -10713,9 +10650,7 @@ async function completeBooking(requestId) {
   }
 }
 
-// ============================================================================
 // DRAWER MODE SWITCH & LOGOUT HANDLERS
-// ============================================================================
 function closeModal() {
   if (state.activeModal === 'RATE_BOOKING_MODAL') {
     state.activeRequestId = null;
@@ -10763,7 +10698,7 @@ async function toggleClientAndProviderMode() {
       showToast(`Switched to Provider: ${matchedProv.name}`);
       renderAll();
     } else {
-      // Start authentic provider sign-in / registration wizard (like inDrive)
+      // Start authentic provider sign-in / registration wizard
       state.authRole = 'PROVIDER';
       state.authStep = 'PHONE';
       state.authName = state.currentUser?.name || '';
@@ -11139,9 +11074,7 @@ function stopFaceCameraStream() {
   }
 }
 
-// ============================================================================
-// INDRIVE-INSPIRED SERVICE PROVIDER MODE (DRIVER / SPECIALIST WORKSPACE)
-// ============================================================================
+// Live-INSPIRED SERVICE PROVIDER MODE (DRIVER / SPECIALIST WORKSPACE)
 function normalizeCategoryId(catId) {
   const map = {
     braiding: 'beauty_care',
@@ -11295,7 +11228,7 @@ function _legacy_renderProviderModeOverlay_unused() {
           </button>
         </div>
 
-        <!-- Dedicated inDrive-Style Primary Job Tabs (Requests & Live Visit) -->
+        <!-- Dedicated Live Primary Job Tabs (Requests & Live Visit) -->
         <div class="provider-bottom-tabs" style="grid-template-columns: 1fr 1fr;">
           <button
             class="provider-tab-btn ${currentTab === 'FEED' ? 'active' : ''}"
@@ -11323,15 +11256,13 @@ function _legacy_renderProviderModeOverlay_unused() {
   `;
 }
 
-// ----------------------------------------------------------------------------
-// PROVIDER TAB: ACTIVE CLIENT VISIT & JOBS DONE TODAY (SCREENSHOT 3 RIGHT & 5)
-// ----------------------------------------------------------------------------
+// PROVIDER TAB: ACTIVE CLIENT VISIT & JOBS DONE TODAY
 function renderProviderActiveVisitTab(prov, activeJob) {
   const isPromo = Boolean(state.db?.settings?.launchPromoActive);
   const commRate = isPromo ? 0 : (state.db.settings?.commissionPercent ?? 10);
 
   if (!activeJob) {
-    // Show clean "My Jobs" view with Jobs Done Today (uncrowded, Screenshot 5 Right style summary if completed today)
+    // Show clean "My Jobs" view with Jobs Done Today
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     const todayMs = todayStart.getTime();
@@ -11472,7 +11403,7 @@ function renderProviderActiveVisitTab(prov, activeJob) {
 
   return `
     <div class="dg-screen-over-map">
-      <!-- Top Floating Bar over Live Harare Map + Route (Screenshot 3 Right & 5) -->
+      <!-- Top Floating Bar over Live Harare Map + Route -->
       <div class="dg-top-area">
         <div class="dg-search-top-row" style="justify-content:space-between;">
           <button type="button" class="dg-map-circle-btn" onclick="state.providerTab='FEED'; renderUiOverlay(true);" title="Opportunities">
@@ -11642,9 +11573,7 @@ async function promptProviderDelayNotice(requestId) {
   }
 }
 
-// ----------------------------------------------------------------------------
 // PROVIDER OPPORTUNITIES MAP CONTROLS & MAP OVERLAY
-// ----------------------------------------------------------------------------
 function setProviderFeedView(view) {
   state.providerFeedView = view;
   if (view === 'MAP') {
@@ -11752,7 +11681,7 @@ function renderProviderOpportunitiesMapOverlay(prov, openRequests, activeJob) {
 
   return `
     <div class="dg-screen-over-map">
-      <!-- Top Floating Bar over Live Harare Map + Route (Screenshot 2 Left & 4 Center) -->
+      <!-- Top Floating Bar over Live Harare Map + Route -->
       <div class="dg-top-area">
         <div class="dg-search-top-row" style="justify-content:space-between;">
           <div style="background:rgba(255,255,255,0.96); backdrop-filter:blur(8px); border:1px solid #E2E8F0; border-radius:999px; padding:8px 14px; display:inline-flex; align-items:center; gap:7px; box-shadow:0 6px 18px rgba(15,23,42,0.12);">
@@ -11937,9 +11866,7 @@ function renderProviderOpportunitiesMapOverlay(prov, openRequests, activeJob) {
   `;
 }
 
-// ----------------------------------------------------------------------------
-// PROVIDER TAB 2: LIVE HARARE CLIENT REQUESTS FEED (WITH INDRIVE BID BUTTONS)
-// ----------------------------------------------------------------------------
+// PROVIDER TAB 2: LIVE HARARE CLIENT REQUESTS FEED
 function renderProviderRequestsFeedTab(prov, openRequests, activeJob) {
   return `
     <div>
@@ -12157,7 +12084,7 @@ function renderProviderRequestsFeedTab(prov, openRequests, activeJob) {
                   <button type="button" onclick="state.providerTab='ACTIVE_JOB'; renderUiOverlay();" style="border:none; background:#0F172A; color:#FFFFFF; font-size:10.5px; font-weight:800; padding:4px 10px; border-radius:99px; cursor:pointer;">View</button>
                 </div>
               ` : isOfferDeclined || isOfferPending ? '' : `
-                <!-- DriveGo Twin Action Row: Decline | Counter-offer (+quick chips) | Accept -->
+                <!-- App Action Row: Decline | Counter-offer (+quick chips) | Accept -->
                 <div style="display:grid; grid-template-columns:0.8fr 1.15fr 1.35fr; gap:6px; margin-bottom:6px;">
                   <button
                     type="button"
@@ -12244,9 +12171,7 @@ function renderProviderRequestsFeedTab(prov, openRequests, activeJob) {
   `;
 }
 
-// ----------------------------------------------------------------------------
-// PROVIDER TAB: EARNINGS & WALLET (SCREENSHOT 6 LEFT & CENTER TWIN)
-// ----------------------------------------------------------------------------
+// PROVIDER TAB: EARNINGS & WALLET
 function setProviderEarningsPeriod(period) {
   state.providerEarningsPeriod = period;
   lastUiOverlaySignature = '';
@@ -12381,7 +12306,7 @@ function renderProviderEarningsTab(prov) {
         <div style="font-size:12.5px; font-weight:600; color:#64748B;">Your earnings summary</div>
       </div>
 
-      <!-- Today | Week | Month Switcher (Screenshot 6 Left) -->
+      <!-- Today | Week | Month Switcher -->
       <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; background:#FFFFFF; border:1px solid #E2E8F0; border-radius:999px; padding:4px; margin-bottom:14px;">
         ${['TODAY', 'WEEK', 'MONTH'].map((p) => {
           const active = period === p;
@@ -12394,7 +12319,7 @@ function renderProviderEarningsTab(prov) {
         }).join('')}
       </div>
 
-      <!-- Dark Navy Net Earnings Card (Screenshot 6 Left) -->
+      <!-- Dark Navy Net Earnings Card -->
       <div style="background:linear-gradient(135deg, #0F172A 0%, #1E293B 100%); border-radius:22px; padding:18px; color:#FFFFFF; margin-bottom:14px; box-shadow:0 10px 26px rgba(15,23,42,0.18);">
         <div style="font-size:12px; font-weight:700; color:#94A3B8;">Net earnings</div>
         <div style="font-size:34px; font-weight:900; margin:4px 0 14px;">$${netEarned.toFixed(2)}</div>
@@ -12410,7 +12335,7 @@ function renderProviderEarningsTab(prov) {
         </div>
       </div>
 
-      <!-- Trend Bar Chart Card (Screenshot 6 Left) -->
+      <!-- Trend Bar Chart Card -->
       <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:20px; padding:16px; margin-bottom:14px;">
         <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
           <div style="font-size:14.5px; font-weight:900; color:#0F172A;">Trend</div>
@@ -12432,7 +12357,7 @@ function renderProviderEarningsTab(prov) {
         </div>
       </div>
 
-      <!-- Wallet Row Card (Tap to open Screenshot 6 Center Wallet View) -->
+      <!-- Wallet Row Card -->
       <div onclick="setProviderEarningsSubView('WALLET')" style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:18px; padding:14px 16px; display:flex; align-items:center; justify-content:space-between; gap:12px; cursor:pointer;">
         <div style="display:flex; align-items:center; gap:12px;">
           <div style="width:42px; height:42px; border-radius:12px; background:#EFF6FF; color:#0052FF; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
@@ -12449,9 +12374,7 @@ function renderProviderEarningsTab(prov) {
   `;
 }
 
-// ----------------------------------------------------------------------------
 // PROVIDER TAB 3: FULL PREPAID FINDIT USD WALLET, COMMISSION & INSTANT TOP-UP
-// ----------------------------------------------------------------------------
 function renderProviderWalletTab(prov) {
   const commRate = state.db.settings?.commissionPercent ?? 10;
   const minBalance = Math.max(0, state.db.settings?.minWalletBalanceUsd ?? 2.0);
@@ -12476,7 +12399,7 @@ function renderProviderWalletTab(prov) {
 
   return `
     <div>
-      <!-- inDrive Provider Lifetime Earnings & Performance Float -->
+      <!-- Live Provider Lifetime Earnings & Performance Float -->
       <div style="background:linear-gradient(135deg, #0F172A 0%, #1E293B 100%); border:1px solid #334155; border-radius:16px; padding:16px; margin-bottom:12px; color:#FFFFFF; box-shadow:0 10px 25px -5px rgba(0,0,0,0.25);">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
           <div style="display:flex; align-items:center; gap:8px;">
@@ -12698,9 +12621,7 @@ async function submitEcoCashTopup() {
   }
 }
 
-// ----------------------------------------------------------------------------
 // PROVIDER TAB 4: WORK CATALOGUE, BIO UPDATE & ADMIN MODERATION STATUS
-// ----------------------------------------------------------------------------
 function renderProviderCatalogueTab(prov, myPendingApprovals) {
   return `
     <div>
@@ -13823,7 +13744,7 @@ async function providerSubmitBid(requestId, priceUsd) {
   const requiredBalanceUsd = Math.round((commFee + minReserve) * 100) / 100;
   const reqTopUp = Math.max(5.00, Math.max(0, Math.round((requiredBalanceUsd - currentBalance) * 100) / 100));
 
-  // Strict wallet balance and commission check:
+  // Strict wallet balance and commission check
   // 1. Below $2 no bidding (currentBalance < minReserve)
   // 2. No bidding if amount in wallet is less than commission (currentBalance < commFee)
   // 3. No bidding if balance after commission leaves less than $2 reserve ((currentBalance - commFee) < minReserve)
@@ -14007,9 +13928,7 @@ async function submitProviderCatalogueUpload() {
   }
 }
 
-// ============================================================================
 // IN-APP PROTECTED CHAT & MASKED VOICE CALL
-// ============================================================================
 function escapeHtml(str) {
   if (!str) return '';
   return String(str)
@@ -14125,7 +14044,7 @@ function renderChatDrawer() {
   root.innerHTML = `
     <div onclick="closeChatDrawer()" style="position:fixed; inset:0; background:rgba(15,23,42,0.28); z-index:2400; display:flex; flex-direction:column; justify-content:flex-end;">
       <div onclick="event.stopPropagation()" style="background:#FFFFFF; border-radius:26px 26px 0 0; height:80vh; max-height:80vh; display:flex; flex-direction:column; box-shadow:0 -12px 36px rgba(15,23,42,0.22); overflow:hidden;">
-        <!-- Top Grabber + Screenshot 3 Left Header ("Chat with [Name]") -->
+        <!-- Top Grabber + Header ("Chat with [Name]") -->
         <div style="padding:10px 16px 12px; border-bottom:1px solid #F1F5F9; flex-shrink:0;">
           <div style="width:38px; height:4px; border-radius:999px; background:#CBD5E1; margin:0 auto 10px;"></div>
           <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
@@ -14775,10 +14694,8 @@ function sendCustomChat(requestId = null) {
   sendChatMessage(text, requestId);
 }
 
-// ============================================================================
 // DUAL-ENGINE AUDIO CALLING (AGORA RTC + WEBRTC P2P DIRECT AUDIO MESH)
 // Ensures audio streams seamlessly from Point A to Point B
-// ============================================================================
 let agoraClient = null;
 let localAudioTrack = null;
 let p2pPeerConnection = null;
@@ -14941,7 +14858,7 @@ function syncIncomingCallFromList(calls) {
     }
   }
 
-  // 2. If incoming call was ringing but caller hung up before callee answered:
+  // 2. If incoming call was ringing but caller hung up before callee answered
   if (state.incomingCall) {
     const currentChan = state.incomingCall.channelId;
     const currentReq = state.incomingCall.requestId;
@@ -14955,7 +14872,7 @@ function syncIncomingCallFromList(calls) {
     }
   }
 
-  // 3. If ongoing call was explicitly marked ENDED by peer:
+  // 3. If ongoing call was explicitly marked ENDED by peer
   if (state.activeCall) {
     const currentChan = state.activeCall.channelId;
     const currentReq = state.activeCall.requestId;
@@ -15435,9 +15352,7 @@ async function endInAppCall(notify = true) {
   }
 }
 
-// ============================================================================
 // WHATSAPP & IOS IN-APP VOICE CALL CONTROLLER & FLOATING PiP WIDGET
-// ============================================================================
 function formatCallTimer(totalSeconds) {
   const m = String(Math.floor((totalSeconds || 0) / 60)).padStart(2, '0');
   const s = String((totalSeconds || 0) % 60).padStart(2, '0');
@@ -15601,9 +15516,7 @@ function renderCallModal() {
   `;
 }
 
-// ============================================================================
 // MOBILE & ANDROID HARDWARE / GESTURE BACK BUTTON CONTROLLER (1-STEP BACK)
-// ============================================================================
 function pushNavigationHistoryState(stateObj = {}) {
   try {
     if (typeof window !== 'undefined' && window.history && window.history.pushState) {

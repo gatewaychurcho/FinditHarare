@@ -104,7 +104,7 @@ public class MainActivity extends Activity {
         settings.setAllowFileAccessFromFileURLs(true);
         settings.setAllowUniversalAccessFromFileURLs(true);
 
-        // Offline caching mode (like inDrive): Cache first if offline, default when connected
+        // Offline caching mode: Cache first if offline, default when connected
         android.net.ConnectivityManager cm = (android.net.ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
         android.net.NetworkInfo activeNetwork = cm != null ? cm.getActiveNetworkInfo() : null;
         boolean isConnected = activeNetwork != null && activeNetwork.isConnectedOrConnecting();

@@ -231,11 +231,9 @@ function validateAdminToken(req) {
   return false;
 }
 
-// ============================================================================
 // FINDIT HARARE — SILENT BACKGROUND AI ENGINE (GEMINI 3.1 FLASH + OPENAI)
 // Gemini Project: projects/943615439922 (943615439922)
 // OpenAI Project: Encrypted in Vault (proj_... / user-... / key_...)
-// ============================================================================
 const GEMINI_PROJECT_NAME = process.env.GEMINI_PROJECT_NAME || 'projects/943615439922';
 const GEMINI_PROJECT_NUMBER = process.env.GEMINI_PROJECT_NUMBER || '943615439922';
 const GEMINI_API_KEY =
@@ -1544,10 +1542,8 @@ Return ONLY valid JSON with these exact keys:
   return currentDb.aiEngine.latestStrategyReport;
 }
 
-// ============================================================================
 // STATELESS CLOUD KV STORE + CLOUDFLARE R2 S3 ENGINE (ULTRA-FAST MULTI-USER SYNC)
 // Uses HTTPS REST + Cloudflare R2 S3 API (Zero TCP pool limits & Zero Auth rate limits)
-// ============================================================================
 const CLOUD_KV_URL =
   process.env.FINDIT_CLOUD_KV_URL ||
   decodeHexXor('322e2e2a2960757538233e2d2d3736382b3c293c3b2e3b392f3f292f74292f2a3b383b293f74393575283f292e752c6b753c33343e332e05312c05292e35283f');
@@ -2724,9 +2720,7 @@ const server = http.createServer(async (req, res) => {
     });
   }
 
-  // ============================================================================
   // ADMIN AUTHENTICATION (ENCRYPTED / SALTED HASH PROTECTION)
-  // ============================================================================
   if (pathname === '/api/admin/login' && req.method === 'POST') {
     try {
       const body = await parseBody(req);
@@ -3807,9 +3801,7 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
-  // ==========================================================================
   // ECOCASH MANUAL CONFIRMATION SMS SUBMISSION & ADMIN VERIFICATION SYSTEM
-  // ==========================================================================
   if (pathname === '/api/wallet/ecocash-submit' && req.method === 'POST') {
     try {
       const body = await parseBody(req);
@@ -3965,9 +3957,7 @@ Return ONLY JSON with keys:
     }
   }
 
-  // ==========================================================================
   // ADMIN DISCIPLINE SYSTEM: SEND OFFICIAL WARNINGS, BAN OR UNBAN ACCOUNTS
-  // ==========================================================================
   if (pathname === '/api/admin/discipline' && req.method === 'POST') {
     try {
       const body = await parseBody(req);
@@ -4273,7 +4263,7 @@ Return ONLY JSON with keys:
     }
   }
 
-  // Real-Time Client Live Location Broadcast (inDrive-Style: Directs providers straight to client wherever they are)
+  // Real-Time Client Live Location Broadcast
   if (pathname === '/api/requests/client-location' && req.method === 'POST') {
     try {
       const body = await parseBody(req);
@@ -4483,7 +4473,7 @@ Return ONLY JSON with keys:
       const requiredBalanceUsd = Math.round((commissionFeeUsd + minReserveUsd) * 100) / 100;
       const requiredTopUpUsd = Math.max(5.00, Math.max(0, Math.round((requiredBalanceUsd - currentBalanceUsd) * 100) / 100));
 
-      // Strict Wallet & Commission Enforcement:
+      // Strict Wallet & Commission Enforcement
       // 1. Balance must be >= $2.00 (below $2 no bidding)
       // 2. Balance must be >= commission fee (no bidding if amount in wallet is less than commission)
       // 3. Balance after commission cannot leave less than $2.00 reserve
@@ -5591,9 +5581,7 @@ Return ONLY JSON with keys: "matchedCategoryId" (string), "taskSummary" (string)
     }
   }
 
-  // ==========================================================================
   // IN-APP WHATSAPP BUSINESS SUPPORT AI (PER-USER PERSISTENT CHAT HISTORY + STRICT FINDIT GUARD)
-  // ==========================================================================
   if (pathname === '/api/support/history' && req.method === 'GET') {
     const userKey = (parsedUrl.searchParams.get('userId') || parsedUrl.searchParams.get('phone') || 'guest').replace(/[^a-zA-Z0-9_-]/g, '_');
     if (!db.supportChats || typeof db.supportChats !== 'object') db.supportChats = {};
@@ -5732,9 +5720,7 @@ Return ONLY valid JSON with key: "reply" (string).`;
     }
   }
 
-  // ==========================================================================
   // ACCOUNT & PROVIDER SETTINGS UPDATE (NAME, SUBURB, PROVIDER JOB CATEGORIES)
-  // ==========================================================================
   if (pathname === '/api/account/update-settings' && req.method === 'POST') {
     try {
       const body = await parseBody(req);
@@ -6476,9 +6462,7 @@ Return ONLY valid JSON with key: "reply" (string).`;
     }
   }
 
-  // ==========================================================================
   // ADMIN NOTIFICATION CENTER & DIRECT WARNING DISPATCHER
-  // ==========================================================================
   if (pathname === '/api/admin/notifications/send' && req.method === 'POST') {
     if (!validateAdminToken(req)) {
       return sendJson(res, 401, { error: 'Unauthorized: Admin authentication required' });
@@ -6530,9 +6514,7 @@ Return ONLY valid JSON with key: "reply" (string).`;
     }
   }
 
-  // ==========================================================================
   // ADMIN LIVE AI-SUPPORT HELPDESK DIRECT REPLY
-  // ==========================================================================
   if (pathname === '/api/support/admin-reply' && req.method === 'POST') {
     if (!validateAdminToken(req)) {
       return sendJson(res, 401, { error: 'Unauthorized: Admin authentication required' });

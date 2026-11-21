@@ -800,7 +800,7 @@
         </div>
       </div>
 
-      <!-- DriveGo Reference Twin 4-Section SVG Sidebar (Zero Emojis) -->
+      <!-- Main 4-Section SVG Sidebar -->
       <div id="adminNav">
         <div class="nav-section-title">OPERATIONS</div>
         <div class="nav-item active" data-tab="OVERVIEW" onclick="setAdminTab('OVERVIEW')">
@@ -1341,7 +1341,7 @@
       }
     }
 
-    // Crisp SVG Icon Helper for Admin Control Center (Zero Emojis)
+    // Crisp SVG Icon Helper for Admin Control Center
     function adminIcon(name, size = 15) {
       const icons = {
         dashboard: `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></svg>`,
@@ -1380,7 +1380,7 @@
       return `<span style="display:inline-flex; align-items:center; vertical-align:middle;">${icons[name] || icons.dashboard}</span>`;
     }
 
-    // Custom DriveGo Modal Dialog Helpers (Replaces native browser prompt/confirm/alert)
+    // Custom App Modal Dialog Helpers (Replaces native browser prompt/confirm/alert)
     function adminPromptModal(title, label, defaultValue = '') {
       return new Promise((resolve) => {
         const existing = document.getElementById('adminCustomDialogOverlay');
@@ -1476,7 +1476,7 @@
       });
     }
 
-    // Tab Navigation & DriveGo Section Mapping
+    // Tab Navigation & App Section Mapping
     const ALL_ADMIN_TABS = [
       'OVERVIEW',
       'DISPUTES',
